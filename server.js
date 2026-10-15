@@ -66,21 +66,30 @@ function questionIn(message = '') {
 function forYou(message = '') {
   const text = String(message).replace(/```[\s\S]*?```/g, ''); // nothing inside code blocks
   const plain = t => t.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_`]/g, '').trim();
-  const seen = new Set(), prs = [], links = [];
+  const seen = new Set(), prs = [];
   for (const m of text.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)<>\]]+)/g)) {
     const url = (m[2] || m[3]).replace(/[.,;:]+$/, '');
     if (seen.has(url)) continue;
     seen.add(url);
     const pr = url.match(/github\.com\/[^/]+\/([^/]+)\/pull\/(\d+)/);
     const label = plain(m[1] || '') || (pr ? `${pr[1]}#${pr[2]}` : url.replace(/^https?:\/\//, '').slice(0, 60));
-    (pr ? prs : links).push({ label: label.slice(0, 80), url });
+    if (pr) prs.push({ label: label.slice(0, 80), url });
   }
   const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('>'));
   const blockers = lines.filter(l => /Blocker:/i.test(l)).map(l => plain(l.replace(/^.*?Blocker:\**\s*/i, '')));
   const asked = lines.filter(l => !/Blocker:/i.test(l)).flatMap(l => plain(l).split(/(?<=[.!?])\s+/)).filter(q => q.endsWith('?'));
+  // the You: line is the TL;DR of what to do; keep its links, split into plain text and {label, url} pieces
+  const youRaw = text.match(/\*\*You:\*\*\s*(.+)/)?.[1] || '', you = [];
+  let at = 0;
+  for (const m of youRaw.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g)) {
+    you.push(youRaw.slice(at, m.index).replace(/[*_`]/g, ''));
+    you.push({ label: m[1].replace(/[*_`]/g, ''), url: m[2] });
+    at = m.index + m[0].length;
+  }
+  if (at < youRaw.length) you.push(youRaw.slice(at).replace(/[*_`]/g, ''));
   return {
-    you: plain(text.match(/\*\*You:\*\*\s*(.+)/)?.[1] || '').slice(0, 200),
-    prs: prs.slice(0, 6), links: links.slice(0, 6),
+    you: you.filter(Boolean),
+    prs: prs.slice(0, 6),
     questions: [...new Set([...blockers, ...asked])].slice(0, 5).map(q => q.slice(0, 160)),
   };
 }
