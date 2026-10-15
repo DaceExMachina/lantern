@@ -273,10 +273,12 @@ function applyStyle(key) {
 // Somewhere on the lantern's surface: a random height, and a random way round from near the middle to the edge.
 // The wing points straight out of the surface; seen from the front its sideways part shrinks toward the middle,
 // so moths there show a shorter wing. Returns [x, y, wing angle, wing length].
-function pickPerch(side = Math.random() < 0.5 ? -1 : 1) {
-  const { top, bottom, half } = style.body;
-  const y = top + (bottom - top) * (0.06 + Math.random() * 0.88);
-  const sin = Math.sin((15 + Math.random() * 75) * Math.PI / 180);
+// The spot faces the direction `a` (radians, from the lantern's middle), like a slice of pie: straight up lands high
+// on the front, straight out lands at the edge, so moths whose homes sit in different directions never cross paths.
+function pickPerch(a = Math.random() * 2 * Math.PI) {
+  const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1;
+  const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a));
+  const sin = Math.sin((15 + 75 * Math.abs(Math.cos(a))) * Math.PI / 180);
   const slope = (half(y + 1) - half(y - 1)) / 2, len = Math.hypot(1, slope); // how fast the surface bulges at this height
   const px = side / len * sin, py = -slope / len; // the surface's outward direction, as seen from the front
   return [340 + side * half(y) * sin, y, Math.atan2(py, px) * 180 / Math.PI, Math.max(0.3, Math.hypot(px, py))];
@@ -749,12 +751,13 @@ function frame(t) {
     } else if (needsMe) {
       // land with the wing joint on the paper (the joint sits 2,6 from the moth's position)
       if (!m.wasLanded) {
-        // a new spot every landing, on the side of the lantern its home is on, so its dotted line never crosses over;
-        // try a few spots and keep the first with room around it, or failing that the roomiest one
-        const side = m.home[0] < 340 ? -1 : 1, others = [...moths.values()].filter(o => o !== m && o.wasLanded);
+        // land in the slice of the lantern facing its home, so its dotted line never crosses another; if a neighbour
+        // is closer than 40, nudge around within the slice and keep the roomiest spot
+        const { top, bottom } = style.body, toward = Math.atan2(m.home[1] - (top + bottom) / 2, m.home[0] - 340);
+        const others = [...moths.values()].filter(o => o !== m && o.wasLanded);
         const room = p => Math.min(Infinity, ...others.map(o => Math.hypot(o.perch[0] - p[0], o.perch[1] - p[1])));
-        let best = pickPerch(side);
-        for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(side); if (room(c) > room(best)) best = c; }
+        let best = pickPerch(toward);
+        for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(toward + (Math.random() - 0.5) * 0.5); if (room(c) > room(best)) best = c; }
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
