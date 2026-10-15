@@ -18,8 +18,8 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **The Dock app's icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
-- **Fireflies** hang around a session's moth, one per PR that needs you. When a landed moth has fireflies back home, a dotted line ties them together. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
-- **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, amber is changes requested. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
+- **Fireflies** hang around a session's moth, one per open PR it owns (up to five). When a landed moth has fireflies back home, a dotted line ties them together. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
+- **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, amber is changes requested, and a dim lavender one is a draft or waiting on review. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
 - **A singed moth** (grey, dark edge) means the turn ended with an API error.
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
