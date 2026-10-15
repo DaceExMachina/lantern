@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Starts the Lantern server at login and restarts it if it crashes.
+     Replace both paths (`which node` gives the first), save as ~/Library/LaunchAgents/com.lantern.server.plist,
+     then: launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lantern.server.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.lantern.server</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/path/to/node</string>
+    <string>/path/to/lantern/server.js</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>/tmp/lantern.log</string>
+  <key>StandardErrorPath</key><string>/tmp/lantern.log</string>
+</dict>
+</plist>
