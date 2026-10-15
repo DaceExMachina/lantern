@@ -29,7 +29,7 @@
   .screensaver footer, .screensaver #card { display: none; }
   .screensaver #bg { border-radius: 0 !important; }
   /* ambient (a second display's screensaver): just the colour and the drifting specks */
-  .ambient #lantern, .ambient #moths, .ambient #threads, .ambient #pulses, .ambient #flies { display: none; }
+  .ambient #lantern, .ambient #moths, .ambient #threads, .ambient #flies { display: none; }
   label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
   input[type=checkbox] { appearance: none; margin: 0; width: 13px; height: 13px; border: 1px solid #6B5C88; border-radius: 3px; background: #2B2440; display: grid; place-content: center; cursor: pointer; }
   input[type=checkbox]:checked { background: #7B5CFF; border-color: #7B5CFF; }
@@ -87,7 +87,6 @@
     <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
   </defs>
   <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
-  <g id="pulses"></g>
   <g id="lantern"></g>
   <g id="moths"></g>
   <g id="flies"></g>
@@ -272,6 +271,7 @@ const WARM = { halo: '#FF9F45', outer: '#F7913F', mid: '#FFC266', core: '#FFF4D6
   paper: '#FFB85C', thread: '#E8B48A', rings: ['#3A3050', '#4A3B58', '#6A4A58'] };
 const COOL = { halo: '#8C6CFF', outer: '#7A63F0', mid: '#9FB6FF', core: '#F0F2FF', base: '#D2B4FF', glow: '#9D7CF5',
   paper: '#A99BFF', thread: '#B6A6F5', rings: ['#2E2E58', '#3A3A6E', '#4E4A86'] };
+let pulseIds = 0;
 const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // singed: the turn ended in an API error
 
 // A faint tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ.
@@ -650,7 +650,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.pulses?.forEach(p => p.n.forEach(c => c.remove())); m.flies?.forEach(f => f.n.forEach(c => c.remove())); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.glow?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -768,26 +768,29 @@ function frame(t) {
       const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
       put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
-      put(m.thread, 'stroke', mix(pal('thread'), COOL.thread, m.cool));
       put(m.thread, 'opacity', m.leaving ? 0.3 : 0.8);
-      // a tool call sends a little glow from the moth down its thread into the lantern (at most three at a time, spaced out)
-      const ticks = m.session.ticks || 0;
+      // A tool call sends light down the thread from the moth to the lantern: the thread's stroke is a soft radial
+      // gradient whose bright centre travels along the curve, so the dashes themselves light up as it passes.
+      // One pulse at a time per thread, 2.2s each, with at most two more waiting.
+      const ticks = m.session.ticks || 0, base = mix(pal('thread'), COOL.thread, m.cool);
       m.ticks ??= ticks;
-      m.pulses ??= [];
-      m.ticks = Math.max(m.ticks, ticks - 3); // a burst of calls shows as a few pulses, not a long queue
-      if (ticks > m.ticks && m.pulses.length < 3 && !m.pulses.some(p => p.at < 0.3)) {
-        const p = { at: 0, n: [el('circle', { r: 6 }), el('circle', { r: 2.2 })] }; // a soft halo and a bright core
-        $('pulses').append(...p.n);
-        m.pulses.push(p);
-        m.ticks++;
-      }
-      for (const p of m.pulses) {
-        p.at += dt / 0.9;
-        const t = 1 - p.at, u = 1 - t, x = u * u * ax + 2 * u * t * qx + t * t * m.x, y = u * u * ay + 2 * u * t * qy + t * t * m.y;
-        const a = Math.sin(Math.PI * Math.min(1, p.at));
-        p.n.forEach((c, i) => { put(c, 'cx', x.toFixed(1)); put(c, 'cy', y.toFixed(1)); put(c, 'fill', pal('core')); put(c, 'opacity', ((i ? 0.9 : 0.18) * a).toFixed(2)); });
-      }
-      while (m.pulses[0]?.at >= 1) m.pulses.shift().n.forEach(c => c.remove());
+      m.ticks = Math.max(m.ticks, ticks - 3);
+      if (!m.pulse && ticks > m.ticks) { m.pulse = { at: 0 }; m.ticks++; }
+      if (m.pulse) {
+        m.pulse.at += dt / 2.2;
+        const t = 1 - Math.min(1, m.pulse.at), u = 1 - t;
+        const x = u * u * ax + 2 * u * t * qx + t * t * m.x, y = u * u * ay + 2 * u * t * qy + t * t * m.y;
+        const lit = mix(base, pal('core'), Math.sin(Math.PI * Math.min(1, m.pulse.at))); // fades in and out over the trip
+        if (!m.glow) {
+          m.glow = el('radialGradient', { id: `pulse-${++pulseIds}`, gradientUnits: 'userSpaceOnUse', r: 28 });
+          m.glow.append(el('stop', { offset: 0 }), el('stop', { offset: 0.45 }), el('stop', { offset: 1 }));
+          document.querySelector('svg defs').append(m.glow);
+        }
+        put(m.glow, 'cx', x.toFixed(1)); put(m.glow, 'cy', y.toFixed(1));
+        [lit, mix(base, lit, 0.6), base].forEach((c, i) => put(m.glow.children[i], 'stop-color', c));
+        put(m.thread, 'stroke', `url(#${m.glow.id})`);
+        if (m.pulse.at >= 1) m.pulse = null;
+      } else put(m.thread, 'stroke', base);
     }
   }
   placeCard();
