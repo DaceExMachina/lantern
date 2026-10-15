@@ -97,6 +97,20 @@ The app is built on your Mac and signed for your Mac alone, so macOS opens it wi
 ~/projects/lantern/app/build.sh
 ```
 
+### Or download the app
+
+Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. You still need the server running (see Setup).
+
+It isn't signed with a paid Apple developer ID, so macOS blocks it the first time:
+
+1. Open `Lantern.app`. macOS says it can't check it for malicious software. Click Done.
+2. Open System Settings > Privacy & Security, scroll down to Security, and click Open Anyway next to the Lantern message.
+3. Confirm with your password or Touch ID. After that it opens normally.
+
+Building it yourself with the installer skips all of this, because an app built on your own Mac isn't quarantined.
+
+### Or use Safari
+
 If you'd rather not build anything, open the page in Safari and choose File > Add to Dock. The moth icon comes with it, and so does the badge. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.
 
 ### Put it in iTerm2's toolbelt

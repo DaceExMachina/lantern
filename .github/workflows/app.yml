@@ -1,0 +1,18 @@
+# Publishing a GitHub release builds Lantern.app and attaches it as Lantern.zip. It's signed ad hoc, with no
+# Developer ID or notarization, so the first launch needs System Settings > Privacy & Security > Open Anyway.
+name: Lantern.app
+on:
+  release:
+    types: [published]
+permissions:
+  contents: write
+jobs:
+  app:
+    runs-on: macos-latest # Apple silicon
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh app/build.sh "$RUNNER_TEMP/apps"
+      - run: ditto -c -k --keepParent app/build/Lantern.app Lantern.zip # ditto keeps the signature intact
+      - run: gh release upload "${{ github.event.release.tag_name }}" Lantern.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
