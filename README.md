@@ -88,7 +88,9 @@ You need Xcode's command line tools.
 ~/projects/lantern/screensaver/build.sh
 ```
 
-That builds `Lantern.saver` from source and installs it in `~/Library/Screen Savers`. Then choose Lantern in System Settings > Screen Saver. It shows the live page full screen, so the server needs to be running.
+That builds `Lantern.saver` from source and installs it in `~/Library/Screen Savers`. Then choose Lantern in System Settings > Wallpaper > Screen Saver (it's listed under Other). It shows the live page full screen, so the server needs to be running.
+
+With more than one display, the biggest one gets the lantern and the others get just the background and drifting specks. To pick which lantern it shows, choose one in any other Lantern window.
 
 ### Click to focus iTerm2
 

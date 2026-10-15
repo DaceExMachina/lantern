@@ -20,6 +20,8 @@
   /* screensaver mode (opened with ?screensaver): just the scene, with the glow running to the screen's edges */
   body.screensaver { background: #2B2440; cursor: none; }
   .screensaver footer, .screensaver #card, .screensaver #frame { display: none; }
+  /* ambient (a second display's screensaver): just the colour and the drifting specks */
+  .ambient #lantern, .ambient #moths, .ambient #threads, .ambient #rings, .ambient #glow, .ambient #rays { display: none; }
   label { cursor: pointer; user-select: none; }
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
@@ -375,7 +377,7 @@ const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 
   ph: Math.random() * 10, n: $('dust').appendChild(el('circle', { r: (0.6 + Math.random() * 0.9).toFixed(2) })) }));
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
-for (const mode of ['panel', 'screensaver']) if (new URLSearchParams(location.search).has(mode)) document.body.classList.add(mode);
+for (const mode of ['panel', 'screensaver', 'ambient']) if (new URLSearchParams(location.search).has(mode)) document.body.classList.add(mode);
 fitView();
 
 // lantern picker
