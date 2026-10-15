@@ -154,6 +154,7 @@ function handle(e) {
   s.unconfirmed = false;
   if (e.cwd) s.cwd = e.cwd;
   if (e.permission_mode) s.mode = e.permission_mode;
+  if (/^\d+$/.test(e.pid || '')) s.pid = Number(e.pid); // the Claude Code process the hook ran under ($PPID)
   const iterm = String(e.iterm || '').split(':').pop(); // ITERM_SESSION_ID looks like w0t1p0:<uuid>
   if (UUID.test(iterm)) s.iterm = iterm;
   const dir = sessionDir(e.transcript_path);
@@ -381,7 +382,12 @@ async function refreshGitHub() {
   if (!settings.github || refreshing) return;
   refreshing = true;
   try {
-    const live = [...sessions.values()].filter(s => s.cwd), folders = [...new Set(live.map(s => s.cwd))];
+    // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
+    // every time from a background process.
+    const inRepo = cwd => new Promise(done => execFile('/usr/bin/git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000 }, err => done(!err)));
+    const live = [];
+    for (const s of sessions.values()) if (s.cwd && await inRepo(s.cwd)) live.push(s);
+    const folders = [...new Set(live.map(s => s.cwd))];
     const found = new Map(); // ask from each folder: different folders can mean different accounts
     for (const cwd of folders)
       for (const p of (await ghJson(['search', 'prs', '--review-requested=@me', '--state=open', '--limit', '20', '--json', 'url,number,title,repository'], cwd)) || [])
@@ -402,24 +408,28 @@ async function refreshGitHub() {
 function clearGitHub() { reviews = []; for (const s of sessions.values()) delete s.github; broadcast(); }
 setInterval(refreshGitHub, 2 * 60 * 1000);
 
+// A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
+const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+
 setInterval(() => {
   const now = Date.now();
   let changed = false;
   for (const [id, s] of sessions) {
+    if (s.pid && !alive(s.pid)) { sessions.delete(id); changed = true; continue; }
     // a session only seen on disk gets the normal timeout until it proves it's alive with a real event
     const limit = s.state === 'waiting' && !s.unconfirmed ? WAITING_EXPIRE_MS : EXPIRE_MS;
     if (now - s.last > limit) { sessions.delete(id); changed = true; continue; }
     for (const [aid, a] of s.subagents) if (now - a.last > EXPIRE_MS) { s.subagents.delete(aid); changed = true; }
   }
   if (changed) broadcast();
-}, 30 * 1000);
+}, 30 * 1000); // checks whether processes are still running, so a closed session's moth leaves within half a minute
 
 http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/event') {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
     req.on('end', () => {
-      try { handle({ ...JSON.parse(body), iterm: req.headers['x-iterm-session'] }); broadcast(); } catch {}
+      try { handle({ ...JSON.parse(body), iterm: req.headers['x-iterm-session'], pid: req.headers['x-claude-pid'] }); broadcast(); } catch {}
       res.end();
     });
     return;

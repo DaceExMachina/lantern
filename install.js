@@ -16,7 +16,7 @@ const EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 
   'Notification', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PreCompact', 'PostCompact'];
 // Runs in the background (async), gives up after 1s, never fails: Claude Code never waits on the lantern.
 // The iTerm session id (empty outside iTerm) lets clicking a moth bring that terminal to the front.
-const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Session: $ITERM_SESSION_ID" --data-binary @- ${URL}/event >/dev/null 2>&1; exit 0 ${MARK}`;
+const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Session: $ITERM_SESSION_ID" -H "X-Claude-Pid: $PPID" --data-binary @- ${URL}/event >/dev/null 2>&1; exit 0 ${MARK}`;
 
 const LABEL = 'com.lantern.server';
 const OLD_LABELS = ['com.dace.lantern']; // hand-made login items from before this installer
