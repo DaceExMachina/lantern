@@ -135,7 +135,7 @@ const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330
 
 // The scene is designed on a 600x600 square around the lantern. To fill any window shape, the visible area grows
 // wider or taller (the lantern keeps its size), and positions laid out on the square stretch with it.
-const VIEW = { kx: 1, ky: 1 };
+const VIEW = { kx: 1, ky: 1, top: 20 }; // top: where the lantern hangs from, the visible area's top edge
 const stretch = ([x, y]) => [340 + (x - 340) * VIEW.kx, 320 + (y - 320) * VIEW.ky];
 function fitView() {
   const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect();
@@ -144,6 +144,8 @@ function fitView() {
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
   Object.entries({ x, y, width: w, height: h }).forEach(([k, v]) => $('frame').setAttribute(k, v));
+  VIEW.top = y;
+  $('hang')?.setAttribute('d', `M340 ${y - 2}V22`); // the string runs from the top of the window to where each lantern's own string starts
 }
 addEventListener('resize', fitView);
 
@@ -202,6 +204,7 @@ const STYLES = {
         <path d="M93.5 198L92 210M95 198V212M96.5 198L98 210" stroke="#D9AE52" stroke-width="0.6"/></g>`, 18),
   },
   moroccan: {
+    hang: ['#B8873A', 2.6, '5 4'], // carries the chain on up to the top
     name: 'Brass Moroccan', flame: [340, 392, 0.9], light: [340, 340], tassel: [340, 444],
     body: { top: 282, bottom: 400, half: y => y < 340 ? 52 + (y - 278) / 62 * 12 : 64 - (y - 340) / 64 * 12 },
     back: `<defs><linearGradient id="brass" x1="0" x2="1"><stop offset="0" stop-color="#6E4618"/><stop offset=".45" stop-color="#D9AE52"/><stop offset="1" stop-color="#7A501C"/></linearGradient>
@@ -232,7 +235,8 @@ let style = STYLES.barrel;
 function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
-  $('lantern').innerHTML = style.back
+  const [hc, hw, dash] = style.hang || ['#C9B49C', 2, ''];
+  $('lantern').innerHTML = `<path id="hang" d="M340 ${VIEW.top - 2}V22" stroke="${hc}" stroke-width="${hw}" ${dash ? `stroke-dasharray="${dash}" stroke-linecap="round"` : ''}/>` + style.back
     + `<g ${style.paper ? 'filter="url(#behindPaper)"' : ''} transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME}</g>`
     + style.front;
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
@@ -391,6 +395,9 @@ applyStyle('barrel'); // until the server says which lantern is chosen
 // ---- animation ---------------------------------------------------------------
 let level = 0, cool = 0, sparkClock = 0, last = performance.now();
 const sparks = [];
+// Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
+const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
+
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   const s = t / 1000;
@@ -403,22 +410,23 @@ function frame(t) {
   const flick = 1 + wobble(s * 1.6, 3) * 0.06;
 
   // sway on the string; anything attached to the lantern goes through rot()
-  const sway = Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, rad = sway * Math.PI / 180;
-  const rot = (px, py) => [340 + (px - 340) * Math.cos(rad) - (py - 20) * Math.sin(rad), 20 + (px - 340) * Math.sin(rad) + (py - 20) * Math.cos(rad)];
-  $('lantern').setAttribute('transform', `rotate(${sway.toFixed(2)} 340 20)`);
-  if (style.tassel) $('tassel')?.setAttribute('transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
+  // swing from the top of the window, with the angle scaled so the lantern moves sideways as much as it did hung at y=20
+  const top = VIEW.top, sway = (Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4) * 310 / (330 - top), rad = sway * Math.PI / 180;
+  const rot = (px, py) => [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
+  put($('lantern'), 'transform', `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
+  if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
   const size = 0.3 + 0.7 * Math.max(level, cool * 0.45);
   const layers = [['fHalo', 46, 118, 6, 1], ['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
   for (const [id, w, h, lean, k] of layers) {
     const n = $(id);
-    n.setAttribute('d', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
-    n.setAttribute('fill', pal(id.slice(1).toLowerCase()));
+    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
+    put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
-  $('fBase').setAttribute('fill', pal('base'));
-  $('flame').setAttribute('transform', `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
-  $('flame').setAttribute('opacity', pulse.toFixed(3));
+  put($('fBase'), 'fill', pal('base'));
+  put($('flame'), 'transform', `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
+  put($('flame'), 'opacity', pulse.toFixed(3));
 
   // embers float off the tip, more of them the busier things get
   sparkClock += dt * (0.4 + 5 * level);
@@ -428,51 +436,60 @@ function frame(t) {
   }
   for (const p of sparks) { p.x += p.vx * dt + Math.sin(s * 4 + p.vy) * 0.3; p.y += p.vy * dt; p.life -= dt * 0.8; }
   while (sparks.length && sparks[0].life <= 0) sparks.shift();
-  $('sparks').replaceChildren(...sparks.map(p => el('circle', { cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: (1.6 * p.life).toFixed(2), fill: pal('mid'), opacity: p.life.toFixed(2) })));
+  // a fixed set of ember circles, reused every frame (switching lanterns replaces #sparks, so refill it then)
+  const embers = $('sparks');
+  if (embers.childElementCount !== 12) embers.replaceChildren(...Array.from({ length: 12 }, () => el('circle', { r: 0, opacity: 0 })));
+  while (sparks.length > 12) sparks.shift();
+  [...embers.children].forEach((c, i) => {
+    const p = sparks[i];
+    if (!p) return put(c, 'opacity', 0);
+    put(c, 'cx', p.x.toFixed(1)); put(c, 'cy', p.y.toFixed(1)); put(c, 'r', (1.6 * p.life).toFixed(2));
+    put(c, 'fill', pal('mid')); put(c, 'opacity', p.life.toFixed(2));
+  });
 
   // the light: lit paper, a breathing halo, and the rings tinting with the flame
-  document.querySelectorAll('.paperStop').forEach(n => n.setAttribute('stop-color', pal('paper')));
-  $('paperGlow')?.setAttribute('opacity', ((0.3 + 0.7 * size) * flick * pulse).toFixed(3));
+  document.querySelectorAll('.paperStop').forEach(n => put(n, 'stop-color', pal('paper')));
+  put($('paperGlow'), 'opacity', ((0.3 + 0.7 * size) * flick * pulse).toFixed(3));
   // the paper takes on the flame's colour, more so the brighter it burns
-  $('paperTint')?.setAttribute('fill', pal('paper'));
-  $('paperTint')?.setAttribute('opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
-  document.querySelectorAll('.glowStop').forEach(n => n.setAttribute('stop-color', pal('glow')));
+  put($('paperTint'), 'fill', pal('paper'));
+  put($('paperTint'), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
+  document.querySelectorAll('.glowStop').forEach(n => put(n, 'stop-color', pal('glow')));
   const [gx, gy] = rot(...style.light);
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5;
-  $('glow').setAttribute('cx', gx.toFixed(1)); $('glow').setAttribute('cy', gy.toFixed(1));
-  $('glow').setAttribute('r', (150 + 90 * level + 25 * cool + 14 * breathe).toFixed(1));
-  $('glow').setAttribute('opacity', ((0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse).toFixed(3));
-  [...$('rings').children].forEach((c, i) => c.setAttribute('fill', mix(WARM.rings[i], COOL.rings[i], cool)));
+  put($('glow'), 'cx', gx.toFixed(1)); put($('glow'), 'cy', gy.toFixed(1));
+  put($('glow'), 'r', (150 + 90 * level + 25 * cool + 14 * breathe).toFixed(1));
+  put($('glow'), 'opacity', ((0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse).toFixed(3));
+  [...$('rings').children].forEach((c, i) => put(c, 'fill', mix(WARM.rings[i], COOL.rings[i], cool)));
   // rings ripple outward: the inner ring swells first, the outer ones follow
   // ...and swing with the lantern, centred where its body hangs
   const [rx, ry] = rot(340, 330);
   [250, 190, 135].forEach((r, i) => {
     const c = $('rings').children[i];
-    c.setAttribute('cx', rx.toFixed(1)); c.setAttribute('cy', ry.toFixed(1));
-    c.setAttribute('r', (r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9))).toFixed(1));
+    put(c, 'cx', rx.toFixed(1)); put(c, 'cy', ry.toFixed(1));
+    put(c, 'r', (r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9))).toFixed(1));
   });
-  $('rings').setAttribute('opacity', (0.55 + 0.45 * Math.max(level, cool * 0.5)).toFixed(3));
+  put($('rings'), 'opacity', (0.55 + 0.45 * Math.max(level, cool * 0.5)).toFixed(3));
   const strength = Math.max(level, cool * 0.6);
-  document.querySelectorAll('.rayStop').forEach(n => n.setAttribute('stop-color', pal('glow')));
-  $('rays').setAttribute('transform', `translate(${gx.toFixed(1)} ${gy.toFixed(1)}) scale(${Math.max(VIEW.kx, VIEW.ky).toFixed(2)})`);
-  $('raysA').setAttribute('transform', `rotate(${(s * 3 % 360).toFixed(2)})`);
-  $('raysB').setAttribute('transform', `rotate(${(-s * 2 % 360).toFixed(2)})`);
-  $('rays').setAttribute('opacity', ((0.05 + 0.22 * strength) * flick * pulse).toFixed(3));
-  rayNodes.forEach((n, i) => n.setAttribute('opacity', (0.35 + 0.65 * Math.sin(s * (0.4 + (i % 5) * 0.13) + i * 1.7) ** 2).toFixed(2)));
-  $('dust').setAttribute('fill', pal('core'));
+  document.querySelectorAll('.rayStop').forEach(n => put(n, 'stop-color', pal('glow')));
+  put($('rays'), 'transform', `translate(${gx.toFixed(1)} ${gy.toFixed(1)}) scale(${Math.max(VIEW.kx, VIEW.ky).toFixed(2)})`);
+  put($('raysA'), 'transform', `rotate(${(s * 3 % 360).toFixed(2)})`);
+  put($('raysB'), 'transform', `rotate(${(-s * 2 % 360).toFixed(2)})`);
+  put($('rays'), 'opacity', ((0.05 + 0.22 * strength) * flick * pulse).toFixed(3));
+  rayNodes.forEach((n, i) => put(n, 'opacity', (0.35 + 0.65 * Math.sin(s * (0.4 + (i % 5) * 0.13) + i * 1.7) ** 2).toFixed(2)));
+  put($('dust'), 'fill', pal('core'));
   for (const p of dust) {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18;
-    p.n.setAttribute('cx', (gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6).toFixed(1));
-    p.n.setAttribute('cy', (gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6).toFixed(1));
-    p.n.setAttribute('opacity', ((0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))).toFixed(3));
+    put(p.n, 'cx', (gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6).toFixed(1));
+    put(p.n, 'cy', (gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6).toFixed(1));
+    put(p.n, 'opacity', ((0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))).toFixed(3));
   }
   for (const p of farDust) {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22;
-    p.n.setAttribute('cx', (CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10).toFixed(1));
-    p.n.setAttribute('cy', (CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10).toFixed(1));
-    p.n.setAttribute('opacity', ((0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)).toFixed(3));
+    put(p.n, 'cx', (CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10).toFixed(1));
+    put(p.n, 'cy', (CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10).toFixed(1));
+    put(p.n, 'opacity', ((0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)).toFixed(3));
   }
 
   // moths
@@ -539,9 +556,9 @@ function frame(t) {
     m.roll = (m.roll || 0) + (rollTo - (m.roll || 0)) * Math.min(1, dt * 2);
     const near = flapWing(WING_UP, liftAt(0), sweep, m.roll);
     const far = flapWing(WING_SIDE, liftAt(0.18), sweep, m.roll);
-    m.up.setAttribute('d', pathOf(mixPts(near, foldedWing(out, 1, m.perch?.[3]), m.fold)));
-    m.side.setAttribute('d', pathOf(mixPts(far, foldedWing(out + part, 0.95, m.perch?.[3]), m.fold)));
-    m.g.setAttribute('transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
+    put(m.up, 'd', pathOf(mixPts(near, foldedWing(out, 1, m.perch?.[3]), m.fold)));
+    put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part, 0.95, m.perch?.[3]), m.fold)));
+    put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
     m.cool += ((needsMe ? (m.session.snoozed ? 0.5 : 1) : 0) - m.cool) * dt * 3; // snoozed moths rest on the lantern in a paler indigo
@@ -557,9 +574,9 @@ function frame(t) {
       const dx = m.x - ax, dy = m.y - ay, len = Math.hypot(dx, dy) || 1;
       const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
-      m.thread.setAttribute('d', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
-      m.thread.setAttribute('stroke', mix(pal('thread'), COOL.thread, m.cool));
-      m.thread.setAttribute('opacity', m.leaving ? 0.3 : 0.8);
+      put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
+      put(m.thread, 'stroke', mix(pal('thread'), COOL.thread, m.cool));
+      put(m.thread, 'opacity', m.leaving ? 0.3 : 0.8);
     }
   }
   placeCard();

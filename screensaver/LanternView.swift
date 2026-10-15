@@ -6,6 +6,11 @@ import WebKit
 @objc(LanternView)
 final class LanternView: ScreenSaverView {
     private let web: WKWebView
+    // macOS starts each screensaver twice per display, a few seconds apart, and the later copy is the one on screen.
+    // Each display remembers its newest copy; an older one unloads its page so it stops drawing for nobody.
+    private static var newest: [String: ObjectIdentifier] = [:]
+    private let display: String
+    private var retired = false
 
     override init?(frame: NSRect, isPreview: Bool) {
         // Inside the screensaver's sandbox WebKit can't tell the window is on screen, so it treats the page as
@@ -17,13 +22,9 @@ final class LanternView: ScreenSaverView {
             config.preferences.setValue(false, forKey: key)
         }
         web = WKWebView(frame: .zero, configuration: config)
+        display = isPreview ? "preview" : NSStringFromRect(frame)
         if web.responds(to: Selector("_setWindowOcclusionDetectionEnabled:")) {
             web.setValue(false, forKey: "windowOcclusionDetectionEnabled")
-        }
-        // The screensaver draws without much GPU help, and a Retina or 5K screen is a lot of pixels; the scene is soft
-        // and glowy, so drawing it at standard resolution looks the same and is several times cheaper.
-        if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
-            web.setValue(1.0, forKey: "overrideDeviceScaleFactor")
         }
         super.init(frame: frame, isPreview: isPreview)
         web.frame = bounds
@@ -35,14 +36,27 @@ final class LanternView: ScreenSaverView {
         // With several displays, the biggest one gets the lantern and the rest get just the ambient specks.
         let area = { (r: NSRect) in r.width * r.height }
         let biggest = NSScreen.screens.map { area($0.frame) }.max() ?? 0
-        let mode = isPreview || area(frame) >= biggest ? "screensaver" : "screensaver&ambient"
+        let ambient = !isPreview && area(frame) < biggest
+        let mode = ambient ? "screensaver&ambient" : "screensaver"
+        // The screensaver draws without much GPU help, and a Retina or 5K screen is a lot of pixels; the scene is soft
+        // and glowy, so drawing it at standard resolution looks the same and is several times cheaper.
+        if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
+            web.setValue(1.0, forKey: "overrideDeviceScaleFactor")
+        }
         web.load(URLRequest(url: URL(string: "http://127.0.0.1:7717/?\(mode)")!)) // screensavers don't get your shell's env, so the port is fixed here
+        Self.newest[display] = ObjectIdentifier(self)
     }
 
     required init?(coder: NSCoder) { nil }
 
     // The web view never fires requestAnimationFrame inside a screensaver, so drive the page from the screensaver's clock.
     override func animateOneFrame() {
+        if retired { return }
+        if Self.newest[display] != ObjectIdentifier(self) {
+            retired = true
+            web.loadHTMLString("", baseURL: nil)
+            return
+        }
         web.evaluateJavaScript("window.lanternTick && lanternTick()")
     }
 
