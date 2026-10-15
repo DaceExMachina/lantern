@@ -15,6 +15,16 @@
   #status.waiting { color: #B9A8FF; }
   #status.offline { color: #8A7A99; font-style: italic; }
   .quiet { all: unset; cursor: pointer; color: #8F7FA6; }
+  #gh { position: fixed; right: 16px; bottom: 52px; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
+    padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); z-index: 5; }
+  #gh h3 { margin: 0 0 6px; font-size: 13px; color: #F5E9FF; }
+  #gh .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
+  #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: #F5E9FF; margin: 6px 0; }
+  #gh button { all: unset; cursor: pointer; color: #C3B2FF; border-bottom: 1px dotted currentColor; }
+  #gh button:hover, #gh a:hover { color: #F0E8FF; }
+  #gh a { color: #C3B2FF; }
+  #gh .dim { color: #8F7FA6; font-size: 11.5px; }
+  #gh .warn { color: #E8C8A8; }
   .quiet:hover, .quiet.on { color: #C3B2FF; }
   .quiet:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   #status .next { all: unset; cursor: pointer; border-bottom: 1px dotted currentColor; }
@@ -93,10 +103,12 @@
   <g id="zones"></g>
 </svg></div>
 <div id="card" role="tooltip"></div>
+<div id="gh" role="dialog" aria-label="GitHub" hidden></div>
 <footer>
   <span id="status" class="offline">connecting…</span>
   <label class="notify"><input type="checkbox" id="notify"> notify me</label>
   <button id="quiet" class="quiet" title="Treat everything as snoozed until 8am">quiet</button>
+  <button id="ghButton" class="quiet" aria-expanded="false" aria-controls="gh">GitHub</button>
   <select id="style" aria-label="Lantern style"></select>
 </footer>
 <script>
@@ -300,6 +312,7 @@ es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
   if (STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
   quietUntil = st.quietUntil || 0;
+  usingGh = !!st.github; renderGitHub();
   sync();
 });
 // quiet hours: until 8am every waiting session counts as snoozed, so nothing turns violet, notifies or badges
@@ -552,6 +565,39 @@ $('quiet').onclick = () => {
   if (morning <= new Date()) morning.setDate(morning.getDate() + 1);
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quietUntil: quiet() ? 0 : morning.getTime() }) });
 };
+
+// ---- GitHub panel: connect accounts through the Claude Lantern GitHub App (device flow) ------------------------
+let github = { accounts: [], signIn: null }, usingGh = false;
+es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
+function renderGitHub() {
+  const panel = $('gh'), make = (tag, text, cls) => { const n = document.createElement(tag); if (text) n.textContent = text; if (cls) n.className = cls; return n; };
+  const post = body => fetch('/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const nodes = [make('h3', 'GitHub')];
+  for (const a of github.accounts) {
+    const row = make('div', '', 'row'), name = make('span', a.login + (a.error ? ' · reconnect' : ''), a.error ? 'warn' : '');
+    const off = make('button', 'disconnect'); off.onclick = () => post({ disconnect: a.login });
+    row.append(name, off); nodes.push(row);
+  }
+  if (github.signIn) {
+    const link = make('a', 'Open github.com/login/device'); link.href = github.signIn.url; link.target = '_blank'; link.rel = 'noopener';
+    const copy = make('button', 'copy code'); copy.onclick = () => navigator.clipboard?.writeText(github.signIn.code).then(() => { copy.textContent = 'copied'; });
+    const cancel = make('button', 'cancel'); cancel.onclick = () => post({ cancel: true });
+    const actions = make('div', '', 'row'); actions.append(copy, cancel);
+    nodes.push(make('div', 'Enter this code on GitHub:', 'dim'), make('div', github.signIn.code, 'code'), link, actions);
+  } else {
+    const connect = make('button', github.accounts.length ? 'Connect another account' : 'Connect an account');
+    connect.onclick = () => post({ connect: true });
+    nodes.push(connect);
+  }
+  const install = make('a', 'Install the app on your account or orgs'); install.href = 'https://github.com/apps/claude-lantern/installations/new'; install.target = '_blank'; install.rel = 'noopener';
+  nodes.push(make('div', 'Read-only: pull requests, checks and statuses. Tokens stay in your Keychain.', 'dim'), install);
+  if (!github.accounts.length && usingGh) nodes.push(make('div', 'Using your local gh until an account is connected.', 'dim'));
+  panel.replaceChildren(...nodes);
+  $('ghButton').textContent = github.accounts.length ? `GitHub (${github.accounts.length})` : 'GitHub';
+}
+$('ghButton').onclick = () => { const open = $('gh').hidden; $('gh').hidden = !open; $('ghButton').setAttribute('aria-expanded', open); };
+addEventListener('keydown', e => { if (e.key === 'Escape') { $('gh').hidden = true; $('ghButton').setAttribute('aria-expanded', false); } });
+addEventListener('pointerdown', e => { if (!$('gh').hidden && !e.target.closest('#gh, #ghButton')) { $('gh').hidden = true; $('ghButton').setAttribute('aria-expanded', false); } });
 
 // lantern picker
 for (const [key, st] of Object.entries(STYLES)) $('style').append(new Option(st.name, key, false, st === style));

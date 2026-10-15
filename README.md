@@ -107,13 +107,17 @@ The first time you click a moth, macOS asks whether `node` can control iTerm2. A
 
 ## GitHub status (optional)
 
-Off by default. Turn it on with:
+Click **GitHub** in the footer, then **Connect an account**. Lantern shows a code; enter it at github.com/login/device and approve the Claude Lantern GitHub App. It can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed (the panel links to installing it; an org admin may need to approve). The token is kept in your macOS Keychain, and you can connect more than one account. Disconnecting removes it from the Keychain; revoke the app in your GitHub settings to cut it off completely.
+
+Every two minutes Lantern asks GitHub, once per account, for your open PRs, reviews requested from you, and any PR a session created. A session's own PRs are the ones it created plus its branch's PR, when it's the only session in that folder.
+
+If you'd rather use your own `gh` instead, with no account connected, turn that on with:
 
 ```bash
 curl -H 'Content-Type: application/json' -d '{"github":true}' http://127.0.0.1:7717/settings
 ```
 
-The server then runs your own `gh`, read-only (`gh pr view` and `gh search prs --review-requested=@me`), every two minutes from each session's folder, so a `gh` that picks an account by folder does the right thing. Nothing leaves your machine. A session's branch PR only counts when it's the only session in that folder. If your token can't read checks, approved PRs still show as ready, but failing checks can't be seen.
+It runs `gh pr view` and `gh search prs` read-only from each session's folder, and only in folders that are git repos.
 
 ## Settings
 

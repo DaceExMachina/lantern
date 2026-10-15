@@ -378,34 +378,123 @@ function prNeed(p) {
   return p.isDraft ? 'draft' : 'waiting';
 }
 let refreshing = false;
+const git = (cwd, args) => new Promise(done => execFile('/usr/bin/git', ['-C', cwd, ...args], { timeout: 5000 }, (err, out) => done(err ? null : out.trim())));
 async function refreshGitHub() {
-  if (!settings.github || refreshing) return;
+  if (refreshing || (!accounts.size && !settings.github)) return;
   refreshing = true;
   try {
     // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
     // every time from a background process.
-    const inRepo = cwd => new Promise(done => execFile('/usr/bin/git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree'], { timeout: 5000 }, err => done(!err)));
     const live = [];
-    for (const s of sessions.values()) if (s.cwd && await inRepo(s.cwd)) live.push(s);
-    const folders = [...new Set(live.map(s => s.cwd))];
-    const found = new Map(); // ask from each folder: different folders can mean different accounts
-    for (const cwd of folders)
-      for (const p of (await ghJson(['search', 'prs', '--review-requested=@me', '--state=open', '--limit', '20', '--json', 'url,number,title,repository'], cwd)) || [])
-        found.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
-    reviews = [...found.values()];
-    for (const s of live) {
-      // Each session's PRs: the ones it created, plus its branch's PR, but only if it's the only session in that
-      // folder (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
-      const alone = live.filter(o => o.cwd === s.cwd).length === 1;
-      const prs = new Map(), mine = alone ? await prView(['pr', 'view'], s.cwd) : null;
-      if (mine) prs.set(mine.url, mine);
-      for (const url of s.created || []) if (!prs.has(url)) { const p = await prView(['pr', 'view', url], s.cwd); if (p) prs.set(url, p); }
-      s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
-    }
+    for (const s of sessions.values()) if (s.cwd && await git(s.cwd, ['rev-parse', '--is-inside-work-tree'])) live.push(s);
+    // A session owns the PRs it created, plus its branch's PR, but only if it's the only session in that folder
+    // (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
+    const alone = s => live.filter(o => o.cwd === s.cwd).length === 1;
+    if (accounts.size) await refreshViaApp(live, alone); else await refreshViaGh(live, alone);
   } finally { refreshing = false; }
   broadcast();
 }
+
+// Through the gh CLI, from each session's folder, so a gh that picks the account by folder does the right thing.
+async function refreshViaGh(live, alone) {
+  const found = new Map();
+  for (const cwd of new Set(live.map(s => s.cwd)))
+    for (const p of (await ghJson(['search', 'prs', '--review-requested=@me', '--state=open', '--limit', '20', '--json', 'url,number,title,repository'], cwd)) || [])
+      found.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
+  reviews = [...found.values()];
+  for (const s of live) {
+    const prs = new Map(), mine = alone(s) ? await prView(['pr', 'view'], s.cwd) : null;
+    if (mine) prs.set(mine.url, mine);
+    for (const url of s.created || []) if (!prs.has(url)) { const p = await prView(['pr', 'view', url], s.cwd); if (p) prs.set(url, p); }
+    s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
+  }
+}
+
+// Through the Claude Lantern GitHub App: one GraphQL query per connected account for my open PRs, reviews requested
+// from me, and any PR a session created; then each session's PRs are matched by its repo and branch.
+const PR_GQL = 'url number title state isDraft reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
+async function refreshViaApp(live, alone) {
+  const created = [...new Set(live.flatMap(s => s.created || []))].filter(u => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(u)).slice(0, 20);
+  const query = `query {
+    reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { ${PR_GQL} } } }
+    mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 50) { nodes { ... on PullRequest { ${PR_GQL} } } }
+    ${created.map((u, i) => `c${i}: resource(url: "${u}") { ... on PullRequest { ${PR_GQL} } }`).join('\n')}
+  }`;
+  const all = new Map(), wanted = new Map();
+  for (const [login, a] of accounts) {
+    const r = await fetch('https://api.github.com/graphql', { method: 'POST', headers: { Authorization: `Bearer ${a.token}`, 'User-Agent': 'claude-lantern' }, body: JSON.stringify({ query }) }).catch(() => null);
+    if (r?.status === 401) { a.error = 'expired'; continue; } // the token was revoked or expired: reconnect
+    const data = (await r?.json().catch(() => null))?.data;
+    if (!data) continue;
+    a.error = '';
+    // reshape to gh's form so prNeed can read it: checks become one rollup state
+    const norm = p => p?.url && { ...p, statusCheckRollup: p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ? [{ state: p.commits.nodes[0].commit.statusCheckRollup.state }] : [] };
+    for (const p of data.reviews?.nodes || []) if (p?.url) wanted.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
+    for (const key of Object.keys(data)) if (key !== 'reviews') for (const p of (data[key]?.nodes || [data[key]]).map(norm)) if (p) all.set(p.url, p);
+  }
+  reviews = [...wanted.values()];
+  for (const s of live) {
+    const prs = new Map();
+    if (alone(s)) {
+      const branch = await git(s.cwd, ['rev-parse', '--abbrev-ref', 'HEAD']), origin = await git(s.cwd, ['remote', 'get-url', 'origin']);
+      const repo = origin?.match(/github\.com[:/](.+?)(?:\.git)?$/)?.[1];
+      for (const p of all.values()) if (p.headRefName === branch && p.repository.nameWithOwner.toLowerCase() === repo?.toLowerCase()) prs.set(p.url, p);
+    }
+    for (const url of s.created || []) if (all.has(url)) prs.set(url, all.get(url));
+    s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
+  }
+}
+
+// ---- Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain ----
+const CLIENT_ID = 'Iv23liGsGuBVmd5HoOSn', KEYCHAIN = 'claude-lantern';
+const accounts = new Map(); // login -> { token, error }
+let signIn = null; // a device-flow sign-in in progress: { code, url, until }
+const security = args => new Promise(done => execFile('/usr/bin/security', args, { timeout: 10000 }, (err, out) => done(err ? null : out.trim())));
+const saveSettings = () => fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n', () => {});
+function broadcastGitHub() {
+  const msg = `event: github\ndata: ${JSON.stringify(githubState())}\n\n`;
+  for (const c of clients) c.write(msg);
+}
+const githubState = () => ({ accounts: [...accounts].map(([login, a]) => ({ login, error: a.error || '' })), signIn });
+async function loadAccounts() {
+  for (const login of settings.githubAccounts || []) { const token = await security(['find-generic-password', '-s', KEYCHAIN, '-a', login, '-w']); if (token) accounts.set(login, { token }); }
+  if (accounts.size) refreshGitHub();
+}
+async function connectGitHub() {
+  const post = (url, body) => fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: CLIENT_ID, ...body }) }).then(r => r.json()).catch(() => ({}));
+  const start = await post('https://github.com/login/device/code', {});
+  if (!start.device_code) return false;
+  signIn = { code: start.user_code, url: start.verification_uri, until: Date.now() + start.expires_in * 1000 };
+  broadcastGitHub();
+  let wait = (start.interval || 5) * 1000;
+  while (signIn?.code === start.user_code && Date.now() < signIn.until) {
+    await new Promise(r => setTimeout(r, wait));
+    const t = await post('https://github.com/login/oauth/access_token', { device_code: start.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
+    if (t.error === 'slow_down') wait += 5000;
+    else if (t.access_token) {
+      const me = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${t.access_token}`, 'User-Agent': 'claude-lantern' } }).then(r => r.json()).catch(() => ({}));
+      if (!me.login) break;
+      await security(['add-generic-password', '-U', '-s', KEYCHAIN, '-a', me.login, '-l', 'Claude Lantern GitHub', '-w', t.access_token]);
+      accounts.set(me.login, { token: t.access_token });
+      settings.githubAccounts = [...new Set([...(settings.githubAccounts || []), me.login])];
+      saveSettings();
+      signIn = null; broadcastGitHub(); refreshGitHub();
+      return true;
+    } else if (t.error !== 'authorization_pending') break;
+  }
+  signIn = null; broadcastGitHub();
+  return false;
+}
+async function disconnectGitHub(login) {
+  await security(['delete-generic-password', '-s', KEYCHAIN, '-a', login]);
+  accounts.delete(login);
+  settings.githubAccounts = (settings.githubAccounts || []).filter(l => l !== login);
+  saveSettings(); broadcastGitHub();
+  if (!accounts.size && !settings.github) clearGitHub(); else refreshGitHub();
+}
+
 function clearGitHub() { reviews = []; for (const s of sessions.values()) delete s.github; broadcast(); }
+loadAccounts();
 setInterval(refreshGitHub, 2 * 60 * 1000);
 
 // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
@@ -478,6 +567,20 @@ http.createServer((req, res) => {
     return;
   }
   // Change a shared setting and tell every open window. Same JSON-only guard as /focus.
+  // Connect GitHub: start a device-flow sign-in, or disconnect an account. Same JSON-only guard as the others.
+  if (req.method === 'POST' && req.url === '/github' && req.headers['content-type'] === 'application/json') {
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
+    req.on('end', () => {
+      let j = {}; try { j = JSON.parse(body); } catch {}
+      if (j.connect) connectGitHub();
+      else if (j.cancel) { signIn = null; broadcastGitHub(); }
+      else if (typeof j.disconnect === 'string' && accounts.has(j.disconnect)) disconnectGitHub(j.disconnect);
+      else return res.writeHead(400).end();
+      res.writeHead(204).end();
+    });
+    return;
+  }
   if (req.method === 'POST' && req.url === '/settings' && req.headers['content-type'] === 'application/json') {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
@@ -490,7 +593,7 @@ http.createServer((req, res) => {
         if (Number.isFinite(quietUntil)) { settings.quietUntil = quietUntil; ok = true; } // quiet hours: every wait counts as snoozed until then
       } catch {}
       if (!ok) return res.writeHead(400).end();
-      fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n', () => {});
+      saveSettings();
       for (const c of clients) c.write(`event: settings\ndata: ${JSON.stringify(settings)}\n\n`);
       res.writeHead(204).end();
     });
@@ -498,7 +601,7 @@ http.createServer((req, res) => {
   }
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`retry: 2000\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`);
+    res.write(`retry: 2000\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: github\ndata: ${JSON.stringify(githubState())}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
