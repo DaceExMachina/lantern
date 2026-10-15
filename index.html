@@ -273,12 +273,13 @@ function applyStyle(key) {
 // Somewhere on the lantern's surface: a random height, and a random way round from near the middle to the edge.
 // The wing points straight out of the surface; seen from the front its sideways part shrinks toward the middle,
 // so moths there show a shorter wing. Returns [x, y, wing angle, wing length].
-// The spot faces the direction `a` (radians, from the lantern's middle), like a slice of pie: straight up lands high
-// on the front, straight out lands at the edge, so moths whose homes sit in different directions never cross paths.
+// The spot sits in the slice of pie facing direction `a` (radians, from the lantern's middle), anywhere from a third
+// of the way out to the rim: straight up lands on the upper front, straight out lands toward the edge, so moths whose
+// homes sit in different directions never cross paths.
 function pickPerch(a = Math.random() * 2 * Math.PI) {
-  const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1;
-  const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a));
-  const sin = Math.sin((15 + 75 * Math.abs(Math.cos(a))) * Math.PI / 180);
+  const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + Math.random() * 0.65;
+  const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a) * depth);
+  const sin = Math.max(Math.sin(15 * Math.PI / 180), Math.abs(Math.cos(a)) * depth); // how far round the side, from the front
   const slope = (half(y + 1) - half(y - 1)) / 2, len = Math.hypot(1, slope); // how fast the surface bulges at this height
   const px = side / len * sin, py = -slope / len; // the surface's outward direction, as seen from the front
   return [340 + side * half(y) * sin, y, Math.atan2(py, px) * 180 / Math.PI, Math.max(0.3, Math.hypot(px, py))];
