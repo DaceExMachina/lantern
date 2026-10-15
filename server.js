@@ -161,6 +161,16 @@ function handle(e) {
       s.state = 'waiting';
       s.note = 'Turn ended with an API error';
       break;
+    // A /compact you run yourself ends back at the prompt with no Stop after it, so put the session back to idle.
+    // An automatic compact carries on with whatever the session was doing (working mid-turn, or waiting), so leave that.
+    case 'PreCompact':
+      s.activity = 'Compacting the conversation';
+      if (e.trigger === 'manual') s.state = 'working';
+      break;
+    case 'PostCompact':
+      s.activity = '';
+      if (e.trigger === 'manual') { s.state = 'idle'; s.note = ''; }
+      break;
     case 'PermissionRequest':
       s.state = 'waiting';
       s.note = `Wants permission to use ${e.tool_name || 'a tool'}`;
@@ -236,6 +246,7 @@ function lastTurn(lines) {
   for (let i = lines.length - 1; i >= 0; i--) {
     let j; try { j = JSON.parse(lines[i]); } catch { continue; }
     if (j.type === 'system' && j.subtype === 'turn_duration') return { done: true, cwd: j.cwd };
+    if (j.isCompactSummary || j.subtype === 'compact_boundary') return { done: true, compacted: true, cwd: j.cwd }; // stopped right after a compact
     if (j.type === 'assistant') return { done: j.message?.stop_reason === 'end_turn', cwd: j.cwd };
     if (j.type === 'user') return { done: false, cwd: j.cwd };
   }
@@ -260,7 +271,7 @@ function seedSession(file, live) {
   const id = path.basename(file, '.jsonl'), dir = file.slice(0, -'.jsonl'.length);
   if (sessions.has(id) || !UUID.test(id)) return;
   const st = fs.statSync(file), turn = lastTurn(tail(file));
-  const s = { id, cwd: turn.cwd || '', state: turn.done ? 'waiting' : 'working', note: turn.done ? 'Finished its turn, waiting for you' : '',
+  const s = { id, cwd: turn.cwd || '', state: turn.compacted ? 'idle' : turn.done ? 'waiting' : 'working', note: turn.done && !turn.compacted ? 'Finished its turn, waiting for you' : '',
     started: st.birthtimeMs, last: live ? Date.now() : st.mtimeMs, project: path.basename(path.dirname(file)), unconfirmed: !live, subagents: new Map() };
   sessions.set(id, s);
   readTitle(s, dir);

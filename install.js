@@ -8,7 +8,7 @@ const FILE = path.join(os.homedir(), '.claude', 'settings.json');
 const PORT = Number(process.env.LANTERN_PORT) || 7717;
 const MARK = '#lantern';
 const EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest',
-  'Notification', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop'];
+  'Notification', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PreCompact', 'PostCompact'];
 // Runs in the background (async), gives up after 1s, never fails: Claude Code never waits on the lantern.
 // The iTerm session id (empty outside iTerm) lets clicking a moth bring that terminal to the front.
 const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Session: $ITERM_SESSION_ID" --data-binary @- http://127.0.0.1:${PORT}/event >/dev/null 2>&1; exit 0 ${MARK}`;
