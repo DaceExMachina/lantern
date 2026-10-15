@@ -14,6 +14,9 @@
   footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 16px; flex-wrap: wrap; }
   #status.waiting { color: #B9A8FF; }
   #status.offline { color: #8A7A99; font-style: italic; }
+  #status .next { all: unset; cursor: pointer; border-bottom: 1px dotted currentColor; }
+  #status .next:hover { color: #E4DAFF; }
+  #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
   .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 8px; }
   .panel #card { max-width: 210px; font-size: 11.5px; }
@@ -271,7 +274,7 @@ const wobble = (s, k) => Math.sin(s * 2.3 + k) * 0.6 + Math.sin(s * 5.1 + k * 1.
 
 let sessions = [];
 const moths = new Map(); // key -> moth
-let seenWaiting = new Set();
+let seenWaiting = new Set(), nextUp = 0;
 
 // ---- state from server -------------------------------------------------------
 const es = new EventSource('/events');
@@ -300,9 +303,25 @@ function sync() {
   const snoozed = sessions.filter(s => s.state === 'waiting' && s.snoozed).length;
   const st = $('status');
   st.className = waiting.length ? 'waiting' : '';
-  st.textContent = sessions.length
-    ? `${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working` + (onAgents ? ` · ${onAgents} waiting on agents` : '') + (waiting.length ? ` · ${waiting.length} need${waiting.length > 1 ? '' : 's'} you` : '') + (snoozed ? ` · ${snoozed} snoozed` : '')
-    : 'quiet night, no sessions';
+  if (!sessions.length) st.textContent = 'quiet night, no sessions';
+  else {
+    st.replaceChildren(`${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working` + (onAgents ? ` · ${onAgents} waiting on agents` : ''));
+    if (waiting.length) {
+      // "N need you" opens the session that's waited longest; each click moves on to the next one
+      const next = document.createElement('button');
+      next.className = 'next'; next.textContent = `${waiting.length} need${waiting.length > 1 ? '' : 's'} you`;
+      next.title = 'Open the session that has waited longest';
+      next.onclick = () => {
+        const queue = sessions.filter(s => s.state === 'waiting' && !s.snoozed).sort((a, b) => a.waitingSince - b.waitingSince);
+        const s = queue[nextUp++ % queue.length];
+        if (s) fetch('/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id }) });
+      };
+      st.append(' · ', next);
+    }
+    if (snoozed) st.append(` · ${snoozed} snoozed`);
+  }
+  // the Dock app's icon shows how many sessions need me (Safari may want notification permission for this)
+  try { const p = waiting.length ? navigator.setAppBadge?.(waiting.length) : navigator.clearAppBadge?.(); p?.catch?.(() => {}); } catch {}
 
   for (const s of waiting) if (!seenWaiting.has(s.id)) alertMe(s);
   seenWaiting = new Set(waiting.map(s => s.id));
@@ -618,6 +637,20 @@ function frame(t) {
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
+      // A long wait makes a moth restless: after 15 minutes it fans its wings every so often, after an hour it hops
+      // off the paper and settles again. Each fidget lasts 1.6s, with 20-40s of stillness between. Snoozed ones stay calm.
+      const waited = m.session.snoozed ? 0 : (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
+      m.fidget = '';
+      if (waited < 15) m.fidgetAt = 0;
+      else {
+        m.fidgetAt ||= s + 5 + Math.random() * 15;
+        const into = s - m.fidgetAt;
+        if (into > 1.6) m.fidgetAt = s + 20 + Math.random() * 20;
+        else if (into > 0) {
+          m.fidget = waited >= 60 ? 'hop' : 'fan';
+          if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / 1.6);
+        }
+      }
     } else {
       // stay near home, drifting lazily
       const [hx, hy] = stretch(m.home);
@@ -643,13 +676,14 @@ function frame(t) {
     // and the two wings are a touch out of step, so no two beats look exactly alike.
     // keep flapping all the way in; only a moth that has reached its spot slows down and folds
     const perched = needsMe && Math.hypot(tx - m.x, ty - m.y) < ((m.fold || 0) > 0.5 ? 10 : 4); // slack once folded, so the sway can't make it flicker
-    m.beat = (m.beat ?? m.phase) + (perched ? 1.5 : flap) * dt; // accumulated, so speed changes never jump the wings
+    const resting = perched && !m.fidget; // perched and still, not fidgeting
+    m.beat = (m.beat ?? m.phase) + (resting ? 1.5 : flap) * dt; // accumulated, so speed changes never jump the wings
     const beat = m.beat;
-    const height = (perched ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
+    const height = (resting ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
     const liftAt = lag => height * 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3);
-    const sweep = perched ? 0 : 0.4 * Math.cos(beat);
+    const sweep = resting ? 0 : 0.4 * Math.cos(beat);
     // landing folds the flapping wings into the side view; taking off unfolds them again
-    m.fold = (m.fold || 0) + ((perched ? 1 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5);
+    m.fold = (m.fold || 0) + ((perched ? { hop: 0, fan: 0.45 }[m.fidget] ?? 1 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5);
     const out = (m.perch?.[2] ?? 0) + sway + (m.landJitter || 0), part = 5 + 4 * Math.sin(s * 1.2 + m.phase);
     // Each moth slowly turns in 3D around its body axis, drifting between seen-from-above and side-on (either way).
     // Mostly near top-down, sometimes swinging well round; landed moths settle back flat before folding.

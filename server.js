@@ -224,6 +224,8 @@ function handle(e) {
       if (ev === 'PreToolUse') s.activity = describe(e.tool_name, e.tool_input);
       if (ev === 'UserPromptSubmit') s.activity = 'Thinking about your message';
   }
+  // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
+  if (s.state === 'waiting') s.waitingSince ||= Date.now(); else s.waitingSince = 0;
 }
 
 // ---- finding a session's iTerm tab when hooks haven't told us (seeded, or quiet since a restart) ---------------
@@ -326,6 +328,7 @@ function seedSession(file, live) {
     s.subagents.set(agent, a);
   }
   if (s.state === 'waiting' && s.subagents.size) { s.state = 'paused'; s.note = 'Waiting on its agents'; }
+  if (s.state === 'waiting') s.waitingSince = st.mtimeMs; // it's been waiting since its transcript last changed
 }
 
 function seed() {
