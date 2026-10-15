@@ -415,7 +415,8 @@ setInterval(() => {
   const now = Date.now();
   let changed = false;
   for (const [id, s] of sessions) {
-    if (s.pid && !alive(s.pid)) { sessions.delete(id); changed = true; continue; }
+    // with its process known, only that decides: a closed session goes, an open one stays however quiet it's been
+    if (s.pid) { if (!alive(s.pid)) { sessions.delete(id); changed = true; } continue; }
     // a session only seen on disk gets the normal timeout until it proves it's alive with a real event
     const limit = s.state === 'waiting' && !s.unconfirmed ? WAITING_EXPIRE_MS : EXPIRE_MS;
     if (now - s.last > limit) { sessions.delete(id); changed = true; continue; }
