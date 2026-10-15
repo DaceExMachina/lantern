@@ -744,7 +744,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.glow?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.grad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -867,29 +867,35 @@ function frame(t) {
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
       put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
       put(m.thread, 'opacity', m.leaving ? 0.2 : 0.5);
-      // A tool call sends light down the thread from the moth to the lantern: the thread's stroke is a soft radial
-      // gradient whose bright centre travels along the curve, so the dashes themselves light up as it passes.
-      // One pulse at a time per thread, 2.2s each, with at most two more waiting.
+      // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from
+      // nowhere. A tool call sends light down it from the moth to the lantern: a bright band in the same gradient
+      // travels along, lighting up the dashes as it passes. One pulse at a time, 2.2s each, with at most two waiting.
       const ticks = m.session.ticks || 0, base = mix(pal('thread'), COOL.thread, m.cool);
       put(m.flyLine, 'stroke', base); // the fireflies' dotted line matches the moth's thread
       m.ticks ??= ticks;
       m.ticks = Math.max(m.ticks, ticks - 3);
       if (!m.pulse && ticks > m.ticks) { m.pulse = { at: 0 }; m.ticks++; }
+      let at = -1, lit = base; // where along the thread the pulse is (0 lantern, 1 moth), and its colour
       if (m.pulse) {
         m.pulse.at += dt / 2.2;
         const t = 1 - Math.min(1, m.pulse.at), u = 1 - t;
         const x = u * u * ax + 2 * u * t * qx + t * t * m.x, y = u * u * ay + 2 * u * t * qy + t * t * m.y;
-        const lit = mix(base, pal('core'), Math.sin(Math.PI * Math.min(1, m.pulse.at))); // fades in and out over the trip
-        if (!m.glow) {
-          m.glow = el('radialGradient', { id: `pulse-${++pulseIds}`, gradientUnits: 'userSpaceOnUse', r: 28 });
-          m.glow.append(el('stop', { offset: 0 }), el('stop', { offset: 0.45 }), el('stop', { offset: 1 }));
-          document.querySelector('svg defs').append(m.glow);
-        }
-        put(m.glow, 'cx', x.toFixed(1)); put(m.glow, 'cy', y.toFixed(1));
-        [lit, mix(base, lit, 0.6), base].forEach((c, i) => put(m.glow.children[i], 'stop-color', c));
-        put(m.thread, 'stroke', `url(#${m.glow.id})`);
+        at = ((x - ax) * dx + (y - ay) * dy) / (len * len);
+        lit = mix(base, pal('core'), Math.sin(Math.PI * Math.min(1, m.pulse.at))); // fades in and out over the trip
         if (m.pulse.at >= 1) m.pulse = null;
-      } else put(m.thread, 'stroke', base);
+      }
+      if (!m.grad) {
+        m.grad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
+        for (let i = 0; i <= 16; i++) m.grad.append(el('stop', { offset: i / 16 }));
+        document.querySelector('svg defs').append(m.grad);
+        put(m.thread, 'stroke', `url(#${m.grad.id})`);
+      }
+      put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', m.x.toFixed(1)); put(m.grad, 'y2', m.y.toFixed(1));
+      [...m.grad.children].forEach((st, i) => {
+        const o = i / 16;
+        put(st, 'stop-color', mix(base, lit, Math.max(0, 1 - Math.abs(o - at) / 0.12)));
+        put(st, 'stop-opacity', Math.min(1, o / 0.25, (1 - o) / 0.25).toFixed(2)); // fades out toward both ends
+      });
     }
   }
   placeCard();
