@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 64 64">
-  <!-- exactly the lantern's moth: same two petals, same flat fill, in its indigo "needs you" color with the same pale outline -->
-  <g transform="translate(32 32) scale(2.05) translate(-4.4 6.5)" fill="#7B5CFF" stroke="#F6F0FF" stroke-width="1.2" stroke-linejoin="round">
+  <!-- the lantern's moth in its own pale colour, on the outermost glow ring's colour -->
+  <rect width="64" height="64" rx="14" fill="#3A3050"/>
+  <g transform="translate(32 32) scale(1.75) translate(-4.4 6.5)" fill="#E9DCF0">
     <path d="M0 0q12 -14 18 -4q-4 10 -18 4z"/>
     <path d="M0 0q-14 -12 -2 -18q8 4 2 18z"/>
   </g>

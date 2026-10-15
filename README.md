@@ -11,7 +11,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Small moths are subagents** circling the session that started them. Supervisor agents are a size up.
 - **A moth that needs you lands on the lantern**, folds its wings, and turns indigo. The flame, paper, and glow all shift to violet.
 - **Waiting on agents isn't the same as waiting on you.** A session whose turn ended while its background agents keep running stays in the air. If it also asked you something, it lands.
-- **Hover a moth** for the session's name, what it's doing right now, your last prompt, the question it's asking, and its subagents' tasks.
+- **Hover a session's moth** for its name, what it's doing right now, your last prompt, the question it's asking, and what each of its agents is working on. The hover area stays put while the moth wanders, so the card holds still.
 - **Click a moth** to jump to that session's tab in iTerm2.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
 - **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
@@ -71,7 +71,7 @@ launchctl kickstart -k gui/$(id -u)/com.lantern.server
 
 ### Put it in your Dock
 
-Open the page in Safari and choose File > Add to Dock. The moth icon comes with it.
+Open the page in Safari and choose File > Add to Dock. The moth icon comes with it. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.
 
 ### Put it in iTerm2's toolbelt
 
@@ -90,7 +90,7 @@ You need Xcode's command line tools.
 
 That builds `Lantern.saver` from source and installs it in `~/Library/Screen Savers`. Then choose Lantern in System Settings > Wallpaper > Screen Saver (it's listed under Other). It shows the live page full screen, so the server needs to be running.
 
-With more than one display, the biggest one gets the lantern and the others get just the background and drifting specks. To pick which lantern it shows, choose one in any other Lantern window.
+With more than one display, the biggest one gets the lantern and the others get just the background and drifting specks. The lantern's rays carry on across onto the other displays, lined up with where they really sit. To pick which lantern it shows, choose one in any other Lantern window.
 
 ### Click to focus iTerm2
 

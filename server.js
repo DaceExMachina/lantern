@@ -385,7 +385,7 @@ http.createServer((req, res) => {
     req.on('close', () => clients.delete(res));
     return;
   }
-  const ICONS = { '/icon.svg': 'image/svg+xml', '/icon.png': 'image/png' };
+  const ICONS = { '/icon.svg': 'image/svg+xml', '/icon.png': 'image/png', '/icon-indigo.svg': 'image/svg+xml', '/icon-indigo.png': 'image/png' };
   if (ICONS[req.url]) {
     res.writeHead(200, { 'Content-Type': ICONS[req.url] });
     return fs.createReadStream(path.join(__dirname, req.url)).pipe(res);

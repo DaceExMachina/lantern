@@ -37,7 +37,12 @@ final class LanternView: ScreenSaverView {
         let area = { (r: NSRect) in r.width * r.height }
         let biggest = NSScreen.screens.map { area($0.frame) }.max() ?? 0
         let ambient = !isPreview && area(frame) < biggest
-        let mode = ambient ? "screensaver&ambient" : "screensaver"
+        // An ambient display is told where both screens sit, so the lantern's rays can carry on across onto it.
+        // (The frame a screensaver is handed may not say where its screen is, so find the screen by size.)
+        let biggestFrame = NSScreen.screens.max { area($0.frame) < area($1.frame) }?.frame ?? frame
+        let selfFrame = NSScreen.screens.first { $0.frame.size == frame.size && $0.frame != biggestFrame }?.frame ?? frame
+        let f = { (r: NSRect) in [r.minX, r.minY, r.width, r.height].map { String(Int($0)) }.joined(separator: ",") }
+        let mode = ambient ? "screensaver&ambient&lantern=\(f(biggestFrame))&self=\(f(selfFrame))" : "screensaver"
         // The screensaver draws without much GPU help, and a Retina or 5K screen is a lot of pixels; the scene is soft
         // and glowy, so drawing it at standard resolution looks the same and is several times cheaper.
         if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
