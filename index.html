@@ -9,7 +9,8 @@
 <style>
   html, body { margin: 0; height: 100%; background: #1E1930; color: #C9B8DA; font: 14px/1.4 system-ui, sans-serif; }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
-  svg { width: 100%; height: 100%; display: block; }
+  #scene { position: relative; min-height: 0; }
+  #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 16px; flex-wrap: wrap; }
   #status.waiting { color: #B9A8FF; }
   #status.offline { color: #8A7A99; font-style: italic; }
@@ -19,9 +20,10 @@
   .panel .notify { display: none; }
   /* screensaver mode (opened with ?screensaver): just the scene, with the glow running to the screen's edges */
   body.screensaver { background: #2B2440; cursor: none; }
-  .screensaver footer, .screensaver #card, .screensaver #frame { display: none; }
+  .screensaver footer, .screensaver #card { display: none; }
+  .screensaver #bg { border-radius: 0 !important; }
   /* ambient (a second display's screensaver): just the colour and the drifting specks */
-  .ambient #lantern, .ambient #moths, .ambient #threads, .ambient #rings, .ambient #glow, .ambient #rays { display: none; }
+  .ambient #lantern, .ambient #moths, .ambient #threads { display: none; }
   label { cursor: pointer; user-select: none; }
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
@@ -45,21 +47,13 @@
 </style>
 </head>
 <body>
+<div id="scene"><canvas id="bg"></canvas>
 <svg viewBox="40 20 600 600" role="img" aria-labelledby="t">
   <title id="t">Lantern: live status of Claude Code sessions</title>
   <defs>
-    <radialGradient id="glowGrad">
-      <stop class="glowStop" offset="0" stop-opacity="0.85"/>
-      <stop class="glowStop" offset="0.45" stop-opacity="0.3"/>
-      <stop class="glowStop" offset="1" stop-opacity="0"/>
-    </radialGradient>
     <radialGradient id="paperGrad" cx="340" cy="350" r="140" gradientUnits="userSpaceOnUse">
       <stop class="paperStop" offset="0" stop-opacity="0.85"/>
       <stop class="paperStop" offset="1" stop-opacity="0"/>
-    </radialGradient>
-    <radialGradient id="rayGrad" cx="0" cy="0" r="300" gradientUnits="userSpaceOnUse">
-      <stop class="rayStop" offset="0.15" stop-opacity="0.9"/>
-      <stop class="rayStop" offset="1" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="paperShade" x1="250" x2="430" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#CFB28C"/><stop offset=".28" stop-color="#F0D9BC"/><stop offset=".5" stop-color="#F8E8D2"/>
@@ -72,19 +66,10 @@
     <clipPath id="bodyClip"><path d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z"/></clipPath>
     <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
   </defs>
-  <rect id="frame" x="40" y="20" width="600" height="600" rx="16" fill="#2B2440"/>
-  <g id="rings">
-    <circle cx="340" cy="330" r="250"/>
-    <circle cx="340" cy="330" r="190"/>
-    <circle cx="340" cy="330" r="135"/>
-  </g>
-  <circle id="glow" cx="340" cy="345" r="200" fill="url(#glowGrad)"/>
-  <g id="rays"><g id="raysA"></g><g id="raysB"></g></g>
-  <g id="dust"></g>
   <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
   <g id="lantern"></g>
   <g id="moths"></g>
-</svg>
+</svg></div>
 <div id="card" role="tooltip"></div>
 <footer>
   <span id="status" class="offline">connecting…</span>
@@ -143,7 +128,10 @@ function fitView() {
   VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-  Object.entries({ x, y, width: w, height: h }).forEach(([k, v]) => $('frame').setAttribute(k, v));
+  VIEW.box = [x, y, w, h];
+  const canvas = $('bg'), dpr = devicePixelRatio || 1;
+  canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+  canvas.style.borderRadius = `${16 * width / w}px`; // the scene's rounded corners (none in the screensaver)
   VIEW.top = y;
   $('hang')?.setAttribute('d', `M340 ${y - 2}V22`); // the string runs from the top of the window to where each lantern's own string starts
 }
@@ -368,17 +356,101 @@ function flamePath(w, h, lean) {
     `C${f(bx + w * 0.6)} ${f(by + h * 0.1)} ${f(bx - w * 0.6)} ${f(by + h * 0.1)} ${f(bx - w * 0.55)} ${f(by - h * 0.14)}Z`;
 }
 
-// soft light rays turning slowly in two layers, and dust drifting in the light
-for (const [id, off] of [['raysA', 0], ['raysB', 0.35]]) for (let i = 0; i < 9; i++) {
-  const a = i / 9 * Math.PI * 2 + off, w = 0.05 + (i % 3) * 0.025, p = t => `${(300 * Math.cos(t)).toFixed(1)} ${(300 * Math.sin(t)).toFixed(1)}`;
-  $(id).append(el('path', { d: `M0 0L${p(a - w)}L${p(a + w)}Z`, fill: 'url(#rayGrad)' }));
+// ---- background on the GPU ------------------------------------------------------------------------------
+// The full-screen layer (background, glow rings, soft glow, turning rays, dust) is drawn by a WebGL shader on a canvas
+// behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
+const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
+function program(vert, frag) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vert], [gl.FRAGMENT_SHADER, frag]]) {
+    const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    gl.attachShader(p, sh);
+  }
+  gl.linkProgram(p);
+  const u = {}; // uniform locations by name
+  for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i++) { const n = gl.getActiveUniform(p, i).name; u[n] = gl.getUniformLocation(p, n); }
+  return { p, u };
 }
-const rayNodes = [...$('rays').querySelectorAll('path')];
+// Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
+const BG = program(`attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`, `
+precision highp float;
+uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient, uTime;
+uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
+uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
+uniform float uRayScale, uRayA, uRotA, uRotB;
+void main() {
+  vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
+  float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
+  vec3 col = uBg;
+  if (uAmbient < 0.5) {
+    // glow rings: three nested discs, shown together at one opacity
+    float d = length(p - uRingC);
+    vec3 ring = mix(mix(uRing0, uRing1, smoothstep(px, -px, d - uRingR.y)), uRing2, smoothstep(px, -px, d - uRingR.z));
+    col = mix(col, ring, smoothstep(px, -px, d - uRingR.x) * uRingA);
+    // soft glow: radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
+    float g = length(p - uGlowC) / uGlowR;
+    float ga = g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));
+    col = mix(col, uGlowCol, ga * uGlowA);
+    // rays: two sets of nine wedges turning opposite ways, each fading out from the light and twinkling on its own
+    vec2 q = (p - uGlowC) / uRayScale;
+    float r = length(q), th = atan(q.y, q.x), fall = r < 45.0 ? 0.9 : 0.9 * clamp(1.0 - (r / 300.0 - 0.15) / 0.85, 0.0, 1.0);
+    float clear = 1.0;
+    for (int i = 0; i < 18; i++) {
+      float fi = float(i), k = mod(fi, 9.0), setB = step(9.0, fi);
+      float a = k / 9.0 * 6.2831853 + setB * 0.35 + mix(uRotA, uRotB, setB);
+      float w = 0.05 + mod(k, 3.0) * 0.025, diff = abs(mod(th - a + 3.1415927, 6.2831853) - 3.1415927);
+      float edge = px / max(r * uRayScale, px);
+      float tw = sin(uTime * (0.4 + mod(fi, 5.0) * 0.13) + fi * 1.7);
+      clear *= 1.0 - smoothstep(w + edge, w - edge, diff) * fall * (0.35 + 0.65 * tw * tw);
+    }
+    col = mix(col, uGlowCol, (1.0 - clear) * uRayA);
+  }
+  gl_FragColor = vec4(col, 1.0);
+}`);
+// dust: soft points, positions worked out in JS each frame
+const DUST = program(`
+attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; varying float vA;
+void main() {
+  gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
+  gl_PointSize = a.z * 2.0 * uRes.x / uBox.z + 1.0; vA = a.w;
+}`, `
+precision mediump float; uniform vec3 uCol; varying float vA;
+void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(uCol, vA * smoothstep(1.0, 0.6, d)); }`);
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const dustBuf = gl.createBuffer(), dustData = new Float32Array(60 * 4);
+const rgb = c => hex(c).map(v => v / 255);
+
 const dust = Array.from({ length: 34 }, () => ({ a: Math.random() * 6.28, d: 40 + Math.random() * 230, w: (Math.random() - 0.5) * 0.12,
-  ph: Math.random() * 10, n: $('dust').appendChild(el('circle', { r: (0.7 + Math.random() * 1.2).toFixed(2) })) }));
+  ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
 const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 230 + Math.random() * 110, w: (Math.random() - 0.5) * 0.08,
-  ph: Math.random() * 10, n: $('dust').appendChild(el('circle', { r: (0.6 + Math.random() * 0.9).toFixed(2) })) }));
+  ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
+
+function drawBackground(v) {
+  if (!VIEW.box) return; // not laid out yet
+  const c = $('bg'), [x, y, w, h] = VIEW.box;
+  gl.viewport(0, 0, c.width, c.height);
+  gl.disable(gl.BLEND);
+  gl.useProgram(BG.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  const u = BG.u;
+  gl.uniform2f(u.uRes, c.width, c.height); gl.uniform4f(u.uBox, x, y, w, h); gl.uniform3fv(u.uBg, rgb('#2B2440'));
+  gl.uniform1f(u.uAmbient, document.body.classList.contains('ambient') ? 1 : 0); gl.uniform1f(u.uTime, v.time);
+  gl.uniform2f(u.uRingC, ...v.ringC); gl.uniform3f(u.uRingR, ...v.ringR); gl.uniform1f(u.uRingA, v.ringA);
+  v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
+  gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR); gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
+  gl.uniform1f(u.uRayScale, v.rayScale); gl.uniform1f(u.uRayA, v.rayA); gl.uniform1f(u.uRotA, v.rotA); gl.uniform1f(u.uRotB, v.rotB);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // dust over it
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(DUST.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, dustBuf); gl.bufferData(gl.ARRAY_BUFFER, dustData, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+  gl.uniform4f(DUST.u.uBox, x, y, w, h); gl.uniform2f(DUST.u.uRes, c.width, c.height); gl.uniform3fv(DUST.u.uCol, rgb(v.dustCol));
+  gl.drawArrays(gl.POINTS, 0, 60);
+}
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
 for (const mode of ['panel', 'screensaver', 'ambient']) if (new URLSearchParams(location.search).has(mode)) document.body.classList.add(mode);
@@ -453,44 +525,30 @@ function frame(t) {
   // the paper takes on the flame's colour, more so the brighter it burns
   put($('paperTint'), 'fill', pal('paper'));
   put($('paperTint'), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
-  document.querySelectorAll('.glowStop').forEach(n => put(n, 'stop-color', pal('glow')));
   const [gx, gy] = rot(...style.light);
-  const breathe = Math.sin(s * 1.1) * 0.5 + 0.5;
-  put($('glow'), 'cx', gx.toFixed(1)); put($('glow'), 'cy', gy.toFixed(1));
-  put($('glow'), 'r', (150 + 90 * level + 25 * cool + 14 * breathe).toFixed(1));
-  put($('glow'), 'opacity', ((0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse).toFixed(3));
-  [...$('rings').children].forEach((c, i) => put(c, 'fill', mix(WARM.rings[i], COOL.rings[i], cool)));
-  // rings ripple outward: the inner ring swells first, the outer ones follow
-  // ...and swing with the lantern, centred where its body hangs
-  const [rx, ry] = rot(340, 330);
-  [250, 190, 135].forEach((r, i) => {
-    const c = $('rings').children[i];
-    put(c, 'cx', rx.toFixed(1)); put(c, 'cy', ry.toFixed(1));
-    put(c, 'r', (r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9))).toFixed(1));
-  });
-  put($('rings'), 'opacity', (0.55 + 0.45 * Math.max(level, cool * 0.5)).toFixed(3));
-  const strength = Math.max(level, cool * 0.6);
-  document.querySelectorAll('.rayStop').forEach(n => put(n, 'stop-color', pal('glow')));
-  put($('rays'), 'transform', `translate(${gx.toFixed(1)} ${gy.toFixed(1)}) scale(${Math.max(VIEW.kx, VIEW.ky).toFixed(2)})`);
-  put($('raysA'), 'transform', `rotate(${(s * 3 % 360).toFixed(2)})`);
-  put($('raysB'), 'transform', `rotate(${(-s * 2 % 360).toFixed(2)})`);
-  put($('rays'), 'opacity', ((0.05 + 0.22 * strength) * flick * pulse).toFixed(3));
-  rayNodes.forEach((n, i) => put(n, 'opacity', (0.35 + 0.65 * Math.sin(s * (0.4 + (i % 5) * 0.13) + i * 1.7) ** 2).toFixed(2)));
-  put($('dust'), 'fill', pal('core'));
-  for (const p of dust) {
+  const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
+  // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs
+  const ringR = [250, 190, 135].map((r, i) => r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9)));
+  // dust drifts around the light; the far specks fill the dark out to the edges
+  dust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18;
-    put(p.n, 'cx', (gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6).toFixed(1));
-    put(p.n, 'cy', (gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6).toFixed(1));
-    put(p.n, 'opacity', ((0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))).toFixed(3));
-  }
-  for (const p of farDust) {
+    dustData.set([gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
+      (0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))], i * 4);
+  });
+  farDust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22;
-    put(p.n, 'cx', (CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10).toFixed(1));
-    put(p.n, 'cy', (CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10).toFixed(1));
-    put(p.n, 'opacity', ((0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)).toFixed(3));
-  }
+    dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
+      (0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)], (34 + i) * 4);
+  });
+  drawBackground({
+    time: s, ringC: rot(340, 330), ringR, ringA: 0.55 + 0.45 * Math.max(level, cool * 0.5),
+    ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
+    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
+    rayScale: Math.max(VIEW.kx, VIEW.ky), rayA: (0.05 + 0.22 * strength) * flick * pulse,
+    rotA: (s * 3 % 360) * Math.PI / 180, rotB: (-s * 2 % 360) * Math.PI / 180, dustCol: pal('core'),
+  });
 
   // moths
   for (const [k, m] of moths) {
