@@ -24,6 +24,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
 - **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
+- **Open windows update themselves.** When `index.html` changes, every Lantern window (the iTerm2 panel, the Dock app, the screensaver) reloads on its own.
 - **Any window shape works.** The scene stretches to fill wide, tall, or square windows, with the lantern staying the same size in the middle.
 
 ## How it works

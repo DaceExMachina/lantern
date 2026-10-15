@@ -523,6 +523,10 @@ function clearGitHub() { reviews = []; for (const s of sessions.values()) delete
 loadAccounts();
 setInterval(refreshGitHub, 2 * 60 * 1000);
 
+// Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when index.html changes on disk.
+const pageVersion = () => { try { return fs.statSync(path.join(__dirname, 'index.html')).mtimeMs; } catch { return 0; } };
+fs.watchFile(path.join(__dirname, 'index.html'), { interval: 1000 }, () => { for (const c of clients) c.write(`event: version\ndata: ${pageVersion()}\n\n`); });
+
 // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
@@ -627,7 +631,7 @@ http.createServer((req, res) => {
   }
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`retry: 2000\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: github\ndata: ${JSON.stringify(githubState())}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`);
+    res.write(`retry: 2000\nevent: version\ndata: ${pageVersion()}\n\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: github\ndata: ${JSON.stringify(githubState())}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;

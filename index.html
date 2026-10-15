@@ -314,6 +314,8 @@ let seenWaiting = new Set(), nextUp = 0;
 const es = new EventSource('/events');
 let raw = [], quietUntil = 0, reviews = [];
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
+let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
+es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
 es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
