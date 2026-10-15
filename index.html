@@ -36,6 +36,11 @@
   #zones circle { fill: transparent; cursor: pointer; }
   #card .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
   #card .agent { color: #E8DCF2; }
+  #card.show { pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
+  #card ul { margin: 6px 0 2px; padding-left: 16px; }
+  #card li { margin: 2px 0; }
+  #card a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
+  #card a:hover { color: #F0E8FF; border-color: #B9A8FF; }
   select { font: inherit; color: inherit; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
   #card { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
@@ -691,6 +696,30 @@ const ago = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 360
 const project = s => s.cwd.split('/').filter(Boolean).pop() || '(unknown)';
 function line(text, cls) { const d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; return d; }
 
+// What a landed session needs from me: its "You:" line, then PRs, other links and how many questions it asked.
+function forYouRows({ you, prs, links, questions }) {
+  const rows = [], list = document.createElement('ul');
+  if (you) rows.push(line(you, 'note'));
+  const link = ({ label, url }, text = label) => {
+    const a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text; a.title = label;
+    return a;
+  };
+  const item = (title, nodes) => {
+    const li = document.createElement('li');
+    li.append(title);
+    nodes.forEach((n, i) => li.append(i ? ', ' : '', n));
+    list.append(li);
+  };
+  // PRs read as short numbers, with the repo added only when they come from more than one
+  const repos = new Set(prs.map(p => p.url.split('/')[4]));
+  if (prs.length) item('PRs: ', prs.map(p => link(p, repos.size > 1 ? `${p.url.split('/')[4]}#${p.url.split('/')[6]}` : `#${p.url.split('/')[6]}`)));
+  if (links.length) item('Links: ', links.map(l => link(l)));
+  if (questions.length) item(`${questions.length} question${questions.length > 1 ? 's' : ''}`, []);
+  if (list.children.length) rows.push(list);
+  return rows;
+}
+
 function renderCard() {
   const m = hovered, s = m?.session;
   if (!s) return;
@@ -701,6 +730,7 @@ function renderCard() {
     chip.textContent = s.snoozed && s.state === 'waiting' ? 'snoozed' : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
     chip.className = 'chip ' + (s.snoozed && s.state === 'waiting' ? 'idle' : s.state);
     if ((s.state === 'waiting' || s.state === 'paused') && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
+    if (s.state === 'waiting' && s.forYou) rows.push(...forYouRows(s.forYou));
     if (s.tasks?.length) rows.push(line(`Running: ${s.tasks.join(', ')}`, 'dim'));
     else if (s.activity) rows.push(line(`Now: ${s.activity}`));
     if (s.prompt) rows.push(line(`“${s.prompt.length > 140 ? s.prompt.slice(0, 140) + '…' : s.prompt}”`, 'prompt'));
@@ -717,7 +747,10 @@ function renderCard() {
   $('card').replaceChildren(...rows);
   $('card').classList.add('show');
 }
-setInterval(() => hovered && renderCard(), 500);
+setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
+$('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
+$('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) hovered.zone.dispatchEvent(new MouseEvent('click')); });
+$('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 400); });
 
 function placeCard() {
   if (!hovered) return;

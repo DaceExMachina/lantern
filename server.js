@@ -61,6 +61,30 @@ function questionIn(message = '') {
   return (blocker || asked).trim().slice(0, 160);
 }
 
+// What a finished turn hands me, for its card: the "You:" line from its status footer, PRs and other links, and
+// the questions it asked. Links come from the model's own text, so only http(s) ones are kept.
+function forYou(message = '') {
+  const text = String(message).replace(/```[\s\S]*?```/g, ''); // nothing inside code blocks
+  const plain = t => t.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/[*_`]/g, '').trim();
+  const seen = new Set(), prs = [], links = [];
+  for (const m of text.matchAll(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s)<>\]]+)/g)) {
+    const url = (m[2] || m[3]).replace(/[.,;:]+$/, '');
+    if (seen.has(url)) continue;
+    seen.add(url);
+    const pr = url.match(/github\.com\/[^/]+\/([^/]+)\/pull\/(\d+)/);
+    const label = plain(m[1] || '') || (pr ? `${pr[1]}#${pr[2]}` : url.replace(/^https?:\/\//, '').slice(0, 60));
+    (pr ? prs : links).push({ label: label.slice(0, 80), url });
+  }
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('>'));
+  const blockers = lines.filter(l => /Blocker:/i.test(l)).map(l => plain(l.replace(/^.*?Blocker:\**\s*/i, '')));
+  const asked = lines.filter(l => !/Blocker:/i.test(l)).flatMap(l => plain(l).split(/(?<=[.!?])\s+/)).filter(q => q.endsWith('?'));
+  return {
+    you: plain(text.match(/\*\*You:\*\*\s*(.+)/)?.[1] || '').slice(0, 200),
+    prs: prs.slice(0, 6), links: links.slice(0, 6),
+    questions: [...new Set([...blockers, ...asked])].slice(0, 5).map(q => q.slice(0, 160)),
+  };
+}
+
 // Agent reports and notifications arrive as "prompts" wrapped in XML; keep just the readable part, labelled.
 function cleanPrompt(p) {
   const tag = p.match(/^\s*<([\w-]+)/)?.[1];
@@ -153,6 +177,7 @@ function handle(e) {
       const q = questionIn(e.last_assistant_message);
       const tasks = running.length ? `${running.length} background task${running.length > 1 ? 's' : ''}` : '';
       s.tasks = running.map(t => t.description).filter(Boolean).slice(0, 4);
+      s.forYou = forYou(e.last_assistant_message);
       if (running.length && !q) { s.state = 'paused'; s.note = `Waiting on ${tasks}`; }
       else { s.state = 'waiting'; s.note = (q ? `Asks: ${q}` : 'Finished its turn') + (tasks ? ` (${tasks} still running)` : ''); }
       break;
@@ -184,6 +209,7 @@ function handle(e) {
       s.state = 'working';
       s.note = '';
       s.tasks = [];
+      s.forYou = null;
       s.snoozed = false; // a snooze only covers the wait it was set on
       if (ev === 'UserPromptSubmit' && e.prompt) s.prompt = cleanPrompt(e.prompt);
       if (ev === 'PreToolUse') s.activity = describe(e.tool_name, e.tool_input);
@@ -243,11 +269,17 @@ function tail(file, bytes = 256 * 1024) {
 }
 // How the last turn ended: a finished turn (end_turn, then a turn_duration marker) means it's waiting for me.
 function lastTurn(lines) {
+  let ended = false; // a turn_duration marker comes after the final message, so keep looking back for its text
   for (let i = lines.length - 1; i >= 0; i--) {
     let j; try { j = JSON.parse(lines[i]); } catch { continue; }
-    if (j.type === 'system' && j.subtype === 'turn_duration') return { done: true, cwd: j.cwd };
+    if (j.type === 'system' && j.subtype === 'turn_duration') { ended = true; continue; }
+    if (j.type === 'assistant') {
+      const text = (j.message?.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+      if (ended && !text) continue;
+      return { done: ended || j.message?.stop_reason === 'end_turn', text, cwd: j.cwd };
+    }
+    if (ended) return { done: true, cwd: j.cwd };
     if (j.isCompactSummary || j.subtype === 'compact_boundary') return { done: true, compacted: true, cwd: j.cwd }; // stopped right after a compact
-    if (j.type === 'assistant') return { done: j.message?.stop_reason === 'end_turn', cwd: j.cwd };
     if (j.type === 'user') return { done: false, cwd: j.cwd };
   }
   return { done: false };
@@ -273,6 +305,7 @@ function seedSession(file, live) {
   const st = fs.statSync(file), turn = lastTurn(tail(file));
   const s = { id, cwd: turn.cwd || '', state: turn.compacted ? 'idle' : turn.done ? 'waiting' : 'working', note: turn.done && !turn.compacted ? 'Finished its turn, waiting for you' : '',
     started: st.birthtimeMs, last: live ? Date.now() : st.mtimeMs, project: path.basename(path.dirname(file)), unconfirmed: !live, subagents: new Map() };
+  if (turn.done && turn.text) s.forYou = forYou(turn.text);
   sessions.set(id, s);
   readTitle(s, dir);
   // subagents that look like they're still going: transcript touched in the last two minutes and not finished

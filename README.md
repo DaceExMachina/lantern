@@ -12,6 +12,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **A moth that needs you lands on the lantern**, folds its wings, and turns indigo. The flame, paper, and glow all shift to violet.
 - **Waiting on agents isn't the same as waiting on you.** A session whose turn ended while its background agents keep running stays in the air. If it also asked you something, it lands.
 - **Hover a session's moth** for its name, what it's doing right now, your last prompt, the question it's asking, and what each of its agents is working on. The hover area stays put while the moth wanders, so the card holds still.
+- **A landed session's card says what it needs from you**: its "You:" line, the PRs and other links it mentioned (clickable), and how many questions it asked. Clicking the card opens the session.
 - **Click a moth** to jump to that session's tab in iTerm2.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
 - **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
