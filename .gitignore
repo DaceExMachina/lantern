@@ -5,3 +5,4 @@ screensaver/build/
 .check/
 node_modules/
 github-cache.json
+app/build/

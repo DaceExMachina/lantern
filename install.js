@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// npx claude-lantern            -> hooks, login item, screensaver, iTerm2 panel, then opens the page
+// npx claude-lantern            -> hooks, login item, Lantern.app, screensaver, iTerm2 panel, then opens the app
 // npx claude-lantern uninstall  -> undoes all of it (~/.claude/settings.json is backed up first either way)
 const fs = require('fs');
 const os = require('os');
@@ -23,6 +23,7 @@ const OLD_LABELS = ['com.dace.lantern']; // hand-made login items from before th
 const DOMAIN = `gui/${/** @type {() => number} */ (process.getuid)()}`;
 const AGENTS = path.join(HOME, 'Library', 'LaunchAgents');
 const SAVER = path.join(HOME, 'Library', 'Screen Savers', 'Lantern.saver');
+const APP = path.join(HOME, 'Applications', 'Lantern.app');
 const ITERM_SCRIPTS = path.join(HOME, 'Library', 'Application Support', 'iTerm2', 'Scripts');
 // npx runs from a cache npm may clear, so the server gets a stable copy here. A git checkout runs in place.
 const COPY = path.join(HOME, 'Library', 'Application Support', 'Lantern');
@@ -91,13 +92,15 @@ function startServer(dir) {
   console.log(`Server starts at login (${plist})`);
 }
 
-function screensaver(dir) {
-  if (!tryRun('xcode-select', '-p')) return console.log('Skipped the screensaver: it needs Xcode command line tools (xcode-select --install), then run this again');
+// The app and the screensaver are built from source on this Mac, which needs Xcode's command line tools.
+function build(dir, what, script, done) {
+  if (!tryRun('xcode-select', '-p')) return console.log(`Skipped ${what}: it needs Xcode command line tools (xcode-select --install), then run this again`);
   try {
-    run('sh', path.join(dir, 'screensaver', 'build.sh'));
-    console.log('Installed the screensaver: pick Lantern in System Settings > Wallpaper > Screen Saver');
+    run('sh', path.join(dir, script));
+    console.log(done);
+    return true;
   } catch (e) {
-    console.log(`Skipped the screensaver: the build failed\n${String(e.stderr || e.message).trim()}`);
+    console.log(`Skipped ${what}: the build failed\n${String(e.stderr || e.message).trim()}`);
   }
 }
 
@@ -115,9 +118,10 @@ async function main() {
   stopServer();
   if (uninstall) {
     fs.rmSync(SAVER, { recursive: true, force: true });
+    if (fs.existsSync(path.join(APP, 'Contents', 'MacOS', 'Lantern'))) fs.rmSync(APP, { recursive: true }); // not a Safari web app of the same name
     fs.rmSync(path.join(ITERM_SCRIPTS, 'AutoLaunch', 'lantern.py'), { force: true });
     fs.rmSync(COPY, { recursive: true, force: true });
-    return console.log('Removed the login item, screensaver, and iTerm2 panel. Lantern is out.');
+    return console.log('Removed the login item, app, screensaver, and iTerm2 panel. Lantern is out.');
   }
 
   let dir = __dirname;
@@ -126,14 +130,15 @@ async function main() {
     dir = COPY;
   }
   startServer(dir);
-  screensaver(dir);
+  const app = build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications');
+  build(dir, 'the screensaver', 'screensaver/build.sh', 'Installed the screensaver: pick Lantern in System Settings > Wallpaper > Screen Saver');
   iterm(dir);
 
   // launchd waits ~10s before restarting a server that couldn't get the port from the one we just stopped.
   for (let i = 0; i < 30 && !(await up()); i++) sleep(500);
   if (!(await up())) throw new Error(`The server didn't come up on ${URL}. Is something else using port ${PORT}? See /tmp/lantern.log`);
   console.log(`Lantern lit at ${URL}`);
-  if (process.stdout.isTTY) tryRun('open', URL); // scripts and agents running this don't get a browser tab
+  if (process.stdout.isTTY) tryRun('open', app ? APP : URL); // scripts and agents running this don't get a window
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });

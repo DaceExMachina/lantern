@@ -15,7 +15,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **A landed session's card says what it needs from you**: its "You:" line, the PRs and other links it mentioned (clickable), and how many questions it asked. Clicking the card opens the session.
 - **Click a moth** to jump to that session's tab in iTerm2. Clicking "N need you" in the footer opens whichever session has waited longest, then the next.
 - **Moths grow restless.** A landed moth now and then fans its wings or slowly flutters them while it waits; after 15 minutes it grows restless, fidgets more, and sometimes hops off the paper.
-- **The Dock app's icon shows how many sessions need you.**
+- **The Lantern app's Dock icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
 - **Fireflies** hang around a session's moth, one per open PR it owns (up to ten). A moth lands on the slice of the lantern facing its home, like a slice of pie, so the lines never cross. While it's landed a dotted line in its thread colour ties it to one of its fireflies back home. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
@@ -45,9 +45,9 @@ That's the whole setup. It:
 
 - backs up `~/.claude/settings.json` and adds one async `curl` hook per event, tagged `#lantern`. If the server isn't running, the hook gives up after a second and stays quiet, so Claude Code never waits on it.
 - starts the server now and at every login, and restarts it if it crashes (a launchd agent, `com.lantern.server`). It runs from `~/Library/Application Support/Lantern`, or in place if you run the installer from a git checkout.
-- builds and installs the screensaver, if you have Xcode's command line tools. Without them it skips that step; run `xcode-select --install`, then run the installer again.
+- builds Lantern.app and the screensaver from source and installs them, if you have Xcode's command line tools. Without them it skips those steps; run `xcode-select --install`, then run the installer again.
 - adds the iTerm2 panel script, if you have iTerm2.
-- opens <http://127.0.0.1:7717>.
+- opens Lantern.app, or <http://127.0.0.1:7717> if the app wasn't built.
 
 Running it again is safe: it replaces what it installed last time. To undo all of it (your settings get backed up first):
 
@@ -85,9 +85,19 @@ To type-check the JavaScript (including the page's inline script) with TypeScrip
 npm install && npm run check
 ```
 
-### Put it in your Dock
+### The Lantern app
 
-Open the page in Safari and choose File > Add to Dock. The moth icon comes with it. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.
+The installer puts `Lantern.app` in `~/Applications`. It's a plain window around the page, with the moth as its Dock icon and a badge counting the sessions that need you. It remembers where you left its window, and links open in your default browser. Drag it to your Dock to keep it there.
+
+The app doesn't start the server: the login item already does that. If the server isn't up yet, the window stays dark and keeps trying until it answers.
+
+The app is built on your Mac and signed for your Mac alone, so macOS opens it without asking, and you don't need an Apple developer account. To rebuild it by hand after changing it:
+
+```bash
+~/projects/lantern/app/build.sh
+```
+
+If you'd rather not build anything, open the page in Safari and choose File > Add to Dock. The moth icon comes with it, and so does the badge. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.
 
 ### Put it in iTerm2's toolbelt
 
@@ -128,7 +138,7 @@ It runs `gh pr view` and `gh search prs` read-only from each session's folder, a
 
 ## Settings
 
-Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py` and `screensaver/LanternView.swift` to match.
+Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py`, `app/main.swift` and `screensaver/LanternView.swift` to match.
 
 The chosen lantern is saved in `settings.json` next to the server.
 
