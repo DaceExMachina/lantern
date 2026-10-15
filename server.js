@@ -27,7 +27,7 @@ function snapshot() {
 }
 
 function broadcast() {
-  const msg = `data: ${snapshot()}\n\n`;
+  const msg = `event: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`;
   for (const res of clients) res.write(msg);
 }
 
@@ -146,6 +146,11 @@ function handle(e) {
   }
   s.last = Date.now();
   if (ev === 'PreToolUse') s.ticks = (s.ticks || 0) + 1; // each tool call, its agents' included, sends a pulse down its thread
+  // A session (or one of its agents) that runs `gh pr create` claims the PR: its URL is in the command's output.
+  if (ev === 'PostToolUse' && e.tool_name === 'Bash' && /\bgh\s+pr\s+create\b/.test(e.tool_input?.command || '')) {
+    const url = JSON.stringify(e.tool_response || '').match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/)?.[0];
+    if (url && !(s.created ||= []).includes(url)) { s.created.push(url); setTimeout(refreshGitHub, 3000); }
+  }
   s.unconfirmed = false;
   if (e.cwd) s.cwd = e.cwd;
   if (e.permission_mode) s.mode = e.permission_mode;
@@ -345,8 +350,57 @@ function seed() {
   setTimeout(async () => {
     for (const s of sessions.values()) if (!s.iterm) s.iterm = await findIterm(s);
     broadcast();
+    refreshGitHub();
   }, 1500);
 }
+
+// ---- GitHub status (opt-in, settings.github): PR state through the person's own `gh`, read-only -------------
+// `gh` runs from each session's folder, so a wrapper that picks the account by folder (or plain gh) does the right thing.
+// Only read commands: `gh pr view` and `gh search prs`. Nothing is stored beyond memory and nothing leaves the machine.
+const GH = [process.env.LANTERN_GH, path.join(require('os').homedir(), '.local/bin/gh'), '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
+  .find(p => p && fs.existsSync(p)) || 'gh'; // launchd's PATH is minimal, so look in the usual places
+const PR_FIELDS = 'url,number,title,state,isDraft,reviewDecision';
+// Some tokens can't read checks, and then GitHub fails the whole query, so ask again without them.
+const prView = async (args, cwd) => (await ghJson([...args, '--json', `${PR_FIELDS},statusCheckRollup`], cwd)) || (await ghJson([...args, '--json', PR_FIELDS], cwd));
+let reviews = []; // open PRs waiting on my review, from every account the sessions' folders use
+const ghJson = (args, cwd) => new Promise(done => execFile(GH, args, { cwd, timeout: 20000 }, (err, out) => {
+  try { done(err ? null : JSON.parse(out)); } catch { done(null); }
+}));
+// what a PR needs from me: merged/closed (gone), checks failing, changes requested, ready to merge, or nothing yet
+function prNeed(p) {
+  if (p.state !== 'OPEN') return p.state === 'MERGED' ? 'merged' : 'closed';
+  const checks = p.statusCheckRollup || [], result = c => c.conclusion || c.state;
+  if (checks.some(c => ['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED'].includes(result(c)))) return 'failing';
+  if (p.reviewDecision === 'CHANGES_REQUESTED') return 'changes';
+  const running = checks.some(c => (c.status && c.status !== 'COMPLETED') || result(c) === 'PENDING');
+  if (p.reviewDecision === 'APPROVED' && !running) return 'ready';
+  return p.isDraft ? 'draft' : 'waiting';
+}
+let refreshing = false;
+async function refreshGitHub() {
+  if (!settings.github || refreshing) return;
+  refreshing = true;
+  try {
+    const live = [...sessions.values()].filter(s => s.cwd), folders = [...new Set(live.map(s => s.cwd))];
+    const found = new Map(); // ask from each folder: different folders can mean different accounts
+    for (const cwd of folders)
+      for (const p of (await ghJson(['search', 'prs', '--review-requested=@me', '--state=open', '--limit', '20', '--json', 'url,number,title,repository'], cwd)) || [])
+        found.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
+    reviews = [...found.values()];
+    for (const s of live) {
+      // Each session's PRs: the ones it created, plus its branch's PR, but only if it's the only session in that
+      // folder (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
+      const alone = live.filter(o => o.cwd === s.cwd).length === 1;
+      const prs = new Map(), mine = alone ? await prView(['pr', 'view'], s.cwd) : null;
+      if (mine) prs.set(mine.url, mine);
+      for (const url of s.created || []) if (!prs.has(url)) { const p = await prView(['pr', 'view', url], s.cwd); if (p) prs.set(url, p); }
+      s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
+    }
+  } finally { refreshing = false; }
+  broadcast();
+}
+function clearGitHub() { reviews = []; for (const s of sessions.values()) delete s.github; broadcast(); }
+setInterval(refreshGitHub, 2 * 60 * 1000);
 
 setInterval(() => {
   const now = Date.now();
@@ -419,7 +473,8 @@ http.createServer((req, res) => {
     req.on('end', () => {
       let ok = false;
       try {
-        const { style, quietUntil } = JSON.parse(body);
+        const { style, quietUntil, github } = JSON.parse(body);
+        if (typeof github === 'boolean') { settings.github = github; ok = true; if (github) setTimeout(refreshGitHub, 0); else clearGitHub(); }
         if (/^[a-z]+$/.test(style)) { settings.style = style; ok = true; }
         if (Number.isFinite(quietUntil)) { settings.quietUntil = quietUntil; ok = true; } // quiet hours: every wait counts as snoozed until then
       } catch {}
@@ -432,7 +487,7 @@ http.createServer((req, res) => {
   }
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`retry: 2000\nevent: settings\ndata: ${JSON.stringify(settings)}\n\ndata: ${snapshot()}\n\n`);
+    res.write(`retry: 2000\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;

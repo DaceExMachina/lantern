@@ -18,7 +18,8 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **The Dock app's icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
-- **Fireflies** hang around a session's moth, one per PR from its last finished turn, blinking.
+- **Fireflies** hang around a session's moth, one per PR that needs you. When a landed moth has fireflies back home, a dotted line ties them together. Without GitHub status they come from PRs the session created (`gh pr create`) or linked in its You: line.
+- **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, amber is changes requested. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
 - **A singed moth** (grey, dark edge) means the turn ended with an API error.
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
@@ -103,6 +104,16 @@ With more than one display, the biggest one gets the lantern and the others get 
 ### Click to focus iTerm2
 
 The first time you click a moth, macOS asks whether `node` can control iTerm2. Allow it.
+
+## GitHub status (optional)
+
+Off by default. Turn it on with:
+
+```bash
+curl -H 'Content-Type: application/json' -d '{"github":true}' http://127.0.0.1:7717/settings
+```
+
+The server then runs your own `gh`, read-only (`gh pr view` and `gh search prs --review-requested=@me`), every two minutes from each session's folder, so a `gh` that picks an account by folder does the right thing. Nothing leaves your machine. A session's branch PR only counts when it's the only session in that folder. If your token can't read checks, approved PRs still show as ready, but failing checks can't be seen.
 
 ## Settings
 
