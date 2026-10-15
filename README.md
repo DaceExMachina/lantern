@@ -19,7 +19,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
 - **Fireflies** hang around a session's moth, one per open PR it owns (up to ten). A moth lands on its own side of the lantern, and while it's landed a dotted line in its thread colour ties it to its fireflies back home. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
-- **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, amber is changes requested, and blue is a draft or one waiting on review. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
+- **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, orange is changes requested, amber is a draft, and blue is waiting on review. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
 - **A singed moth** (grey, dark edge) means the turn ended with an API error.
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
