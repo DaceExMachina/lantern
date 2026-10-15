@@ -20,12 +20,17 @@ final class LanternView: ScreenSaverView {
         if web.responds(to: Selector("_setWindowOcclusionDetectionEnabled:")) {
             web.setValue(false, forKey: "windowOcclusionDetectionEnabled")
         }
+        // The screensaver draws without much GPU help, and a Retina or 5K screen is a lot of pixels; the scene is soft
+        // and glowy, so drawing it at standard resolution looks the same and is several times cheaper.
+        if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
+            web.setValue(1.0, forKey: "overrideDeviceScaleFactor")
+        }
         super.init(frame: frame, isPreview: isPreview)
         web.frame = bounds
         web.autoresizingMask = [.width, .height]
         web.setValue(false, forKey: "drawsBackground") // no white flash before the page paints
         addSubview(web)
-        animationTimeInterval = 1.0 / 30
+        animationTimeInterval = 1.0 / 60
 
         // With several displays, the biggest one gets the lantern and the rest get just the ambient specks.
         let area = { (r: NSRect) in r.width * r.height }
