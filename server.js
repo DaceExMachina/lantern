@@ -14,6 +14,11 @@ const PROJECTS = path.join(require('os').homedir(), '.claude', 'projects');
 const TITLE_EVERY_MS = 15 * 1000;
 const UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
 
+// Settings every window shares (just the lantern style for now), kept next to the server and out of git.
+const SETTINGS_FILE = path.join(__dirname, 'settings.json');
+let settings = { style: 'barrel' };
+try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch {}
+
 const sessions = new Map(); // session_id -> { id, cwd, state, started, last, subagents: Map of agent_id -> { type, tool, last }, plus what the hover card shows }
 const clients = new Set();
 
@@ -348,9 +353,23 @@ http.createServer((req, res) => {
     });
     return;
   }
+  // Change a shared setting and tell every open window. Same JSON-only guard as /focus.
+  if (req.method === 'POST' && req.url === '/settings' && req.headers['content-type'] === 'application/json') {
+    let body = '';
+    req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
+    req.on('end', () => {
+      let ok = false;
+      try { const { style } = JSON.parse(body); if (/^[a-z]+$/.test(style)) { settings.style = style; ok = true; } } catch {}
+      if (!ok) return res.writeHead(400).end();
+      fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n', () => {});
+      for (const c of clients) c.write(`event: settings\ndata: ${JSON.stringify(settings)}\n\n`);
+      res.writeHead(204).end();
+    });
+    return;
+  }
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`retry: 2000\ndata: ${snapshot()}\n\n`);
+    res.write(`retry: 2000\nevent: settings\ndata: ${JSON.stringify(settings)}\n\ndata: ${snapshot()}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;

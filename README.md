@@ -14,7 +14,8 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Hover a moth** for the session's name, what it's doing right now, your last prompt, the question it's asking, and its subagents' tasks.
 - **Click a moth** to jump to that session's tab in iTerm2.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
-- **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern.
+- **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
+- **Any window shape works.** The scene stretches to fill wide, tall, or square windows, with the lantern staying the same size in the middle.
 
 ## How it works
 
@@ -79,10 +80,22 @@ Open the page in Safari and choose File > Add to Dock. The moth icon comes with 
 3. Run it once from Scripts > AutoLaunch > lantern.py, and accept the Python runtime download.
 4. Choose View > Toolbelt > Show Toolbelt, then tick Lantern.
 
+### Use it as your screensaver
+
+You need Xcode's command line tools.
+
+```bash
+~/projects/lantern/screensaver/build.sh
+```
+
+That builds `Lantern.saver` from source and installs it in `~/Library/Screen Savers`. Then choose Lantern in System Settings > Screen Saver. It shows the live page full screen, so the server needs to be running.
+
 ### Click to focus iTerm2
 
 The first time you click a moth, macOS asks whether `node` can control iTerm2. Allow it.
 
 ## Settings
 
-Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py` to match.
+Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py` and `screensaver/LanternView.swift` to match.
+
+The chosen lantern is saved in `settings.json` next to the server.

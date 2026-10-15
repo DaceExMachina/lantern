@@ -8,16 +8,18 @@
 <link rel="apple-touch-icon" href="/icon.png">
 <style>
   html, body { margin: 0; height: 100%; background: #1E1930; color: #C9B8DA; font: 14px/1.4 system-ui, sans-serif; }
-  body { display: grid; grid-template-rows: 1fr auto; }
-  svg { width: 100%; height: 100%; max-height: calc(100vh - 48px); display: block; margin: auto; }
+  body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+  svg { width: 100%; height: 100%; display: block; }
   footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 16px; flex-wrap: wrap; }
   #status.waiting { color: #B9A8FF; }
   #status.offline { color: #8A7A99; font-style: italic; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
   .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 8px; }
-  .panel svg { max-height: calc(100vh - 56px); }
   .panel #card { max-width: 210px; font-size: 11.5px; }
   .panel .notify { display: none; }
+  /* screensaver mode (opened with ?screensaver): just the scene, with the glow running to the screen's edges */
+  body.screensaver { background: #2B2440; cursor: none; }
+  .screensaver footer, .screensaver #card, .screensaver #frame { display: none; }
   label { cursor: pointer; user-select: none; }
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
@@ -68,7 +70,7 @@
     <clipPath id="bodyClip"><path d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z"/></clipPath>
     <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
   </defs>
-  <rect x="40" y="20" width="600" height="600" rx="16" fill="#2B2440"/>
+  <rect id="frame" x="40" y="20" width="600" height="600" rx="16" fill="#2B2440"/>
   <g id="rings">
     <circle cx="340" cy="330" r="250"/>
     <circle cx="340" cy="330" r="190"/>
@@ -128,6 +130,20 @@ const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
 // where session moths live, clear of the lantern; each session keeps its spot and wanders around it
 const HOMES = [[150,170],[530,160],[115,390],[565,385],[190,550],[490,555],[245,85],[435,85]];
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
+
+// The scene is designed on a 600x600 square around the lantern. To fill any window shape, the visible area grows
+// wider or taller (the lantern keeps its size), and positions laid out on the square stretch with it.
+const VIEW = { kx: 1, ky: 1 };
+const stretch = ([x, y]) => [340 + (x - 340) * VIEW.kx, 320 + (y - 320) * VIEW.ky];
+function fitView() {
+  const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect();
+  if (!width || !height) return;
+  VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
+  const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
+  svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  Object.entries({ x, y, width: w, height: h }).forEach(([k, v]) => $('frame').setAttribute(k, v));
+}
+addEventListener('resize', fitView);
 
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame. `flame` places the flame's base and sets its size,
@@ -209,9 +225,8 @@ const STYLES = {
       <g id="tassel"><path d="M340 446V452" stroke="#B8873A" stroke-width="2"/><ellipse cx="340" cy="460" rx="6" ry="8" fill="url(#brass)"/><path d="M338 467L340 482L342 467Z" fill="#D9AE52"/></g>`,
   },
 };
-const STYLE_KEY = 'lantern-style';
+// which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
 let style = STYLES.barrel;
-try { style = STYLES[localStorage.getItem(STYLE_KEY)] || style; } catch {}
 function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
@@ -219,7 +234,7 @@ function applyStyle(key) {
     + `<g ${style.paper ? 'filter="url(#behindPaper)"' : ''} transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME}</g>`
     + style.front;
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
-  try { localStorage.setItem(STYLE_KEY, key); } catch {}
+  $('style').value = key;
 }
 
 // Somewhere on the lantern's surface: a random height, and a random way round from near the middle to the edge.
@@ -253,6 +268,7 @@ let seenWaiting = new Set();
 // ---- state from server -------------------------------------------------------
 const es = new EventSource('/events');
 es.onmessage = e => { sessions = JSON.parse(e.data); sync(); };
+es.addEventListener('settings', e => { const key = JSON.parse(e.data).style; if (STYLES[key] && STYLES[key] !== style) applyStyle(key); });
 es.onerror = () => { $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline'; };
 
 function sync() {
@@ -323,7 +339,7 @@ function makeSessionMoth(key) {
   let slot = 0; while (taken.has(slot)) slot++;
   const [hx, hy] = HOMES[slot % HOMES.length];
   const spill = Math.floor(slot / HOMES.length) * 35; // more than 8 sessions: crowd in near an existing spot
-  const [x, y] = EDGES[Math.floor(Math.random() * EDGES.length)];
+  const [x, y] = stretch(EDGES[Math.floor(Math.random() * EDGES.length)]);
   const thread = el('path');
   $('threads').append(thread);
   return hoverable({ ...mothNode(), size: SIZE.session, slot, home: [hx + spill, hy + spill * 0.5], thread,
@@ -358,13 +374,17 @@ const dust = Array.from({ length: 34 }, () => ({ a: Math.random() * 6.28, d: 40 
 const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 230 + Math.random() * 110, w: (Math.random() - 0.5) * 0.08,
   ph: Math.random() * 10, n: $('dust').appendChild(el('circle', { r: (0.6 + Math.random() * 0.9).toFixed(2) })) }));
 
-// the iTerm2 toolbelt opens the page with ?panel for a compact layout
-if (new URLSearchParams(location.search).has('panel')) document.body.classList.add('panel');
+// the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
+for (const mode of ['panel', 'screensaver']) if (new URLSearchParams(location.search).has(mode)) document.body.classList.add(mode);
+fitView();
 
 // lantern picker
 for (const [key, st] of Object.entries(STYLES)) $('style').append(new Option(st.name, key, false, st === style));
-$('style').onchange = e => applyStyle(e.target.value);
-applyStyle(Object.keys(STYLES).find(k => STYLES[k] === style));
+$('style').onchange = e => {
+  applyStyle(e.target.value);
+  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style: e.target.value }) });
+};
+applyStyle('barrel'); // until the server says which lantern is chosen
 
 // ---- animation ---------------------------------------------------------------
 let level = 0, cool = 0, sparkClock = 0, last = performance.now();
@@ -432,7 +452,7 @@ function frame(t) {
   $('rings').setAttribute('opacity', (0.55 + 0.45 * Math.max(level, cool * 0.5)).toFixed(3));
   const strength = Math.max(level, cool * 0.6);
   document.querySelectorAll('.rayStop').forEach(n => n.setAttribute('stop-color', pal('glow')));
-  $('rays').setAttribute('transform', `translate(${gx.toFixed(1)} ${gy.toFixed(1)})`);
+  $('rays').setAttribute('transform', `translate(${gx.toFixed(1)} ${gy.toFixed(1)}) scale(${Math.max(VIEW.kx, VIEW.ky).toFixed(2)})`);
   $('raysA').setAttribute('transform', `rotate(${(s * 3 % 360).toFixed(2)})`);
   $('raysB').setAttribute('transform', `rotate(${(-s * 2 % 360).toFixed(2)})`);
   $('rays').setAttribute('opacity', ((0.05 + 0.22 * strength) * flick * pulse).toFixed(3));
@@ -448,8 +468,8 @@ function frame(t) {
   for (const p of farDust) {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22;
-    p.n.setAttribute('cx', (CX + Math.cos(p.a) * d + Math.sin(s * 0.6 + p.ph) * 10).toFixed(1));
-    p.n.setAttribute('cy', (CY + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.45 + p.ph) * 10).toFixed(1));
+    p.n.setAttribute('cx', (CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10).toFixed(1));
+    p.n.setAttribute('cy', (CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10).toFixed(1));
     p.n.setAttribute('opacity', ((0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)).toFixed(3));
   }
 
@@ -485,8 +505,9 @@ function frame(t) {
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
     } else {
       // stay near home, drifting lazily
-      tx = m.home[0] + Math.sin(s * 0.5 + m.phase) * 24 + Math.sin(s * 1.3 + m.phase * 2) * 8;
-      ty = m.home[1] + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
+      const [hx, hy] = stretch(m.home);
+      tx = hx + Math.sin(s * 0.5 + m.phase) * 24 + Math.sin(s * 1.3 + m.phase * 2) * 8;
+      ty = hy + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
     }
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
     // lean gently into the direction of travel, eased so position jitter doesn't shake it
