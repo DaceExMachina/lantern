@@ -124,3 +124,7 @@ It runs `gh pr view` and `gh search prs` read-only from each session's folder, a
 Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py` and `screensaver/LanternView.swift` to match.
 
 The chosen lantern is saved in `settings.json` next to the server.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
