@@ -796,7 +796,7 @@ function frame(t) {
         for (const url of m.session.created || []) if (youLinks.has(url)) want.set(url, 'mention');
       }
       const home = stretch(m.home);
-      swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [26, 42], dt, s);
+      swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt, s);
       // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits
       m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);
       const tied = m.wasLanded && m.flies.size > 0;
