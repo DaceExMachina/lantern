@@ -16,6 +16,11 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Click a moth** to jump to that session's tab in iTerm2. Clicking "N need you" in the footer opens whichever session has waited longest, then the next.
 - **Moths grow restless.** After 15 minutes of waiting a landed moth fans its wings every so often; after an hour it hops off the paper and settles again.
 - **The Dock app's icon shows how many sessions need you.**
+- **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
+- **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
+- **Fireflies** hang around a session's moth, one per PR from its last finished turn, blinking.
+- **A singed moth** (grey, dark edge) means the turn ended with an API error.
+- **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
 - **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
 - **Any window shape works.** The scene stretches to fill wide, tall, or square windows, with the lantern staying the same size in the middle.

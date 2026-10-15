@@ -145,6 +145,7 @@ function handle(e) {
     sessions.set(id, s);
   }
   s.last = Date.now();
+  if (ev === 'PreToolUse') s.ticks = (s.ticks || 0) + 1; // each tool call, its agents' included, sends a pulse down its thread
   s.unconfirmed = false;
   if (e.cwd) s.cwd = e.cwd;
   if (e.permission_mode) s.mode = e.permission_mode;
@@ -187,6 +188,7 @@ function handle(e) {
       const tasks = running.length ? `${running.length} background task${running.length > 1 ? 's' : ''}` : '';
       s.tasks = running.map(t => t.description).filter(Boolean).slice(0, 4);
       s.forYou = forYou(e.last_assistant_message);
+      s.error = false;
       if (running.length && !q) { s.state = 'paused'; s.note = `Waiting on ${tasks}`; }
       else { s.state = 'waiting'; s.note = (q ? `Asks: ${q}` : 'Finished its turn') + (tasks ? ` (${tasks} still running)` : ''); }
       break;
@@ -194,6 +196,7 @@ function handle(e) {
     case 'StopFailure':
       s.state = 'waiting';
       s.note = 'Turn ended with an API error';
+      s.error = true; // the moth lands singed
       break;
     // A /compact you run yourself ends back at the prompt with no Stop after it, so put the session back to idle.
     // An automatic compact carries on with whatever the session was doing (working mid-turn, or waiting), so leave that.
@@ -218,7 +221,7 @@ function handle(e) {
       s.state = 'working';
       s.note = '';
       s.tasks = [];
-      s.forYou = null;
+      s.error = false;
       s.snoozed = false; // a snooze only covers the wait it was set on
       if (ev === 'UserPromptSubmit' && e.prompt) s.prompt = cleanPrompt(e.prompt);
       if (ev === 'PreToolUse') s.activity = describe(e.tool_name, e.tool_input);
@@ -415,7 +418,11 @@ http.createServer((req, res) => {
     req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
     req.on('end', () => {
       let ok = false;
-      try { const { style } = JSON.parse(body); if (/^[a-z]+$/.test(style)) { settings.style = style; ok = true; } } catch {}
+      try {
+        const { style, quietUntil } = JSON.parse(body);
+        if (/^[a-z]+$/.test(style)) { settings.style = style; ok = true; }
+        if (Number.isFinite(quietUntil)) { settings.quietUntil = quietUntil; ok = true; } // quiet hours: every wait counts as snoozed until then
+      } catch {}
       if (!ok) return res.writeHead(400).end();
       fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2) + '\n', () => {});
       for (const c of clients) c.write(`event: settings\ndata: ${JSON.stringify(settings)}\n\n`);
