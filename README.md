@@ -33,7 +33,29 @@ When the server starts, it rebuilds the sessions you already have open from thei
 
 ## Setup
 
-You need macOS and Node.
+You need macOS and Node 18 or later.
+
+```bash
+npx claude-lantern
+```
+
+That's the whole setup. It:
+
+- backs up `~/.claude/settings.json` and adds one async `curl` hook per event, tagged `#lantern`. If the server isn't running, the hook gives up after a second and stays quiet, so Claude Code never waits on it.
+- starts the server now and at every login, and restarts it if it crashes (a launchd agent, `com.lantern.server`). It runs from `~/Library/Application Support/Lantern`, or in place if you run the installer from a git checkout.
+- builds and installs the screensaver, if you have Xcode's command line tools. Without them it skips that step; run `xcode-select --install`, then run the installer again.
+- adds the iTerm2 panel script, if you have iTerm2.
+- opens <http://127.0.0.1:7717>.
+
+Running it again is safe: it replaces what it installed last time. To undo all of it (your settings get backed up first):
+
+```bash
+npx claude-lantern uninstall
+```
+
+### Working on Lantern
+
+Clone the repo and run the installer from it, so the server runs your checkout:
 
 ```bash
 git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
@@ -43,38 +65,16 @@ git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
 node ~/projects/lantern/install.js
 ```
 
-```bash
-node ~/projects/lantern/server.js
-```
-
-Then open <http://127.0.0.1:7717>.
-
-`install.js` backs up `~/.claude/settings.json` and adds one async `curl` hook per event, tagged `#lantern`. If the server isn't running, the hook gives up after a second and stays quiet, so Claude Code never waits on it.
-
-To remove the hooks:
+Restart the server after you change `server.js`:
 
 ```bash
-node ~/projects/lantern/install.js uninstall
+launchctl kickstart -k gui/$(id -u)/com.lantern.server
 ```
 
 To see every state without real sessions:
 
 ```bash
 node ~/projects/lantern/fake.js
-```
-
-### Start it on login
-
-Copy `launchd.plist.example` to `~/Library/LaunchAgents/com.lantern.server.plist`, fill in the two paths, and load it:
-
-```bash
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.lantern.server.plist
-```
-
-Restart it after you change `server.js`:
-
-```bash
-launchctl kickstart -k gui/$(id -u)/com.lantern.server
 ```
 
 ### Put it in your Dock
@@ -84,13 +84,13 @@ Open the page in Safari and choose File > Add to Dock. The moth icon comes with 
 ### Put it in iTerm2's toolbelt
 
 1. Turn on iTerm2's Python API (Settings > General > Magic).
-2. Copy `iterm/lantern.py` to `~/Library/Application Support/iTerm2/Scripts/AutoLaunch/`.
+2. The installer copies `iterm/lantern.py` to `~/Library/Application Support/iTerm2/Scripts/AutoLaunch/`. If you installed iTerm2 afterwards, run the installer again.
 3. Run it once from Scripts > AutoLaunch > lantern.py, and accept the Python runtime download.
 4. Choose View > Toolbelt > Show Toolbelt, then tick Lantern.
 
 ### Use it as your screensaver
 
-You need Xcode's command line tools.
+The installer builds it for you if you have Xcode's command line tools. To rebuild it by hand after changing it:
 
 ```bash
 ~/projects/lantern/screensaver/build.sh
