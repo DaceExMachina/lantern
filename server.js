@@ -319,6 +319,30 @@ function liveTranscripts() {
   return Object.entries(count).flatMap(([d, n]) => byNewest(transcripts(path.join(PROJECTS, d))).slice(0, n));
 }
 
+// PRs a session created, read back from its transcript and its subagents' (a restart forgets the live ones).
+// ponytail: reads every transcript in full (about 3s for a 1.4 GB orchestrator); read only the tails if startup drags.
+// Each Bash call that ran `gh pr create`, and the PR URL in that call's own output:
+function createdPRs(file, dir) {
+  const files = [file, ...transcripts(path.join(dir, 'subagents'))], calls = new Set(), urls = new Set();
+  for (const f of files) {
+    let text; try { text = fs.readFileSync(f, 'utf8'); } catch { continue; }
+    if (!text.includes('gh pr create')) continue;
+    for (const l of text.split('\n')) {
+      // only the `gh pr create` call itself and that call's own output are worth parsing
+      if (!l.includes('gh pr create') && !calls.has(l.match(/"tool_use_id":"([^"]+)"/)?.[1])) continue; // skip the rest without parsing
+      let j; try { j = JSON.parse(l); } catch { continue; }
+      for (const c of Array.isArray(j.message?.content) ? j.message.content : []) {
+        if (c.type === 'tool_use' && c.name === 'Bash' && /\bgh\s+pr\s+create\b/.test(c.input?.command || '')) calls.add(c.id);
+        if (c.type === 'tool_result' && calls.has(c.tool_use_id)) {
+          const url = JSON.stringify(c.content).match(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/)?.[0];
+          if (url) urls.add(url);
+        }
+      }
+    }
+  }
+  return [...urls];
+}
+
 function seedSession(file, live) {
   const id = path.basename(file, '.jsonl'), dir = file.slice(0, -'.jsonl'.length);
   if (sessions.has(id) || !UUID.test(id)) return;
@@ -326,6 +350,7 @@ function seedSession(file, live) {
   const s = { id, cwd: turn.cwd || '', state: turn.compacted ? 'idle' : turn.done ? 'waiting' : 'working', note: turn.done && !turn.compacted ? 'Finished its turn, waiting for you' : '',
     started: st.birthtimeMs, last: live ? Date.now() : st.mtimeMs, project: path.basename(path.dirname(file)), unconfirmed: !live, subagents: new Map() };
   if (turn.done && turn.text) s.forYou = forYou(turn.text);
+  s.created = createdPRs(file, dir);
   sessions.set(id, s);
   readTitle(s, dir);
   // subagents that look like they're still going: transcript touched in the last two minutes and not finished
@@ -402,23 +427,24 @@ async function refreshViaGh(live, alone) {
     for (const p of (await ghJson(['search', 'prs', '--review-requested=@me', '--state=open', '--limit', '20', '--json', 'url,number,title,repository'], cwd)) || [])
       found.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
   reviews = [...found.values()];
+  const open = new Set(); // my open PRs: a created PR that isn't among them is merged or closed, so it's not looked up
+  for (const cwd of new Set(live.map(s => s.cwd)))
+    for (const p of (await ghJson(['search', 'prs', '--author=@me', '--state=open', '--limit', '100', '--json', 'url'], cwd)) || []) open.add(p.url);
   for (const s of live) {
     const prs = new Map(), mine = alone(s) ? await prView(['pr', 'view'], s.cwd) : null;
     if (mine) prs.set(mine.url, mine);
-    for (const url of s.created || []) if (!prs.has(url)) { const p = await prView(['pr', 'view', url], s.cwd); if (p) prs.set(url, p); }
+    for (const url of s.created || []) if (open.has(url) && !prs.has(url)) { const p = await prView(['pr', 'view', url], s.cwd); if (p) prs.set(url, p); }
     s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
   }
 }
 
-// Through the Claude Lantern GitHub App: one GraphQL query per connected account for my open PRs, reviews requested
-// from me, and any PR a session created; then each session's PRs are matched by its repo and branch.
+// Through the Claude Lantern GitHub App: one GraphQL query per connected account for my open PRs and reviews requested
+// from me; each session's PRs are then the open ones it created plus its branch's (merged ones simply drop out).
 const PR_GQL = 'url number title state isDraft reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
 async function refreshViaApp(live, alone) {
-  const created = [...new Set(live.flatMap(s => s.created || []))].filter(u => /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(u)).slice(0, 20);
   const query = `query {
     reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { ${PR_GQL} } } }
-    mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 50) { nodes { ... on PullRequest { ${PR_GQL} } } }
-    ${created.map((u, i) => `c${i}: resource(url: "${u}") { ... on PullRequest { ${PR_GQL} } }`).join('\n')}
+    mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 100) { nodes { ... on PullRequest { ${PR_GQL} } } }
   }`;
   const all = new Map(), wanted = new Map();
   for (const [login, a] of accounts) {
@@ -430,7 +456,7 @@ async function refreshViaApp(live, alone) {
     // reshape to gh's form so prNeed can read it: checks become one rollup state
     const norm = p => p?.url && { ...p, statusCheckRollup: p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ? [{ state: p.commits.nodes[0].commit.statusCheckRollup.state }] : [] };
     for (const p of data.reviews?.nodes || []) if (p?.url) wanted.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
-    for (const key of Object.keys(data)) if (key !== 'reviews') for (const p of (data[key]?.nodes || [data[key]]).map(norm)) if (p) all.set(p.url, p);
+    for (const p of (data.mine?.nodes || []).map(norm)) if (p) all.set(p.url, p);
   }
   reviews = [...wanted.values()];
   for (const s of live) {

@@ -781,14 +781,15 @@ function frame(t) {
       ty = hy + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
     }
     if (!m.parentId) {
-      // Fireflies around the moth's home: with GitHub on, one per PR that needs me (ready, failing, changes requested);
-      // without it, the PRs it created or its last You: line pointed at. A leaving moth's fireflies drift off.
+      // Fireflies around the moth's home, only for PRs the session owns (ones it created, or its branch's), never ones
+      // it merely mentioned. With GitHub on: each owned PR that needs me (ready, failing, changes requested). Without it:
+      // created PRs its last You: line points at. A leaving moth's fireflies drift off.
       const want = new Map(), gh = m.session.github;
       if (m.leaving) {} // nothing: they all drift off
       else if (gh) for (const p of gh) { if (['ready', 'failing', 'changes'].includes(p.need)) want.set(p.url, p.need); }
       else {
-        const fy = m.session.forYou || {}, youPRs = (fy.you || []).filter(p => p.url && /\/pull\/\d+/.test(p.url));
-        for (const url of [...(m.session.created || []), ...(youPRs.length ? youPRs : fy.prs || []).map(p => p.url)]) want.set(url, 'mention');
+        const youLinks = new Set((m.session.forYou?.you || []).map(p => p.url).filter(Boolean));
+        for (const url of m.session.created || []) if (youLinks.has(url)) want.set(url, 'mention');
       }
       const home = stretch(m.home);
       swarm(m.flies ??= new Map(), new Map([...want].slice(0, 5)), home, [26, 42], dt, s);

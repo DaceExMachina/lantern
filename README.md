@@ -18,7 +18,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **The Dock app's icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
-- **Fireflies** hang around a session's moth, one per PR that needs you. When a landed moth has fireflies back home, a dotted line ties them together. Without GitHub status they come from PRs the session created (`gh pr create`) or linked in its You: line.
+- **Fireflies** hang around a session's moth, one per PR that needs you. When a landed moth has fireflies back home, a dotted line ties them together. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
 - **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, amber is changes requested. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
 - **A singed moth** (grey, dark edge) means the turn ended with an API error.
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
@@ -109,7 +109,7 @@ The first time you click a moth, macOS asks whether `node` can control iTerm2. A
 
 Click **GitHub** in the footer, then **Connect an account**. Lantern shows a code; enter it at github.com/login/device and approve the Claude Lantern GitHub App. It can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed (the panel links to installing it; an org admin may need to approve). The token is kept in your macOS Keychain, and you can connect more than one account. Disconnecting removes it from the Keychain; revoke the app in your GitHub settings to cut it off completely.
 
-Every two minutes Lantern asks GitHub, once per account, for your open PRs, reviews requested from you, and any PR a session created. A session's own PRs are the ones it created plus its branch's PR, when it's the only session in that folder.
+Every two minutes Lantern asks GitHub, once per account, for your open PRs and reviews requested from you. Merged and closed PRs drop out. A session's own PRs are the ones it created plus its branch's PR, when it's the only session in that folder.
 
 If you'd rather use your own `gh` instead, with no account connected, turn that on with:
 
