@@ -133,7 +133,7 @@ async function main() {
   for (let i = 0; i < 30 && !(await up()); i++) sleep(500);
   if (!(await up())) throw new Error(`The server didn't come up on ${URL}. Is something else using port ${PORT}? See /tmp/lantern.log`);
   console.log(`Lantern lit at ${URL}`);
-  tryRun('open', URL);
+  if (process.stdout.isTTY) tryRun('open', URL); // scripts and agents running this don't get a browser tab
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });
