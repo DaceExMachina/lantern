@@ -18,7 +18,7 @@
   #ghButton { all: unset; cursor: pointer; color: #C3B2FF; display: inline-flex; align-items: center; gap: 3px; }
   #ghButton:hover, #ghButton[aria-expanded="true"] { color: #F0E8FF; }
   #ghButton:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 3px; border-radius: 50%; }
-  #ghCount { font-size: 11px; }
+  #ghCount { font-size: 12px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #gh { position: fixed; right: 16px; bottom: 52px; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
     padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); z-index: 5; }
   #gh h3 { margin: 0 0 6px; font-size: 13px; color: #F5E9FF; }
@@ -597,7 +597,10 @@ function renderGitHub() {
   nodes.push(make('div', 'Read-only: pull requests, checks and statuses. Tokens stay in your Keychain.', 'dim'), install);
   if (!github.accounts.length && usingGh) nodes.push(make('div', 'Using your local gh until an account is connected.', 'dim'));
   panel.replaceChildren(...nodes);
-  $('ghCount').textContent = github.accounts.length || ''; // how many accounts are connected
+  // one account: its name (cut short with an ellipsis if long); more than one: how many
+  const n = github.accounts.length;
+  $('ghCount').textContent = n === 1 ? github.accounts[0].login : n > 1 ? `(${n})` : '';
+  $('ghButton').title = n ? `GitHub: ${github.accounts.map(a => a.login).join(', ')}` : 'GitHub';
 }
 $('ghButton').onclick = () => { const open = $('gh').hidden; $('gh').hidden = !open; $('ghButton').setAttribute('aria-expanded', open); };
 addEventListener('keydown', e => { if (e.key === 'Escape') { $('gh').hidden = true; $('ghButton').setAttribute('aria-expanded', false); } });
