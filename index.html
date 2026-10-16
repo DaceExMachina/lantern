@@ -775,19 +775,20 @@ function frame(t) {
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // Every 20-40s a waiting moth gets a chance to fidget for 1.6s: at rest, a 1 in 2 chance it fans its wings; after
-      // 15 minutes it's restless, and each turn has a 1 in 3 chance to be a hop off the paper, otherwise a fan.
+      // Every 20-40s a waiting moth fidgets, each kind equally likely: at rest it fans its wings or slowly flutters them;
+      // after 15 minutes it's restless and may also hop off the paper. A fan or hop takes 1.6s, a slow flutter 3s.
       // Snoozed ones stay still.
       const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
+      const kinds = waited >= 15 ? ['fan', 'flutter', 'hop'] : ['fan', 'flutter'];
       m.fidget = '';
       if (m.session.snoozed) m.fidgetAt = 0;
       else {
         if (!m.fidgetAt) { m.fidgetAt = s + 5 + Math.random() * 15; m.dice = Math.random(); }
-        const into = s - m.fidgetAt;
-        if (into > 1.6) { m.fidgetAt = s + 20 + Math.random() * 20; m.dice = Math.random(); }
+        const kind = kinds[Math.floor(m.dice * kinds.length)], dur = kind === 'flutter' ? 3 : 1.6, into = m.into = s - m.fidgetAt;
+        if (into > dur) { m.fidgetAt = s + 20 + Math.random() * 20; m.dice = Math.random(); }
         else if (into > 0) {
-          m.fidget = waited >= 15 ? (m.dice < 1 / 3 ? 'hop' : 'fan') : m.dice < 1 / 2 ? 'fan' : '';
-          if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / 1.6);
+          m.fidget = kind;
+          if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / dur);
         }
       }
     } else {
@@ -847,7 +848,7 @@ function frame(t) {
     // and the two wings are a touch out of step, so no two beats look exactly alike.
     // keep flapping all the way in; only a moth that has reached its spot slows down and folds
     const perched = needsMe && Math.hypot(tx - m.x, ty - m.y) < ((m.fold || 0) > 0.5 ? 10 : 4); // slack once folded, so the sway can't make it flicker
-    const resting = perched && !m.fidget; // perched and still, not fidgeting
+    const resting = perched && (!m.fidget || m.fidget === 'flutter'); // perched and not fanning or hopping
     m.beat = (m.beat ?? m.phase) + (resting ? 1.5 : flap) * dt; // accumulated, so speed changes never jump the wings
     const beat = m.beat;
     const height = (resting ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
@@ -864,9 +865,9 @@ function frame(t) {
     const near = flapWing(WING_UP, liftAt(0), sweep, m.roll);
     const far = flapWing(WING_SIDE, liftAt(0.18), sweep, m.roll);
     // At rest the folded wings part a little, less the more head-on the moth sits (toward the lantern's middle, where an
-    // opening seen from the front looks wrong), and every so often they slowly open and close a few times.
+    // opening seen from the front looks wrong); a slow flutter opens and closes them three times.
     m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5);
-    const flutter = Math.max(0, Math.sin(s * 0.3 + m.phase * 2)) ** 8 * (0.5 - 0.5 * Math.cos(s * 6.5));
+    const flutter = m.fidget === 'flutter' ? Math.sin(Math.PI * m.into / 3) * (0.5 - 0.5 * Math.cos(2 * Math.PI * m.into)) : 0;
     const gap = m.open * (m.perch?.[3] ?? 1) ** 2 * (1 + 1.2 * flutter);
     put(m.up, 'd', pathOf(mixPts(near, foldedWing(out - 10 * gap, 1, m.perch?.[3]), m.fold)));
     put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part + 14 * gap, 0.95, m.perch?.[3]), m.fold)));
