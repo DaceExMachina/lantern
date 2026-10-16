@@ -16,6 +16,7 @@ const UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
 
 // Settings every window shares (just the lantern style for now), kept next to the server and out of git.
 const SETTINGS_FILE = path.join(__dirname, 'settings.json');
+const GITHUB_CACHE = path.join(__dirname, 'github-cache.json');
 let settings = { style: 'barrel' };
 try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch {}
 
@@ -376,6 +377,14 @@ function seed() {
       if (Date.now() - fs.statSync(f).mtimeMs < SEED_RECENT_MS) seedSession(f, false);
   } catch (err) { console.error('seeding failed:', err.message); }
   console.log(`Seeded ${sessions.size} session(s) from disk`);
+  // last known PR status, until the first refresh replaces it
+  try {
+    const cache = JSON.parse(fs.readFileSync(GITHUB_CACHE, 'utf8'));
+    if (settings.githubAccounts?.length || settings.github) { // (accounts are still loading from the Keychain here)
+      reviews = cache.reviews || [];
+      for (const s of sessions.values()) if (cache.bySession?.[s.id]) s.github = cache.bySession[s.id];
+    }
+  } catch {}
   // give the titles a moment to load, then find each seeded session's iTerm tab so it's clickable right away
   setTimeout(async () => {
     for (const s of sessions.values()) if (!s.iterm) s.iterm = await findIterm(s);
@@ -420,6 +429,9 @@ async function refreshGitHub() {
     // (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
     const alone = s => live.filter(o => o.cwd === s.cwd).length === 1;
     if (accounts.size) await refreshViaApp(live, alone); else await refreshViaGh(live, alone);
+    // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
+    const bySession = Object.fromEntries([...sessions.values()].filter(s => s.github).map(s => [s.id, s.github]));
+    fs.writeFile(GITHUB_CACHE, JSON.stringify({ reviews, bySession }) + '\n', () => {});
   } finally { refreshing = false; }
   broadcast();
 }

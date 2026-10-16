@@ -4,3 +4,4 @@ screensaver/build/
 .claude/
 .check/
 node_modules/
+github-cache.json
