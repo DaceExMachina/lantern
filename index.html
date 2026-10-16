@@ -862,9 +862,13 @@ function frame(t) {
     m.roll = (m.roll || 0) + (rollTo - (m.roll || 0)) * Math.min(1, dt * 2);
     const near = flapWing(WING_UP, liftAt(0), sweep, m.roll);
     const far = flapWing(WING_SIDE, liftAt(0.18), sweep, m.roll);
-    m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5); // at rest the folded wings part a little
-    put(m.up, 'd', pathOf(mixPts(near, foldedWing(out - 10 * m.open, 1, m.perch?.[3]), m.fold)));
-    put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part + 14 * m.open, 0.95, m.perch?.[3]), m.fold)));
+    // At rest the folded wings part a little, less the more head-on the moth sits (toward the lantern's middle, where an
+    // opening seen from the front looks wrong), and every so often they slowly open and close a few times.
+    m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5);
+    const flutter = Math.max(0, Math.sin(s * 0.3 + m.phase * 2)) ** 8 * (0.5 - 0.5 * Math.cos(s * 6.5));
+    const gap = m.open * (m.perch?.[3] ?? 1) ** 2 * (1 + 1.2 * flutter);
+    put(m.up, 'd', pathOf(mixPts(near, foldedWing(out - 10 * gap, 1, m.perch?.[3]), m.fold)));
+    put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part + 14 * gap, 0.95, m.perch?.[3]), m.fold)));
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
