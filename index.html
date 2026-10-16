@@ -775,17 +775,17 @@ function frame(t) {
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // A waiting moth fans its wings every so often; after 15 minutes it grows restless and hops off the paper and
-      // settles again instead. Each fidget lasts 1.6s, with 20-40s of stillness between. Snoozed ones stay still.
+      // A waiting moth fans its wings every so often; after 15 minutes it grows restless, and about half its fidgets
+      // become hops off the paper before it settles again. Each fidget lasts 1.6s, with 20-40s of stillness between. Snoozed ones stay still.
       const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
       m.fidget = '';
       if (m.session.snoozed) m.fidgetAt = 0;
       else {
         m.fidgetAt ||= s + 5 + Math.random() * 15;
         const into = s - m.fidgetAt;
-        if (into > 1.6) m.fidgetAt = s + 20 + Math.random() * 20;
+        if (into > 1.6) { m.fidgetAt = s + 20 + Math.random() * 20; m.hops = Math.random() < 0.5; }
         else if (into > 0) {
-          m.fidget = waited >= 15 ? 'hop' : 'fan';
+          m.fidget = waited >= 15 && m.hops ? 'hop' : 'fan';
           if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / 1.6);
         }
       }
@@ -853,7 +853,7 @@ function frame(t) {
     const liftAt = lag => height * 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3);
     const sweep = resting ? 0 : 0.4 * Math.cos(beat);
     // landing folds the flapping wings into the side view; taking off unfolds them again
-    m.fold = (m.fold || 0) + ((perched ? { hop: 0, fan: 0.45 }[m.fidget] ?? 0.8 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5); // at rest, wings stay a little open
+    m.fold = (m.fold || 0) + ((perched ? { hop: 0, fan: 0.45 }[m.fidget] ?? 1 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5);
     const out = (m.perch?.[2] ?? 0) + sway + (m.landJitter || 0), part = 5 + 4 * Math.sin(s * 1.2 + m.phase);
     // Each moth slowly turns in 3D around its body axis, drifting between seen-from-above and side-on (either way).
     // Mostly near top-down, sometimes swinging well round; landed moths settle back flat before folding.
@@ -862,8 +862,9 @@ function frame(t) {
     m.roll = (m.roll || 0) + (rollTo - (m.roll || 0)) * Math.min(1, dt * 2);
     const near = flapWing(WING_UP, liftAt(0), sweep, m.roll);
     const far = flapWing(WING_SIDE, liftAt(0.18), sweep, m.roll);
-    put(m.up, 'd', pathOf(mixPts(near, foldedWing(out, 1, m.perch?.[3]), m.fold)));
-    put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part, 0.95, m.perch?.[3]), m.fold)));
+    m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5); // at rest the folded wings part a little
+    put(m.up, 'd', pathOf(mixPts(near, foldedWing(out - 10 * m.open, 1, m.perch?.[3]), m.fold)));
+    put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part + 14 * m.open, 0.95, m.perch?.[3]), m.fold)));
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
