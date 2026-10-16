@@ -830,9 +830,10 @@ function frame(t) {
       put(m.flyLine, 'opacity', tied ? 0.2 : 0);
     }
     if (m.zone) {
-      // the hover area sits on the moth's home (or its landing spot), not on the moth, so it holds still as the moth wanders
-      [m.zx, m.zy] = needsMe ? [tx, ty] : stretch(m.home);
-      put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 26 : 48);
+      // the hover area sits on the moth's home, or on its landing spot with the lantern at rest, not on the moth, so it
+      // holds still while the moth wanders or the lantern swings
+      [m.zx, m.zy] = needsMe ? [m.perch[0] + 2 * m.size, m.perch[1] + 6 * m.size] : stretch(m.home);
+      put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 40 : 48); // a landed moth's area covers the whole swing and a hop
       if (m.leaving) m.zone.style.pointerEvents = 'none';
     }
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
