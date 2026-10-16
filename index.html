@@ -276,8 +276,8 @@ function applyStyle(key) {
 // The spot sits in the slice of pie facing direction `a` (radians, from the lantern's middle), anywhere from a third
 // of the way out to the rim: straight up lands on the upper front, straight out lands toward the edge, so moths whose
 // homes sit in different directions never cross paths.
-function pickPerch(a = Math.random() * 2 * Math.PI) {
-  const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + Math.random() * 0.65;
+function pickPerch(a = Math.random() * 2 * Math.PI, rand = Math.random) {
+  const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + rand() * 0.65;
   const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a) * depth);
   const sin = Math.max(Math.sin(15 * Math.PI / 180), Math.abs(Math.cos(a)) * depth); // how far round the side, from the front
   const slope = (half(y + 1) - half(y - 1)) / 2, len = Math.hypot(1, slope); // how fast the surface bulges at this height
@@ -295,6 +295,13 @@ const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // 
 
 // A faint tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ.
 const hash = str => [...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+// Random-looking numbers that every window agrees on: seeded from a session's id, so the lantern in the toolbelt,
+// the Dock app and the screensaver all put a moth in the same place (mulberry32).
+const seeded = seed => () => {
+  let t = seed = (seed + 0x6D2B79F5) >>> 0;
+  t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
 function tintFor(s) {
   const hue = (hash(s.cwd.split('/').filter(Boolean).pop()) % 360 + (hash(s.id) % 29) - 14 + 360) % 360;
   const l = 0.72, a = 0.55 * Math.min(l, 1 - l), f = n => { const k = (n + hue / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
@@ -422,23 +429,25 @@ function hoverable(m) {
 }
 
 function makeSessionMoth(key) {
-  const taken = new Set([...moths.values()].filter(m => m.home && !m.leaving).map(m => m.slot));
-  let slot = 0; while (taken.has(slot)) slot++;
+  // each session has its own favourite home spot, so every window agrees; if it's taken, the next free one
+  const taken = new Set([...moths.values()].filter(m => m.home && !m.leaving).map(m => m.slot)), pref = hash(key) % HOMES.length;
+  let slot, i = 0;
+  do slot = (pref + i) % HOMES.length + Math.floor(i / HOMES.length) * HOMES.length, i++; while (taken.has(slot));
   const [hx, hy] = HOMES[slot % HOMES.length];
   const spill = Math.floor(slot / HOMES.length) * 35; // more than 8 sessions: crowd in near an existing spot
   const [x, y] = stretch(EDGES[Math.floor(Math.random() * EDGES.length)]);
   const thread = el('path');
   $('threads').append(thread);
   return hoverable({ ...mothNode(), size: SIZE.session, slot, home: [hx + spill, hy + spill * 0.5], thread,
-    x, y, phase: Math.random() * 10, perch: pickPerch(), cool: 0, leaving: false });
+    x, y, phase: seeded(hash(key))() * 10, perch: pickPerch(), cool: 0, leaving: false });
 }
 
 function makeSubMoth(key, parentId, size) {
-  const p = moths.get(parentId);
-  return ({ ...mothNode(), size, parentId, x: p?.x ?? CX, y: p?.y ?? CY, a: Math.random() * 6.28,
-    r: (size === SIZE.supervisor ? 54 : 38) + Math.random() * 14,
-    speed: (1.1 + Math.random()) * (Math.random() < 0.5 ? -1 : 1) / size ** 0.5,
-    phase: Math.random() * 10, cool: 0, leaving: false });
+  const p = moths.get(parentId), rand = seeded(hash(key));
+  return ({ ...mothNode(), size, parentId, x: p?.x ?? CX, y: p?.y ?? CY, a: rand() * 6.28,
+    r: (size === SIZE.supervisor ? 54 : 38) + rand() * 14,
+    speed: (1.1 + rand()) * (rand() < 0.5 ? -1 : 1) / size ** 0.5,
+    phase: rand() * 10, cool: 0, leaving: false });
 }
 
 function flamePath(w, h, lean) {
@@ -626,7 +635,8 @@ const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '
 const lanternFlies = new Map(); // reviews requested from me hang around the lantern itself
 function swarm(flies, want, [cx, cy], [rMin, rMax], dt, s) {
   for (const [url, need] of want) if (!flies.has(url)) {
-    const f = { a: Math.random() * 6.28, r: rMin + Math.random() * (rMax - rMin), w: (0.3 + Math.random() * 0.3) * (Math.random() < 0.5 ? -1 : 1), ph: Math.random() * 10, n: [el('circle', { r: 18 }), el('circle', { r: 8 }), el('circle', { r: 2.8 })] }; // wide glow, halo, bright core
+    const rand = seeded(hash(url)); // the same firefly path in every window
+    const f = { a: rand() * 6.28, r: rMin + rand() * (rMax - rMin), w: (0.3 + rand() * 0.3) * (rand() < 0.5 ? -1 : 1), ph: rand() * 10, n: [el('circle', { r: 18 }), el('circle', { r: 8 }), el('circle', { r: 2.8 })] }; // wide glow, halo, bright core
     $('flies').append(...f.n);
     flies.set(url, f);
   }
@@ -759,8 +769,9 @@ function frame(t) {
         const { top, bottom } = style.body, toward = Math.atan2(m.home[1] - (top + bottom) / 2, m.home[0] - 340);
         const others = [...moths.values()].filter(o => o !== m && o.wasLanded);
         const room = p => Math.min(Infinity, ...others.map(o => Math.hypot(o.perch[0] - p[0], o.perch[1] - p[1])));
-        let best = pickPerch(toward);
-        for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(toward + (Math.random() - 0.5) * 0.5); if (room(c) > room(best)) best = c; }
+        m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
+        let best = pickPerch(toward, m.rand);
+        for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(toward + (m.rand() - 0.5) * 0.5, m.rand); if (room(c) > room(best)) best = c; }
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
@@ -821,7 +832,7 @@ function frame(t) {
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
     // lean gently into the direction of travel, eased so position jitter doesn't shake it
     // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
-    if (needsMe && !m.wasLanded) m.landJitter = (Math.random() * 2 - 1) * 15;
+    if (needsMe && !m.wasLanded) m.landJitter = ((m.rand || Math.random)() * 2 - 1) * 15;
     m.wasLanded = needsMe;
     // and each one slowly turns to face its own way, but only as far as it's rolled toward side-on: seen from above a
     // moth points up (flying away from you), and by fully side-on it can turn up to 60 degrees; upright again to land
