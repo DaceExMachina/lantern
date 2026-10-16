@@ -821,8 +821,10 @@ function frame(t) {
     // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
     if (needsMe && !m.wasLanded) m.landJitter = (Math.random() * 2 - 1) * 15;
     m.wasLanded = needsMe;
+    // and each one slowly turns to face its own way, up to about 60 degrees either side, coming upright to land
     const lean = needsMe ? 0 : Math.max(-15, Math.min(15, (nx - m.x) / (dt || 1) * 0.25));
-    m.tilt = (m.tilt || 0) + (lean - (m.tilt || 0)) * Math.min(1, dt * 3);
+    const facing = needsMe ? 0 : 60 * (0.6 * Math.sin(s * 0.13 + m.phase * 3) + 0.4 * Math.sin(s * 0.29 + m.phase * 5));
+    m.tilt = (m.tilt || 0) + (lean + facing - (m.tilt || 0)) * Math.min(1, dt * 3);
     m.x = nx; m.y = ny;
 
     // Wingbeat in depth: both tips rise toward the viewer and dip slightly away. How high each beat goes drifts,
