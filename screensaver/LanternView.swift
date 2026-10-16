@@ -36,7 +36,9 @@ final class LanternView: ScreenSaverView {
         // With several displays, the biggest one gets the lantern and the rest get just the ambient specks.
         let area = { (r: NSRect) in r.width * r.height }
         let biggest = NSScreen.screens.map { area($0.frame) }.max() ?? 0
-        let ambient = !isPreview && area(frame) < biggest
+        // (only when another screen really is bigger: a lone laptop screen can hand the saver a frame a few points
+        // short of the screen's, which used to make it think it was the small one and show no lantern)
+        let ambient = !isPreview && NSScreen.screens.count > 1 && area(frame) < biggest * 0.9
         // An ambient display is told where both screens sit, so the lantern's rays can carry on across onto it.
         // (The frame a screensaver is handed may not say where its screen is, so find the screen by size.)
         let biggestFrame = NSScreen.screens.max { area($0.frame) < area($1.frame) }?.frame ?? frame
