@@ -14,7 +14,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Hover a session's moth** for its name, what it's doing right now, your last prompt, the question it's asking, and what each of its agents is working on. The hover area stays put while the moth wanders, so the card holds still.
 - **A landed session's card says what it needs from you**: its "You:" line, the PRs and other links it mentioned (clickable), and how many questions it asked. Clicking the card opens the session.
 - **Click a moth** to jump to that session's tab in iTerm2. Clicking "N need you" in the footer opens whichever session has waited longest, then the next.
-- **Moths grow restless.** After 15 minutes of waiting a landed moth fans its wings every so often; after an hour it hops off the paper and settles again.
+- **Moths grow restless.** A landed moth fans its wings every so often while it waits; after 15 minutes it hops off the paper and settles again instead.
 - **The Dock app's icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.

@@ -775,17 +775,17 @@ function frame(t) {
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // A long wait makes a moth restless: after 15 minutes it fans its wings every so often, after an hour it hops
-      // off the paper and settles again. Each fidget lasts 1.6s, with 20-40s of stillness between. Snoozed ones stay calm.
-      const waited = m.session.snoozed ? 0 : (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
+      // A waiting moth fans its wings every so often; after 15 minutes it grows restless and hops off the paper and
+      // settles again instead. Each fidget lasts 1.6s, with 20-40s of stillness between. Snoozed ones stay still.
+      const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
       m.fidget = '';
-      if (waited < 15) m.fidgetAt = 0;
+      if (m.session.snoozed) m.fidgetAt = 0;
       else {
         m.fidgetAt ||= s + 5 + Math.random() * 15;
         const into = s - m.fidgetAt;
         if (into > 1.6) m.fidgetAt = s + 20 + Math.random() * 20;
         else if (into > 0) {
-          m.fidget = waited >= 60 ? 'hop' : 'fan';
+          m.fidget = waited >= 15 ? 'hop' : 'fan';
           if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / 1.6);
         }
       }
