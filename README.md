@@ -79,6 +79,12 @@ To see every state without real sessions:
 node ~/projects/lantern/fake.js
 ```
 
+To type-check the JavaScript (including the page's inline script) with TypeScript, no build step involved:
+
+```bash
+npm install && npm run check
+```
+
 ### Put it in your Dock
 
 Open the page in Safari and choose File > Add to Dock. The moth icon comes with it. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.

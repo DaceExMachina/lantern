@@ -20,7 +20,7 @@ const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Se
 
 const LABEL = 'com.lantern.server';
 const OLD_LABELS = ['com.dace.lantern']; // hand-made login items from before this installer
-const DOMAIN = `gui/${process.getuid()}`;
+const DOMAIN = `gui/${/** @type {() => number} */ (process.getuid)()}`;
 const AGENTS = path.join(HOME, 'Library', 'LaunchAgents');
 const SAVER = path.join(HOME, 'Library', 'Screen Savers', 'Lantern.saver');
 const ITERM_SCRIPTS = path.join(HOME, 'Library', 'Application Support', 'iTerm2', 'Scripts');
