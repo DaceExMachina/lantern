@@ -872,7 +872,6 @@ function frame(t) {
       const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
       put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
-      put(m.thread, 'opacity', m.leaving ? 0.1 : 0.25);
       // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from
       // nowhere. A tool call sends light down it from the moth to the lantern: a bright band in the same gradient
       // travels along, lighting up the dashes as it passes. One pulse at a time, 2.2s each, with at most two waiting.
@@ -888,13 +887,14 @@ function frame(t) {
       m.ticks ??= ticks;
       m.ticks = Math.max(m.ticks, ticks - 3);
       if (!m.pulse && ticks > m.ticks) { m.pulse = { at: 0 }; m.ticks++; }
-      let at = -1, lit = base; // where along the thread the pulse is (0 lantern, 1 moth), and its colour
+      let at = -1, lit = base, glow = 0; // where along the thread the pulse is (0 lantern, 1 moth), its colour and strength
       if (m.pulse) {
         m.pulse.at += dt / 2.2;
         const t = 1 - Math.min(1, m.pulse.at), u = 1 - t;
         const x = u * u * ax + 2 * u * t * qx + t * t * m.x, y = u * u * ay + 2 * u * t * qy + t * t * m.y;
         at = ((x - ax) * dx + (y - ay) * dy) / (len * len);
-        lit = mix(base, pal('core'), Math.sin(Math.PI * Math.min(1, m.pulse.at))); // fades in and out over the trip
+        glow = Math.sin(Math.PI * Math.min(1, m.pulse.at)); // fades in and out over the trip
+        lit = mix(base, pal('core'), glow);
         if (m.pulse.at >= 1) m.pulse = null;
       }
       if (!m.grad) {
@@ -905,9 +905,10 @@ function frame(t) {
       }
       put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', m.x.toFixed(1)); put(m.grad, 'y2', m.y.toFixed(1));
       [...m.grad.children].forEach((st, i) => {
-        const o = i / 16;
-        put(st, 'stop-color', mix(base, lit, Math.max(0, 1 - Math.abs(o - at) / 0.12)));
-        put(st, 'stop-opacity', Math.min(1, o / 0.25, (1 - o) / 0.25).toFixed(2)); // fades out toward both ends
+        const o = i / 16, band = Math.max(0, 1 - Math.abs(o - at) / 0.12), faint = m.leaving ? 0.1 : 0.25;
+        put(st, 'stop-color', mix(base, lit, band));
+        // the thread itself is faint, the passing pulse nearly full; both fade out toward the ends
+        put(st, 'stop-opacity', (Math.min(1, o / 0.25, (1 - o) / 0.25) * (faint + (0.9 - faint) * band * glow)).toFixed(2));
       });
     }
   }
