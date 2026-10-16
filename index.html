@@ -810,7 +810,7 @@ function frame(t) {
         const dx = m.x - hx, dy = m.y - hy, len = Math.hypot(dx, dy) || 1, bow = 0.12 * len;
         put(m.flyLine, 'd', `M${hx.toFixed(1)} ${hy.toFixed(1)} Q${(hx + dx / 2 - dy / len * bow).toFixed(1)} ${(hy + dy / 2 + dx / len * bow).toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
       }
-      put(m.flyLine, 'opacity', tied ? 0.4 : 0);
+      put(m.flyLine, 'opacity', tied ? 0.2 : 0);
     }
     if (m.zone) {
       // the hover area sits on the moth's home (or its landing spot), not on the moth, so it holds still as the moth wanders
@@ -872,7 +872,7 @@ function frame(t) {
       const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
       put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
-      put(m.thread, 'opacity', m.leaving ? 0.2 : 0.5);
+      put(m.thread, 'opacity', m.leaving ? 0.1 : 0.25);
       // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from
       // nowhere. A tool call sends light down it from the moth to the lantern: a bright band in the same gradient
       // travels along, lighting up the dashes as it passes. One pulse at a time, 2.2s each, with at most two waiting.
