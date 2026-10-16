@@ -744,7 +744,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.grad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -805,7 +805,9 @@ function frame(t) {
       const end = [...m.flies.values()].find(f => f.gone === undefined && f.x !== undefined); // the line ends on one firefly, the oldest
       const tied = m.wasLanded && !!end;
       if (tied) {
-        const hx = end.x, hy = end.y, dx = m.x - hx, dy = m.y - hy, len = Math.hypot(dx, dy) || 1, bow = 0.12 * len;
+        const hx = end.x, hy = end.y;
+        if (m.flyGrad) { put(m.flyGrad, 'x1', hx.toFixed(1)); put(m.flyGrad, 'y1', hy.toFixed(1)); put(m.flyGrad, 'x2', m.x.toFixed(1)); put(m.flyGrad, 'y2', m.y.toFixed(1)); }
+        const dx = m.x - hx, dy = m.y - hy, len = Math.hypot(dx, dy) || 1, bow = 0.12 * len;
         put(m.flyLine, 'd', `M${hx.toFixed(1)} ${hy.toFixed(1)} Q${(hx + dx / 2 - dy / len * bow).toFixed(1)} ${(hy + dy / 2 + dx / len * bow).toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
       }
       put(m.flyLine, 'opacity', tied ? 0.4 : 0);
@@ -875,7 +877,14 @@ function frame(t) {
       // nowhere. A tool call sends light down it from the moth to the lantern: a bright band in the same gradient
       // travels along, lighting up the dashes as it passes. One pulse at a time, 2.2s each, with at most two waiting.
       const ticks = m.session.ticks || 0, base = mix(pal('thread'), COOL.thread, m.cool);
-      put(m.flyLine, 'stroke', base); // the fireflies' dotted line matches the moth's thread
+      // the fireflies' dotted line matches the moth's thread, fading out at both ends the same way
+      if (!m.flyGrad) {
+        m.flyGrad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
+        for (const [o, a] of [[0, 0], [0.25, 1], [0.75, 1], [1, 0]]) m.flyGrad.append(el('stop', { offset: o, 'stop-opacity': a }));
+        document.querySelector('svg defs').append(m.flyGrad);
+        put(m.flyLine, 'stroke', `url(#${m.flyGrad.id})`);
+      }
+      for (const st of m.flyGrad.children) put(st, 'stop-color', base);
       m.ticks ??= ticks;
       m.ticks = Math.max(m.ticks, ticks - 3);
       if (!m.pulse && ticks > m.ticks) { m.pulse = { at: 0 }; m.ticks++; }
