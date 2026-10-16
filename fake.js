@@ -4,6 +4,7 @@ const send = (session_id, hook_event_name, extra = {}) =>
   fetch(`http://127.0.0.1:${PORT}/event`, { method: 'POST', body: JSON.stringify({ session_id, hook_event_name, cwd: `/Users/demo/${session_id}`, ...extra }) });
 const wait = s => new Promise(r => setTimeout(r, s * 1000));
 
+/** @type {[string, number, (() => Promise<unknown>)?][]} */
 const steps = [
   ['nothing going on: dim ember, sway, flicker', 3],
   ['moth flies in', 3, () => send('blog', 'UserPromptSubmit')],

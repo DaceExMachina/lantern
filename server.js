@@ -58,7 +58,7 @@ function questionIn(message = '') {
   const blocker = text.match(/Blocker:\s*(.+)/i)?.[1];
   const last = text.split('\n').map(l => l.trim()).filter(Boolean).pop() || '';
   const asked = /\?\s*$/.test(last) ? last.split(/(?<=[.!])\s+/).pop() : '';
-  return (blocker || asked).trim().slice(0, 160);
+  return (blocker || asked || '').trim().slice(0, 160);
 }
 
 // What a finished turn hands me, for its card: the "You:" line from its status footer, PRs and other links, and
@@ -108,6 +108,7 @@ function cleanPrompt(p) {
 }
 
 // Session names and agent tasks live next to the transcript the hooks point at. Only ever read inside ~/.claude/projects.
+/** @param {string} [transcript] */
 function sessionDir(transcript) {
   const p = path.resolve(String(transcript || ''));
   return p.startsWith(PROJECTS + path.sep) && p.endsWith('.jsonl') ? p.slice(0, -'.jsonl'.length) : null;
@@ -155,7 +156,7 @@ function handle(e) {
   if (e.cwd) s.cwd = e.cwd;
   if (e.permission_mode) s.mode = e.permission_mode;
   if (/^\d+$/.test(e.pid || '')) s.pid = Number(e.pid); // the Claude Code process the hook ran under ($PPID)
-  const iterm = String(e.iterm || '').split(':').pop(); // ITERM_SESSION_ID looks like w0t1p0:<uuid>
+  const iterm = String(e.iterm || '').split(':').pop() || ''; // ITERM_SESSION_ID looks like w0t1p0:<uuid>
   if (UUID.test(iterm)) s.iterm = iterm;
   const dir = sessionDir(e.transcript_path);
   if (dir) s.project = path.basename(path.dirname(dir));
@@ -450,7 +451,7 @@ async function refreshViaApp(live, alone) {
   for (const [login, a] of accounts) {
     const r = await fetch('https://api.github.com/graphql', { method: 'POST', headers: { Authorization: `Bearer ${a.token}`, 'User-Agent': 'claude-lantern' }, body: JSON.stringify({ query }) }).catch(() => null);
     if (r?.status === 401) { a.error = 'expired'; continue; } // the token was revoked or expired: reconnect
-    const data = (await r?.json().catch(() => null))?.data;
+    const data = /** @type {any} */ (await r?.json().catch(() => null))?.data;
     if (!data) continue;
     a.error = '';
     // reshape to gh's form so prNeed can read it: checks become one rollup state
@@ -487,6 +488,7 @@ async function loadAccounts() {
   if (accounts.size) refreshGitHub();
 }
 async function connectGitHub() {
+  /** @type {(url: string, body: object) => Promise<any>} */
   const post = (url, body) => fetch(url, { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: JSON.stringify({ client_id: CLIENT_ID, ...body }) }).then(r => r.json()).catch(() => ({}));
   const start = await post('https://github.com/login/device/code', {});
   if (!start.device_code) return false;
@@ -498,6 +500,7 @@ async function connectGitHub() {
     const t = await post('https://github.com/login/oauth/access_token', { device_code: start.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' });
     if (t.error === 'slow_down') wait += 5000;
     else if (t.access_token) {
+      /** @type {any} */
       const me = await fetch('https://api.github.com/user', { headers: { Authorization: `Bearer ${t.access_token}`, 'User-Agent': 'claude-lantern' } }).then(r => r.json()).catch(() => ({}));
       if (!me.login) break;
       await security(['add-generic-password', '-U', '-s', KEYCHAIN, '-a', me.login, '-l', 'Claude Lantern GitHub', '-w', t.access_token]);
@@ -637,11 +640,11 @@ http.createServer((req, res) => {
     return;
   }
   const ICONS = { '/icon.svg': 'image/svg+xml', '/icon.png': 'image/png', '/icon-indigo.svg': 'image/svg+xml', '/icon-indigo.png': 'image/png' };
-  if (ICONS[req.url]) {
+  if (req.url && ICONS[req.url]) {
     res.writeHead(200, { 'Content-Type': ICONS[req.url] });
     return fs.createReadStream(path.join(__dirname, req.url)).pipe(res);
   }
-  const page = req.url.split('?')[0]; // ?panel and friends are for the page, not the server
+  const page = (req.url || '').split('?')[0]; // ?panel and friends are for the page, not the server
   if (page === '/' || page === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
