@@ -11,17 +11,20 @@
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 16px; flex-wrap: wrap; }
+  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 48px; flex-wrap: wrap; position: relative; }
+  #menuButton { all: unset; cursor: pointer; color: #C3B2FF; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; padding: 4px; border-radius: 6px; }
+  #menuButton:hover { color: #F0E8FF; }
+  #menuButton:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  #menu { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
+    padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
+  #menu:popover-open { display: flex; flex-direction: column; gap: 10px; }
+  #menu select { align-self: stretch; }
+  #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
   #status.offline { color: #8A7A99; font-style: italic; }
   .quiet { all: unset; cursor: pointer; color: #8F7FA6; }
-  #ghButton { all: unset; cursor: pointer; color: #C3B2FF; display: inline-flex; align-items: center; gap: 6px; }
-  #ghButton:hover, #ghButton[aria-expanded="true"] { color: #F0E8FF; }
-  #ghButton:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 3px; border-radius: 50%; }
-  #ghCount { font-size: 12px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #gh { position: fixed; right: 16px; bottom: 52px; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
-    padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); z-index: 5; }
-  #gh h3 { margin: 0 0 6px; font-size: 13px; color: #F5E9FF; }
+  #gh h3 { margin: 0 0 4px; font-size: 13px; color: #F5E9FF; display: flex; align-items: center; gap: 6px; }
+  #gh h3 svg { color: #C3B2FF; }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
   #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: #F5E9FF; margin: 6px 0; }
   #gh button { all: unset; cursor: pointer; color: #C3B2FF; border-bottom: 1px dotted currentColor; }
@@ -107,13 +110,16 @@
   <g id="zones"></g>
 </svg></div>
 <div id="card" role="tooltip"></div>
-<div id="gh" role="dialog" aria-label="GitHub" hidden></div>
 <footer>
   <span id="status" class="offline">connecting…</span>
-  <label class="notify"><input type="checkbox" id="notify"> notify me</label>
   <button id="quiet" class="quiet" title="Treat everything as snoozed until 8am">quiet</button>
-  <button id="ghButton" aria-label="GitHub" title="GitHub" aria-expanded="false" aria-controls="gh"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg><span id="ghCount"></span></button>
-  <select id="style" aria-label="Lantern style"></select>
+  <button id="menuButton" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="#1E182E"/><circle cx="11" cy="8" r="1.6" fill="#1E182E"/><circle cx="7" cy="12" r="1.6" fill="#1E182E"/></svg></button>
+  <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
+  <div id="menu" popover>
+    <label class="notify"><input type="checkbox" id="notify"> notify me</label>
+    <select id="style" aria-label="Lantern style"></select>
+    <section id="gh" aria-label="GitHub"></section>
+  </div>
 </footer>
 <script>
 const NS = 'http://www.w3.org/2000/svg';
@@ -594,10 +600,16 @@ $('quiet').onclick = () => {
 // ---- GitHub panel: connect accounts through the Claude Lantern GitHub App (device flow) ------------------------
 let github = { accounts: [], signIn: null }, usingGh = false;
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
+const GH_LOGO = '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>';
 function renderGitHub() {
   const panel = $('gh'), make = (tag, text, cls) => { const n = document.createElement(tag); if (text) n.textContent = text; if (cls) n.className = cls; return n; };
   const post = body => fetch('/github', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const nodes = [make('h3', 'GitHub')];
+  const heading = make('h3'); heading.innerHTML = GH_LOGO + ' GitHub pull requests';
+  // say plainly where PR status comes from right now
+  const source = github.accounts.length ? `Checks, reviews and merge state come from ${github.accounts.map(a => a.login).join(', ')} every two minutes.`
+    : usingGh ? 'Checks, reviews and merge state come from your local gh every two minutes.'
+    : 'Not connected: fireflies only show PRs your sessions created, with no status colours.';
+  const nodes = [heading, make('div', source, 'dim')];
   for (const a of github.accounts) {
     const row = make('div', '', 'row'), name = make('span', a.login + (a.error ? ' · reconnect' : ''), a.error ? 'warn' : '');
     const off = make('button', 'disconnect'); off.onclick = () => post({ disconnect: a.login });
@@ -616,16 +628,8 @@ function renderGitHub() {
   }
   const install = make('a', 'Install the app on your account or orgs'); install.href = 'https://github.com/apps/claude-lantern/installations/new'; install.target = '_blank'; install.rel = 'noopener';
   nodes.push(make('div', 'Read-only: pull requests, checks and statuses. Tokens stay in your Keychain.', 'dim'), install);
-  if (!github.accounts.length && usingGh) nodes.push(make('div', 'Using your local gh until an account is connected.', 'dim'));
   panel.replaceChildren(...nodes);
-  // one account: its name (cut short with an ellipsis if long); more than one: how many
-  const n = github.accounts.length;
-  $('ghCount').textContent = n === 1 ? github.accounts[0].login : n > 1 ? `(${n})` : '';
-  $('ghButton').title = n ? `GitHub: ${github.accounts.map(a => a.login).join(', ')}` : 'GitHub';
 }
-$('ghButton').onclick = () => { const open = $('gh').hidden; $('gh').hidden = !open; $('ghButton').setAttribute('aria-expanded', open); };
-addEventListener('keydown', e => { if (e.key === 'Escape') { $('gh').hidden = true; $('ghButton').setAttribute('aria-expanded', false); } });
-addEventListener('pointerdown', e => { if (!$('gh').hidden && !/** @type {Element} */ (e.target).closest('#gh, #ghButton')) { $('gh').hidden = true; $('ghButton').setAttribute('aria-expanded', false); } });
 
 // lantern picker
 for (const [key, st] of Object.entries(STYLES)) $('style').append(new Option(st.name, key, false, st === style));
