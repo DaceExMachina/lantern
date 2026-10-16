@@ -775,17 +775,18 @@ function frame(t) {
         m.perch = best;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // A waiting moth fans its wings every so often; after 15 minutes it grows restless, and about half its fidgets
-      // become hops off the paper before it settles again. Each fidget lasts 1.6s, with 10-20s of stillness between (7-13s once restless). Snoozed ones stay still.
+      // Every 20-40s a waiting moth gets a chance to fidget for 1.6s: at rest, a 1 in 2 chance it fans its wings; after
+      // 15 minutes it's restless, and each turn has a 1 in 3 chance to be a hop off the paper, otherwise a fan.
+      // Snoozed ones stay still.
       const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
       m.fidget = '';
       if (m.session.snoozed) m.fidgetAt = 0;
       else {
-        m.fidgetAt ||= s + 5 + Math.random() * 15;
+        if (!m.fidgetAt) { m.fidgetAt = s + 5 + Math.random() * 15; m.dice = Math.random(); }
         const into = s - m.fidgetAt;
-        if (into > 1.6) { m.fidgetAt = s + (10 + Math.random() * 10) / (waited >= 15 ? 1.5 : 1); m.hops = Math.random() < 0.5; } // restless ones fidget more often
+        if (into > 1.6) { m.fidgetAt = s + 20 + Math.random() * 20; m.dice = Math.random(); }
         else if (into > 0) {
-          m.fidget = waited >= 15 && m.hops ? 'hop' : 'fan';
+          m.fidget = waited >= 15 ? (m.dice < 1 / 3 ? 'hop' : 'fan') : m.dice < 1 / 2 ? 'fan' : '';
           if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / 1.6);
         }
       }
