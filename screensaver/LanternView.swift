@@ -4,13 +4,14 @@ import ScreenSaver
 import WebKit
 
 @objc(LanternView)
-final class LanternView: ScreenSaverView {
+final class LanternView: ScreenSaverView, WKNavigationDelegate {
     private let web: WKWebView
     // macOS starts each screensaver twice per display, a few seconds apart, and the later copy is the one on screen.
     // Each display remembers its newest copy; an older one unloads its page so it stops drawing for nobody.
     private static var newest: [String: ObjectIdentifier] = [:]
     private let display: String
     private var retired = false
+    private var page: URL!
 
     override init?(frame: NSRect, isPreview: Bool) {
         // Inside the screensaver's sandbox WebKit can't tell the window is on screen, so it treats the page as
@@ -50,11 +51,21 @@ final class LanternView: ScreenSaverView {
         if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
             web.setValue(1.0, forKey: "overrideDeviceScaleFactor")
         }
-        web.load(URLRequest(url: URL(string: "http://127.0.0.1:7717/?\(mode)")!)) // screensavers don't get your shell's env, so the port is fixed here
+        page = URL(string: "http://127.0.0.1:7717/?\(mode)")! // screensavers don't get your shell's env, so the port is fixed here
+        web.navigationDelegate = self
+        web.load(URLRequest(url: page))
         Self.newest[display] = ObjectIdentifier(self)
     }
 
     required init?(coder: NSCoder) { nil }
+
+    // If the server isn't answering yet (just restarted, or still starting at login), keep trying instead of staying black.
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self, !self.retired else { return }
+            self.web.load(URLRequest(url: self.page))
+        }
+    }
 
     // The web view never fires requestAnimationFrame inside a screensaver, so drive the page from the screensaver's clock.
     override func animateOneFrame() {
