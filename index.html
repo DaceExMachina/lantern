@@ -821,9 +821,11 @@ function frame(t) {
     // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
     if (needsMe && !m.wasLanded) m.landJitter = (Math.random() * 2 - 1) * 15;
     m.wasLanded = needsMe;
-    // and each one slowly turns to face its own way, up to about 60 degrees either side, coming upright to land
+    // and each one slowly turns to face its own way, but only as far as it's rolled toward side-on: seen from above a
+    // moth points up (flying away from you), and by fully side-on it can turn up to 60 degrees; upright again to land
     const lean = needsMe ? 0 : Math.max(-15, Math.min(15, (nx - m.x) / (dt || 1) * 0.25));
-    const facing = needsMe ? 0 : 60 * (0.6 * Math.sin(s * 0.13 + m.phase * 3) + 0.4 * Math.sin(s * 0.29 + m.phase * 5));
+    const sideOn = Math.min(1, Math.abs(m.roll || 0) / (80 * Math.PI / 180));
+    const facing = needsMe ? 0 : 60 * sideOn * (0.6 * Math.sin(s * 0.13 + m.phase * 3) + 0.4 * Math.sin(s * 0.29 + m.phase * 5));
     m.tilt = (m.tilt || 0) + (lean + facing - (m.tilt || 0)) * Math.min(1, dt * 3);
     m.x = nx; m.y = ny;
 
