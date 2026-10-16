@@ -22,8 +22,11 @@ try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'ut
 const sessions = new Map(); // session_id -> { id, cwd, state, started, last, subagents: Map of agent_id -> { type, tool, last }, plus what the hover card shows }
 const clients = new Set();
 
+// Sessions snoozed for good stay snoozed through new activity and restarts, until they're woken by hand.
+// ponytail: the list is never pruned; ids are small and a resumed session keeps its id.
+const forGood = id => (settings.snoozedForGood || []).includes(id);
 function snapshot() {
-  return JSON.stringify([...sessions.values()].map(s => ({ ...s, subagents: [...s.subagents].map(([id, a]) => ({ id, ...a })) })));
+  return JSON.stringify([...sessions.values()].map(s => ({ ...s, ...(forGood(s.id) && { snoozed: true, forGood: true }), subagents: [...s.subagents].map(([id, a]) => ({ id, ...a })) })));
 }
 
 function broadcast() {
@@ -588,12 +591,21 @@ http.createServer((req, res) => {
     });
     return;
   }
-  // Snooze or wake a session: it stops counting as needing me until it does something new. Same JSON-only guard as /focus.
+  // Snooze or wake a session: it stops counting as needing me until it does something new, or with "always" for good.
+  // Same JSON-only guard as /focus.
   if (req.method === 'POST' && req.url === '/snooze' && req.headers['content-type'] === 'application/json') {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e4) req.destroy(); });
     req.on('end', () => {
-      let s; try { const j = JSON.parse(body); s = sessions.get(j.id); if (s) s.snoozed = !!j.snoozed; } catch {}
+      let s; try {
+        const j = JSON.parse(body); s = sessions.get(j.id);
+        if (s) {
+          s.snoozed = !!j.snoozed;
+          const rest = (settings.snoozedForGood || []).filter(id => id !== s.id);
+          settings.snoozedForGood = j.snoozed === 'always' ? [...rest, s.id] : rest;
+          saveSettings();
+        }
+      } catch {}
       if (s) broadcast();
       res.writeHead(s ? 204 : 404).end();
     });

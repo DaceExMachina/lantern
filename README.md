@@ -22,7 +22,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, orange is changes requested, amber is a draft, and blue is waiting on review. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
 - **A singed moth** (grey, dark edge) means the turn ended with an API error.
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
-- **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new.
+- **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new. Right-click again to snooze it for good, so new activity never wakes it (handy for a chat you only drop into now and then), and once more to wake it. Right-clicking a moth that isn't waiting snoozes it for good straight away.
 - **Pick a lantern** at the bottom of the page: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
 - **Open windows update themselves.** When `index.html` changes, every Lantern window (the iTerm2 panel, the Dock app, the screensaver) reloads on its own.
 - **Any window shape works.** The scene stretches to fill wide, tall, or square windows, with the lantern staying the same size in the middle.
