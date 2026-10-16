@@ -853,7 +853,7 @@ function frame(t) {
     const liftAt = lag => height * 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3);
     const sweep = resting ? 0 : 0.4 * Math.cos(beat);
     // landing folds the flapping wings into the side view; taking off unfolds them again
-    m.fold = (m.fold || 0) + ((perched ? { hop: 0, fan: 0.45 }[m.fidget] ?? 1 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5);
+    m.fold = (m.fold || 0) + ((perched ? { hop: 0, fan: 0.45 }[m.fidget] ?? 0.8 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5); // at rest, wings stay a little open
     const out = (m.perch?.[2] ?? 0) + sway + (m.landJitter || 0), part = 5 + 4 * Math.sin(s * 1.2 + m.phase);
     // Each moth slowly turns in 3D around its body axis, drifting between seen-from-above and side-on (either way).
     // Mostly near top-down, sometimes swinging well round; landed moths settle back flat before folding.
