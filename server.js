@@ -395,16 +395,10 @@ function seed() {
 
 // ---- GitHub status (opt-in, settings.github): PR state through the person's own `gh`, read-only -------------
 // `gh` runs from each session's folder, so a wrapper that picks the account by folder (or plain gh) does the right thing.
-// Only read commands: `gh pr view` and `gh search prs`. Nothing is stored beyond memory and nothing leaves the machine.
+// Only a read-only GraphQL query (`gh api graphql`). The result is cached on disk and nothing else leaves the machine.
 const GH = [process.env.LANTERN_GH, path.join(require('os').homedir(), '.local/bin/gh'), '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
   .find(p => p && fs.existsSync(p)) || 'gh'; // launchd's PATH is minimal, so look in the usual places
-const PR_FIELDS = 'url,number,title,state,isDraft,reviewDecision';
-// Some tokens can't read checks, and then GitHub fails the whole query, so ask again without them.
-const prView = async (args, cwd) => (await ghJson([...args, '--json', `${PR_FIELDS},statusCheckRollup`], cwd)) || (await ghJson([...args, '--json', PR_FIELDS], cwd));
 let reviews = []; // open PRs waiting on my review, from every account the sessions' folders use
-const ghJson = (args, cwd) => new Promise(done => execFile(GH, args, { cwd, timeout: 20000 }, (err, out) => {
-  try { done(err ? null : JSON.parse(out)); } catch { done(null); }
-}));
 // what a PR needs from me: merged/closed (gone), checks failing, changes requested, ready to merge, or nothing yet
 function prNeed(p) {
   if (p.state !== 'OPEN') return p.state === 'MERGED' ? 'merged' : 'closed';
@@ -428,7 +422,7 @@ async function refreshGitHub() {
     // A session owns the PRs it created, plus its branch's PR, but only if it's the only session in that folder
     // (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
     const alone = s => live.filter(o => o.cwd === s.cwd).length === 1;
-    if (accounts.size) await refreshViaApp(live, alone); else await refreshViaGh(live, alone);
+    await refreshPRs(live, alone);
     // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
     const bySession = Object.fromEntries([...sessions.values()].filter(s => s.github).map(s => [s.id, s.github]));
     fs.writeFile(GITHUB_CACHE, JSON.stringify({ reviews, bySession }) + '\n', () => {});
@@ -436,55 +430,51 @@ async function refreshGitHub() {
   broadcast();
 }
 
-// Through the gh CLI, from each session's folder, so a gh that picks the account by folder does the right thing.
-async function refreshViaGh(live, alone) {
-  const found = new Map();
-  for (const cwd of new Set(live.map(s => s.cwd)))
-    for (const p of (await ghJson(['search', 'prs', '--review-requested=@me', '--state=open', '--limit', '20', '--json', 'url,number,title,repository'], cwd)) || [])
-      found.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
-  reviews = [...found.values()];
-  const open = new Set(); // my open PRs: a created PR that isn't among them is merged or closed, so it's not looked up
-  for (const cwd of new Set(live.map(s => s.cwd)))
-    for (const p of (await ghJson(['search', 'prs', '--author=@me', '--state=open', '--limit', '100', '--json', 'url'], cwd)) || []) open.add(p.url);
-  for (const s of live) {
-    const prs = new Map(), mine = alone(s) ? await prView(['pr', 'view'], s.cwd) : null;
-    if (mine) prs.set(mine.url, mine);
-    for (const url of s.created || []) if (open.has(url) && !prs.has(url)) { const p = await prView(['pr', 'view', url], s.cwd); if (p) prs.set(url, p); }
-    s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
-  }
-}
-
-// Through the Claude Lantern GitHub App: one GraphQL query per connected account for my open PRs and reviews requested
-// from me; each session's PRs are then the open ones it created plus its branch's (merged ones simply drop out).
+// One GraphQL query per GitHub account for my open PRs and reviews requested from me; each session's PRs are then
+// the open ones it created plus its branch's (merged ones simply drop out). It runs through the Claude Lantern GitHub
+// App's tokens when an account is connected, or else through the gh CLI from each session's folder, so a gh that picks
+// the account by folder does the right thing. Either way it's a handful of calls, all at once.
 const PR_GQL = 'url number title state isDraft reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
-async function refreshViaApp(live, alone) {
-  const query = `query {
-    reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { ${PR_GQL} } } }
-    mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 100) { nodes { ... on PullRequest { ${PR_GQL} } } }
-  }`;
+const prQuery = fields => `query {
+  reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { ${fields} } } }
+  mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 100) { nodes { ... on PullRequest { ${fields} } } }
+}`;
+// gh prints the response even when the query partly fails; a token without checks access fails the whole thing, so
+// that one is asked again without checks
+const ghGraphql = cwd => new Promise(done => execFile(GH, ['api', 'graphql', '-f', `query=${prQuery(PR_GQL)}`], { cwd, timeout: 20000 }, (err, out) => {
+  let data = null; try { data = JSON.parse(out).data; } catch {}
+  if (data?.mine) return done(data);
+  execFile(GH, ['api', 'graphql', '-f', `query=${prQuery(PR_GQL.replace(/ commits\(.*$/, ''))}`], { cwd, timeout: 20000 }, (_, out2) => {
+    try { done(JSON.parse(out2).data); } catch { done(null); }
+  });
+}));
+async function appGraphql(a) {
+  const r = await fetch('https://api.github.com/graphql', { method: 'POST', headers: { Authorization: `Bearer ${a.token}`, 'User-Agent': 'claude-lantern' }, body: JSON.stringify({ query: prQuery(PR_GQL) }) }).catch(() => null);
+  if (r?.status === 401) { a.error = 'expired'; return null; } // the token was revoked or expired: reconnect
+  const data = /** @type {any} */ (await r?.json().catch(() => null))?.data;
+  if (data) a.error = '';
+  return data;
+}
+async function refreshPRs(live, alone) {
+  const results = await Promise.all(accounts.size ? [...accounts.values()].map(appGraphql) : [...new Set(live.map(s => s.cwd))].map(ghGraphql));
   const all = new Map(), wanted = new Map();
-  for (const [login, a] of accounts) {
-    const r = await fetch('https://api.github.com/graphql', { method: 'POST', headers: { Authorization: `Bearer ${a.token}`, 'User-Agent': 'claude-lantern' }, body: JSON.stringify({ query }) }).catch(() => null);
-    if (r?.status === 401) { a.error = 'expired'; continue; } // the token was revoked or expired: reconnect
-    const data = /** @type {any} */ (await r?.json().catch(() => null))?.data;
-    if (!data) continue;
-    a.error = '';
-    // reshape to gh's form so prNeed can read it: checks become one rollup state
-    const norm = p => p?.url && { ...p, statusCheckRollup: p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ? [{ state: p.commits.nodes[0].commit.statusCheckRollup.state }] : [] };
-    for (const p of data.reviews?.nodes || []) if (p?.url) wanted.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
-    for (const p of (data.mine?.nodes || []).map(norm)) if (p) all.set(p.url, p);
+  // reshape to gh's form so prNeed can read it: checks become one rollup state
+  const norm = p => p?.url && { ...p, statusCheckRollup: p.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ? [{ state: p.commits.nodes[0].commit.statusCheckRollup.state }] : [] };
+  for (const data of results) {
+    for (const p of data?.reviews?.nodes || []) if (p?.url) wanted.set(p.url, { url: p.url, title: p.title, label: `${p.repository.name}#${p.number}` });
+    for (const p of (data?.mine?.nodes || []).map(norm)) if (p) all.set(p.url, p);
   }
   reviews = [...wanted.values()];
-  for (const s of live) {
+  await Promise.all(live.map(async s => {
     const prs = new Map();
     if (alone(s)) {
-      const branch = await git(s.cwd, ['rev-parse', '--abbrev-ref', 'HEAD']), origin = await git(s.cwd, ['remote', 'get-url', 'origin']);
+      const [branch, origin] = await Promise.all([git(s.cwd, ['rev-parse', '--abbrev-ref', 'HEAD']), git(s.cwd, ['remote', 'get-url', 'origin'])]);
       const repo = origin?.match(/github\.com[:/](.+?)(?:\.git)?$/)?.[1];
       for (const p of all.values()) if (p.headRefName === branch && p.repository.nameWithOwner.toLowerCase() === repo?.toLowerCase()) prs.set(p.url, p);
     }
     for (const url of s.created || []) if (all.has(url)) prs.set(url, all.get(url));
     s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
-  }
+  }));
 }
 
 // ---- Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain ----
