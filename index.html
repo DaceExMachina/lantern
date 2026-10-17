@@ -421,25 +421,31 @@ function mothNode() {
 
 // hovering a moth pins a card to it; a short grace period stops it flickering as the moth drifts
 let hovered = null, hideTimer;
-function hoverable(m) {
-  m.zone = $('zones').appendChild(el('circle', { r: 48 }));
-  m.zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = m; renderCard(); });
+// A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.
+// A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
+function hoverArea(m, at) {
+  const zone = $('zones').appendChild(el('circle', { r: 48 }));
+  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = m; m.cardAt = at; renderCard(); });
   // clicking brings the session's iTerm tab to the front (a subagent focuses its parent session)
-  m.zone.addEventListener('click', () => {
+  zone.addEventListener('click', () => {
     fetch('/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.key }) });
     clearTimeout(hideTimer); hovered = null; $('card').classList.remove('show'); // you're off to the session, so the card can go
   });
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
   // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight
   // to for good. A snoozed moth rests on the lantern without turning it violet.
-  m.zone.addEventListener('contextmenu', e => {
+  zone.addEventListener('contextmenu', e => {
     e.preventDefault();
     const s = m.session;
     if (!s) return;
     const next = s.forGood ? false : s.state === 'waiting' && !s.snoozed ? true : 'always';
     fetch('/snooze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, snoozed: next }) });
   });
-  m.zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
+  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
+  return zone;
+}
+function hoverable(m) {
+  m.zone = hoverArea(m, 'moth');
   return m;
 }
 
@@ -767,7 +773,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -843,6 +849,13 @@ function frame(t) {
       // holds still while the moth wanders or the lantern swings
       [m.zx, m.zy] = needsMe ? [m.perch[0] + 2 * m.size, m.perch[1] + 6 * m.size] : stretch(m.home);
       put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 40 : 48); // a landed moth's area covers the whole swing and a hop
+      // once it has landed, its fireflies back home get a hover area of their own with the same card
+      if (m.flies) {
+        m.flyZone ??= hoverArea(m, 'flies');
+        [m.fx, m.fy] = stretch(m.home);
+        put(m.flyZone, 'cx', m.fx.toFixed(1)); put(m.flyZone, 'cy', m.fy.toFixed(1)); put(m.flyZone, 'r', 62);
+        m.flyZone.style.display = needsMe && m.flies.size && !m.leaving ? '' : 'none';
+      }
       if (m.leaving) m.zone.style.pointerEvents = 'none';
     }
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
@@ -1041,9 +1054,10 @@ $('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(() => 
 function placeCard() {
   if (!hovered) return;
   const pt = document.querySelector('svg').createSVGPoint();
-  pt.x = hovered.zx; pt.y = hovered.zy;
+  const zone = hovered.cardAt === 'flies' && hovered.flyZone ? hovered.flyZone : hovered.zone; // beside whichever area was hovered
+  pt.x = +zone.getAttribute('cx'); pt.y = +zone.getAttribute('cy');
   const ctm = document.querySelector('svg').getScreenCTM(), p = pt.matrixTransform(ctm), c = $('card');
-  const gap = (+hovered.zone.getAttribute('r') || 48) * ctm.a * 0.7; // clear of the hover area, which covers the moth
+  const gap = (+zone.getAttribute('r') || 48) * ctm.a * 0.7; // clear of the hover area, which covers the moth
   const x = Math.min(p.x + gap, innerWidth - c.offsetWidth - 12), y = p.y + gap + c.offsetHeight > innerHeight - 8 ? p.y - c.offsetHeight - gap : p.y + gap;
   c.style.transform = `translate(${Math.max(8, x)}px, ${Math.max(8, y)}px)`;
 }
