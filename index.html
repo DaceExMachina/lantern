@@ -12,12 +12,19 @@
   #scene { position: relative; min-height: 0; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 48px; flex-wrap: wrap; position: relative; }
-  #menuButton { all: unset; cursor: pointer; color: #C3B2FF; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; padding: 4px; border-radius: 6px; }
-  #menuButton:hover { color: #F0E8FF; }
-  #menuButton:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
-  #menu { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
+  /* the settings button in the corner, and the menu that flies up from it */
+  .corner { all: unset; cursor: pointer; color: #C3B2FF; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; padding: 4px; border-radius: 6px; }
+  .corner:hover { color: #F0E8FF; }
+  .corner:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
     padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
-  #menu:popover-open { display: flex; flex-direction: column; gap: 10px; }
+  .flyup:popover-open { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 72px); overflow-y: auto; }
+  #help { border-top: 1px solid #3A2E52; padding-top: 10px; }
+  #help summary { cursor: pointer; color: #C3B2FF; }
+  #help summary:hover { color: #F0E8FF; }
+  #help p { margin: 6px 0 0; }
+  #help b { color: #F0E8FF; font-weight: 600; }
+  #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
   #menu select { align-self: stretch; }
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
@@ -39,8 +46,8 @@
   #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
   .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 32px; } /* room for the menu button */
-  .panel #menuButton { right: 6px; }
-  .panel #menu { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
+  .panel .corner { right: 6px; }
+  .panel .flyup { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
   .panel #card { max-width: 210px; font-size: 11.5px; }
   .panel .notify { display: none; }
   /* screensaver mode (opened with ?screensaver): just the scene, with the glow running to the screen's edges */
@@ -61,6 +68,9 @@
   #zones circle { fill: transparent; cursor: pointer; }
   #card .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
   #card .agent { color: #E8DCF2; }
+  #card .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
+  #card .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
+  #card .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #B8AACB; }
   #card.show { pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
   #card ul { margin: 6px 0 2px; padding-left: 16px; }
   #card li { margin: 2px 0; }
@@ -115,12 +125,21 @@
 <footer>
   <span id="status" class="offline">connecting…</span>
   <button id="quiet" class="quiet" title="Treat everything as snoozed until 8am">quiet</button>
-  <button id="menuButton" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="#1E182E"/><circle cx="11" cy="8" r="1.6" fill="#1E182E"/><circle cx="7" cy="12" r="1.6" fill="#1E182E"/></svg></button>
+  <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="#1E182E"/><circle cx="11" cy="8" r="1.6" fill="#1E182E"/><circle cx="7" cy="12" r="1.6" fill="#1E182E"/></svg></button>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
-  <div id="menu" popover>
+  <div id="menu" class="flyup" popover>
     <label class="notify"><input type="checkbox" id="notify"> notify me</label>
     <select id="style" aria-label="Lantern style"></select>
     <section id="gh" aria-label="GitHub"></section>
+    <details id="help">
+      <summary>What's what?</summary>
+      <p><b>Big moths</b> are your sessions, <b>small ones</b> their agents. The flame burns brighter the more are working.</p>
+      <p>A moth that <b>needs you</b> lands on the lantern and turns indigo, and the light goes violet. One that's waiting on its agents keeps flying.</p>
+      <p><b>Hover</b> a moth for its card. <b>Click</b> it (or its card) to open its iTerm tab. <b>Right-click</b> to snooze it until it does something new, again to snooze it for good, and once more to wake it.</p>
+      <p><b>Fireflies</b> are a session's PRs:<span class="swatch" style="background:#C8F48A"></span>ready<span class="swatch" style="background:#FF9E8C"></span>failing<span class="swatch" style="background:#FFAA6E"></span>changes<span class="swatch" style="background:#FFD27A"></span>draft<span class="swatch" style="background:#8CCBFF"></span>in review. Hover a cluster for the list.</p>
+      <p><b>Threads</b> pulse when a session runs a tool. A <b>grey moth</b> hit an API error. Landed moths get <b>restless</b> after 15 minutes.</p>
+      <p><b>N need you</b> opens the one waiting longest. <b>quiet</b> snoozes everything until 8am.</p>
+    </details>
   </div>
 </footer>
 <script>
@@ -1005,14 +1024,16 @@ function forYouRows({ you = [], prs = [], questions = [] }) {
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
 const NEED = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
-function prRow(prs) {
-  const row = line('PRs: ');
-  prs.forEach((p, i) => {
-    const a = document.createElement('a');
-    a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = p.label; a.title = p.title;
-    row.append(i ? ', ' : '', a, ` ${NEED[p.need] || p.need}`);
-  });
-  return row;
+// a heading, then one line per PR: a dot in its firefly's colour, the number, its state, and the title cut to fit
+function prRows(prs) {
+  return [line(`PRs (${prs.length})`, 'agents'), ...prs.map(p => {
+    const row = line('', 'pr'), a = document.createElement('a'), dot = document.createElement('i'), title = document.createElement('span');
+    a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = p.label;
+    dot.style.background = FLY[['ready', 'failing', 'changes', 'draft'].includes(p.need) ? p.need : 'quiet'];
+    title.textContent = p.title; title.title = p.title;
+    row.append(dot, a, ` ${NEED[p.need] || p.need} · `, title);
+    return row;
+  })];
 }
 
 function renderCard() {
@@ -1027,7 +1048,7 @@ function renderCard() {
     chip.className = 'chip ' + (s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'idle' : s.state);
     if ((s.state === 'waiting' || s.state === 'paused') && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
     if (s.state === 'waiting' && s.forYou) rows.push(...forYouRows(s.forYou));
-    if (s.github?.length) rows.push(prRow(s.github));
+    if (s.github?.length) rows.push(...prRows(s.github));
     if (s.tasks?.length) rows.push(line(`Running: ${s.tasks.join(', ')}`, 'dim'));
     else if (s.activity) rows.push(line(`Now: ${s.activity}`));
     if (s.prompt) rows.push(line(`“${s.prompt.length > 140 ? s.prompt.slice(0, 140) + '…' : s.prompt}”`, 'prompt'));
@@ -1035,10 +1056,8 @@ function renderCard() {
       rows.push(line(`Agents (${s.subagents.length})`, 'agents'));
       for (const a of s.subagents) rows.push(line(a.description || a.type || 'subagent', 'agent'), ...(a.activity ? [line(`Now: ${a.activity}`, 'dim')] : []));
     }
-    if (s.iterm) rows.push(line('Click to open in iTerm', 'dim'));
-    if (s.forGood) rows.push(line('Snoozed for good · right-click to wake', 'dim'));
-    else if (s.state === 'waiting') rows.push(line(s.snoozed ? 'Snoozed until it does something new · right-click to snooze for good' : 'Right-click to snooze', 'dim'));
-    else rows.push(line('Right-click to snooze for good', 'dim'));
+    if (s.forGood) rows.push(line('Snoozed for good', 'dim'));
+    else if (s.snoozed && s.state === 'waiting') rows.push(line('Snoozed until it does something new', 'dim'));
     rows.push(line(`${project(s)} · running ${ago(now - s.started)} · active ${ago(now - s.last)} ago`, 'dim'));
   }
   chip.className ||= 'chip';

@@ -12,7 +12,8 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **A moth that needs you lands on the lantern**, folds its wings, and turns indigo. The flame, paper, and glow all shift to violet.
 - **Waiting on agents isn't the same as waiting on you.** A session whose turn ended while its background agents keep running stays in the air. If it also asked you something, it lands.
 - **Hover a session's moth** for its name, what it's doing right now, your last prompt, the question it's asking, and what each of its agents is working on. The hover area stays put while the moth wanders, so the card holds still.
-- **A landed session's card says what it needs from you**: its "You:" line, the PRs and other links it mentioned (clickable), and how many questions it asked. Clicking the card opens the session.
+- **A landed session's card says what it needs from you**: its "You:" line, the links it mentioned (clickable), how many questions it asked, and one line per PR with its state and title. Clicking the card opens the session.
+- **Forgot what something means?** "What's what?" at the bottom of the settings menu explains it all.
 - **Click a moth** to jump to that session's tab in iTerm2. Clicking "N need you" in the footer opens whichever session has waited longest, then the next.
 - **Moths grow restless.** A landed moth now and then fans its wings or slowly flutters them while it waits; after 15 minutes it grows restless, fidgets more, and sometimes hops off the paper.
 - **The Dock app's icon shows how many sessions need you.**
