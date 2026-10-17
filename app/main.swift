@@ -1,15 +1,35 @@
-// Lantern.app: the Lantern page in its own window, with a Dock icon and badge. The server runs on its own (a login
-// item), so this only points a web view at it, the same as the screensaver.
+// Lantern.app: the Lantern page in its own window, with a Dock icon and badge, and the Lantern server (Server.swift)
+// running inside it, so hooks reach it as long as the app is open.
 import AppKit
+import ServiceManagement
 import WebKit
 
-let home = URL(string: "http://127.0.0.1:7717/")! // apps opened from the Dock don't get your shell's env, so the port is fixed here
+// `--unregister` is for the uninstaller: only the app itself can take its login item back out.
+if CommandLine.arguments.contains("--unregister") { try? SMAppService.mainApp.unregister(); exit(0) }
+
+let env = ProcessInfo.processInfo.environment
+let port = env["LANTERN_PORT"] ?? "7717" // apps opened from the Dock don't get your shell's env; `open --env` can still set it
+let home = URL(string: "http://127.0.0.1:\(port)/")!
 
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var window: NSWindow!
     var web: WKWebView!
+    var server: LanternServer!
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        // Settings live in Application Support, since an app can't write inside itself. The page comes from the app,
+        // or, when the installer ran from a git checkout, from that checkout, so edits to index.html go live.
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Lantern").path
+        let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
+        server = LanternServer(port: UInt16(port) ?? 7717, data: env["LANTERN_DATA"] ?? support, web: checkout ?? Bundle.main.resourcePath!)
+        server.start()
+        // Hooks need the server even with no window open, so an installed copy opens at login. That's offered once;
+        // turning it off in System Settings > General > Login Items sticks.
+        if !UserDefaults.standard.bool(forKey: "loginItemOffered"), Bundle.main.bundlePath.contains("/Applications/") {
+            try? SMAppService.mainApp.register()
+            UserDefaults.standard.set(true, forKey: "loginItemOffered")
+        }
+
         let config = WKWebViewConfiguration()
         // The page sets the Dock badge with navigator.setAppBadge, which only Safari's Dock web apps have; hand it to the Dock tile.
         config.userContentController.add(self, name: "badge")
@@ -29,13 +49,18 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(red: 0x2B / 255.0, green: 0x24 / 255.0, blue: 0x40 / 255.0, alpha: 1)
         window.contentView = web
+        window.isReleasedWhenClosed = false // closing hides it; the page keeps running for the badge
         window.center()
         window.setFrameAutosaveName("Lantern") // remembers size and position between launches
         window.makeKeyAndOrderFront(nil)
         web.load(URLRequest(url: home))
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
+    // The server lives as long as the app, so closing the window keeps both running. Clicking the Dock icon brings it back.
+    func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if !hasVisibleWindows { window.makeKeyAndOrderFront(nil) }
+        return true
+    }
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let n = message.body as? Int ?? 0
@@ -54,9 +79,9 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         return nil
     }
 
-    // At login the app can open before the server is up, so keep trying until it answers.
+    // The server takes a moment to start, so keep trying until it answers.
     func webView(_ web: WKWebView, didFailProvisionalNavigation nav: WKNavigation!, withError error: Error) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { web.load(URLRequest(url: home)) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { web.load(URLRequest(url: home)) }
     }
 
     @objc func reload(_ sender: Any?) { web.load(URLRequest(url: home)) }
