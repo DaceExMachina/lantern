@@ -636,7 +636,7 @@ http.createServer((req, res) => {
       try {
         const { style, quietUntil, github } = JSON.parse(body);
         if (typeof github === 'boolean') { settings.github = github; ok = true; if (github) setTimeout(refreshGitHub, 0); else clearGitHub(); }
-        if (/^[a-z]+$/.test(style)) { settings.style = style; ok = true; }
+        if (typeof style === 'string' && /^[a-z]+$/.test(style)) { settings.style = style; ok = true; } // (test() would pass undefined as "undefined")
         if (Number.isFinite(quietUntil)) { settings.quietUntil = quietUntil; ok = true; } // quiet hours: every wait counts as snoozed until then
       } catch {}
       if (!ok) return res.writeHead(400).end();
