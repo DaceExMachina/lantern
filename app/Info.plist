@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>Lantern</string>
+  <key>CFBundleIdentifier</key><string>com.lantern.app</string>
+  <key>CFBundleName</key><string>Lantern</string>
+  <key>CFBundleIconFile</key><string>Lantern</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>NSAppleEventsUsageDescription</key><string>Clicking a moth brings that session's iTerm2 tab to the front.</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+</dict>
+</plist>

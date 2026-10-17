@@ -5,7 +5,8 @@
   "bin": { "claude-lantern": "install.js" },
   "files": [
     "install.js", "server.js", "index.html", "fake.js", "lantern.svg", "icon.svg", "icon.png", "icon-indigo.svg", "icon-indigo.png",
-    "iterm/lantern.py", "screensaver/build.sh", "screensaver/Info.plist", "screensaver/LanternView.swift"
+    "iterm/lantern.py", "app/build.sh", "app/Info.plist", "app/main.swift", "app/Server.swift",
+    "screensaver/build.sh", "screensaver/Info.plist", "screensaver/LanternView.swift"
   ],
   "os": ["darwin"],
   "engines": { "node": ">=18" },

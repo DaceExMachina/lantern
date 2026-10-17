@@ -16,7 +16,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Forgot what something means?** "What's what?" at the bottom of the settings menu explains it all.
 - **Click a moth** to jump to that session's tab in iTerm2. Clicking "N need you" in the footer opens whichever session has waited longest, then the next.
 - **Moths grow restless.** A landed moth now and then fans its wings or slowly flutters them while it waits; after 15 minutes it grows restless, fidgets more, and sometimes hops off the paper.
-- **The Dock app's icon shows how many sessions need you.**
+- **The Lantern app's Dock icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
 - **Fireflies** hang around a session's moth, one per open PR it owns (up to ten). A moth lands on the slice of the lantern facing its home, like a slice of pie, so the lines never cross. While it's landed a dotted line in its thread colour ties it to one of its fireflies back home. Hovering that cluster shows the session's card too, PRs and all. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
@@ -30,7 +30,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 
 ## How it works
 
-Claude Code hooks send every session event to a small Node server (no dependencies). The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page is one HTML file that animates an inline SVG.
+Claude Code hooks send every session event to a small server: inside Lantern.app it's written in Swift, and without the app it's `server.js` (Node, no dependencies). Both do the same thing. The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page is one HTML file that animates an inline SVG.
 
 When the server starts, it rebuilds the sessions you already have open from their transcripts in `~/.claude/projects`, so a restart doesn't lose them.
 
@@ -45,10 +45,10 @@ npx claude-lantern
 That's the whole setup. It:
 
 - backs up `~/.claude/settings.json` and adds one async `curl` hook per event, tagged `#lantern`. If the server isn't running, the hook gives up after a second and stays quiet, so Claude Code never waits on it.
-- starts the server now and at every login, and restarts it if it crashes (a launchd agent, `com.lantern.server`). It runs from `~/Library/Application Support/Lantern`, or in place if you run the installer from a git checkout.
-- builds and installs the screensaver, if you have Xcode's command line tools. Without them it skips that step; run `xcode-select --install`, then run the installer again.
+- builds Lantern.app and the screensaver from source and installs them, if you have Xcode's command line tools. The app runs the server and opens at every login (see [The Lantern app](#the-lantern-app)).
+- without Xcode's command line tools, it skips the app and the screensaver and runs the server with a launchd agent instead (`com.lantern.server`), which starts at every login and restarts it if it crashes. Run `xcode-select --install`, then run the installer again to get the app.
 - adds the iTerm2 panel script, if you have iTerm2.
-- opens <http://127.0.0.1:7717>.
+- opens Lantern.app, or <http://127.0.0.1:7717> if the app wasn't built.
 
 Running it again is safe: it replaces what it installed last time. To undo all of it (your settings get backed up first):
 
@@ -58,7 +58,7 @@ npx claude-lantern uninstall
 
 ### Working on Lantern
 
-Clone the repo and run the installer from it, so the server runs your checkout:
+Clone the repo and run the installer from it. Lantern.app then serves your checkout's `index.html` instead of its own copy, so page changes go live:
 
 ```bash
 git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
@@ -68,10 +68,10 @@ git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
 node ~/projects/lantern/install.js
 ```
 
-Restart the server after you change `server.js`:
+The page reloads itself when `index.html` changes. The server inside the app is `app/Server.swift`; after changing it, rebuild the app (below). `server.js` is the same server for setups without the app, so a change to one belongs in the other. To run it on a spare port alongside the app:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.lantern.server
+LANTERN_PORT=7718 node ~/projects/lantern/server.js
 ```
 
 To see every state without real sessions:
@@ -86,9 +86,39 @@ To type-check the JavaScript (including the page's inline script) with TypeScrip
 npm install && npm run check
 ```
 
-### Put it in your Dock
+### The Lantern app
 
-Open the page in Safari and choose File > Add to Dock. The moth icon comes with it. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.
+The installer puts `Lantern.app` in `~/Applications`. It's a plain window around the page, with the moth as its Dock icon and a badge counting the sessions that need you. It remembers where you left its window, and links open in your default browser. Drag it to your Dock to keep it there.
+
+The Lantern server is part of the app, so there's nothing else to run and no Node needed. If another Lantern server already has port 7717 (one you started yourself, say), the app shows that one and takes the port over once it's free.
+
+- **Closing the window keeps Lantern running**, so the hooks still have a server and the Dock badge keeps counting. Click the Dock icon to bring the window back.
+- **Quitting the app stops the server.** Until you open it again, the hooks quietly do nothing.
+- **It opens at login**, so the server is there before your first session. Turn that off in System Settings > General > Login Items.
+- **Your settings** (the lantern you picked, and the GitHub status cache) live in `~/Library/Application Support/Lantern`, since an app can't write inside itself.
+- **Rebuilding the app makes macOS ask again** whether Lantern can control iTerm2, because an app signed on your own Mac counts as a new app each time it's built.
+
+The app is built on your Mac and signed for your Mac alone, so macOS opens it without asking, and you don't need an Apple developer account. To rebuild it by hand after changing it:
+
+```bash
+~/projects/lantern/app/build.sh
+```
+
+### Or download the app
+
+Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. The app is the server, but Claude Code still needs the hooks that send it your sessions, and those come from the installer (see Setup).
+
+It isn't signed with a paid Apple developer ID, so macOS blocks it the first time:
+
+1. Open `Lantern.app`. macOS says it can't check it for malicious software. Click Done.
+2. Open System Settings > Privacy & Security, scroll down to Security, and click Open Anyway next to the Lantern message.
+3. Confirm with your password or Touch ID. After that it opens normally.
+
+Building it yourself with the installer skips all of this, because an app built on your own Mac isn't quarantined.
+
+### Or use Safari
+
+If you'd rather not build anything, open the page in Safari and choose File > Add to Dock. The moth icon comes with it, and so does the badge. An indigo version of the icon is in `icon-indigo.svg` and `icon-indigo.png`.
 
 ### Put it in iTerm2's toolbelt
 
@@ -111,7 +141,7 @@ With more than one display, the biggest one gets the lantern and the others get 
 
 ### Click to focus iTerm2
 
-The first time you click a moth, macOS asks whether `node` can control iTerm2. Allow it.
+The first time you click a moth, macOS asks whether Lantern (or `node`, without the app) can control iTerm2. Allow it.
 
 ## GitHub status (optional)
 
@@ -131,7 +161,9 @@ It runs `gh pr view` and `gh search prs` read-only from each session's folder, a
 
 Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py` and `screensaver/LanternView.swift` to match.
 
-The chosen lantern is saved in `settings.json` next to the server.
+The chosen lantern is saved in `settings.json`: in `~/Library/Application Support/Lantern` with the app, or next to `server.js` without it.
+
+The app reads `LANTERN_PORT` too, but apps opened from the Dock don't see your shell's settings, so it uses 7717 unless you open it with `open --env LANTERN_PORT=7718 ~/Applications/Lantern.app`.
 
 ## License
 
