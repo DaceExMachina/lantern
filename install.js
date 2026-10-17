@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// npx claude-lantern            -> hooks, login item, Lantern.app, screensaver, iTerm2 panel, then opens the app
+// npx claude-lantern            -> hooks, Lantern.app (which runs the server), screensaver, iTerm2 panel, then opens the app
 // npx claude-lantern uninstall  -> undoes all of it (~/.claude/settings.json is backed up first either way)
 const fs = require('fs');
 const os = require('os');
@@ -26,7 +26,9 @@ const SAVER = path.join(HOME, 'Library', 'Screen Savers', 'Lantern.saver');
 const APP = path.join(HOME, 'Applications', 'Lantern.app');
 const ITERM_SCRIPTS = path.join(HOME, 'Library', 'Application Support', 'iTerm2', 'Scripts');
 // npx runs from a cache npm may clear, so the server gets a stable copy here. A git checkout runs in place.
+// Lantern.app keeps its settings here too.
 const COPY = path.join(HOME, 'Library', 'Application Support', 'Lantern');
+const APP_BIN = path.join(APP, 'Contents', 'MacOS', 'Lantern'); // only ours has this, not a Safari web app of the same name
 const uninstall = process.argv[2] === 'uninstall';
 
 const run = (cmd, ...args) => execFileSync(cmd, args, { stdio: 'pipe' });
@@ -118,10 +120,15 @@ async function main() {
   stopServer();
   if (uninstall) {
     fs.rmSync(SAVER, { recursive: true, force: true });
-    if (fs.existsSync(path.join(APP, 'Contents', 'MacOS', 'Lantern'))) fs.rmSync(APP, { recursive: true }); // not a Safari web app of the same name
+    if (fs.existsSync(APP_BIN)) {
+      tryRun(APP_BIN, '--unregister'); // only the app can take its own login item back out
+      tryRun('pkill', '-f', APP_BIN); // its server stops with it
+      fs.rmSync(APP, { recursive: true });
+    }
+    tryRun('defaults', 'delete', 'com.lantern.app');
     fs.rmSync(path.join(ITERM_SCRIPTS, 'AutoLaunch', 'lantern.py'), { force: true });
     fs.rmSync(COPY, { recursive: true, force: true });
-    return console.log('Removed the login item, app, screensaver, and iTerm2 panel. Lantern is out.');
+    return console.log('Removed the app, login items, screensaver, and iTerm2 panel. Lantern is out.');
   }
 
   let dir = __dirname;
@@ -129,16 +136,26 @@ async function main() {
     fs.cpSync(dir, COPY, { recursive: true }); // keeps the lantern style the user picked (settings.json)
     dir = COPY;
   }
-  startServer(dir);
-  const app = build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications');
+  // Lantern.app runs the server and opens at login. Without Xcode's command line tools, a launchd agent runs it instead.
+  tryRun('pkill', '-f', APP_BIN); // a running copy would keep its old server
+  const app = build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications: it runs the server and opens at login');
+  if (app) {
+    if (dir === COPY) tryRun('defaults', 'delete', 'com.lantern.app', 'serverDir'); // runs the server inside the app
+    else {
+      run('defaults', 'write', 'com.lantern.app', 'serverDir', dir); // a checkout: the app runs its server.js, so edits go live
+      for (const f of ['settings.json', 'github-cache.json']) // and the lantern style you picked comes along
+        if (fs.existsSync(path.join(dir, f)) && !fs.existsSync(path.join(COPY, f))) fs.cpSync(path.join(dir, f), path.join(COPY, f));
+    }
+    run('open', ...(process.stdout.isTTY ? [] : ['-g']), APP); // starts the server; agents running this get it in the background
+  } else startServer(dir);
   build(dir, 'the screensaver', 'screensaver/build.sh', 'Installed the screensaver: pick Lantern in System Settings > Wallpaper > Screen Saver');
   iterm(dir);
 
   // launchd waits ~10s before restarting a server that couldn't get the port from the one we just stopped.
   for (let i = 0; i < 30 && !(await up()); i++) sleep(500);
-  if (!(await up())) throw new Error(`The server didn't come up on ${URL}. Is something else using port ${PORT}? See /tmp/lantern.log`);
+  if (!(await up())) throw new Error(`The server didn't come up on ${URL}. Is something else using port ${PORT}? See ${app ? '~/Library/Logs/Lantern.log' : '/tmp/lantern.log'}`);
   console.log(`Lantern lit at ${URL}`);
-  if (process.stdout.isTTY) tryRun('open', app ? APP : URL); // scripts and agents running this don't get a window
+  if (!app && process.stdout.isTTY) tryRun('open', URL); // scripts and agents running this don't get a browser tab
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });

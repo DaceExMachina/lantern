@@ -15,8 +15,13 @@ const TITLE_EVERY_MS = 15 * 1000;
 const UUID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
 
 // Settings every window shares (just the lantern style for now), kept next to the server and out of git.
-const SETTINGS_FILE = path.join(__dirname, 'settings.json');
-const GITHUB_CACHE = path.join(__dirname, 'github-cache.json');
+// Lantern.app keeps them in ~/Library/Application Support/Lantern instead, since an app's own files are read-only.
+const DATA = process.env.LANTERN_DATA || __dirname;
+fs.mkdirSync(DATA, { recursive: true });
+const SETTINGS_FILE = path.join(DATA, 'settings.json');
+const GITHUB_CACHE = path.join(DATA, 'github-cache.json');
+// Lantern.app holds this server's stdin open; when the app quits or crashes, the pipe closes and the server goes with it.
+if (process.env.LANTERN_APP) process.stdin.on('end', () => process.exit()).resume();
 let settings = { style: 'barrel' };
 try { settings = { ...settings, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch {}
 

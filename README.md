@@ -44,8 +44,8 @@ npx claude-lantern
 That's the whole setup. It:
 
 - backs up `~/.claude/settings.json` and adds one async `curl` hook per event, tagged `#lantern`. If the server isn't running, the hook gives up after a second and stays quiet, so Claude Code never waits on it.
-- starts the server now and at every login, and restarts it if it crashes (a launchd agent, `com.lantern.server`). It runs from `~/Library/Application Support/Lantern`, or in place if you run the installer from a git checkout.
-- builds Lantern.app and the screensaver from source and installs them, if you have Xcode's command line tools. Without them it skips those steps; run `xcode-select --install`, then run the installer again.
+- builds Lantern.app and the screensaver from source and installs them, if you have Xcode's command line tools. The app runs the server and opens at every login (see [The Lantern app](#the-lantern-app)).
+- without Xcode's command line tools, it skips the app and the screensaver and runs the server with a launchd agent instead (`com.lantern.server`), which starts at every login and restarts it if it crashes. Run `xcode-select --install`, then run the installer again to get the app.
 - adds the iTerm2 panel script, if you have iTerm2.
 - opens Lantern.app, or <http://127.0.0.1:7717> if the app wasn't built.
 
@@ -57,7 +57,7 @@ npx claude-lantern uninstall
 
 ### Working on Lantern
 
-Clone the repo and run the installer from it, so the server runs your checkout:
+Clone the repo and run the installer from it. Lantern.app then runs your checkout's `server.js` instead of its own copy, so your changes go live:
 
 ```bash
 git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
@@ -67,10 +67,10 @@ git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
 node ~/projects/lantern/install.js
 ```
 
-Restart the server after you change `server.js`:
+The page reloads itself when `index.html` changes. After you change `server.js`, stop the server and the app starts it again within a couple of seconds:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.lantern.server
+pkill -f "$HOME/projects/lantern/server.js"
 ```
 
 To see every state without real sessions:
@@ -89,7 +89,13 @@ npm install && npm run check
 
 The installer puts `Lantern.app` in `~/Applications`. It's a plain window around the page, with the moth as its Dock icon and a badge counting the sessions that need you. It remembers where you left its window, and links open in your default browser. Drag it to your Dock to keep it there.
 
-The app doesn't start the server: the login item already does that. If the server isn't up yet, the window stays dark and keeps trying until it answers.
+The Lantern server lives inside the app. When the app opens and nothing is answering on port 7717, it starts the server with your own `node`, found the same way your terminal finds it (so nvm, fnm, Volta and Homebrew all work). If you don't have Node 18 or later, it says so. If a server is already running (one you started yourself, say), the app uses that one instead.
+
+- **Closing the window keeps Lantern running**, so the hooks still have a server and the Dock badge keeps counting. Click the Dock icon to bring the window back.
+- **Quitting the app stops the server.** Until you open it again, the hooks quietly do nothing.
+- **It opens at login**, so the server is there before your first session. Turn that off in System Settings > General > Login Items.
+- **It restarts the server** if it ever crashes. The server's log is `~/Library/Logs/Lantern.log`.
+- **Your settings** (the lantern you picked, and the GitHub status cache) live in `~/Library/Application Support/Lantern`, since an app can't write inside itself.
 
 The app is built on your Mac and signed for your Mac alone, so macOS opens it without asking, and you don't need an Apple developer account. To rebuild it by hand after changing it:
 
@@ -99,7 +105,7 @@ The app is built on your Mac and signed for your Mac alone, so macOS opens it wi
 
 ### Or download the app
 
-Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. You still need the server running (see Setup).
+Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. The app runs the server itself, but Claude Code still needs the hooks that send it your sessions, and those come from the installer (see Setup).
 
 It isn't signed with a paid Apple developer ID, so macOS blocks it the first time:
 
@@ -134,7 +140,7 @@ With more than one display, the biggest one gets the lantern and the others get 
 
 ### Click to focus iTerm2
 
-The first time you click a moth, macOS asks whether `node` can control iTerm2. Allow it.
+The first time you click a moth, macOS asks whether Lantern (or `node`, without the app) can control iTerm2. Allow it.
 
 ## GitHub status (optional)
 
@@ -154,7 +160,7 @@ It runs `gh pr view` and `gh search prs` read-only from each session's folder, a
 
 Set `LANTERN_PORT` to use a port other than 7717. The hooks, the server, and the demo script read it; change the address in `iterm/lantern.py`, `app/main.swift` and `screensaver/LanternView.swift` to match.
 
-The chosen lantern is saved in `settings.json` next to the server.
+The chosen lantern is saved in `settings.json`: in `~/Library/Application Support/Lantern` with the app, or next to `server.js` without it.
 
 ## License
 
