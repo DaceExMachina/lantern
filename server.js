@@ -305,6 +305,9 @@ function lastTurn(lines) {
     }
     if (ended) return { done: true, cwd: j.cwd };
     if (j.isCompactSummary || j.subtype === 'compact_boundary') return { done: true, compacted: true, cwd: j.cwd }; // stopped right after a compact
+    // a background task's "finished" notice lands as a user message but only starts a turn once Claude picks it up,
+    // so one still sitting unanswered at the end doesn't mean the session is working
+    if (j.type === 'user' && typeof j.message?.content === 'string' && j.message.content.startsWith('<task-notification>')) continue;
     if (j.type === 'user') return { done: false, cwd: j.cwd };
   }
   return { done: false };

@@ -222,6 +222,9 @@ func lastTurn(_ lines: [String]) -> Turn {
         }
         if ended { return Turn(done: true, cwd: j["cwd"]) }
         if truthy(j["isCompactSummary"]) || str(j["subtype"]) == "compact_boundary" { return Turn(done: true, compacted: true, cwd: j["cwd"]) } // stopped right after a compact
+        // a background task's "finished" notice lands as a user message but only starts a turn once Claude picks it up,
+        // so one still sitting unanswered at the end doesn't mean the session is working
+        if str(j["type"]) == "user", str((j["message"] as? JSON)?["content"]).hasPrefix("<task-notification>") { continue }
         if str(j["type"]) == "user" { return Turn(done: false, cwd: j["cwd"]) }
     }
     return Turn()
