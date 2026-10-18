@@ -1,5 +1,5 @@
 // A badge just earned: a swarm of fireflies drifts in from the window's sides and packs into a pill near the top, so
-// densely their halos merge into one warm light, with the badge's name on it in dark ink. It holds a few seconds, then
+// densely their halos merge into one light, with the badge's name on it in dark ink. It holds a few seconds, then
 // they scatter back out to the sides. Clicking the pill opens the stats panel on that badge. Badges earned together play
 // one after another.
 // They're the scene's own fireflies (FIREFLY_R, fireflyBlink and fireflyLook in fireflies.js, at the scene's scale),
@@ -8,9 +8,14 @@
 const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as the farthest flight needs
 // Two speeds, in screen px per ms as they look in a 1024x768 window (the scene's scale there is about 1.2), scaling with
 // the scene: flying in and off (on average along a path), and swarming in the pill. ?flySpeed=0.4&swarmSpeed=0.05 tries others.
-const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') || 0.03;
-const SURGE = Q.get('surge') === '1'; // ?surge=1: the halos brighten to their cores' once the pill forms (off for now)
-const FLASH_COLOUR = FLY.draft; // the warm amber of a draft PR's firefly
+const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') || 0.002;
+// how much they wander about the pill while it holds (1 by default; ?jostle=0.5 or 2 tries others)
+const JOSTLE = Q.has('jostle') ? +Q.get('jostle') || 0 : 1;
+// Mostly the warm amber of a draft PR's firefly, and the rest the lantern's other light colours: the sky blue of one
+// waiting on review, the green of a ready one, the pink of a failing one, and the violet lantern's lavender. Those are
+// a quarter of the way to white here, so the dark text keeps 7:1 contrast wherever they gather behind it.
+const FLASH_COLOURS = /** @type {[number, string][]} */ ([[0.55, FLY.draft],
+  ...[[0.12, FLY.quiet], [0.11, FLY.ready], [0.11, FLY.failing], [0.11, COOL.base]].map(([share, c]) => [share, mix(c, '#FFFFFF', 0.25)])]);
 const flashQueue = [];
 let flashing = false;
 
@@ -63,40 +68,92 @@ function playFlash(id) {
   const { width: w, height: h, left, top } = pill.getBoundingClientRect(), cx = left + w / 2, cy = top + h / 2;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const rand = seeded(hash(id + Date.now()));
-  const ease = u => (1 - Math.cos(Math.PI * Math.max(0, Math.min(1, u)))) / 2;
 
-  // The pill is filled by currents: nested loops inset from its outline 0.7 halo radii apart, each holding fireflies
-  // 0.8 halo radii apart (the density of a hexagonal packing), so the halos cover it solidly end to end. Each loop
-  // streams round the pill, neighbours going opposite ways, and every firefly weaves in and out across its neighbours'
-  // loops (the outermost only a little, so the rim stays full). A loop moving along itself never thins, so the coverage
-  // stays even, and nobody leaves the outline.
-  // They fly in fast and slow down steadily as they land, reaching their loop at its own gentle pace and carrying on with
-  // it, never stopping; when they leave they speed up again from that pace.
-  const step = radii[1] * 0.8, r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, weave = step * 0.35, flies = /** @type {any[]} */ ([]);
-  const inner = step * 0.6; // the tightest loop: round, not a flat line that would turn its fireflies back in an instant, and it doesn't weave
+  // The pill is filled by slow currents: nested loops inset from its outline 0.7 halo radii apart, each holding
+  // fireflies 0.8 halo radii apart (the density of a hexagonal packing), so the halos cover it solidly end to end. Each
+  // loop creeps round the pill, neighbours going opposite ways, and a loop moving along itself never thins.
+  // On top of that a swirl carries them about and each wanders on its own, so it reads as a loose swarm, not lanes.
+  // They fly in fast and slow down steadily as they land, reaching their place at its own gentle pace and carrying on
+  // with it, never stopping; when they leave they speed up again from that pace.
+  const step = radii[1] * 0.8, r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, flies = /** @type {any[]} */ ([]);
+  const inner = step * 0.6; // the tightest loop: round, not a flat line that would turn its fireflies back in an instant
+  const jostle = still ? 0 : JOSTLE;
   const fly = FLY_SPEED * px / 1.2, swarm = still ? 0 : SWARM_SPEED * px / 1.2; // px per ms
   // Landings fall in the 400ms from `gather` (set below, once the longest flight is known); the currents' clock starts
   // there, so where a firefly lands doesn't depend on how long the arrival takes.
   let gather = 0;
-  // where a firefly's place in the current is at `t` (its loop runs all along, so it lands on a moving spot)
+  // How far in from the pill's edge a point is (its outline, in from the halos' reach), negative outside.
+  const inside = p => r - Math.hypot(Math.max(0, Math.abs(p[0] - cx) - half), p[1] - cy);
+  // A slow swirl over the whole pill: three crossing waves of a stream function, changing over a few seconds, and the
+  // fireflies flow along its curl, carried frame by frame (`flow`). A flow like that never squeezes or spreads what it
+  // carries, so it can take them a long way round without opening holes; the stream function fades out at the rim,
+  // so there the flow only runs along the edge and nobody is carried out.
+  const waves = [0, 1, 2].map(() => {
+    const k = 2 * Math.PI / ((8 + rand() * 8) * step), a = rand() * 6.28;
+    return { kx: k * Math.cos(a), ky: k * Math.sin(a), w: 2 * Math.PI / (3000 + rand() * 3000), ph: rand() * 6.28, amp: 0.025 * px / k };
+  });
+  const stream = (x, y, t) => Math.min(1, Math.max(0, inside([x, y]) / (2 * step))) ** 2 * waves.reduce((sum, v) => sum + v.amp * Math.sin(v.kx * x + v.ky * y + v.w * t + v.ph), 0);
+  const swirl = (p, t) => { const e = 0.5; return [(stream(p[0], p[1] + e, t) - stream(p[0], p[1] - e, t)) / (2 * e) * jostle, -(stream(p[0] + e, p[1], t) - stream(p[0] - e, p[1], t)) / (2 * e) * jostle]; }; // px per ms
+  // back onto the outline, along the way it went out, if a point is past it
+  const keepIn = p => {
+    if (inside(p) >= 0) return p;
+    const q = Math.max(-half, Math.min(half, p[0] - cx)), d = Math.hypot(p[0] - cx - q, p[1] - cy) || 1;
+    return [cx + q + (p[0] - cx - q) / d * r, cy + (p[1] - cy) / d * r];
+  };
+  // Each firefly's own wander on top, a quarter of a spacing, and now and then a quick dart of half a spacing, on its
+  // own clocks (`t` in ms since the landings began). Kept small: unlike the swirl, these can open gaps.
+  const wanderAt = (f, t) => {
+    const n = (t + f.dartAt) % f.every, dart = n < 450 ? Math.sin(Math.PI * n / 450) * 0.5 * step : 0, a = f.dir + Math.floor((t + f.dartAt) / f.every) * 2.4;
+    return [jostle * ((Math.sin(t * f.ax + f.ph) * 0.15 + Math.sin(t * f.bx + f.ph * 2.3) * 0.1) * step + Math.cos(a) * dart),
+      jostle * ((Math.sin(t * f.ay + f.ph * 1.7) * 0.15 + Math.sin(t * f.by + f.ph * 3.1) * 0.1) * step + Math.sin(a) * dart)];
+  };
+  // where a firefly's place in the current is at `t`, with its wander but before any swirl (it all runs from the start,
+  // so it lands on a moving spot; the swirl starts carrying it once it's there)
   const holdAt = (f, t) => {
     t -= gather;
-    const rr = Math.max(inner, Math.min(r, f.rr + Math.sin(t * f.wf + f.ph) * f.weave)); // weaving in and out, never past the edge
-    return aroundPill((f.s0 + f.v * t) / f.loop * (4 * half + 2 * Math.PI * rr), half, rr, cx, cy); // the same share of the way round
+    const b = aroundPill(f.s0 + f.v * t, half, f.rr, cx, cy), o = wanderAt(f, t);
+    return keepIn([b[0] + o[0], b[1] + o[1]]);
+  };
+  // The swirl carries a firefly's offset `off` from its place `b` on by `dt` ms, at `t` ms since the landings began
+  // (a midpoint step, so it follows the curl closely).
+  const carry = (b, off, t, dt) => {
+    if (!jostle || dt <= 0) return off;
+    const at = [b[0] + off[0], b[1] + off[1]], v1 = swirl(at, t), v2 = swirl([at[0] + v1[0] * dt / 2, at[1] + v1[1] * dt / 2], t + dt / 2);
+    return [off[0] + v2[0] * dt, off[1] + v2[1] * dt];
+  };
+  // One frame of the hold: the swirl carries the firefly on, then its place, wander and offset make where it is.
+  const flow = (f, t) => {
+    const b = holdAt(f, t);
+    f.off = carry(b, f.off, f.flowT - gather, Math.min(50, t - f.flowT)); f.flowT = t;
+    return keepIn([b[0] + f.off[0], b[1] + f.off[1]]);
   };
   const heading = (f, t) => { const a = holdAt(f, t - 1), b = holdAt(f, t + 1); return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]; }; // px per ms
-  for (let ring = 0, rr = r; rr > -0.01; ring++, rr -= step * 0.866) {
-    const loop = 4 * half + 2 * Math.PI * Math.max(inner, rr), n = Math.max(1, Math.round(loop / step)), at = rand() * step;
+  // rings from the rim in to the innermost, evenly spaced and no further apart than a hexagonal packing's rows
+  const rings = Math.ceil((r - inner) / (step * 0.866)) + 1;
+  for (let ring = 0; ring < rings; ring++) {
+    const rr = r - (r - inner) * ring / (rings - 1);
+    const loop = 4 * half + 2 * Math.PI * rr, n = Math.max(1, Math.round(loop / step)), at = rand() * step;
     const way = (ring % 2 ? -1 : 1) * (0.9 + rand() * 0.2); // one pace per loop, so its fireflies never bunch
-    for (let i = 0; i < n; i++) flies.push({ rr: Math.max(inner, rr), loop, weave: rr <= inner ? 0 : ring ? weave : weave * 0.4, s0: at + i * loop / n,
-      v: way * swarm, wf: 0.0007 + rand() * 0.0007, ph: rand() * 6.28, land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2 });
+    for (let i = 0; i < n; i++) {
+      let pick = rand(), col = FLASH_COLOURS[0][1];
+      for (const [share, c] of FLASH_COLOURS) if ((pick -= share) < 0) { col = c; break; }
+      const wander = () => (0.0006 + rand() * 0.0012) * (rand() < 0.5 ? -1 : 1); // radians per ms, each its own
+      flies.push({ rr, s0: at + i * loop / n, v: way * swarm, col, ph: rand() * 6.28,
+        ax: wander(), bx: wander(), ay: wander(), by: wander(), every: 2000 + rand() * 3000, dartAt: rand() * 5000, dir: rand() * 6.28,
+        land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2 });
+    }
   }
   // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
   // comes in from the side behind that heading (the nearer side where its loop runs up or down), from anywhere along
   // its height, so it eases into the loop going the same way instead of hooking round to turn back.
   for (const f of flies) {
-    f.spot = holdAt(f, f.land);
-    f.vel = heading(f, f.land);
+    // The swirl runs for everyone from the first landing, so they all move with one flow and stay evenly spread: a
+    // firefly landing later lands where the swirl would have carried it by then, already moving the way it goes.
+    f.off = [0, 0];
+    for (let at = 0; at < f.land; at += 16) f.off = carry(holdAt(f, at), f.off, at, Math.min(16, f.land - at));
+    const b = holdAt(f, f.land), carried = swirl([b[0] + f.off[0], b[1] + f.off[1]], f.land), own = heading(f, f.land);
+    f.spot = keepIn([b[0] + f.off[0], b[1] + f.off[1]]);
+    f.vel = [own[0] + carried[0], own[1] + carried[1]];
     const behind = Math.abs(f.vel[0]) > 0.3 * Math.abs(f.vel[1]) ? f.vel[0] > 0 : f.spot[0] < cx;
     f.from = still ? f.spot : [behind ? -radii[0] : W + radii[0], rand() * H];
     f.len = Math.hypot(f.spot[0] - f.from[0], f.spot[1] - f.from[1]) * 1.15;
@@ -106,17 +163,12 @@ function playFlash(id) {
   gather = Math.max(...flies.map(f => f.arrive), 800);
   const settle = gather + 400, leaveAt = settle + FLASH.hold, end = leaveAt + 400 + FLASH.leave;
   for (const f of flies) {
-    f.land += gather; f.delay = f.land - f.arrive; f.lift = leaveAt + f.land - gather;
+    f.land += gather; f.delay = f.land - f.arrive; f.lift = leaveAt + f.land - gather; f.flowT = f.land;
     // handles: out of the edge a third of the way towards a bend, and into the spot at its loop's pace and heading, so it
     // slows all the way down to that pace instead of stopping
     f.c1 = still ? f.spot : toward(f.from, bend(f.from, f.spot, rand), f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
-  // With ?surge=1, once everyone has landed they brighten together: each halo eases up to its core's colour and
-  // opacity, so the pill glows as one light, then settles back a little through the hold, and dims to normal as each
-  // firefly leaves.
-  const surgeAt = t => !SURGE || t < settle ? 0 : ease((t - settle) / 500) - 0.25 * ease((t - settle - 500) / 1500);
-  const surgeFill = new Map(); // halo colour by surge, in twentieths
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
@@ -129,36 +181,32 @@ function playFlash(id) {
       const t = performance.now() - t0;
       if (t >= end) { layer.remove(); return done(); }
       g.clearRect(0, 0, W, H);
-      const surge = surgeAt(t);
       for (const f of flies) {
-        let p, fade, lit = surge;
+        let p, fade;
         if (t < f.delay) continue;
         if (t < f.land) { const u = (t - f.delay) / f.arrive; p = cubic(f.from, f.c1, f.c2, f.spot, u); fade = Math.min(1, u * 3); }
-        else if (t < f.lift) { p = holdAt(f, t); fade = 1; }
+        else if (t < f.lift) { p = flow(f, t); fade = 1; f.was = [f.at ?? p, f.flowT]; f.at = p; }
         else {
           // off from wherever the current had carried it, out towards a side (a little upward), speeding up from its
           // loop's pace to the fly speed on a gently curving path
           if (!f.p0) {
-            f.p0 = holdAt(f, f.lift);
-            const vel = heading(f, f.lift), len = fly * f.go, side = f.tilt > 0 ? W + radii[0] : -radii[0];
+            // from where the swarm had it, going the way it was going (its last frame's step)
+            f.p0 = f.at ?? holdAt(f, f.lift);
+            const len = fly * f.go, side = f.tilt > 0 ? W + radii[0] : -radii[0];
+            const vel = f.was ? [(f.p0[0] - f.was[0][0]) / 16, (f.p0[1] - f.was[0][1]) / 16] : heading(f, f.lift);
             f.away = still ? f.p0 : toward(f.p0, [side, f.p0[1] - H * 0.15 + f.tilt * H * 0.4], len);
             const along = toward(f.away, f.p0, len / 3), curl = f.tilt * len * 0.3;
             f.c3 = [f.p0[0] + vel[0] * f.go / 3, f.p0[1] + vel[1] * f.go / 3];
             f.c4 = [along[0] - (f.away[1] - f.p0[1]) / len * curl, along[1] + (f.away[0] - f.p0[0]) / len * curl];
           }
-          const u = Math.min(1, (t - f.lift) / f.go); p = cubic(f.p0, f.c3, f.c4, f.away, u); fade = 1 - u; lit *= 1 - ease(u * 2);
+          const u = Math.min(1, (t - f.lift) / f.go); p = cubic(f.p0, f.c3, f.c4, f.away, u); fade = 1 - u;
         }
-        const look = fireflyLook(FLASH_COLOUR, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade), q = Math.round(lit * 20);
-        if (q) {
-          if (!surgeFill.has(q)) surgeFill.set(q, mix(look[1][0], look[2][0], q / 20));
-          look[1] = [surgeFill.get(q), look[1][1] + (look[2][1] - look[1][1]) * lit];
-        }
-        look.forEach(([fill, opacity], i) => {
+        fireflyLook(f.col, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade).forEach(([fill, opacity], i) => {
           g.globalAlpha = opacity; g.fillStyle = fill;
           g.beginPath(); g.arc(p[0], p[1], radii[i], 0, 6.2832); g.fill();
         });
       }
-      // the name comes up on the brightened pill and goes as the swarm leaves
+      // the name comes up once the pill has formed and goes as the swarm leaves
       const text = String(Math.max(0, Math.min(1, (t - settle - 300) / 600, 1 - (t - leaveAt) / 500)).toFixed(2));
       if (text !== shown) pill.style.opacity = shown = text;
       requestAnimationFrame(draw);
