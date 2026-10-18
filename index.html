@@ -26,6 +26,32 @@
   #help b { color: #F0E8FF; font-weight: 600; }
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
   #menu select { align-self: stretch; }
+  #menu .item { all: unset; cursor: pointer; color: #C3B2FF; }
+  #menu .item:hover { color: #F0E8FF; }
+  #menu .item:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  /* the stats panel: the settings menu's look, centred over the scene */
+  #stats { inset: 0; margin: auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 24px); padding: 14px 18px 16px; }
+  #stats:popover-open { gap: 8px; }
+  #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
+  #stats h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
+  #statsBody { display: flex; flex-direction: column; gap: 8px; }
+  #stats .headline { display: flex; align-items: baseline; gap: 10px; }
+  #stats .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
+  #stats .headline span { color: #C9B8DA; }
+  #stats .ribbon svg { display: block; width: 100%; height: 50px; }
+  #stats .axis, #stats .legend { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
+  #stats .legend { justify-content: flex-start; flex-wrap: wrap; gap: 2px 14px; margin-top: 0; }
+  #stats .legend span { white-space: nowrap; }
+  #stats .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
+  #stats dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
+  #stats dt { color: #8F7FA6; font-size: 11px; }
+  #stats dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
+  #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  #stats .day { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #8F7FA6; min-width: 0; }
+  #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
+  #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
+  #stats .day b { color: #D8CCE6; font-weight: 500; }
+  #stats .dim { color: #8F7FA6; margin: 0; }
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
   #status.offline { color: #8A7A99; font-style: italic; }
@@ -130,6 +156,7 @@
   <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="#1E182E"/><circle cx="11" cy="8" r="1.6" fill="#1E182E"/><circle cx="7" cy="12" r="1.6" fill="#1E182E"/></svg></button>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
+    <button class="item" id="statsButton">Stats</button>
     <label class="notify"><input type="checkbox" id="notify"> notify me</label>
     <label><input type="checkbox" id="graveToggle"> graveyard (stale PRs no session owns)</label>
     <select id="style" aria-label="Lantern style"></select>
@@ -142,9 +169,11 @@
       <p><b>Fireflies</b> are a session's PRs:<span class="swatch" style="background:#C8F48A"></span>ready<span class="swatch" style="background:#FF9E8C"></span>failing<span class="swatch" style="background:#FFAA6E"></span>changes<span class="swatch" style="background:#FFD27A"></span>draft<span class="swatch" style="background:#8CCBFF"></span>in review. Hover a cluster for the list.</p>
       <p>The <b>graveyard</b> along the bottom holds your open PRs that no session owns and nobody has touched for a week, oldest at the back. Hover one for what it needs, click to open it. Touch it again and it rises. A pale <b>moth lying among them</b> is the old session that made them: click it to resume that session in a new iTerm tab.</p>
       <p><b>Threads</b> pulse when a session runs a tool. A <b>grey moth</b> hit an API error. Landed moths get <b>restless</b> after 15 minutes.</p>
+      <p><b>Stats</b> shows how much of your moths' time was warm today, with the day as a ribbon and the week before it.</p>
       <p><b>N need you</b> opens the one waiting longest. <b>quiet</b> snoozes everything until 8am.</p>
     </details>
   </div>
+  <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today</h3><div id="statsBody"><p class="dim">Reading the log…</p></div></div>
 </footer>
 <script defer src="page/scene.js"></script>
 <script defer src="page/lanterns.js"></script>
@@ -156,6 +185,7 @@
 <script defer src="page/frame.js"></script>
 <script defer src="page/card.js"></script>
 <script defer src="page/notify.js"></script>
+<script defer src="page/stats.js"></script>
 <script defer src="page/main.js"></script>
 </body>
 </html>

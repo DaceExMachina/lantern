@@ -1198,6 +1198,15 @@ final class LanternServer {
             drain()
             return
         }
+        // Today and the seven days before it (local days), for the stats panel. Read-only, and computed off the main queue.
+        if req.method == "GET" && req.url == "/stats" {
+            let cal = Calendar.current, today = cal.startOfDay(for: Date()), ms = { (d: Date) in (d.timeIntervalSince1970 * 1000).rounded() }
+            let days = (0...7).reversed().map { i -> (Double, Double) in
+                let day = cal.date(byAdding: .day, value: -i, to: today)!
+                return (ms(day), i == 0 ? now() : ms(cal.date(byAdding: .day, value: 1, to: day)!))
+            }
+            return stats.report(days) { self.respond(c, 200, "application/json", Data(jsonText($0).utf8)) }
+        }
         let icons = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = icons[req.url] { return respond(c, 200, type, FileManager.default.contents(atPath: web + req.url) ?? Data()) }
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server

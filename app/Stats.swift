@@ -1,4 +1,4 @@
-// The event log: what the lantern saw, kept in stats.sqlite for stats and daily recaps later (nothing reads it yet).
+// The event log: what the lantern saw, kept in stats.sqlite for the stats panel (report(), served as GET /stats).
 // Three tables, times in ms since 1970:
 //   spans  (kind, session, began, ended, data): stretches of time. kind is server (the app running), alive (a session),
 //          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), violet (the lantern
@@ -85,6 +85,64 @@ final class Stats {
             WHERE rowid IN (SELECT max(rowid) FROM events WHERE kind = 'graveyard' GROUP BY json_extract(data, '$.url'))
               AND json_extract(data, '$.change') = 'entered'
             """) }.compactMap { $0[0] })
+    }
+
+    /// What GET /stats serves: each day's headline numbers (`days`, oldest first, each [start, end) in ms, the last one
+    /// ending now), plus the spans and gauges the page draws its day ribbons from. Runs on the log's queue, then hands
+    /// the result to `done` on the main queue, so the server never waits on it.
+    func report(_ days: [(Double, Double)], done: @escaping (JSON) -> Void) {
+        queue.async {
+            let bounds = jsonText(days.map { [$0.0, $0.1] }), from = days[0].0, to = days[days.count - 1].1
+            let num = { (s: String?) in Double(s ?? "") }
+            // time each kind of span covered in each day; an open span runs to now
+            var cover = Array(repeating: [String: Double](), count: days.count)
+            for r in self.run("""
+                WITH days AS (SELECT key AS d, json_extract(value, '$[0]') AS f, json_extract(value, '$[1]') AS t FROM json_each(?1))
+                SELECT d, kind, sum(min(coalesce(ended, ?2), t) - max(began, f)) FROM days JOIN spans ON began < t AND coalesce(ended, ?2) > f
+                GROUP BY d, kind
+                """, [bounds, to]) { if let d = Int(r[0] ?? ""), let k = r[1] { cover[d][k] = num(r[2]) } }
+            // waits by the day they began: how long each lasted and whether I answered it
+            var waits = Array(repeating: [(ms: Double, answered: Bool)](), count: days.count)
+            for r in self.run("""
+                WITH days AS (SELECT key AS d, json_extract(value, '$[0]') AS f, json_extract(value, '$[1]') AS t FROM json_each(?1))
+                SELECT d, coalesce(ended, ?2) - began, json_extract(data, '$.how') = 'answered' FROM days JOIN spans
+                ON kind = 'waiting' AND began >= f AND began < t
+                """, [bounds, to]) { if let d = Int(r[0] ?? ""), let ms = num(r[1]) { waits[d].append((ms, r[2] == "1")) } }
+            var merged = Array(repeating: 0, count: days.count)
+            for r in self.run("""
+                WITH days AS (SELECT key AS d, json_extract(value, '$[0]') AS f, json_extract(value, '$[1]') AS t FROM json_each(?1))
+                SELECT d, count(*) FROM days JOIN events ON kind = 'pr' AND json_extract(data, '$.change') = 'merged' AND time >= f AND time < t
+                GROUP BY d
+                """, [bounds]) { if let d = Int(r[0] ?? "") { merged[d] = Int(r[1] ?? "") ?? 0 } }
+            // gauges in the window, and the last one before it so the first day's graveyard has something to compare to
+            let gauges = self.run("""
+                SELECT * FROM (SELECT time, alive, working, fireflies, graveyard FROM gauges WHERE time < ?1 ORDER BY time DESC LIMIT 1)
+                UNION ALL SELECT time, alive, working, fireflies, graveyard FROM gauges WHERE time >= ?1 ORDER BY time
+                """, [from]).map { $0.map { num($0) ?? -1 } }
+            // the spans themselves, clipped to the window, for the ribbons; `seeded` sessions were already running at startup
+            let spans = self.run("""
+                SELECT kind, max(began, ?1), min(coalesce(ended, ?2), ?2), coalesce(json_extract(data, '$.seeded'), 0) FROM spans
+                WHERE began < ?2 AND coalesce(ended, ?2) > ?1 ORDER BY began
+                """, [from, to]).map { r -> [Any] in [r[0] ?? "", num(r[1]) ?? 0, num(r[2]) ?? 0, r[3] == "1"] }
+
+            let lastGauge = { (t: Double) in gauges.last { $0[0] < t } }
+            let value = { (g: [Double]?, i: Int) -> Double? in g.flatMap { $0[i] >= 0 ? $0[i] : nil } } // a gauge's column, if it was recorded
+            let pct = { (part: Double, whole: Double) -> Any in whole > 0 ? (100 * (1 - part / whole)).rounded() : NSNull() }
+            let out: [JSON] = days.enumerated().map { d, day in
+                let c = cover[d], answered = waits[d].filter(\.answered).map(\.ms).sorted()
+                let at = { (q: Double) -> Any in answered.isEmpty ? NSNull() : answered[min(answered.count - 1, Int(Double(answered.count) * q))] }
+                let end = lastGauge(day.1), start = lastGauge(day.0)
+                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0,
+                        "warmMoths": pct(c["waiting"] ?? 0, c["alive"] ?? 0),
+                        // the lantern's warm share of the time it ran outside quiet hours (it's never violet in quiet hours)
+                        "warmLantern": pct(c["violet"] ?? 0, (c["server"] ?? 0) - (c["quiet"] ?? 0)),
+                        "medianWait": at(0.5), "slowWait": at(0.9), "waits": waits[d].count, "answered": answered.count,
+                        "merged": merged[d], "open": value(end, 3) ?? NSNull(), "graveyard": value(end, 4) ?? NSNull(),
+                        "graveyardChange": value(end, 4).flatMap { e in value(start, 4).map { e - $0 } } ?? NSNull()]
+            }
+            let result: JSON = ["days": out, "spans": spans, "gauges": gauges.filter { $0[0] >= from }.map { Array($0[0...2]) }]
+            DispatchQueue.main.async { done(result) }
+        }
     }
 
     /// The app is quitting: close what's open now, and wait for every write to land.
