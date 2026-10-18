@@ -455,7 +455,7 @@ function frame(t) {
       });
     }
   }
-  drawStale(dt, s);
+  if (!AMBIENT) drawStale(dt, s); // the second screen keeps just the light and the dust
   // the background last, once every moth has moved, so their shadows fall where they are now
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
   // a burner cup under the flame (holder: its bottom and half-width) throws a narrow fan straight down, seen from the flame

@@ -90,7 +90,7 @@ function drawStale(dt, s) {
   // the sessions that made them, most recently active first
   const owners = new Map();
   for (const p of drifting) if (p.owner?.id) { const o = owners.get(p.owner.id) || { ...p.owner, prs: [] }; o.prs.push(p); owners.set(p.owner.id, o); }
-  const kept = [...owners.values()].sort((a, b) => b.last - a.last).slice(0, AMBIENT ? 0 : GHOSTS_MAX); // the second screen's wisps all drift free
+  const kept = [...owners.values()].sort((a, b) => b.last - a.last).slice(0, GHOSTS_MAX);
   for (const o of kept) if (!ghosts.has(o.id)) ghosts.set(o.id, makeGhost(o));
   planStale(s, [...wisps.values()].filter(d => !ghosts.has(d.p.owner?.id)));
   for (const [id, m] of ghosts) {
