@@ -92,7 +92,7 @@ let hovered = null, hideTimer;
 function hoverArea(m, at) {
   const zone = $('zones').appendChild(el('circle', { r: 48 }));
   zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = m; m.cardAt = at; renderCard(); });
-  // clicking brings the session's iTerm tab to the front (a subagent focuses its parent session)
+  // clicking brings the session's terminal tab (or Claude app session) to the front (a subagent focuses its parent session)
   zone.addEventListener('click', () => {
     fetch('/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.key }) });
     clearTimeout(hideTimer); hovered = null; $('card').classList.remove('show'); // you're off to the session, so the card can go

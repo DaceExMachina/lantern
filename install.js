@@ -15,8 +15,11 @@ const MARK = '#lantern';
 const EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest',
   'Notification', 'Stop', 'StopFailure', 'SubagentStart', 'SubagentStop', 'PreCompact', 'PostCompact'];
 // Runs in the background (async), gives up after 1s, never fails: Claude Code never waits on the lantern.
-// The iTerm session id (empty outside iTerm) lets clicking a moth bring that terminal to the front.
-const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Session: $ITERM_SESSION_ID" -H "X-Claude-Pid: $PPID" --data-binary @- ${URL}/event >/dev/null 2>&1; exit 0 ${MARK}`;
+// The terminal's own ids (each empty outside that terminal) and the app it runs in let clicking a moth bring that
+// terminal tab, or the Claude app's session, to the front.
+const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Session: $ITERM_SESSION_ID" -H "X-Claude-Pid: $PPID" ` +
+  `-H "X-Term-Program: $TERM_PROGRAM" -H "X-Term-App: $__CFBundleIdentifier" -H "X-Term-Pane: $WEZTERM_PANE$KITTY_WINDOW_ID" -H "X-Kitty-Socket: $KITTY_LISTEN_ON" ` +
+  `--data-binary @- ${URL}/event >/dev/null 2>&1; exit 0 ${MARK}`;
 
 const LABEL = 'com.lantern.server';
 const OLD_LABELS = ['com.dace.lantern']; // hand-made login items from before this installer
