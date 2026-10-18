@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const page = vm.createContext({});
+const page = vm.createContext({ URLSearchParams, location: { search: '' } }); // a plain window, no query string
 for (const f of ['scene', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
@@ -48,4 +48,15 @@ test('flapWing matches the old closed-form flap', () => {
     now.forEach(([x, y], i) => assert.ok(Math.hypot(x - was[i][0], y - was[i][1]) < 1e-9,
       `${wing} lift ${lift} sweep ${sweep} roll ${roll}: point ${i} is at ${x},${y}, was ${was[i]}`));
   }
+});
+
+test('a wing faces the flame on the side its lit face turns to', () => {
+  // seen from above, a wing spread flat faces the viewer, so it's lit from in front of the screen whatever the flame's
+  // direction in the plane; tipped up on its edge toward the flame its seen face points away from it
+  const flat = run('wing3d(WING_SIDE, [AU[0], AU[1], 0], [0, 0, 1], Math.PI / 2 - 0.3).normal');
+  assert.ok(flat[2] > 0.9, `a spread wing faces the viewer: ${flat.map(v => v.toFixed(2))}`);
+  const up = run('wing3d(WING_SIDE, [AU[0], AU[1], 0], [0, 0, 1], 0.4).normal');
+  const lift = run('[AN[0], AN[1]]'); // the side WING_SIDE spreads to
+  assert.strictEqual(run(`facesFlame([${up}], ${lift[0]}, ${lift[1]})`), 0, 'the flame on the side the wing opens to is behind its seen face');
+  assert.strictEqual(run(`facesFlame([${up}], ${-lift[0]}, ${-lift[1]})`), 1, 'the flame across the body lights its seen face');
 });

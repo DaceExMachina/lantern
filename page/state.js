@@ -24,7 +24,7 @@ function sync() {
   q.textContent = quiet() ? `quiet until ${quietEndLabel()}` : 'quiet';
   q.classList.toggle('on', quiet());
   const live = new Set();
-  for (const s of sessions) {
+  for (const s of AMBIENT ? [] : sessions) { // the ambient view only needs the sessions for the glow's colour
     live.add(s.id);
     if (!moths.has(s.id)) moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
     moths.get(s.id).session = s;

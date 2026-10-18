@@ -3,14 +3,15 @@
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame. `flame` places the flame's base and sets its size,
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
-// is the surface moths land on: its top and bottom, and its half-width at a given height.
+// is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
+// the solid top and bottom that the light can't pass: their heights and half-width.
 const FLAME = `<g id="flame"><path id="fHalo" filter="url(#soft)" opacity="0.8"/><path id="fOuter"/><path id="fMid"/><path id="fCore"/>
   <ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g><g id="sparks"></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
 const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop class="paperStop" offset="0" stop-opacity=".9"/><stop class="paperStop" offset="1" stop-opacity="0"/></radialGradient></defs>`;
 const STYLES = {
   barrel: {
-    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 462],
+    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 462], caps: [216, 445, 50],
     body: { top: 216, bottom: 445, half: y => { const t = (y - 216) / 229; return 50 + 80 * t * (1 - t); } },
     back: `<path d="M340 20 L340 193" stroke="#C9B49C" stroke-width="2"/>
     <circle cx="340" cy="196" r="4" fill="none" stroke="#A8876A" stroke-width="1.6"/>
@@ -41,7 +42,7 @@ const STYLES = {
     </g>`,
   },
   chochin: {
-    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 177], // pivot in the drawing's own units
+    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 177], caps: [218, 441, 46], // pivot in the drawing's own units
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
     back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V66" stroke="#C9B49C" stroke-width="0.8"/>
       <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/><ellipse id="paperGlow" cx="95" cy="122" rx="52" ry="48" fill="url(#pg)"/>

@@ -3,6 +3,9 @@
 const NS = 'http://www.w3.org/2000/svg';
 /** @type {(id: string) => any} */ // elements are looked up by id; checking each as HTMLElement would just be casts
 const $ = id => document.getElementById(id);
+// A second display's screensaver (?ambient): the lantern's light and the drifting wisps, with no lantern, moths or
+// fireflies made there at all.
+const AMBIENT = new URLSearchParams(location.search).has('ambient');
 const CX = 340, CY = 330, FLAME_BASE = 388;
 // the original two-petal moth, split into its wings as absolute quadratic curves from the joint at 0,0
 const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
@@ -30,8 +33,14 @@ function wing3d(pts, T, N, open, sweep = 0) {
     depth += pz;
     return [px * k, py * k];
   });
-  return Object.assign(flat, { depth: depth / pts.length }); // how near the viewer it is, to draw the nearer wing on top
+  // The wing is flat: it holds T and the way its outline points out from the body, so its normal is their cross product.
+  const side = Math.sign(pts.reduce((sum, [x, y]) => sum + x * AN[0] + y * AN[1], 0));
+  const normal = unit(cross(T, [N[0] * c + B[0] * sn * side, N[1] * c + B[1] * sn * side, N[2] * c + B[2] * sn * side]));
+  return Object.assign(flat, { depth: depth / pts.length, normal }); // depth: how near the viewer, to draw the nearer wing on top
 }
+// How a wing catches the flame (dx, dy: the flame from the moth, in the moth's own axes): 1 when the face we see is
+// toward the flame, 0 when the flame is behind the wing.
+const facesFlame = (normal, dx, dy) => (Math.sign(normal[2]) * (normal[0] * dx + normal[1] * dy) > 0 ? 1 : 0);
 // Paint a moth's two wings with the nearer one on top (the DOM order is the paint order).
 function wingsInDepthOrder(a, aPts, b, bPts) {
   const front = aPts.depth > bPts.depth ? a : b;

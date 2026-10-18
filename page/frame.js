@@ -98,8 +98,8 @@ function frame(t) {
     dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
       (0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)], (34 + i) * 4);
   });
-  const ambient = document.body.classList.contains('ambient'), remote = ambient && REMOTE ? remoteLight() : null;
-  swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
+  const ambient = AMBIENT, remote = ambient && REMOTE ? remoteLight() : null;
+  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
 
   // moths
   for (const [k, m] of moths) {
@@ -271,6 +271,14 @@ function frame(t) {
     const backlit = m.fold || 0;
     const wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
     const rim = hex(mix('#F6F0FF', mix('#FFFFFF', pal('paper'), 0.45), backlit)).join(','), edge = Math.max(m.cool, backlit) * 0.9;
+    // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
+    // flame is behind it, with a little of its warmth glowing through the thin wing.
+    const a = -m.tilt * Math.PI / 180, [lx, ly] = rot(...style.light), fx = lx - m.x, fy = ly - m.y;
+    const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
+    for (const [path, pts] of [[m.up, upPts], [m.side, sidePts]]) {
+      const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
+      if (path.style.fill !== tone) path.style.fill = tone;
+    }
     const st = m.g.style;
     st.setProperty('--wing', wing);
     st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(${rim},${edge.toFixed(2)})`);
@@ -361,7 +369,8 @@ function frame(t) {
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
     glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
-    airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters,
+    airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters, sway: rad,
+    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
   });
   placeCard();
 }
