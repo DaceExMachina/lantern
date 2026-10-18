@@ -60,7 +60,6 @@ $('style').onchange = e => {
   applyStyle(e.target.value);
   post('/settings', { style: e.target.value });
 };
-blurHalo();
 applyStyle(STYLES[PINNED] ? PINNED : 'barrel'); // until the server says which lantern is chosen
 
 // The macOS screensaver's web view never fires requestAnimationFrame, so when it goes quiet a timer takes over,
