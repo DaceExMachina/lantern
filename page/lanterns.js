@@ -105,10 +105,10 @@ function pickPerch(a = Math.random() * 2 * Math.PI, rand = Math.random) {
   const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a) * depth);
   const sin = Math.max(Math.sin(15 * Math.PI / 180), Math.abs(Math.cos(a)) * depth); // how far round the side, from the front
   const slope = (half(y + 1) - half(y - 1)) / 2, len = Math.hypot(1, slope); // how fast the surface bulges at this height
-  // the surface's outward direction, as seen from the front; pulled halfway toward the side-on view at the rim, so a
-  // moth near the middle still shows a proper side profile (not quite true to the curve, but it reads better)
-  const px = side / len * (sin + 1) / 2, py = -slope / len;
-  return [340 + side * half(y) * sin, y, Math.atan2(py, px) * 180 / Math.PI, Math.max(0.3, Math.hypot(px, py))];
+  // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
+  // up or down by how the lantern bulges at this height
+  const normal = unit([side * sin, -slope, Math.sqrt(1 - sin * sin)]);
+  return [340 + side * half(y) * sin, y, normal];
 }
 
 // warm = everyone busy, cool = someone needs me; everything crossfades between the two

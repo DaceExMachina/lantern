@@ -225,23 +225,30 @@ function frame(t) {
     const height = (resting ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
     const liftAt = lag => height * 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3);
     const sweep = resting ? 0 : 0.4 * Math.cos(beat);
-    // landing folds the flapping wings into the side view; taking off unfolds them again
-    m.fold = (m.fold || 0) + ((perched ? { hop: 0, fan: 0.45 }[m.fidget] ?? 1 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5);
-    const out = (m.perch?.[2] ?? 0) + sway + (m.landJitter || 0), part = 5 + 4 * Math.sin(s * 1.2 + m.phase);
+    // landing turns the moth onto the lantern; taking off (or a restless hop) turns it back
+    m.fold = (m.fold || 0) + ((perched && m.fidget !== 'hop' ? 1 : 0) - (m.fold || 0)) * Math.min(1, dt * 2.5);
     // Each moth slowly turns in 3D around its body axis, drifting between seen-from-above and side-on (either way).
     // Mostly near top-down, sometimes swinging well round; landed moths settle back flat before folding.
     const drift = 0.6 * Math.sin(s * 0.21 + m.phase) + 0.4 * Math.sin(s * 0.53 + m.phase * 1.7);
     const rollTo = needsMe ? 0 : Math.sign(drift) * Math.abs(drift) ** 1.3 * 80 * Math.PI / 180;
     m.roll = (m.roll || 0) + (rollTo - (m.roll || 0)) * Math.min(1, dt * 2);
-    const near = flapWing(WING_UP, liftAt(0), sweep, m.roll);
-    const far = flapWing(WING_SIDE, liftAt(0.18), sweep, m.roll);
-    // At rest the folded wings part a little, less the more head-on the moth sits (toward the lantern's middle, where an
-    // opening seen from the front looks wrong); a slow flutter opens and closes them three times.
+    // Landed, the moth sits on the paper in 3D: belly against it, its body pointing up along the surface (turned a
+    // little by its own jitter), its wings standing out along the surface's normal, all swaying with the lantern.
+    // In between, the frame turns smoothly from the flying one to the landed one.
+    const n0 = m.perch?.[2] || [0, 0, 1], j = (m.landJitter || 0) * Math.PI / 180, sw = sway * Math.PI / 180;
+    const t0 = unit([n0[1] * n0[0], n0[1] * n0[1] - 1, n0[1] * n0[2]]); // "up" along the surface
+    const tj = unit(lerp3(t0, cross(n0, t0), Math.tan(j))); // turned by the jitter, around the normal
+    const swayed = v => [v[0] * Math.cos(sw) - v[1] * Math.sin(sw), v[0] * Math.sin(sw) + v[1] * Math.cos(sw), v[2]];
+    const fly = flightFrame(m.roll), f = m.fold;
+    const T = unit(lerp3(fly.T, swayed(tj), f)), n1 = lerp3(fly.N, swayed(n0), f), N = unit(lerp3(n1, T, -dot(n1, T)));
+    // At rest the folded wings stand a little apart, a slow flutter opens and closes them three times, and a fan
+    // swings them open and shut; in flight each wing's angle comes from its lift.
     m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5);
     const flutter = m.fidget === 'flutter' ? Math.sin(Math.PI * m.into / 3) * (0.5 - 0.5 * Math.cos(2 * Math.PI * m.into)) : 0;
-    const gap = m.open * (m.perch?.[3] ?? 1) ** 2 * (1 + 1.2 * flutter);
-    put(m.up, 'd', pathOf(mixPts(near, foldedWing(out - 10 * gap, 1, m.perch?.[3]), m.fold)));
-    put(m.side, 'd', pathOf(mixPts(far, foldedWing(out + part + 14 * gap, 0.95, m.perch?.[3]), m.fold)));
+    const landOpen = m.fidget === 'fan' ? 0.3 + 0.8 * (0.5 + 0.5 * Math.sin(beat)) : 0.14 + 0.2 * m.open + 0.9 * flutter;
+    const openAt = (lag, extra) => (Math.PI / 2 - liftAt(lag)) * (1 - f) + (landOpen + extra) * f;
+    put(m.up, 'd', pathOf(wing3d(WING_UP, T, N, openAt(0, 0), sweep * (1 - f))));
+    put(m.side, 'd', pathOf(wing3d(WING_SIDE, T, N, openAt(0.18, 0.06), sweep * (1 - f))));
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
