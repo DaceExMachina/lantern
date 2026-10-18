@@ -42,16 +42,20 @@ function makeGhost(o) {
 }
 
 // Where the ghosts go: all around the lantern, in the gaps between the living moths. Each living moth (with its
-// fireflies) takes a slice of directions around the lantern; a ghost or loose wisp settles in the free direction
-// nearest its own seeded preference, at its own seeded distance, and glides there when the gaps shift. Planned twice a
-// second, not every frame.
+// fireflies) takes a slice of directions around the lantern; a ghost or loose wisp starts in the free direction nearest
+// its own seeded preference, at its own seeded distance. It keeps that spot while it stays clear, so the target doesn't
+// flicker as the moths shift; only when a moth's slice takes it over does it move, to the nearest direction with room
+// to spare. Planned twice a second, not every frame.
 const angleGap = (a, b) => Math.abs(((a - b) % 6.283 + 9.425) % 6.283 - 3.1416);
-function freeAngle(pref, taken) {
+function nextAim(aim, pref, taken) {
+  const clear = (a, pad) => taken.every(([t, w]) => angleGap(a, t) > w + pad);
+  if (aim !== undefined && clear(aim, 0)) return aim;
+  const from = aim ?? pref;
   for (let i = 0; i < 64; i++) for (const sign of [1, -1]) {
-    const a = pref + sign * i * 0.05;
-    if (taken.every(([t, w]) => angleGap(a, t) > w)) return a;
+    const a = from + sign * i * 0.05;
+    if (clear(a, 0.12)) return a;
   }
-  return pref;
+  return from;
 }
 let stalePlannedAt = -1;
 function planStale(s, loose) {
@@ -59,14 +63,22 @@ function planStale(s, loose) {
   stalePlannedAt = s;
   const taken = [];
   for (const m of moths.values()) if (m.home && !m.parentId && !m.leaving) taken.push([Math.atan2(m.home[1] - 320, m.home[0] - 340), 0.42]);
-  for (const m of ghosts.values()) { m.aim = freeAngle(m.pref, taken); taken.push([m.aim, 0.3]); }
-  for (const d of loose) { d.aim = freeAngle(d.pref, taken); taken.push([d.aim, 0.1]); }
+  for (const m of ghosts.values()) { m.aim = nextAim(m.aim, m.pref, taken); taken.push([m.aim, 0.3]); }
+  for (const d of loose) { d.aim = nextAim(d.aim, d.pref, taken); taken.push([d.aim, 0.1]); }
 }
-// glide a ghost or wisp toward its planned spot (in the scene's unstretched space), with a gentle drift on top
+// One step of a critically damped spring, solved exactly so any frame length is stable: from rest it eases in, and it
+// eases out into the target without overshooting. Peak speed is about 0.37 * k * the distance; 95% there after 4.7 / k s.
+function settle(x, v, target, k, dt) {
+  const d = x - target, c = v + k * d, e = Math.exp(-k * dt);
+  return [target + (d + c * dt) * e, (v - k * c * dt) * e];
+}
+// glide a ghost or wisp round the lantern toward its planned direction (in the scene's unstretched space), slowly: a
+// typical move takes about ten seconds. A gentle drift goes on top.
 function driftTo(o, dt, s, sway) {
-  const tx = 340 + Math.cos(o.aim) * o.dist, ty = 320 + Math.sin(o.aim) * o.dist * 0.95;
-  o.px ??= tx; o.py ??= ty;
-  o.px += (tx - o.px) * Math.min(1, dt * 0.6); o.py += (ty - o.py) * Math.min(1, dt * 0.6);
+  o.ang ??= o.aim; o.spin ??= 0;
+  const goal = o.ang + ((o.aim - o.ang) % 6.283 + 9.425) % 6.283 - 3.1416; // the short way round
+  [o.ang, o.spin] = settle(o.ang, o.spin, goal, 0.5, dt);
+  o.px = 340 + Math.cos(o.ang) * o.dist; o.py = 320 + Math.sin(o.ang) * o.dist * 0.95;
   const [x0, y0, w, h] = VIEW.box || [40, 20, 600, 600];
   const [x, y] = stretch([o.px + Math.sin(s * 0.08 + o.ph) * sway, o.py + Math.sin(s * 0.12 + o.ph * 2) * sway * 0.4]);
   return [Math.max(x0 + 24, Math.min(x0 + w - 24, x)), Math.max(y0 + 24, Math.min(y0 + h - 30, y))];
