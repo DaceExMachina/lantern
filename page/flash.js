@@ -11,11 +11,9 @@ const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as t
 const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') || 0.002;
 // how much they wander about the pill while it holds (1 by default; ?jostle=0.5 or 2 tries others)
 const JOSTLE = Q.has('jostle') ? +Q.get('jostle') || 0 : 1;
-// Mostly the warm amber of a draft PR's firefly, and the rest the lantern's other light colours: the sky blue of one
-// waiting on review, the green of a ready one, the pink of a failing one, and the violet lantern's lavender. Those are
-// a quarter of the way to white here, so the dark text keeps 7:1 contrast wherever they gather behind it.
-const FLASH_COLOURS = /** @type {[number, string][]} */ ([[0.55, FLY.draft],
-  ...[[0.12, FLY.quiet], [0.11, FLY.ready], [0.11, FLY.failing], [0.11, COOL.base]].map(([share, c]) => [share, mix(c, '#FFFFFF', 0.25)])]);
+// The colours PR fireflies come in: half the yellow of a draft, two fifths the orange of one with changes asked for,
+// and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
+const FLASH_COLOURS = /** @type {[number, string][]} */ ([[0.5, FLY.draft], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.review]]);
 const flashQueue = [];
 let flashing = false;
 
@@ -169,6 +167,17 @@ function playFlash(id) {
     f.c1 = still ? f.spot : toward(f.from, bend(f.from, f.spot, rand), f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
+  // A soft amber backing behind the words, under the fireflies, coming and going with them: where the swarm thins
+  // behind a letter the dark sky doesn't show through, so the text keeps its contrast. Blurred once, drawn each frame.
+  const words = [...pill.children].map(e => e.getBoundingClientRect()), pad = 14, blur = 8;
+  const bx = Math.min(...words.map(b => b.left)) - pad, by = Math.min(...words.map(b => b.top)) - pad;
+  const backing = document.createElement('canvas'), bw = Math.max(...words.map(b => b.right)) + pad - bx, bh = Math.max(...words.map(b => b.bottom)) + pad - by;
+  backing.width = Math.ceil((bw + 4 * blur) * k); backing.height = Math.ceil((bh + 4 * blur) * k);
+  const bg = backing.getContext('2d');
+  // blurred as a shadow (WebKit's canvas has no filter): the shape itself is drawn off to the side, out of view
+  const away = backing.width * 2;
+  bg.shadowColor = FLY.draft; bg.shadowBlur = 2 * blur * k; bg.shadowOffsetX = away; bg.fillStyle = FLY.draft;
+  bg.beginPath(); bg.roundRect(2 * blur * k - away, 2 * blur * k, bw * k, bh * k, bh * k / 2); bg.fill();
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
@@ -181,6 +190,8 @@ function playFlash(id) {
       const t = performance.now() - t0;
       if (t >= end) { layer.remove(); return done(); }
       g.clearRect(0, 0, W, H);
+      const text = Math.max(0, Math.min(1, (t - settle - 300) / 600, 1 - (t - leaveAt) / 500));
+      if (text) { g.globalAlpha = text; g.drawImage(backing, bx - 2 * blur, by - 2 * blur, bw + 4 * blur, bh + 4 * blur); }
       for (const f of flies) {
         let p, fade;
         if (t < f.delay) continue;
@@ -207,8 +218,7 @@ function playFlash(id) {
         });
       }
       // the name comes up once the pill has formed and goes as the swarm leaves
-      const text = String(Math.max(0, Math.min(1, (t - settle - 300) / 600, 1 - (t - leaveAt) / 500)).toFixed(2));
-      if (text !== shown) pill.style.opacity = shown = text;
+      if (text.toFixed(2) !== shown) pill.style.opacity = shown = text.toFixed(2);
       requestAnimationFrame(draw);
     };
     requestAnimationFrame(draw);
