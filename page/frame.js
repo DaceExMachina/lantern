@@ -267,7 +267,8 @@ function mothTarget(k, m, dt, s) {
   }
   const parent = m.parentId && moths.get(m.parentId);
   if (m.parentId && (!parent || parent.leaving)) m.leaving = true;
-  const needsMe = !m.leaving && !m.parentId && m.session?.state === 'waiting';
+  // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
+  const needsMe = !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
   if (m.leaving) {
     const ang = Math.atan2(m.y - CY, m.x - CX);
     tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
