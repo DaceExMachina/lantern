@@ -33,7 +33,7 @@ node lantern/install.js uninstall
 
 ## Download the app instead
 
-Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. On an Intel Mac, use the installer, which builds the app for you.
+Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. A nightly workflow cuts a new patch release whenever the app has changed on main, so the latest release is at most a day behind. On an Intel Mac, use the installer, which builds the app for you.
 
 The app runs the server, but Claude Code still needs hooks to tell it about your sessions, and only the installer adds those. Run it after you've moved the app in. Without Xcode's command line tools, it keeps the app you downloaded and adds just the hooks and the iTerm2 panel.
 
