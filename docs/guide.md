@@ -5,7 +5,7 @@ What everything on screen means. Installing and settings live in [setup](setup.m
 - [Moths and the lantern](#moths-and-the-lantern)
 - [Cards, clicks and snooze](#cards-clicks-and-snooze)
 - [Fireflies and stale PRs](#fireflies-and-stale-prs)
-- [Session text on the barrel](#session-text-on-the-barrel)
+- [Session text on the paper](#session-text-on-the-paper)
 - [Picking a lantern](#picking-a-lantern)
 - [Stats, goals, badges and the recap](#stats-goals-badges-and-the-recap)
 - [Quiet hours](#quiet-hours)
@@ -69,9 +69,9 @@ Ghost moths drift behind the wisps. They're the old sessions that made some of t
 
 Stale PRs need GitHub status, and "show stale PRs" in the settings menu hides them.
 
-## Session text on the barrel
+## Session text on the paper
 
-On the book-page barrel, paragraphs your sessions wrote wrap round the paper like print on a drum. They squeeze as they turn toward the sides and vanish round the back, on the rows between the wires. A new one fades in every twenty seconds or so and lingers for about a minute, overlapping the others. Some are printed on the inside, mirrored. They read best near the flame.
+On the book-page barrel and the round chōchin, paragraphs your sessions wrote wrap round the paper like print on a drum or a globe. They squeeze as they turn toward the sides and vanish round the back, on the rows between the wires. On the chōchin they also squash toward the top and bottom, where the paper curves away. A new one fades in every twenty seconds or so and lingers for about a minute, overlapping the others. Some are printed on the inside, mirrored. They read best near the flame.
 
 Only plain sentences make it onto the paper. Lantern drops anything with code, a link or path, a number, a name (a capitalised word past the first), or talk to or about you, and it keeps the words in memory only. Besides the sessions running now, it reads the newest few transcripts when it starts, ended sessions included. With nothing to show, the paper stays blank.
 
