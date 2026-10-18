@@ -14,7 +14,7 @@ for s in 16 32 128 256 512; do
   [ $s = 512 ] || sips -z $((s * 2)) $((s * 2)) ../icon.png --out build/Lantern.iconset/icon_${s}x${s}@2x.png >/dev/null
 done
 iconutil -c icns -o "$OUT/Contents/Resources/Lantern.icns" build/Lantern.iconset
-swiftc -O -target "$(uname -m)-apple-macos13" -framework AppKit -framework WebKit -o "$OUT/Contents/MacOS/Lantern" main.swift Server.swift Stats.swift
+swiftc -O -target "$(uname -m)-apple-macos13" -framework AppKit -framework WebKit -o "$OUT/Contents/MacOS/Lantern" *.swift
 codesign --force --sign - "$OUT"
 mkdir -p "$DEST"
 rm -rf "$DEST/Lantern.app" # also replaces a Safari "Add to Dock" Lantern, which lives at the same path

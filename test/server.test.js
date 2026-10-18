@@ -1,4 +1,4 @@
-// Replays recorded hook events against the app's real server (app/Server.swift, built headless from test/server) and
+// Replays recorded hook events against the app's real server (the app/*.swift files, built headless from test/server) and
 // checks the session snapshot the page would get. Each file in test/replay is a list of steps: a POST to send, or an
 // `expect` holding what /events should show by then (sessions, and settings if the step lists them).
 // `UPDATE=1 npm test` rewrites the expect steps from what the server does now; read the diff.
@@ -14,7 +14,7 @@ const { execFileSync, spawn } = require('child_process');
 const ROOT = path.join(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lantern-test-'));
 const BIN = path.join(tmp, 'lantern-server');
-test.before(() => execFileSync('swiftc', ['-Onone', '-o', BIN, 'app/Server.swift', 'app/Stats.swift', 'test/server/main.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] }));
+test.before(() => execFileSync('swiftc', ['-Onone', '-o', BIN, ...fs.readdirSync(path.join(ROOT, 'app')).filter(f => f.endsWith('.swift') && f !== 'main.swift').map(f => 'app/' + f), 'test/server/main.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] }));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const freePort = () => new Promise(done => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => done(port)); }); });

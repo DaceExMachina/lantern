@@ -16,7 +16,7 @@ const LIVE = path.join(os.homedir(), 'Library', 'Application Support', 'Lantern'
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lantern-preview-'));
 const BIN = path.join(tmp, 'server'), DATA = path.join(tmp, 'data');
 
-execFileSync('swiftc', ['-Onone', '-suppress-warnings', '-o', BIN, 'app/Server.swift', 'app/Stats.swift', 'test/server/main.swift'], { cwd: ROOT, stdio: 'inherit' });
+execFileSync('swiftc', ['-Onone', '-suppress-warnings', '-o', BIN, ...fs.readdirSync(path.join(ROOT, 'app')).filter(f => f.endsWith('.swift') && f !== 'main.swift').map(f => 'app/' + f), 'test/server/main.swift'], { cwd: ROOT, stdio: 'inherit' });
 fs.mkdirSync(DATA);
 for (const f of ['settings.json', 'github-cache.json']) if (fs.existsSync(path.join(LIVE, f))) fs.copyFileSync(path.join(LIVE, f), path.join(DATA, f));
 // The database is in WAL mode, so copying the file alone could miss recent writes; .backup takes a consistent snapshot.

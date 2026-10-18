@@ -11,7 +11,10 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | `index.html` | The page's markup and styles. It loads the scripts in `page/`. |
 | `page/*.js` | One classic script per part of the scene (moths, lanterns, fireflies, the card, stats and so on). They share globals and load in the order `index.html` lists them, with `main.js` last to wire everything up. |
 | `page-globals.d.ts`, `tsconfig.page.json` | Type-check the page scripts as one program, with no build step. |
-| `app/Server.swift` | The server: hook events, sessions, transcripts, GitHub status, click to focus. |
+| `app/Server.swift` | The server: state, hook events, the HTTP and SSE plumbing. |
+| `app/Transcripts.swift` | Reading hook payloads and transcripts, and rebuilding sessions from them. |
+| `app/Terminals.swift` | Finding a session's terminal tab and bringing it to the front. |
+| `app/GitHub.swift` | GitHub status: PRs, accounts and sign-in. |
 | `app/Stats.swift` | The event log behind the stats panel. Its schema is described at the top of the file. |
 | `app/main.swift` | The app's window, Dock badge and login item. |
 | `screensaver/`, `iterm/` | The screensaver and the iTerm2 toolbelt panel. Both show the page served by the app. |
@@ -79,7 +82,7 @@ CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the type 
 
 ## Adding a terminal
 
-Each terminal needs its own way of bringing a session forward. The hook already sends `TERM_PROGRAM`, the terminal app's bundle id and a few terminal-specific ids with every event (see `COMMAND` in `install.js`). Add a case for your terminal next to the others in `focusElsewhere` in `app/Server.swift`, and a row to the table in [docs/setup.md](docs/setup.md#terminals-and-click-to-focus).
+Each terminal needs its own way of bringing a session forward. The hook already sends `TERM_PROGRAM`, the terminal app's bundle id and a few terminal-specific ids with every event (see `COMMAND` in `install.js`). Add a case for your terminal next to the others in `focusElsewhere` in `app/Terminals.swift`, and a row to the table in [docs/setup.md](docs/setup.md#terminals-and-click-to-focus).
 
 ## Writing docs and UI text
 
