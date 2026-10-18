@@ -1031,12 +1031,15 @@ final class LanternServer {
         if quietNow != quiet { if quietNow { stats.begin("quiet") } else { stats.end("quiet") }; quiet = quietNow }
         if violetNow != violet { if violetNow { stats.begin("violet") } else { stats.end("violet") }; violet = violetNow }
         // badges for what's on screen right now (Stats.earn gives each once a day): ten agents in one session, ten open PRs
-        // owned by one session, twenty fireflies in flight, a graveyard over its 30
+        // owned by one session, twenty fireflies in flight, stale PRs past their 30 (the faint cloud shows), and one ghost moth
+        // (an old session) behind five stale PRs
         if agents.values.contains(where: { $0.count >= 10 }) { stats.earn("hive_mind") }
         let open = ownedPRs.filter { !["merged", "closed"].contains($0.value.need) }
         if Dictionary(grouping: open.values, by: \.session).values.contains(where: { $0.count >= 10 }) { stats.earn("swarm_season") }
         if open.count >= 20 { stats.earn("light_pollution") }
-        if graveyard.count > 30 { stats.earn("mass_grave") }
+        if graveyard.count > 30 { stats.earn("haunted") }
+        let ghosts = graveyard.compactMap { (owners[str($0["url"])] as? JSON)?["id"] as? String }
+        if Dictionary(grouping: ghosts) { $0 }.values.contains(where: { $0.count >= 5 }) { stats.earn("restless_spirits") }
     }
     /// The warm moths goal from the stats panel, or 75%: it decides which days count toward a warm streak.
     var warmGoal: Double { ((settings["goals"] as? JSON)?["warm"] as? NSNumber)?.doubleValue ?? 75 }

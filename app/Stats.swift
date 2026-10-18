@@ -195,15 +195,17 @@ final class Stats {
                     """) { got.append("ghosted") }
                 // Snooze Button Champion: ten waits snoozed in a day
                 if yes("SELECT count(*) >= 10 FROM spans WHERE kind = 'waiting' AND began >= ?1 AND began < ?2 AND json_extract(data, '$.snoozed') IS NOT NULL") { got.append("snooze_champion") }
-                // Revived: a dead PR merged, straight from the graveyard or after it rose again
+                // Revived: a stale PR merged, straight off the stale list or after it was revived
                 if yes("""
                     SELECT count(*) FROM events e WHERE e.time >= ?1 AND e.time < ?2 AND (
                       (e.kind = 'graveyard' AND json_extract(e.data, '$.how') = 'merged') OR
                       (e.kind = 'pr' AND json_extract(e.data, '$.change') = 'merged' AND EXISTS (SELECT 1 FROM events g WHERE g.kind = 'graveyard'
                         AND json_extract(g.data, '$.how') = 'revived' AND json_extract(g.data, '$.url') = json_extract(e.data, '$.url') AND g.time < e.time)))
                     """) { got.append("revived") }
-                // Necromancer: five dead PRs revived in a week
-                if self.run("SELECT count(*) >= 5 FROM events WHERE kind = 'graveyard' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("necromancer") }
+                // Séance: five stale PRs revived in a week (touched again, or picked up by a session)
+                if self.run("SELECT count(*) >= 5 FROM events WHERE kind = 'graveyard' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
+                // Ghostbuster: five stale PRs merged or closed in a day (the stale list is 'graveyard' in the log)
+                if yes("SELECT count(*) >= 5 FROM events WHERE kind = 'graveyard' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
                 if self.lightsOut(f, min(e, t)) { got.append("lights_out") }
                 if over {
                     // Warm all day: an hour or more of sessions, and the lantern warm nine tenths of the time it ran outside quiet hours
@@ -213,11 +215,11 @@ final class Stats {
                     }
                     let ran = (cover["server"] ?? 0) - (cover["quiet"] ?? 0)
                     if (cover["alive"] ?? 0) >= 3600000 && ran > 0 && (cover["violet"] ?? 0) <= ran / 10 { got.append("warm_all_day") }
-                    // Clean Floor and Small Batches: a week of gauges (the log must go back that far) with an empty graveyard, or never
+                    // Clear Night and Small Batches: a week of gauges (the log must go back that far) with no stale PRs, or never
                     // more than three fireflies in flight
                     let history: [Any?] = [e - week, e]
                     let enough = "(SELECT min(time) FROM gauges) <= ?1 AND (SELECT count(*) FROM gauges WHERE time >= ?1 AND time < ?2) > 0"
-                    if self.run("SELECT \(enough) AND (SELECT max(graveyard) FROM gauges WHERE time >= ?1 AND time < ?2) = 0", history).first?[0] == "1" { got.append("clean_floor") }
+                    if self.run("SELECT \(enough) AND (SELECT max(graveyard) FROM gauges WHERE time >= ?1 AND time < ?2) = 0", history).first?[0] == "1" { got.append("clear_night") }
                     if self.run("SELECT \(enough) AND (SELECT max(fireflies) FROM gauges WHERE time >= ?1 AND time < ?2) <= 3", history).first?[0] == "1" { got.append("small_batches") }
                     // Warm streaks, on the day they reach 3, 7, 14 and 30 days
                     if let n = streaks[day], [3, 7, 14, 30].contains(n) { got.append("streak_\(n)") }
