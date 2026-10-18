@@ -8,14 +8,14 @@ const vm = require('vm');
 
 // #lantern's on-screen scale is `screen` CSS pixels to a paper unit: a 229-unit drum is 229 px tall at 1, too small to read
 const page = vm.createContext({
-  URLSearchParams, location: { search: '' }, performance, addEventListener: () => {}, setInterval: () => 7, clearInterval: () => {}, screen: 1,
+  URLSearchParams, location: { search: '' }, performance, addEventListener: () => {}, setInterval: () => 7, clearInterval: () => {}, screen: 0.6,
   document: { getElementById: id => id === 'lantern' ? { getScreenCTM: () => ({ a: page.screen, b: 0 }) } : null },
 });
 for (const f of ['scene', 'lanterns', 'pages']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 test('the text sleeps in a window too small to read it, and wakes when it grows', () => {
-  assert.strictEqual(run('pagesTimer'), 0, 'a 229 px drum loads with no timer');
+  assert.strictEqual(run('pagesTimer'), 0, 'a 137 px drum loads with no timer');
   page.screen = 2;
   run('wakePages()');
   assert.strictEqual(run('pagesTimer'), 7, 'a 458 px drum starts it');
