@@ -11,14 +11,16 @@
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 106px; flex-wrap: wrap; position: relative; }
+  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 110px; flex-wrap: wrap; position: relative; }
   /* the settings button in the corner, and the menu that flies up from it */
-  .corner { all: unset; cursor: pointer; color: #C3B2FF; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; padding: 4px; border-radius: 6px; }
+  /* the quiet, stats and settings buttons: each one's click area runs the bar's full height and meets its neighbours',
+     so there's no dead spot between or around them */
+  .corners { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
+  .corner { all: unset; cursor: pointer; color: #C3B2FF; display: flex; align-items: center; padding: 0 6px; }
+  .corner:last-child { padding-right: 16px; }
   .corner:hover { color: #F0E8FF; }
-  #statsButton { right: 46px; } /* stats sits just left of settings, and the quiet moon left of that */
-  #quiet { right: 76px; }
   #quiet.on svg path:first-child { fill: currentColor; } /* a full moon... well, a filled one, while quiet is on */
-  .corner:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  .corner:focus-visible { outline: 1px solid #B9A8FF; outline-offset: -3px; }
   .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
     padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
   .flyup:popover-open { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 72px); overflow-y: auto; }
@@ -92,14 +94,15 @@
   #gh a, #help a { color: #C3B2FF; }
   #gh .dim { color: #8F7FA6; font-size: 11.5px; }
   #gh .warn { color: #E8C8A8; }
-  #status .next { all: unset; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+  #status .next { all: unset; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
+    padding: 12px 0; margin: -12px 0; } /* clickable to the bar's top and bottom edges, without moving the text */
   #status .next:hover { color: #E4DAFF; }
+  .panel #status .next { padding: 6px 0; margin: -6px 0; }
   #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
-  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 80px; } /* room for the quiet, stats and menu buttons */
-  .panel .corner { right: 6px; }
-  .panel #statsButton { right: 30px; }
-  .panel #quiet { right: 54px; }
+  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 86px; } /* room for the quiet, stats and menu buttons */
+  .panel .corner { padding: 0 4px; }
+  .panel .corner:last-child { padding-right: 6px; }
   .panel .flyup { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
   .panel #card { max-width: 210px; font-size: 11.5px; }
   .panel .notify { display: none; }
@@ -184,9 +187,11 @@
 <div id="card" role="tooltip"></div>
 <footer>
   <span id="status" class="offline">connecting…</span>
+  <div class="corners">
   <button id="quiet" class="corner" aria-label="Quiet" title="Treat everything as snoozed until 8am"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M10.5 2.6a5.6 5.6 0 1 0 3 9.8 4.6 4.6 0 0 1-3-9.8z"/><path d="M13 2.5v2.4M11.8 3.7h2.4"/></svg></button>
-  <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M1.6 14.3h12.8v.8H1.6z"/><path d="M3.7 14.3V9.6c0-.5-.4-.7-.9-.8V8.4h3v.4c-.5.1-.9.3-.9.8v4.7zM7.4 14.3V4.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v9.9zM11.1 14.3V7.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v6.9z"/></svg></button>
-  <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><circle cx="8" cy="8" r="1.3"/><path d="M8 1.2l.9 4.9L8 6.6l-.9-.5zM8 14.8l-.9-4.9.9-.5.9.5zM1.2 8l4.9-.9.5.9-.5.9zM14.8 8l-4.9.9-.5-.9.5-.9z"/><path d="M3.2 3.2l3.4 2.6-.3.5-.5.3zM12.8 12.8l-3.4-2.6.3-.5.5-.3zM3.2 12.8l2.6-3.4.5.3.3.5zM12.8 3.2l-2.6 3.4-.5-.3-.3-.5z" opacity=".7"/></svg></button>
+  <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 1.2 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M1.6 14.3h12.8v.8H1.6z"/><path d="M3.7 14.3V9.6c0-.5-.4-.7-.9-.8V8.4h3v.4c-.5.1-.9.3-.9.8v4.7zM7.4 14.3V4.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v9.9zM11.1 14.3V7.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v6.9z"/></svg></button>
+  <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="21" height="21" aria-hidden="true" fill="currentColor"><circle cx="8" cy="8" r="1.3"/><path d="M8 1.2l.9 4.9L8 6.6l-.9-.5zM8 14.8l-.9-4.9.9-.5.9.5zM1.2 8l4.9-.9.5.9-.5.9zM14.8 8l-4.9.9-.5-.9.5-.9z"/><path d="M3.2 3.2l3.4 2.6-.3.5-.5.3zM12.8 12.8l-3.4-2.6.3-.5.5-.3zM3.2 12.8l2.6-3.4.5.3.3.5zM12.8 3.2l-2.6 3.4-.5-.3-.3-.5z" opacity=".7"/></svg></button>
+  </div>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
     <label class="notify"><input type="checkbox" id="notify"> notify me</label>
