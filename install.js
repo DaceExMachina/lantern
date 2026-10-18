@@ -83,7 +83,7 @@ function iterm(dir) {
   fs.mkdirSync(autoLaunch, { recursive: true });
   const script = fs.readFileSync(path.join(dir, 'iterm', 'lantern.py'), 'utf8').replace('127.0.0.1:7717', `127.0.0.1:${PORT}`);
   fs.writeFileSync(path.join(autoLaunch, 'lantern.py'), script);
-  console.log('Added the iTerm2 panel: see the README to switch it on');
+  console.log('Added the iTerm2 panel: see docs/setup.md#the-iterm2-toolbelt to switch it on');
 }
 
 async function main() {
