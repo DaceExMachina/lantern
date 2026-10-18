@@ -68,14 +68,9 @@ function playFlash(id) {
   const g = canvas.getContext('2d');
   g.scale(k, k);
   // On screen, at the scene's scale: a firefly's bright glow (how far off screen they start), the halo the packing is
-  // measured in, and the whole bloom, its colour's picture, swelling the way the scene's do. Nothing travels within
-  // `clear` of the window's top unless it's in the window: a path skimming just above the edge would show only the
-  // bottom sliver of its glows, a thin line of colour with no firefly to go with it.
-  const px = VIEW.px || 1, glowR = 20 * px, haloR = 6.5 * px, bloomR = FIREFLY_BLOOM * px, clear = bloomR * 1.2;
+  // measured in, and the whole bloom, its colour's picture, swelling the way the scene's do.
+  const px = VIEW.px || 1, glowR = 20 * px, haloR = 6.5 * px, bloomR = FIREFLY_BLOOM * px;
   const sprites = new Map(), sprite = col => sprites.get(col) ?? sprites.set(col, bloomSprite(col, Math.ceil(2 * bloomR * k))).get(col);
-  // far enough down that the blooms along the pill's top rim (at their widest swell) clear the window's edge, instead
-  // of a whole row of them being cut off flat along it; a stray flying up and out of the window on its own is fine
-  pill.style.top = `${Math.max(parseFloat(getComputedStyle(pill).top), clear)}px`;
   const { width: w, height: h, left, top } = pill.getBoundingClientRect(), cx = left + w / 2, cy = top + h / 2;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const rand = seeded(hash(id + Date.now()));
@@ -193,14 +188,11 @@ function playFlash(id) {
     f.strayEvery = strayFor(f) * (1 + f.rest);
     f.lead = f.overshoot ? strayFor(f) * (0.3 + rand() * 0.3) : -rand() * f.rest * strayFor(f);
     const b = holdAt(f, f.land), carried = swirl([b[0] + f.off[0], b[1] + f.off[1]], f.land), own = heading(f, f.land);
-    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]);
-    // one landing mid-stray up past the top would arrive along the edge; it lands at home and strays later instead
-    if (f.overshoot && p[1] + strayOff(f, f.land)[1] < clear) f.lead = -rand() * f.rest * strayFor(f);
-    const o = strayOff(f, f.land), o2 = strayOff(f, f.land + 1);
+    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, f.land), o2 = strayOff(f, f.land + 1);
     f.spot = [p[0] + o[0], p[1] + o[1]];
     f.vel = [own[0] + carried[0] + o2[0] - o[0], own[1] + carried[1] + o2[1] - o[1]];
     const behind = Math.abs(f.vel[0]) > 0.3 * Math.abs(f.vel[1]) ? f.vel[0] > 0 : f.spot[0] < cx;
-    f.from = still ? f.spot : [behind ? -glowR : W + glowR, clear + rand() * (H - clear)];
+    f.from = still ? f.spot : [behind ? -glowR : W + glowR, glowR + rand() * (H - glowR)];
     f.len = Math.hypot(f.spot[0] - f.from[0], f.spot[1] - f.from[1]) * 1.15;
     f.arrive = still ? 800 : f.len / fly;
   }
@@ -212,9 +204,9 @@ function playFlash(id) {
     // handles: out of the edge a third of the way towards a bend, and into the spot at its loop's pace and heading, so it
     // slows all the way down to that pace instead of stopping
     // The bend goes to whichever side keeps the path in the window: the pill sits near the top, and a path bowing up
-    // past it would skim along above the window (see `clear`).
+    // past it would skim along above the window with only the edges of its glows showing, a line stuck to the top.
     let via = bend(f.from, f.spot, rand);
-    if (via[1] < clear) via = [f.from[0] + f.spot[0] - via[0], f.from[1] + f.spot[1] - via[1]];
+    if (via[1] < glowR) via = [f.from[0] + f.spot[0] - via[0], f.from[1] + f.spot[1] - via[1]];
     f.c1 = still ? f.spot : toward(f.from, via, f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
@@ -269,14 +261,9 @@ function playFlash(id) {
             f.p0 = f.at ?? holdAt(f, f.lift);
             const len = fly * f.go, side = f.tilt > 0 ? W + glowR : -glowR;
             const vel = f.was ? [(f.p0[0] - f.was[0][0]) / 16, (f.p0[1] - f.was[0][1]) / 16] : heading(f, f.lift);
-            // One heading out over the top, or already up there on a stray, goes straight, climbing at 60° or more, so it
-            // crosses the edge steeply (see `clear`) instead of curving along it.
-            let aim = f.p0[1] - H * 0.15 + f.tilt * H * 0.4;
-            const overTop = aim < clear || f.p0[1] < clear;
-            if (overTop) aim = Math.min(aim, f.p0[1] - 1.7 * Math.abs(side - f.p0[0]));
-            f.away = still ? f.p0 : toward(f.p0, [side, aim], len);
-            const along = toward(f.away, f.p0, len / 3), curl = overTop ? 0 : f.tilt * len * 0.3, push = overTop ? [0, 0] : vel;
-            f.c3 = [f.p0[0] + push[0] * f.go / 3, f.p0[1] + push[1] * f.go / 3];
+            f.away = still ? f.p0 : toward(f.p0, [side, f.p0[1] - H * 0.15 + f.tilt * H * 0.4], len);
+            const along = toward(f.away, f.p0, len / 3), curl = f.tilt * len * 0.3;
+            f.c3 = [f.p0[0] + vel[0] * f.go / 3, f.p0[1] + vel[1] * f.go / 3];
             f.c4 = [along[0] - (f.away[1] - f.p0[1]) / len * curl, along[1] + (f.away[0] - f.p0[0]) / len * curl];
           }
           const u = Math.min(1, (t - f.lift) / f.go); p = cubic(f.p0, f.c3, f.c4, f.away, u); fade = 1 - u;
