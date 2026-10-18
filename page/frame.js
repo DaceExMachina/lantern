@@ -18,19 +18,29 @@ function findPerch(m, rand, from) {
   return best;
 }
 
-// A pierced lantern's light through its holes: by default a beam from each star hole, out from the flame through the
-// star (its direction, half-width as the flame sees it, the star's distance, strength). With ?spots, a spot of light
-// from every hole instead, landing at its own distance (walls nearby or far off), as big as the hole would project
-// there and fainter further out. Holes right over the flame shine at the viewer, so they give neither.
-const SPOTS = new URLSearchParams(location.search).has('spots');
-function spotsFor(st) {
-  return holesIn(st.back).flatMap(([x, y, r, star], i) => {
-    const dx = x - st.light[0], dy = y - st.light[1], h = Math.hypot(dx, dy);
-    if (h < 25) return [];
-    if (!SPOTS) return star ? [[Math.atan2(dy, dx), 0.8 * r / Math.max(h, 45), h, 1]] : [];
-    const far = 120 + 190 * seeded(i + 1)(), size = 0.8 * r * far / h;
-    return [[dx / h * far, dy / h * far, size, Math.min(1, 150 / far) * (star ? -1 : 1)]];
+// A pierced lantern's beams, measured on the drawing every frame: the flame's centre and each star hole's centre and size
+// (the stars in its #cutouts mask), mapped into scene coordinates with their real transforms, so each beam runs from the
+// flame through its star and follows the sway. ?beamdebug draws each beam's axis and marks each star.
+const BEAMDEBUG = new URLSearchParams(location.search).has('beamdebug');
+/** @type {SVGPolygonElement[]} */
+let starEls = [], starBoxes = [];
+function measureBeams() {
+  if (!starEls[0]?.isConnected) { starEls = [...document.querySelectorAll('#cutouts polygon')].map(e => /** @type {SVGPolygonElement} */ (e)); starBoxes = starEls.map(e => e.getBBox()); }
+  const core = $('fCore');
+  if (!starEls.length || !core) return { o: [0, 0], beams: [] };
+  const toScene = document.querySelector('svg').getScreenCTM().inverse(), at = (el, x, y) => new DOMPoint(x, y).matrixTransform(toScene.multiply(el.getScreenCTM()));
+  const fb = core.getBBox(), f = at(core, fb.x + fb.width / 2, fb.y + fb.height / 2);
+  const stars = starBoxes.map(b => {
+    const c = at(starEls[0], b.x + b.width / 2, b.y + b.height / 2), edge = at(starEls[0], b.x + b.width, b.y + b.height / 2);
+    const dx = c.x - f.x, dy = c.y - f.y, h = Math.hypot(dx, dy);
+    return { c, h, beam: [Math.atan2(dy, dx), 0.8 * Math.hypot(edge.x - c.x, edge.y - c.y) / Math.max(h, 45), h, 1] };
   });
+  if (BEAMDEBUG) {
+    const g = $('beamDebug') || document.querySelector('svg').appendChild(el('g', { id: 'beamDebug', stroke: '#7CFF8A', 'stroke-width': 0.6, fill: '#FF5C8A' }));
+    g.replaceChildren(el('circle', { cx: f.x, cy: f.y, r: 2.5, fill: '#FFFFFF' }), ...stars.flatMap(({ c, h }) => [
+      el('line', { x1: f.x, y1: f.y, x2: f.x + (c.x - f.x) / h * 400, y2: f.y + (c.y - f.y) / h * 400 }), el('circle', { cx: c.x, cy: c.y, r: 1.6, stroke: 'none' })]));
+  }
+  return { o: [f.x, f.y], beams: stars.map(s => s.beam) };
 }
 
 function frame(t) {
@@ -382,7 +392,7 @@ function frame(t) {
     glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters, sway: rad,
-    spots: style.spots ??= spotsFor(style), spotMode: SPOTS ? 1 : 0,
+    ...(({ o, beams }) => ({ beamO: o, beams: ambient ? [] : beams }))(measureBeams()),
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
   });
   placeCard();
