@@ -34,7 +34,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 
 ## Works with
 
-- **macOS 13 or later.** Tested on macOS 26. The app, the screensaver and click to focus are Mac only. Elsewhere, `server.js` and the page in a browser still work (see [How it works](#how-it-works)).
+- **macOS 13 or later.** Tested on macOS 26. The app, the screensaver and click to focus are Mac only. Elsewhere, `server.js` and the page in a browser still work (see [Without the app](#without-the-app-serverjs)).
 - **Claude Code**, in a terminal or in the Claude desktop app (both run the hooks). Tested with 2.1.302. The installer registers hooks for newer events such as `PermissionRequest` and `PostCompact`, which a much older Claude Code may not know.
 - **Your own `~/.claude` folder**, or wherever `CLAUDE_CONFIG_DIR` points when you run the installer.
 - **Any CLAUDE.md.** A status footer with a `**You:**` line and `**Blocker:**` questions gives the card a sharper summary, but it's optional: without one the card shows the last paragraph of the final message, and any sentence ending in "?" counts as a question (English only).
@@ -56,7 +56,7 @@ The first click in iTerm2 or Terminal makes macOS ask whether Lantern can contro
 
 ## How it works
 
-Claude Code hooks send every session event to a small server: inside Lantern.app it's written in Swift, and without the app it's `server.js` (Node, no dependencies). Both do the same thing. The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page is one HTML file and a handful of plain scripts that animate an inline SVG over a WebGL background.
+Claude Code hooks send every session event to a small server: inside Lantern.app it's written in Swift, and without the app it's `server.js` (Node, no dependencies), an older, simpler copy (see [Without the app](#without-the-app-serverjs)). The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page is one HTML file and a handful of plain scripts that animate an inline SVG over a WebGL background.
 
 When the server starts, it rebuilds the sessions you already have open from their transcripts in `~/.claude/projects` (or under `CLAUDE_CONFIG_DIR`), so a restart doesn't lose them.
 
@@ -94,7 +94,7 @@ git clone https://github.com/DaceExMachina/lantern.git <clone-dir>
 node <clone-dir>/install.js
 ```
 
-The page is `index.html` plus plain scripts in `page/`, one per part of the scene (moths, lanterns, fireflies, the card, and so on), loaded in order with `main.js` last to wire everything up. It reloads itself when any of them changes. The server inside the app is `app/Server.swift`; after changing it, rebuild the app (below). `server.js` is the same server for setups without the app, so a change to one belongs in the other. To run it on a spare port alongside the app:
+The page is `index.html` plus plain scripts in `page/`, one per part of the scene (moths, lanterns, fireflies, the card, and so on), loaded in order with `main.js` last to wire everything up. It reloads itself when any of them changes. The server inside the app is `app/Server.swift`; after changing it, rebuild the app (below). `server.js` is the older fallback server and is frozen, so new features go in the Swift server only. To run it on a spare port alongside the app:
 
 ```bash
 LANTERN_PORT=7718 node <clone-dir>/server.js
@@ -169,6 +169,24 @@ With more than one display, the biggest one gets the lantern and the others get 
 ### Click to focus
 
 The first time you click a moth in iTerm2 or Terminal, macOS asks whether Lantern can control it. Allow it. See [Works with](#works-with) for what a click does in each terminal.
+
+### Without the app (`server.js`)
+
+`server.js` is the server from before Lantern.app, kept as a plain fallback: the installer runs it under launchd when your Mac has no Xcode command line tools, and it's the way to run Lantern off macOS. It needs only Node 18. It's frozen, so it lacks everything added since the app took over:
+
+- stale PRs' ghost moths and resuming their sessions, and side sessions orbiting the session that started them
+- the event log, the Stats panel (it says it can't read the stats), badges and the daily recap
+- the card's last-paragraph summary when a session writes no `**You:**` footer (it shows nothing there)
+- click to focus anywhere but iTerm2
+- `claudeDir` and `port` in settings.json: it reads `~/.claude`, and the port from `LANTERN_PORT` only
+
+The installer refuses to run off macOS. On Linux, start `node server.js` (under systemd if you want it at login), open <http://127.0.0.1:7717> in a browser, and add the hooks to `~/.claude/settings.json` by hand: one entry per event listed in `EVENTS` in `install.js`, each running
+
+```bash
+curl -s -m 1 -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:7717/event >/dev/null 2>&1; exit 0
+```
+
+with `"async": true`. For GitHub status off macOS, use your own `gh` (the account sign-in keeps its token in the macOS Keychain).
 
 ## GitHub status (optional)
 

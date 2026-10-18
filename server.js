@@ -1,4 +1,14 @@
 // Lantern: receives Claude Code hook events, keeps session state, streams it to the page over SSE.
+//
+// Frozen as the plain fallback: the server for Macs without Xcode's command line tools (the installer runs it under
+// launchd) and the cheap path off macOS (`node server.js`, then open the page in a browser). The real server is
+// app/Server.swift inside Lantern.app; new features go there only. Keep this one working, but don't port to it.
+// What it doesn't have, compared with the app (the README lists the same under "Without the app"):
+// - stale PRs' ghost moths and resuming their sessions (/resume), and side sessions orbiting their parent
+// - the event log, the Stats panel, badges and the daily recap (/stats)
+// - the card's last-paragraph fallback when a session writes no **You:** status footer
+// - click to focus beyond iTerm2 (Terminal, the Claude desktop app, VS Code, WezTerm, kitty), and the no-launch iTerm check
+// - claudeDir and the port from settings.json: it reads ~/.claude only, and the port only from LANTERN_PORT
 const http = require('http');
 const fs = require('fs');
 const { execFile, spawnSync } = require('child_process');
