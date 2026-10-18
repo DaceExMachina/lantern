@@ -987,6 +987,9 @@ final class LanternServer {
         }
     }
 
+    // A side session whose parent is still alive reports back to that session, so its waiting isn't waiting on Dace.
+    func reportsBack(_ s: JSON) -> Bool { truthy(s["parent"]) && sessions[str(s["parent"])] != nil }
+
     func saveGitHubCache() {
         let bySession = sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
         let text = jsonText(["reviews": reviews, "graveyard": graveyard, "owners": owners, "bySession": bySession]) + "\n"
@@ -1002,7 +1005,7 @@ final class LanternServer {
             if seen[id] == nil { stats.begin("alive", id, ["title": title ?? NSNull(), "project": project, "seeded": seeded.contains(id)]) }
             else if title != was.title, let title { stats.note("alive", id, ["title": title]); if was.waiting { stats.note("waiting", id, ["title": title]) } }
             was.title = title
-            let waiting = str(s["state"]) == "waiting"
+            let waiting = str(s["state"]) == "waiting" && !reportsBack(s) // a side session reporting back isn't waiting on Dace
             if waiting != was.waiting {
                 if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project]) } else { stats.end("waiting", id, ["how": "answered"]) }
                 was.waiting = waiting
@@ -1020,7 +1023,7 @@ final class LanternServer {
         }
         // the lantern's colour, worked out the way the page does it
         let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now()
-        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !truthy($0.1["snoozed"]) && !forGood($0.0) }
+        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !reportsBack($0.1) && !truthy($0.1["snoozed"]) && !forGood($0.0) }
         if quietNow != quiet { if quietNow { stats.begin("quiet") } else { stats.end("quiet") }; quiet = quietNow }
         if violetNow != violet { if violetNow { stats.begin("violet") } else { stats.end("violet") }; violet = violetNow }
         // badges for what's on screen right now (Stats.earn gives each once a day): ten agents in one session, ten open PRs

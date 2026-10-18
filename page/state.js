@@ -12,7 +12,11 @@ let violetAt = Date.now();
 const quiet = () => quietUntil > Date.now();
 
 function sync() {
-  sessions = quiet() ? raw.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : raw;
+  // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
+  // orbiting (like agents do) and doesn't count as needing me.
+  const alive = new Set(raw.map(s => s.id));
+  const base = raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
+  sessions = quiet() ? base.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : base;
   const q = $('quiet');
   q.textContent = quiet() ? 'quiet until 8am' : 'quiet';
   q.classList.toggle('on', quiet());
@@ -25,7 +29,7 @@ function sync() {
     // smaller, with its thread to the parent; it still lands on the lantern on its own when it needs you.
     const m = moths.get(s.id), parent = s.parent && moths.get(s.parent);
     m.satellite = parent && !parent.leaving ? s.parent : null;
-    m.size = m.satellite ? SIZE.supervisor * 1.15 : SIZE.session;
+    m.size = m.satellite ? SIZE.supervisor : SIZE.session; // like a supervisor agent
     if (m.satellite) m.slot = -1; // it doesn't hold one of the home spots
     // a fresh snooze (not quiet hours, not waking) puffs a "zz" off the moth; the first sync only records where it stands
     const snooze = s.forGood ? 'always' : s.snoozed && !s.quiet ? 'once' : '';
@@ -41,7 +45,7 @@ function sync() {
   for (const [k, m] of moths) if (!live.has(k)) m.leaving = true;
 
   const working = sessions.filter(s => s.state === 'working').length;
-  const onAgents = sessions.filter(s => s.state === 'paused').length;
+  const onAgents = sessions.filter(s => s.state === 'paused' && !s.reported).length;
   const waiting = sessions.filter(s => s.state === 'waiting' && !s.snoozed);
   const snoozed = sessions.filter(s => s.state === 'waiting' && s.snoozed).length;
   const st = $('status');

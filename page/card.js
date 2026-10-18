@@ -58,7 +58,7 @@ function renderCard() {
   const rows = [h], name = s.title || project(s);
   {
     h.textContent = name;
-    chip.textContent = s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'snoozed' : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
+    chip.textContent = s.reported ? 'reported back' : s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'snoozed' : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
     chip.className = 'chip ' + (s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'idle' : s.state);
     if ((s.state === 'waiting' || s.state === 'paused') && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
     if (s.state === 'waiting' && s.forYou) rows.push(...forYouRows(s.forYou));
@@ -66,6 +66,11 @@ function renderCard() {
     if (s.tasks?.length) rows.push(line(`Running: ${s.tasks.join(', ')}`, 'dim'));
     else if (s.activity) rows.push(line(`Now: ${s.activity}`));
     if (s.prompt) rows.push(line(`“${s.prompt.length > 140 ? s.prompt.slice(0, 140) + '…' : s.prompt}”`, 'prompt'));
+    const side = sessions.filter(o => o.parent === s.id); // side sessions it started, listed like its agents
+    if (side.length) {
+      rows.push(line(`Side sessions (${side.length})`, 'agents'));
+      for (const o of side) rows.push(line(o.title || project(o), 'agent'), ...(o.activity && o.state === 'working' ? [line(`Now: ${o.activity}`, 'dim')] : o.reported ? [line('Reported back', 'dim')] : []));
+    }
     if (s.subagents.length) {
       rows.push(line(`Agents (${s.subagents.length})`, 'agents'));
       for (const a of s.subagents) rows.push(line(a.description || a.type || 'subagent', 'agent'), ...(a.activity ? [line(`Now: ${a.activity}`, 'dim')] : []));
