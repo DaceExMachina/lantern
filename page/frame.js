@@ -48,8 +48,8 @@ function frame(t) {
   put($('flame'), 'transform', `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
   put($('flame'), 'opacity', pulse.toFixed(3));
 
-  // embers float off the tip, more of them the busier things get
-  sparkClock += dt * (0.4 + 5 * level);
+  // sparks float off the tip, more of them the busier things get; not from a paper lantern, whose flame is hidden behind paper
+  sparkClock += style.paper ? 0 : dt * (0.4 + 5 * level);
   while (sparkClock > 1) {
     sparkClock--;
     sparks.push({ x: 340 + wobble(s, 2) * 6 * size, y: FLAME_BASE - 90 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
@@ -63,8 +63,8 @@ function frame(t) {
   [...embers.children].forEach((c, i) => {
     const p = sparks[i];
     if (!p) return put(c, 'opacity', 0);
-    put(c, 'cx', p.x.toFixed(1)); put(c, 'cy', p.y.toFixed(1)); put(c, 'r', (1.6 * p.life).toFixed(2));
-    put(c, 'fill', pal('mid')); put(c, 'opacity', p.life.toFixed(2));
+    put(c, 'cx', p.x.toFixed(1)); put(c, 'cy', p.y.toFixed(1)); put(c, 'r', (0.6 + 0.6 * p.life).toFixed(2));
+    put(c, 'fill', pal('core')); put(c, 'opacity', Math.min(1, p.life * 2).toFixed(2)); // small, bright and crisp, winking out at the end
   });
 
   // the light: lit paper, a breathing halo, and the rings tinting with the flame
