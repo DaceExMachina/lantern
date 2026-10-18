@@ -257,10 +257,14 @@ function frame(t) {
     const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330);
     m.tint ||= m.parentId ? moths.get(m.parentId)?.tint : tintFor(m.session); // subagents share their session's tint
     const singed = needsMe && m.session.error;
-    const wing = mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool);
+    // Landed, the flame is behind the moth: it turns to a darker silhouette against the glowing paper, and the light
+    // wrapping round its edges makes the pale outline a bright rim in the paper's colour.
+    const backlit = m.fold || 0;
+    const wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+    const rim = hex(mix('#F6F0FF', mix('#FFFFFF', pal('paper'), 0.45), backlit)).join(','), edge = Math.max(m.cool, backlit) * 0.9;
     const st = m.g.style;
     st.setProperty('--wing', wing);
-    st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(246,240,255,${(m.cool * 0.9).toFixed(2)})`);
+    st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(${rim},${edge.toFixed(2)})`);
 
     // A sleeping moth (landed and snoozed) breathes out z's: one at a time, each fading in as it floats up, growing a
     // little, and fading out, 0.6s apart, so three or four show at once. They come in spells, about half the time, on
