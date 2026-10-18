@@ -1,5 +1,8 @@
 name: check
-on: [pull_request]
+on:
+  pull_request:
+  push:
+    branches: [main] # sessions push small fixes straight to main, so check those too
 jobs:
   types:
     runs-on: macos-latest # package.json says os: darwin, so npm ci refuses on Linux
