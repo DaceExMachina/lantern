@@ -1,0 +1,53 @@
+# One-click release: Actions > release > Run workflow bumps the version, creates the release with GitHub's
+# generated notes, and attaches Lantern.zip. A dry run, or a run on any branch but main, builds the zip and publishes nothing.
+name: release
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      dry_run:
+        description: Build the zip but don't publish a release
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency: release
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+      publish: ${{ steps.next.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: next
+        run: |
+          last=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          IFS=. read -r major minor patch <<< "${last#v}"
+          case $BUMP in
+            major) tag=v$((major + 1)).0.0 ;;
+            minor) tag=v$major.$((minor + 1)).0 ;;
+            *) tag=v$major.$minor.$((patch + 1)) ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "$last to $tag (publish: $PUBLISH)"
+        env:
+          BUMP: ${{ inputs.bump }}
+          PUBLISH: ${{ github.ref == 'refs/heads/main' && inputs.dry_run != true }}
+      - if: steps.next.outputs.publish == 'true'
+        run: gh release create "$TAG" --target "$GITHUB_SHA" --title "Lantern ${TAG#v}" --generate-notes
+        env:
+          TAG: ${{ steps.next.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+  # a release made with GITHUB_TOKEN doesn't fire app.yml's release event, so call it directly
+  app:
+    needs: release
+    uses: ./.github/workflows/app.yml
+    with:
+      tag: ${{ needs.release.outputs.publish == 'true' && needs.release.outputs.tag || '' }}
