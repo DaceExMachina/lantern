@@ -222,7 +222,8 @@ function frame(t) {
     // keep flapping all the way in; only a moth that has reached its spot slows down and folds
     const perched = needsMe && Math.hypot(tx - m.x, ty - m.y) < ((m.fold || 0) > 0.5 ? 10 : 4); // slack once folded, so the sway can't make it flicker
     const resting = perched && m.fidget !== 'hop'; // perched and not hopping
-    m.beat = (m.beat ?? m.phase) + (resting ? 1.5 : flap) * dt; // accumulated, so speed changes never jump the wings
+    m.rate ??= 0.88 + seeded(hash(m.key + ':wings'))() * 0.24; // each moth beats at its own speed, so they drift in and out of step
+    m.beat = (m.beat ?? m.phase) + (resting ? 1.5 : flap * m.rate) * dt; // accumulated, so speed changes never jump the wings
     const beat = m.beat;
     const height = (resting ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
     const liftAt = lag => height * 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3);

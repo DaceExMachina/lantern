@@ -1,5 +1,5 @@
-// Stale PRs: my open PRs that no session owns and nobody has touched for a week drift low in the scene as wisps,
-// pale ghost fireflies in a washed-out shade of their PR colour, wandering slowly. The longer stale, the lower and
+// Stale PRs: my open PRs that no session owns and nobody has touched for a week drift around the lantern as wisps,
+// pale ghost fireflies in a washed-out shade of their PR colour, wandering slowly. The longer stale, the fainter and
 // dimmer. Now and then one slowly brightens and fades again. Up to 30; the
 // oldest beyond that gather into a faint cloud with a count. A new one fades in; one that comes back to life (touched
 // again, or picked up by a session) rises and fades. There's no ground: the lantern floats in the dark and its light
@@ -17,7 +17,7 @@ function makeWisp(p) {
   const ember = [el('circle', { r: 18 }), el('circle', { r: 8 }), el('circle', { r: 2.8 })]; // a firefly's own glow: wide, halo, core
   $('stale').append(...ember);
   const zone = $('zones').appendChild(el('circle', { r: 12 }));
-  const d = { p, ember, zone, u: 0.05 + rand() * 0.9, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
+  const d = { p, ember, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30,
     born: staleSeeded ? 0 : 1, gone: undefined };
   // hovering shows the PR's card; clicking (or clicking the card) opens it
@@ -38,7 +38,7 @@ function makeGhost(o) {
   wings.append(side, up); g.append(wings);
   $('stale').prepend(g); // behind the wisps
   const zone = $('zones').appendChild(el('circle', { r: 20 }));
-  const m = { o, g, side, up, zone, prs: [], u: 0.08 + rand() * 0.84, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0 };
+  const m = { o, g, side, up, zone, prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0 };
   zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { ghost: m, zone }; renderCard(); });
   zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
   zone.addEventListener('click', () => {
@@ -48,6 +48,37 @@ function makeGhost(o) {
   return m;
 }
 
+// Where the ghosts go: all around the lantern, in the gaps between the living moths. Each living moth (with its
+// fireflies) takes a slice of directions around the lantern; a ghost or loose wisp settles in the free direction
+// nearest its own seeded preference, at its own seeded distance, and glides there when the gaps shift. Planned twice a
+// second, not every frame.
+const angleGap = (a, b) => Math.abs(((a - b) % 6.283 + 9.425) % 6.283 - 3.1416);
+function freeAngle(pref, taken) {
+  for (let i = 0; i < 64; i++) for (const sign of [1, -1]) {
+    const a = pref + sign * i * 0.05;
+    if (taken.every(([t, w]) => angleGap(a, t) > w)) return a;
+  }
+  return pref;
+}
+let stalePlannedAt = -1;
+function planStale(s, loose) {
+  if (s - stalePlannedAt < 0.5) return;
+  stalePlannedAt = s;
+  const taken = [];
+  for (const m of moths.values()) if (m.home && !m.parentId && !m.leaving) taken.push([Math.atan2(m.home[1] - 320, m.home[0] - 340), 0.42]);
+  for (const m of ghosts.values()) { m.aim = freeAngle(m.pref, taken); taken.push([m.aim, 0.3]); }
+  for (const d of loose) { d.aim = freeAngle(d.pref, taken); taken.push([d.aim, 0.1]); }
+}
+// glide a ghost or wisp toward its planned spot (in the scene's unstretched space), with a gentle drift on top
+function driftTo(o, dt, s, sway) {
+  const tx = 340 + Math.cos(o.aim) * o.dist, ty = 320 + Math.sin(o.aim) * o.dist * 0.95;
+  o.px ??= tx; o.py ??= ty;
+  o.px += (tx - o.px) * Math.min(1, dt * 0.6); o.py += (ty - o.py) * Math.min(1, dt * 0.6);
+  const [x0, y0, w, h] = VIEW.box || [40, 20, 600, 600];
+  const [x, y] = stretch([o.px + Math.sin(s * 0.08 + o.ph) * sway, o.py + Math.sin(s * 0.12 + o.ph * 2) * sway * 0.4]);
+  return [Math.max(x0 + 24, Math.min(x0 + w - 24, x)), Math.max(y0 + 24, Math.min(y0 + h - 30, y))];
+}
+
 function drawStale(dt, s) {
   const show = staleOn && !quiet(), list = stalePRs;
   $('stale').style.display = show ? '' : 'none'; // turning it off (or quiet hours) just hides it
@@ -55,20 +86,21 @@ function drawStale(dt, s) {
   const want = new Map(drifting.map((p, i) => [p.url, [p, i]]));
   for (const [url, [p]] of want) if (!wisps.has(url)) wisps.set(url, makeWisp(p));
   staleSeeded ||= list.length > 0;
-  const [x0, y0, w, h] = VIEW.box || [40, 20, 600, 600], low = y0 + h * 0.6, floor = y0 + h - 24; // the band they drift in
+  const [x0, y0, w, h] = VIEW.box || [40, 20, 600, 600], floor = y0 + h - 24;
   // the sessions that made them, most recently active first
   const owners = new Map();
   for (const p of drifting) if (p.owner?.id) { const o = owners.get(p.owner.id) || { ...p.owner, prs: [] }; o.prs.push(p); owners.set(p.owner.id, o); }
   const kept = [...owners.values()].sort((a, b) => b.last - a.last).slice(0, GHOSTS_MAX);
   for (const o of kept) if (!ghosts.has(o.id)) ghosts.set(o.id, makeGhost(o));
+  planStale(s, [...wisps.values()].filter(d => !ghosts.has(d.p.owner?.id)));
   for (const [id, m] of ghosts) {
     const i = kept.findIndex(o => o.id === id);
     if (i < 0) { m.g.remove(); m.zone.remove(); ghosts.delete(id); continue; }
     m.o = kept[i]; m.prs = kept[i].prs;
     m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3;
-    m.x = x0 + w * m.u + Math.sin(s * 0.06 + m.ph) * 30;
-    m.y = low + (floor - low) * (0.15 + m.back * 0.6) + Math.sin(s * 0.1 + m.ph * 2) * 10;
-    m.beat += dt * 22.4; // the same wingbeat as a living moth: about 3.6 a second
+    m.aim ??= m.pref;
+    [m.x, m.y] = driftTo(m, dt, s, 22);
+    m.beat += dt * 22.4 * (m.rate ??= 0.88 + seeded(hash(m.o.id + ':wings'))() * 0.24); // a living moth's wingbeat, at its own speed
     const liftAt = lag => 80 * Math.PI / 180 * (0.7 * Math.sin(m.beat - lag) + 0.3), sweep = 0.4 * Math.cos(m.beat);
     const roll = 0.7 * Math.sin(s * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
     const upPts = flapWing(WING_UP, liftAt(0), sweep, roll), sidePts = flapWing(WING_SIDE, liftAt(0.18), sweep, roll);
@@ -87,8 +119,9 @@ function drawStale(dt, s) {
       if (d.gone >= 1) { d.ember.forEach(c => c.remove()); d.zone.remove(); wisps.delete(url); continue; }
     }
     d.born = Math.min(1, d.born + dt / 2);
-    const back = drifting.length > 1 && entry ? 1 - entry[1] / (drifting.length - 1) : 0.5; // older: lower and dimmer
-    let x = x0 + w * d.u + Math.sin(s * 0.09 + d.ph) * 24, y = low + (floor - low) * (0.2 + back * 0.75) + Math.sin(s * 0.13 + d.ph * 1.7) * 8;
+    const back = drifting.length > 1 && entry ? 1 - entry[1] / (drifting.length - 1) : 0.5; // older: fainter
+    d.aim ??= d.pref;
+    let [x, y] = driftTo(d, dt, s, 16);
     const moth = ghosts.get(d.p.owner?.id);
     if (moth) { // circling the ghost of the session that made it, the way fireflies circle a living moth
       d.a += d.w * dt;
