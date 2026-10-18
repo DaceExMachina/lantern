@@ -1,0 +1,52 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Here's what changed.\n\nThe paper glows warmer now, and the shadows fall where the flame sits.\nI traced it to `frame.js`, see [the PR](https://github.com/x/y/pull/12).\nDace asked for the moth to land more slowly this time around.\nThe fix keeps the old gradient and only moves its centre upward a little.\nRebased onto 70015e5 and the tests pass across all nine replay files.\nYou can see it in the preview whenever the window comes back.\n- Moths drift a little further from the lantern before they turn home.\n\n```js\nconst moth = 'The code inside a fence never shows up on the paper at all.';\n```\n\n| Before | After |\n|---|---|\n| The table rows never count as sentences for the lantern paper. | x |\n\n**You:** The footer line never shows up on the paper either way.\nFine.\n"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [
+              {
+                "label": "the PR",
+                "url": "https://github.com/x/y/pull/12"
+              }
+            ],
+            "questions": [],
+            "you": [
+              "The footer line never shows up on the paper either way."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

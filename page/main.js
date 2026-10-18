@@ -18,6 +18,7 @@ es.addEventListener('settings', e => {
   const until = quietEndLabel();
   $('quiet').title = `Treat everything as snoozed until ${until}`;
   $('quietUntil').textContent = until;
+  lanternText = ['sessions', 'sample', 'off'].includes(st.lanternText) ? st.lanternText : 'sessions';
   try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();

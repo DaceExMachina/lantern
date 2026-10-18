@@ -86,6 +86,8 @@ test('a turn that asks a question or names a Blocker is waiting, with the questi
 test('snooze, snooze for good, and wake', t => replay(t, 'snooze'));
 test('a manual /compact ends idle, an automatic one leaves the session as it was', t => replay(t, 'compact'));
 test('SessionEnd removes the session', t => replay(t, 'session-end'));
+test('a turn\'s plain sentences become its prose, newest ten, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
+test('with lanternText off the real words stay off the page', t => replay(t, 'prose-off', { 'data/settings.json': '{"lanternText": "sample"}' }));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
 // Transcripts on disk, for the seeding cases: one JSON object per line.
@@ -96,6 +98,10 @@ const user = text => ({ type: 'user', cwd: '/work', message: { role: 'user', con
 const answer = text => ({ type: 'assistant', cwd: '/work', message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] } });
 const turnEnd = { type: 'system', subtype: 'turn_duration', cwd: '/work' };
 
+test('a seeded session brings back the plain sentences from its whole transcript, not just the last turn', t => replay(t, 'seed-prose', {
+  ...transcript(UUID(3), [user('Look at the glow'), answer('The glow sits a little higher on the paper than before.'), turnEnd,
+    user('And the moths?'), answer('Every moth now lands where the light is warmest on the paper.'), turnEnd]),
+}));
 test('a transcript ending on an unanswered task notification seeds as waiting, not working', t => replay(t, 'seed-task-notification', {
   ...transcript(UUID(1), [user('Fix it'), answer('Fixed. **You:** try it'), turnEnd, user('<task-notification><summary>Agent finished</summary></task-notification>')]),
   ...transcript(UUID(2), [user('Start on the docs')]), // mid-turn, for contrast

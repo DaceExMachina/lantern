@@ -194,6 +194,36 @@ func forYou(_ message: Any?) -> JSON {
             "questions": questions.prefix(5).map { $0.cut(160) }]
 }
 
+// The plain sentences in a message, for the barrel's paper (page/pages.js) to show in passing: whole sentences of 6 to 20
+// words, starting with a capital and ending in a full stop. Anyone walking past can read the screensaver, so a sentence
+// goes whole if it holds anything that could identify work: code, a link or path, any digit (ids, hashes, ports), a
+// capitalised word past its first (a name), or talk to or about the person (I, you). Kept in memory only.
+func prose(_ message: Any?) -> [String] {
+    let text = Re("```[\\s\\S]*?```").replace(message == nil ? "" : str(message), "")
+    let person = Re("\\b(I|I'm|I'll|I've|I'd|me|my|you|your|you're|you'll|we|we're|let's|us|our)\\b", .caseInsensitive)
+    // a sentence's first word could be a name too: it has to be a common opener, or a word the message also writes in lowercase
+    let lower = Set(Re("\\b[a-z][a-z']*\\b").matches(text).compactMap { text.sub($0.range) }.map { $0.hasSuffix("s") ? String($0.dropLast()) : $0 })
+    let openers: Set<String> = ["the", "this", "that", "these", "those", "it", "its", "a", "an", "each", "every", "both", "all", "some", "most",
+                                "now", "then", "there", "here", "when", "while", "if", "once", "after", "before", "only", "no", "nothing",
+                                "everything", "their", "they", "one", "so", "but", "and", "with", "without", "instead", "also", "still"]
+    var out: [String] = []
+    for line in text.components(separatedBy: "\n") {
+        let l = line.trim
+        if l.isEmpty || Re("^(#|>|\\|)").test(l) || Re("\\*\\*[A-Za-z ]+:\\*\\*").test(l) { continue } // headings, quotes, tables, footer labels
+        for raw in Re("(?<=[.!?])\\s+").split(Re("^([-*+]|[0-9]+[.)])\\s+").replace(l, "")) {
+            if Re("[`/\\\\\\[\\]()<>#@:=|{}0-9]|https?|\\w\\.\\w").test(raw) || person.test(raw) { continue }
+            let s = Re("[*_]").replace(raw, "").trim
+            let words = s.split(separator: " ")
+            let first = words.first.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) } ?? ""
+            guard (6...20).contains(words.count), Re("^[A-Z][a-z']*,?$").test(String(words[0])), s.hasSuffix("."), !s.hasSuffix("..."),
+                  openers.contains(first) || lower.contains(first.hasSuffix("s") ? String(first.dropLast()) : first),
+                  !words.dropFirst().contains(where: { Re("^[^a-z]*[A-Z]").test(String($0)) }) else { continue }
+            if !out.contains(s) { out.append(s) }
+        }
+    }
+    return out
+}
+
 // Agent reports and notifications arrive as "prompts" wrapped in XML; keep just the readable part, labelled.
 func cleanPrompt(_ p: String) -> String {
     let tag = Re("^\\s*<([A-Za-z0-9_-]+)").match(p)?[1]
@@ -460,12 +490,19 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
 func seedSession(_ file: String, live: Bool) -> (JSON, Ordered<JSON>)? {
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
-    let turn = lastTurn(tail(file))
+    let lines = tail(file), turn = lastTurn(lines)
     var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "state": turn.compacted ? "idle" : turn.done ? "waiting" : "working",
                    "note": turn.done && !turn.compacted ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
                    "unconfirmed": !live]
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
+    // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
+    var said: [String] = []
+    for line in lines {
+        guard let j = parse(Data(line.utf8)) as? JSON, str(j["type"]) == "assistant" else { continue }
+        for c in (j["message"] as? JSON)?["content"] as? [JSON] ?? [] where str(c["type"]) == "text" { said += prose(c["text"]).filter { !said.contains($0) } }
+    }
+    if !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
     // subagents that look like they're still going: transcript touched in the last two minutes and not finished
     var agents = Ordered<JSON>()
@@ -633,6 +670,7 @@ final class LanternServer {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
+            if settings["lanternText"] as? String ?? "sessions" != "sessions" { out["prose"] = nil } // real words only when asked for
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
         })
@@ -721,6 +759,8 @@ final class LanternServer {
             let tasks = running.isEmpty ? "" : "\(running.count) background task\(running.count > 1 ? "s" : "")"
             s["tasks"] = Array(running.map { $0["description"] }.filter(truthy).prefix(4)).map { $0! }
             s["forYou"] = forYou(e["last_assistant_message"])
+            let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
+            if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(10)) } // the newest ~10 sentences
             s["error"] = false
             if !running.isEmpty && q.isEmpty { s["state"] = "paused"; s["note"] = "Waiting on \(tasks)" }
             else { s["state"] = "waiting"; s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
