@@ -96,17 +96,23 @@ function drawRibbon(dt, s) {
   });
   const pt = ([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`, faces = { front: '', back: '' };
   const face = (side, ...ps) => { faces[side > 0 ? 'front' : 'back'] += `M${ps.map(pt).join('L')}Z`; };
-  const [ex, ey] = P[n - 1], [qx, qy] = P[n - 2], tl = Math.hypot(ex - qx, ey - qy) || 1, notch = [ex - (ex - qx) / tl * 4, ey - (ey - qy) / tl * 4];
+  // the end is cut on a long slant: one edge runs to the tip, the other stops about two widths short (steeper than 45°)
+  for (let k = n - 1, back = 0; k > 0; k--) {
+    const d = Math.hypot(P[k][0] - P[k - 1][0], P[k][1] - P[k - 1][1]) || 1;
+    if (back + d < 4 * half) { back += d; continue; }
+    const f = (4 * half - back) / d, c = [R[k][0] + (R[k - 1][0] - R[k][0]) * f, R[k][1] + (R[k - 1][1] - R[k][1]) * f];
+    for (let j = k; j < n; j++) R[j] = c;
+    break;
+  }
   for (let i = 0; i < n - 1; i++) {
-    const tail = i === n - 2 ? [notch] : [];
-    if (w[i] * w[i + 1] > 0) face(w[i], L[i], L[i + 1], ...tail, R[i + 1], R[i]);
+    if (w[i] * w[i + 1] > 0) face(w[i], L[i], L[i + 1], R[i + 1], R[i]);
     else { // it turns over within this link: split where it's edge-on
       const t = w[i] / (w[i] - w[i + 1]), c = [P[i][0] + (P[i + 1][0] - P[i][0]) * t, P[i][1] + (P[i + 1][1] - P[i][1]) * t];
-      face(w[i], L[i], c, R[i]); face(w[i + 1], c, L[i + 1], ...tail, R[i + 1]);
+      face(w[i], L[i], c, R[i]); face(w[i + 1], c, L[i + 1], R[i + 1]);
     }
   }
   put($('ribbonFront'), 'd', faces.front); put($('ribbonBack'), 'd', faces.back);
-  put($('ribbonEdge'), 'd', `M${[...L, notch, ...R.reverse()].map(pt).join('L')}Z`);
+  put($('ribbonEdge'), 'd', `M${[...L, ...R.reverse()].map(pt).join('L')}Z`);
 }
 
 // One frame: the lantern burns brighter the more sessions work and turns violet while one needs me, then each part
