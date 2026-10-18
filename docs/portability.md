@@ -72,6 +72,7 @@ In `settings.json` in the data folder, next to `style`, `github`, `quietUntil` a
 | `claudeDir` | `~/.claude` (or `CLAUDE_CONFIG_DIR`) | Config only |
 | `ghPath`, `githubHost`, `githubClientId` | autodetect, `github.com`, built in | Config only |
 | `expireMinutes`, `seedRecentMinutes` | 20, 15 | Config only |
+| `sideSessions` | `report to parent` (a side session the Claude app started orbits its parent and never needs you while the parent is alive) or `independent` (it lands and counts like any session) | Yes, a toggle |
 
 ## Suggested order
 

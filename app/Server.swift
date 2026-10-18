@@ -601,6 +601,7 @@ final class LanternServer {
         stats.begin("server")
         ownedPRs = stats.ownedPRs()
         buried = stats.buried()
+        stats.award(warmGoal: warmGoal)
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
@@ -990,6 +991,9 @@ final class LanternServer {
         }
     }
 
+    // A side session whose parent is still alive reports back to that session, so its waiting isn't waiting on Dace.
+    func reportsBack(_ s: JSON) -> Bool { truthy(s["parent"]) && sessions[str(s["parent"])] != nil }
+
     func saveGitHubCache() {
         let bySession = sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
         let text = jsonText(["reviews": reviews, "graveyard": graveyard, "owners": owners, "bySession": bySession]) + "\n"
@@ -1005,7 +1009,7 @@ final class LanternServer {
             if seen[id] == nil { stats.begin("alive", id, ["title": title ?? NSNull(), "project": project, "seeded": seeded.contains(id)]) }
             else if title != was.title, let title { stats.note("alive", id, ["title": title]); if was.waiting { stats.note("waiting", id, ["title": title]) } }
             was.title = title
-            let waiting = str(s["state"]) == "waiting"
+            let waiting = str(s["state"]) == "waiting" && !reportsBack(s) // a side session reporting back isn't waiting on Dace
             if waiting != was.waiting {
                 if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project]) } else { stats.end("waiting", id, ["how": "answered"]) }
                 was.waiting = waiting
@@ -1023,10 +1027,19 @@ final class LanternServer {
         }
         // the lantern's colour, worked out the way the page does it
         let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now()
-        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !truthy($0.1["snoozed"]) && !forGood($0.0) }
+        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !reportsBack($0.1) && !truthy($0.1["snoozed"]) && !forGood($0.0) }
         if quietNow != quiet { if quietNow { stats.begin("quiet") } else { stats.end("quiet") }; quiet = quietNow }
         if violetNow != violet { if violetNow { stats.begin("violet") } else { stats.end("violet") }; violet = violetNow }
+        // badges for what's on screen right now (Stats.earn gives each once a day): ten agents in one session, ten open PRs
+        // owned by one session, twenty fireflies in flight, a graveyard over its 30
+        if agents.values.contains(where: { $0.count >= 10 }) { stats.earn("hive_mind") }
+        let open = ownedPRs.filter { !["merged", "closed"].contains($0.value.need) }
+        if Dictionary(grouping: open.values, by: \.session).values.contains(where: { $0.count >= 10 }) { stats.earn("swarm_season") }
+        if open.count >= 20 { stats.earn("light_pollution") }
+        if graveyard.count > 30 { stats.earn("mass_grave") }
     }
+    /// The warm moths goal from the stats panel, or 75%: it decides which days count toward a warm streak.
+    var warmGoal: Double { ((settings["goals"] as? JSON)?["warm"] as? NSNumber)?.doubleValue ?? 75 }
 
     // PR changes, from what the sessions own after a refresh. One no session owns any more was merged or closed, or is
     // still open with no session (a stray), or fell out of the closed search (gone). Graveyard changes go in too.
@@ -1061,6 +1074,7 @@ final class LanternServer {
         stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { str($0.1["state"]) == "working" }.count),
                      ("waiting", waiting.count), ("snoozed", waiting.filter { truthy($0.1["snoozed"]) || forGood($0.0) }.count),
                      ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("graveyard", graveyard.count)])
+        stats.award(warmGoal: warmGoal)
     }
 
     func clearGitHub() { reviews = []; graveyard = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
@@ -1304,12 +1318,7 @@ final class LanternServer {
         }
         // Today and the seven days before it (local days), for the stats panel. Read-only, and computed off the main queue.
         if req.method == "GET" && req.url == "/stats" {
-            let cal = Calendar.current, today = cal.startOfDay(for: Date()), ms = { (d: Date) in (d.timeIntervalSince1970 * 1000).rounded() }
-            let days = (0...7).reversed().map { i -> (Double, Double) in
-                let day = cal.date(byAdding: .day, value: -i, to: today)!
-                return (ms(day), i == 0 ? now() : ms(cal.date(byAdding: .day, value: 1, to: day)!))
-            }
-            return stats.report(days) { self.respond(c, 200, "application/json", Data(jsonText($0).utf8)) }
+            return stats.report(warmGoal: warmGoal) { self.respond(c, 200, "application/json", Data(jsonText($0).utf8)) }
         }
         let icons = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = icons[req.url] { return respond(c, 200, type, FileManager.default.contents(atPath: web + req.url) ?? Data()) }
