@@ -5,6 +5,8 @@ const moths = new Map(); // key -> moth
 let seenWaiting = new Set(), nextUp = 0;
 // ---- state from server -------------------------------------------------------
 let raw = [], quietUntil = 0, reviews = [];
+// from settings.json: when quiet hours end ("HH:MM"), and which agent types count as supervisors (medium moths)
+let quietEnd = '08:00', supervisor = /supervisor|orchestrat/i;
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();
@@ -34,7 +36,7 @@ function sync() {
     for (const a of s.subagents) {
       const k = s.id + '/' + a.id;
       live.add(k);
-      if (!moths.has(k)) moths.set(k, Object.assign(makeSubMoth(k, s.id, /supervisor/i.test(a.type) ? SIZE.supervisor : SIZE.subagent), { key: k }));
+      if (!moths.has(k)) moths.set(k, Object.assign(makeSubMoth(k, s.id, supervisor.test(a.type) ? SIZE.supervisor : SIZE.subagent), { key: k }));
       Object.assign(moths.get(k), { session: s, type: a.type });
     }
   }

@@ -11,6 +11,11 @@ es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
   if (STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
   quietUntil = st.quietUntil || 0;
+  if (/^\d{1,2}:\d{2}$/.test(st.quietEnd || '')) quietEnd = st.quietEnd;
+  const [h, m] = quietEnd.split(':').map(Number), until = `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`;
+  $('quiet').title = `Treat everything as snoozed until ${until}`;
+  $('quietUntil').textContent = until;
+  try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   usingGh = !!st.github; renderGitHub();
   staleOn = st.graveyard !== false; $('staleToggle').checked = staleOn;
   goals = st.goals || {}; renderGoals();
@@ -24,7 +29,7 @@ for (const mode of ['panel', 'screensaver', 'ambient']) if (new URLSearchParams(
 fitView();
 
 $('quiet').onclick = () => {
-  const morning = new Date(); morning.setHours(8, 0, 0, 0);
+  const [h, m] = quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);
   if (morning <= new Date()) morning.setDate(morning.getDate() + 1);
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quietUntil: quiet() ? 0 : morning.getTime() }) });
 };

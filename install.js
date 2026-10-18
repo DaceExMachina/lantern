@@ -8,8 +8,14 @@ const http = require('http');
 const { execFileSync } = require('child_process');
 
 const HOME = os.homedir();
-const FILE = path.join(HOME, '.claude', 'settings.json');
-const PORT = Number(process.env.LANTERN_PORT) || 7717;
+// npx runs from a cache npm may clear, so the server gets a stable copy here. A git checkout runs in place.
+// Lantern.app keeps its settings here too, and the port and Claude config folder are written there once (below), since
+// the app, opened from the Dock, never sees your shell's env.
+const COPY = path.join(HOME, 'Library', 'Application Support', 'Lantern');
+const SETTINGS = path.join(COPY, 'settings.json');
+const saved = fs.existsSync(SETTINGS) ? JSON.parse(fs.readFileSync(SETTINGS, 'utf8')) : {};
+const PORT = Number(process.env.LANTERN_PORT) || saved.port || 7717;
+const FILE = path.join(process.env.CLAUDE_CONFIG_DIR || saved.claudeDir || path.join(HOME, '.claude'), 'settings.json');
 const URL = `http://127.0.0.1:${PORT}`;
 const MARK = '#lantern';
 const EVENTS = ['SessionStart', 'SessionEnd', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PermissionRequest',
@@ -28,9 +34,6 @@ const AGENTS = path.join(HOME, 'Library', 'LaunchAgents');
 const SAVER = path.join(HOME, 'Library', 'Screen Savers', 'Lantern.saver');
 const APP = path.join(HOME, 'Applications', 'Lantern.app');
 const ITERM_SCRIPTS = path.join(HOME, 'Library', 'Application Support', 'iTerm2', 'Scripts');
-// npx runs from a cache npm may clear, so the server gets a stable copy here. A git checkout runs in place.
-// Lantern.app keeps its settings here too.
-const COPY = path.join(HOME, 'Library', 'Application Support', 'Lantern');
 const APP_BIN = path.join(APP, 'Contents', 'MacOS', 'Lantern'); // only ours has this, not a Safari web app of the same name
 const uninstall = process.argv[2] === 'uninstall';
 
@@ -113,7 +116,8 @@ function iterm(dir) {
   if (!fs.existsSync(ITERM_SCRIPTS)) return;
   const autoLaunch = path.join(ITERM_SCRIPTS, 'AutoLaunch');
   fs.mkdirSync(autoLaunch, { recursive: true });
-  fs.copyFileSync(path.join(dir, 'iterm', 'lantern.py'), path.join(autoLaunch, 'lantern.py'));
+  const script = fs.readFileSync(path.join(dir, 'iterm', 'lantern.py'), 'utf8').replace('127.0.0.1:7717', `127.0.0.1:${PORT}`);
+  fs.writeFileSync(path.join(autoLaunch, 'lantern.py'), script);
   console.log('Added the iTerm2 panel: see the README to switch it on');
 }
 
@@ -139,6 +143,15 @@ async function main() {
     fs.cpSync(dir, COPY, { recursive: true }); // keeps the lantern style the user picked (settings.json)
     dir = COPY;
   }
+  // The port and Claude config folder you installed with, for the app (and LANTERN_PORT for the screensaver's build).
+  // A first install from a checkout starts from the lantern style picked there.
+  const from = [SETTINGS, path.join(dir, 'settings.json')].find(f => fs.existsSync(f));
+  const settings = from ? JSON.parse(fs.readFileSync(from, 'utf8')) : {};
+  if (PORT !== 7717 || settings.port) settings.port = PORT;
+  if (process.env.CLAUDE_CONFIG_DIR) settings.claudeDir = process.env.CLAUDE_CONFIG_DIR;
+  fs.mkdirSync(COPY, { recursive: true });
+  fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
+  process.env.LANTERN_PORT = String(PORT);
   // Lantern.app runs the server and opens at login. Without Xcode's command line tools, a launchd agent runs it instead.
   tryRun('pkill', '-f', APP_BIN); // a running copy would keep its old server
   const app = build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications: it runs the server and opens at login');
@@ -146,8 +159,8 @@ async function main() {
     if (dir === COPY) tryRun('defaults', 'delete', 'com.lantern.app', 'pageDir'); // the app serves its own copy of the page
     else {
       run('defaults', 'write', 'com.lantern.app', 'pageDir', dir); // a checkout: the app serves its index.html, so edits go live
-      for (const f of ['settings.json', 'github-cache.json']) // and the lantern style you picked comes along
-        if (fs.existsSync(path.join(dir, f)) && !fs.existsSync(path.join(COPY, f))) fs.cpSync(path.join(dir, f), path.join(COPY, f));
+      const cache = 'github-cache.json'; // and the last PR status it saw comes along
+      if (fs.existsSync(path.join(dir, cache)) && !fs.existsSync(path.join(COPY, cache))) fs.cpSync(path.join(dir, cache), path.join(COPY, cache));
     }
     run('open', ...(process.stdout.isTTY ? [] : ['-g']), APP); // the app is the server; agents running this get it in the background
   } else startServer(dir);
