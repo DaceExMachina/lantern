@@ -11,8 +11,8 @@ const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as t
 const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') || 0.002;
 // how much they wander about the pill while it holds (1 by default; ?jostle=0.5 or 2 tries others)
 const JOSTLE = Q.has('jostle') ? +Q.get('jostle') || 0 : 1;
-// how many fireflies fill the pill, as a share of the scene-sized packing: fewer are bigger (by 1/√count), so they
-// still overlap enough to read as one light (?count=1 tries the scene's own size)
+// how many fireflies fill the pill, as a share of the densest packing; fewer are spaced wider and stay the scene's
+// size, so the pill gets lighter and lacier (?count=1 is the densest)
 const COUNT = Q.has('count') ? Math.min(1, +Q.get('count') || 1) : 0.25;
 // The colours PR fireflies come in: half the yellow of a draft, two fifths the orange of one with changes asked for,
 // and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
@@ -65,7 +65,7 @@ function playFlash(id) {
   canvas.width = Math.round(W * k); canvas.height = Math.round(H * k);
   const g = canvas.getContext('2d');
   g.scale(k, k);
-  const px = VIEW.px || 1, radii = FIREFLY_R.map(r => r * px / Math.sqrt(COUNT)); // the scene's firefly size on screen, bigger when fewer
+  const px = VIEW.px || 1, radii = FIREFLY_R.map(r => r * px); // the scene's firefly size on screen
   // far enough down that the top rim's glows clear the window's edge, instead of being cut off flat along it
   pill.style.top = `${Math.max(parseFloat(getComputedStyle(pill).top), radii[0] + 6)}px`;
   const { width: w, height: h, left, top } = pill.getBoundingClientRect(), cx = left + w / 2, cy = top + h / 2;
@@ -73,13 +73,13 @@ function playFlash(id) {
   const rand = seeded(hash(id + Date.now()));
 
   // The pill is filled by slow currents: nested loops inset from its outline 0.7 halo radii apart, each holding
-  // fireflies 0.8 halo radii apart (the density of a hexagonal packing), so the halos cover
+  // fireflies 0.8 halo radii apart (the density of a hexagonal packing, wider for a lower COUNT), so the halos cover
   // it solidly end to end. Each
   // loop creeps round the pill, neighbours going opposite ways, and a loop moving along itself never thins.
   // On top of that a swirl carries them about and each wanders on its own, so it reads as a loose swarm, not lanes.
   // They fly in fast and slow down steadily as they land, reaching their place at its own gentle pace and carrying on
   // with it, never stopping; when they leave they speed up again from that pace.
-  const step = radii[1] * 0.8, r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, flies = /** @type {any[]} */ ([]);
+  const step = radii[1] * 0.8 / Math.sqrt(COUNT), r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, flies = /** @type {any[]} */ ([]);
   const inner = step * 0.6; // the tightest loop: round, not a flat line that would turn its fireflies back in an instant
   const jostle = still ? 0 : JOSTLE;
   const fly = FLY_SPEED * px / 1.2, swarm = still ? 0 : SWARM_SPEED * px / 1.2; // px per ms
@@ -204,7 +204,7 @@ function playFlash(id) {
   }
   // A soft amber backing behind the words, under the fireflies, coming and going with them: where the swarm thins
   // behind a letter the dark sky doesn't show through, so the text keeps its contrast. Blurred once, drawn each frame.
-  const words = [...pill.children].map(e => e.getBoundingClientRect()), pad = 14, blur = 8;
+  const words = [...pill.children].map(e => e.getBoundingClientRect()), pad = 24, blur = 8; // solid under every letter, fading out beyond them
   const bx = Math.min(...words.map(b => b.left)) - pad, by = Math.min(...words.map(b => b.top)) - pad;
   const backing = document.createElement('canvas'), bw = Math.max(...words.map(b => b.right)) + pad - bx, bh = Math.max(...words.map(b => b.bottom)) + pad - by;
   backing.width = Math.ceil((bw + 4 * blur) * k); backing.height = Math.ceil((bh + 4 * blur) * k);
