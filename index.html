@@ -149,8 +149,8 @@
     <clipPath id="bodyClip"><path d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z"/></clipPath>
     <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
   </defs>
-  <g id="graveyard"></g>
-  <g id="graveHeap" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="graveHeapCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
+  <g id="stale"></g>
+  <g id="staleCloud" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="staleCloudCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
   <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
   <g id="lantern"></g>
   <g id="moths"></g>
@@ -166,7 +166,7 @@
   <div id="menu" class="flyup" popover>
     <button class="item" id="statsButton">Stats</button>
     <label class="notify"><input type="checkbox" id="notify"> notify me</label>
-    <label><input type="checkbox" id="graveToggle"> show stale PRs</label>
+    <label><input type="checkbox" id="staleToggle"> show stale PRs</label>
     <select id="style" aria-label="Lantern style"></select>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
@@ -195,7 +195,7 @@
 <script defer src="page/background.js"></script>
 <script defer src="page/github.js"></script>
 <script defer src="page/fireflies.js"></script>
-<script defer src="page/graveyard.js"></script>
+<script defer src="page/stale.js"></script>
 <script defer src="page/frame.js"></script>
 <script defer src="page/card.js"></script>
 <script defer src="page/notify.js"></script>

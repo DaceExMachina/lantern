@@ -334,6 +334,6 @@ function frame(t) {
       });
     }
   }
-  drawGraveyard(dt, s);
+  drawStale(dt, s);
   placeCard();
 }
