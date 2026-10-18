@@ -84,14 +84,25 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
     wires: ribs.slice(1, -1).map(y => `<path d="M${n(cx - half(y))} ${n(y)}${arc(y, 1)}"/>`).join(''),
   };
 };
+// A paper lantern's paper (style.surface), so whatever is printed on it (pages.js) follows the same curves, in the units
+// it's drawn in: its middle `cx`, its top and bottom, its wires `ribs`, each wire's front bow `bow(y)` (as in SUNKEN), its
+// half-width `half(y)` and widest `r`, the gap between wires its type is sized for and how many `lines` share it (on
+// the chōchin, with its wires twice as far apart, a little larger than the barrel's), how many blocks of words it
+// shows at once (`shown`), and the ellipse its words are read
+// by, centred just above the flame. A round one also has `cy` and `ry`, the centre and vertical radius of its curve.
 // the Odawara barrel: a straight cylinder on 20 close wires (top and bottom edges included), each bowed from the flame's
-// height like its drums. style.drum, so whatever is drawn on the paper can follow the same curves.
-// `cap` is the half-width of the lacquer drums where they grip the paper.
-const BARREL = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350 };
+// height like its drums. `cap` is the half-width of the lacquer drums where they grip the paper.
+const BARREL = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350, half: _y => BARREL.r,
+  light: { cx: 340, cy: 340, rx: 88, ry: 165 } };
 BARREL.ribs = Array.from({ length: 20 }, (_, i) => BARREL.top + (BARREL.bottom - BARREL.top) * i / 19);
-const ODAWARA = SUNKEN(BARREL.cx, _y => BARREL.r, BARREL.ribs, 1.2, BARREL.bow);
-// the chōchin, in its mockup units: round, its wires wider apart and bowing away from the middle, so it sinks in less
-const CHOCHIN = SUNKEN(95, y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)), [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], 0.35, y => 0.115 * (y - 122));
+BARREL.gap = BARREL.ribs[1] - BARREL.ribs[0]; BARREL.lines = 2; BARREL.shown = 8;
+const ODAWARA = SUNKEN(BARREL.cx, BARREL.half, BARREL.ribs, 1.2, BARREL.bow);
+// the chōchin, in its mockup units: round (a little wider than tall), its wires wider apart and bowing away from the
+// middle, so it sinks in less
+const BALL = { cx: 95, cy: 122, r: 52, ry: 48, top: 74, bottom: 170, gap: 10, lines: 3, shown: 10, bow: y => 0.115 * (y - 122),
+  ribs: [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], light: { cx: 95, cy: 120, rx: 76, ry: 69 } };
+BALL.half = y => BALL.r * Math.sqrt(Math.max(0, 1 - ((y - BALL.cy) / BALL.ry) ** 2));
+const CHOCHIN = SUNKEN(BALL.cx, BALL.half, BALL.ribs, 0.35, BALL.bow);
 // A lacquered drum (the barrel's ends, the chōchin's caps), cel-shaded in flat tones: lit lacquer with a darker side on
 // the right, and an ink outline. Where it grips the paper (`paper` 1 for paper below it, -1 above, 0 for neither) it has a
 // dark lip, and a rim facing the paper that catches the flame (class paperLit, coloured each frame). Its top edge is at y,
@@ -118,7 +129,7 @@ const DRUM = (kit, y, half, height, paper = 0) => {
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
-    drum: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: _y => BARREL.r }, // a straight cylinder
+    surface: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: BARREL.half }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
     <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
@@ -137,12 +148,13 @@ const STYLES = {
   },
   chochin: {
     name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], knot: [95.4, 56.5], caps: [221, 441, 46], // pivot in the drawing's own units
+    surface: BALL,
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
     // the caps' faces that turn toward the paper catch the flame (class paperLit, coloured each frame), drawn behind it
     back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V55.6" stroke="#C9B49C" stroke-width="0.8"/>
       <ellipse class="paperLit" cx="95" cy="74" rx="18.6" ry="2" fill="currentColor"/><ellipse class="paperLit" cx="95" cy="168" rx="18.6" ry="2" fill="currentColor"/>
       <defs><clipPath id="bodyClip"><path d="${CHOCHIN.outline}"/></clipPath></defs><path d="${CHOCHIN.outline}" fill="#F3ECE2"/><path id="paperGlow" d="${CHOCHIN.outline}" fill="url(#pg)"/>
-      <path id="paperTint" d="${CHOCHIN.outline}"/>`, 18),
+      <path id="paperTint" d="${CHOCHIN.outline}"/><g id="pages" clip-path="url(#bodyClip)"></g>`, 18),
     front: MOCK(`<path d="${CHOCHIN.outline}" fill="#F3ECE2" opacity="0.22"/>
       <g fill="#A8967E" opacity="0.08" clip-path="url(#bodyClip)">${CHOCHIN.bands}</g><!-- the paper sinks in a little between wires -->
       <g fill="none" stroke="#C9BBA8" opacity="0.9"><path d="M70.1 79.9Q95 75.3 119.9 79.8" stroke-width="0.45"/><path d="M56.5 90.2Q95 86.5 133.5 89.8" stroke-width="0.6"/><path d="M49.1 99.8Q95 97.5 140.9 99.8" stroke-width="0.45"/><path d="M45.0 109.8Q95 109.1 145.0 110.0" stroke-width="0.45"/><path d="M43.3 120.3Q95 120.1 146.7 120.1" stroke-width="0.45"/><path d="M44.0 130.0Q95 131.6 146.0 129.9" stroke-width="0.45"/><path d="M47.1 140.0Q95 142.3 142.9 139.8" stroke-width="0.6"/><path d="M53.1 149.8Q95 153.9 136.9 149.9" stroke-width="0.45"/><path d="M63.5 159.8Q95 164.6 126.5 160.0" stroke-width="0.45"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below, each a little uneven -->
@@ -213,12 +225,12 @@ function applyStyle(key) {
     + `<g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>`
     + style.front;
   drawHang();
-  // only a lantern with a paper drum to print on shows session text; elsewhere the toggle stays put but can't be used
+  // only a paper lantern has paper to print on and shows session text; elsewhere the toggle stays put but can't be used
   const text = $('textToggle');
   if (text) {
-    text.disabled = !style.drum;
-    text.parentElement.classList.toggle('unavailable', !style.drum);
-    text.parentElement.title = style.drum ? '' : 'Only the book-page barrel shows session text';
+    text.disabled = !style.surface;
+    text.parentElement.classList.toggle('unavailable', !style.surface);
+    text.parentElement.title = style.surface ? '' : 'Only the paper lanterns show session text';
   }
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
   $('style').value = key;
