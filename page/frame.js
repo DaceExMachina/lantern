@@ -262,6 +262,14 @@ function frame(t) {
     const backlit = m.fold || 0;
     const wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
     const rim = hex(mix('#F6F0FF', mix('#FFFFFF', pal('paper'), 0.45), backlit)).join(','), edge = Math.max(m.cool, backlit) * 0.9;
+    // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
+    // flame is behind it, with a little of its warmth glowing through the thin wing.
+    const a = -m.tilt * Math.PI / 180, [lx, ly] = rot(...style.light), fx = lx - m.x, fy = ly - m.y;
+    const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
+    for (const [path, pts] of [[m.up, upPts], [m.side, sidePts]]) {
+      const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
+      if (path.style.fill !== tone) path.style.fill = tone;
+    }
     const st = m.g.style;
     st.setProperty('--wing', wing);
     st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(${rim},${edge.toFixed(2)})`);
