@@ -43,8 +43,17 @@
   :is(#stats, #recap) .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
   #stats .headline span { color: #C9B8DA; }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
+  #stats .ribbon { position: relative; touch-action: pan-y; }
+  #stats .ribbon .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
+  #stats [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
+  #stats .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
+  #stats .axis [data-v] { min-width: 6em; text-align: center; }
   :is(#stats, #recap) .axis, #stats .legend { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
-  #stats .legend { justify-content: flex-start; flex-wrap: wrap; gap: 2px 14px; margin-top: 0; }
+  /* the session states as a 2x2 block, then the strip-level items as the ribbon stacks them: beside the block when
+     three columns fit, under it when not. Columns fit the widest item ("moths flying" and its value slot, 141px at 11px, so 13em; three of them and two gaps need 457px). */
+  #statsBody { container-type: inline-size; }
+  #stats .legend { display: grid; grid-template-columns: repeat(2, minmax(13em, 1fr)); grid-template-areas: "working waiting" "snoozed idle" "flying lamp"; gap: 2px 14px; margin-top: 0; }
+  @container (min-width: 457px) { #stats .legend { grid-template-columns: repeat(3, minmax(13em, 1fr)); grid-template-areas: "working waiting flying" "snoozed idle lamp"; } }
   #stats .legend span { white-space: nowrap; }
   #stats .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
   :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }

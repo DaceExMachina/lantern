@@ -273,6 +273,33 @@ test('stats: warm moths, warm lantern and response times', async t => {
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });
 });
 
+// A snooze logs a 'snoozed' span for the part of the wait it covered: from the snooze to the end of the wait. The server
+// writes it a moment after each request (its next look at the sessions), so each bound runs from just before the request
+// to when the test first saw the row.
+test('stats: a snooze is logged as a snoozed span, from the snooze to the end of the wait', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  const spans = () => JSON.parse(execFileSync('sqlite3', ['-json', path.join(home, 'data/stats.sqlite'),
+    "SELECT kind, began, ended FROM spans WHERE session = 's1' AND kind IN ('waiting', 'snoozed') ORDER BY rowid"], { encoding: 'utf8' }) || '[]');
+  const turn = name => post(base, '/event', { session_id: 's1', hook_event_name: name, cwd: '/work/s1', last_assistant_message: 'Done.' });
+  await turn('UserPromptSubmit');
+  await turn('Stop');
+  await until(() => spans().some(s => s.kind === 'waiting'), 'the wait to be logged');
+  const snoozedFrom = Date.now();
+  await post(base, '/snooze', { id: 's1', snoozed: true });
+  const snooze = await until(() => spans().find(s => s.kind === 'snoozed'), 'a snoozed span');
+  const snoozedBy = Date.now();
+  const wokeFrom = Date.now();
+  await turn('UserPromptSubmit');
+  const done = await until(() => { const all = spans(); return all.every(s => s.ended) && all; }, 'the wait and the snooze to end');
+  const wokeBy = Date.now();
+  const waiting = done.find(s => s.kind === 'waiting'), snoozed = done.filter(s => s.kind === 'snoozed');
+  assert.strictEqual(snoozed.length, 1);
+  assert.ok(snooze.began >= snoozedFrom && snooze.began <= snoozedBy, `the snooze began at ${snooze.began}, not between ${snoozedFrom} and ${snoozedBy}`);
+  assert.ok(snoozed[0].ended >= wokeFrom && snoozed[0].ended <= wokeBy, `the snooze ended at ${snoozed[0].ended}, not between ${wokeFrom} and ${wokeBy}`);
+  assert.strictEqual(snoozed[0].ended, waiting.ended);
+});
+
 // The stale switch used to be saved as "graveyard"; a settings.json from then must still turn the stale PRs off.
 test('an old "graveyard" setting is read as "stale"', async t => {
   const base = await serve(t, { 'data/settings.json': '{"graveyard": false}' });
