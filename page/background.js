@@ -126,15 +126,16 @@ precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
 void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(mix(uCol, vec3(1.0, 0.15, 0.1), vD * (1.0 - vS)), vA * smoothstep(1.0, 0.6, d)); }`);
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-const dustBuf = gl.createBuffer(), dustData = new Float32Array(60 * 4);
+const dustBuf = gl.createBuffer();
 const rgb = c => hex(c).map(v => v / 255);
 
 // the near specks start just outside the lantern's body, so none of them hide behind it
-const dust = Array.from({ length: 34 }, () => ({ a: Math.random() * 6.28, d: 125 + Math.random() * 140, w: (Math.random() - 0.5) * 0.12,
+const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: 125 + Math.random() * 140, w: (Math.random() - 0.5) * 0.12,
   ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
-const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 230 + Math.random() * 110, w: (Math.random() - 0.5) * 0.08,
+const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: 230 + Math.random() * 110, w: (Math.random() - 0.5) * 0.08,
   ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
+const dustData = new Float32Array((dust.length + farDust.length) * 4);
 
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
 // screens' frames (global points, y up), so its light can carry on from where the lantern's light is, off this screen's edge.
