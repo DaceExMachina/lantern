@@ -39,6 +39,28 @@ function makeHusk(p) {
   return husk;
 }
 
+// Dead moths: an old session that made some of the dead PRs lies on the ground with its dead fireflies around it,
+// wings spread flat like a pinned specimen. Hovering shows the session and its dead PRs; clicking resumes it in a
+// new iTerm tab. At most 8, the most recently active; older ones lie further back.
+const MOTHS_MAX = 8;
+const deadMoths = new Map(); // session id -> moth
+function makeDeadMoth(o) {
+  const rand = seeded(hash(o.id));
+  const g = el('g'), side = el('path', { d: pathOf(WING_SIDE) }), up = el('path', { d: pathOf(WING_UP) });
+  const wings = el('g', { transform: 'translate(-2 -6)' });
+  wings.append(side, up); g.append(wings);
+  $('graveyard').append(g);
+  const zone = $('zones').appendChild(el('circle', { r: 14 }));
+  const m = { o, g, side, up, zone, prs: [], u: 0.08 + rand() * 0.84, wob: rand(), turn: -70 + rand() * 140, back: 0, x: undefined, y: 0 };
+  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { deadMoth: m, zone }; renderCard(); });
+  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
+  zone.addEventListener('click', () => {
+    fetch('/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.o.id }) });
+    hovered = null; $('card').classList.remove('show');
+  });
+  return m;
+}
+
 // rim: the lantern's light on the side of each husk facing it (warm or violet, like everything else)
 function drawGraveyard(dt, s, rim) {
   const show = graveyardOn && !quiet(), list = graveyard;
@@ -48,6 +70,23 @@ function drawGraveyard(dt, s, rim) {
   for (const [url, [p]] of want) if (!dead.has(url)) dead.set(url, makeHusk(p));
   graveSeeded ||= list.length > 0;
   const [x0, y0, w, h] = VIEW.box || [40, 20, 600, 600], ground = y0 + h;
+  // the sessions that made them, most recently active first
+  const owners = new Map();
+  for (const p of lying) if (p.owner?.id) { const o = owners.get(p.owner.id) || { ...p.owner, prs: [] }; o.prs.push(p); owners.set(p.owner.id, o); }
+  const kept = [...owners.values()].sort((a, b) => b.last - a.last).slice(0, MOTHS_MAX);
+  for (const o of kept) if (!deadMoths.has(o.id)) deadMoths.set(o.id, makeDeadMoth(o));
+  for (const [id, m] of deadMoths) {
+    const i = kept.findIndex(o => o.id === id);
+    if (i < 0) { m.g.remove(); m.zone.remove(); deadMoths.delete(id); continue; }
+    m.o = kept[i]; m.prs = kept[i].prs;
+    m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3; // the longer since it was active, the further back
+    m.x = x0 + w * m.u; m.y = ground - 18 - m.back * 30 - m.wob * 4;
+    const k = 1.5 - m.back * 0.6, fade = 1 - m.back * 0.5, ash = mix('#9A92A8', '#4A4260', m.back);
+    put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.turn.toFixed(1)}) scale(${(k * 0.9).toFixed(2)} ${(k * 0.5).toFixed(2)})`); // flat on the ground
+    for (const wing of [m.side, m.up]) { put(wing, 'fill', ash); put(wing, 'opacity', fade.toFixed(2)); }
+    m.zone.style.display = show ? '' : 'none';
+    put(m.zone, 'cx', m.x.toFixed(1)); put(m.zone, 'cy', m.y.toFixed(1));
+  }
   for (const [url, d] of dead) {
     const entry = want.get(url);
     if (entry) { d.p = entry[0]; d.gone = undefined; } else d.gone ??= 0;
@@ -58,7 +97,9 @@ function drawGraveyard(dt, s, rim) {
     d.fall = Math.min(1, d.fall + dt / 2.5);
     // older ones lie further back: higher up the band, smaller and dimmer
     const back = lying.length > 1 && entry ? 1 - entry[1] / (lying.length - 1) : 0.5;
-    const x = x0 + w * d.u, rest = ground - 14 - back * 34 - d.wob * 4, k = 2.4 - back * 1;
+    let x = x0 + w * d.u, rest = ground - 14 - back * 34 - d.wob * 4, k = 2.4 - back * 1;
+    const moth = deadMoths.get(d.p.owner?.id);
+    if (moth) { x = moth.x + (d.u - 0.5) * 50; rest = moth.y + 3 + (d.wob - 0.5) * 8; k = 2.2 - moth.back * 0.9; } // gather around the session that made it
     const drop = (1 - d.fall) ** 2, y = rest - drop * (rest - y0 - 40) - (d.gone || 0) * 80;
     const sway = drop * Math.sin(s * 3 + d.ph) * 14;
     put(d.g, 'transform', `translate(${(x + sway).toFixed(1)} ${y.toFixed(1)}) rotate(${(d.back ? 180 : 0) + d.turn * (1 - drop) + sway}) scale(${k.toFixed(2)})`);
@@ -83,6 +124,15 @@ function drawGraveyard(dt, s, rim) {
     put($('graveHeap'), 'transform', `translate(${(x0 + w - 46).toFixed(1)} ${(ground - 50).toFixed(1)})`);
     $('graveHeapCount').textContent = `+${heaped}`;
   }
+}
+
+// a dead moth's card: the old session, when it was last active, and the dead PRs it made
+function renderDeadMothCard(m) {
+  const h = document.createElement('h3'), chip = document.createElement('span');
+  h.textContent = m.o.title || m.o.id.slice(0, 8); chip.className = 'chip idle'; chip.textContent = 'gone quiet'; h.append(chip);
+  const days = Math.round((Date.now() - m.o.last) / 864e5), where = String(m.o.cwd || '').split('/').filter(Boolean).pop() || '';
+  $('card').replaceChildren(h, line(`${where ? where + ' · ' : ''}last active ${days ? `${days} days ago` : 'today'}`, 'dim'), ...prRows(m.prs));
+  $('card').classList.add('show');
 }
 
 // a dead PR's card: what it is, how long since anyone touched it, and what it needs

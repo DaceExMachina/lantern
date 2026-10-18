@@ -48,7 +48,14 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         window.title = "Lantern"
         window.titlebarAppearsTransparent = true
         window.backgroundColor = NSColor(red: 0x2B / 255.0, green: 0x24 / 255.0, blue: 0x40 / 255.0, alpha: 1)
-        window.contentView = web
+        // The page runs right up under the transparent title bar, so the web view would swallow drags there. A clear
+        // strip along the top (the title bar's height) hands them to the window instead: drag to move, double-click to zoom.
+        let container = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        web.frame = container.bounds; web.autoresizingMask = [.width, .height]
+        let strip = DragStrip(frame: NSRect(x: 0, y: container.bounds.height - 28, width: container.bounds.width, height: 28))
+        strip.autoresizingMask = [.width, .minYMargin]
+        container.addSubview(web); container.addSubview(strip)
+        window.contentView = container
         window.isReleasedWhenClosed = false // closing hides it; the page keeps running for the badge
         window.center()
         window.setFrameAutosaveName("Lantern") // remembers size and position between launches
@@ -88,6 +95,13 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 }
 
 // A minimal menu bar, so the usual shortcuts work: quit, close, minimise, full screen, copy, reload.
+// A see-through title bar for a window whose content runs under it.
+final class DragStrip: NSView {
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 { window?.performZoom(nil) } else { window?.performDrag(with: event) }
+    }
+}
+
 func menu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
     let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
     item.submenu = NSMenu(title: title)
