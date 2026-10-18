@@ -17,14 +17,17 @@ const BRASS = { front: '#B8893A', side: '#86612A', lit: '#E0BC6A', rim: '#A47C38
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
 // underneath, a smaller inverted dome ending in a drop, so the lamp reads as hanging (and still top-heavy)
-const BOTTOM = 'M302 418C301 436 314 446 326 454C334 459 338 464 340 470C342 464 346 459 354 454C366 446 379 436 378 418Z';
+const BOTTOM = 'M302 434C301 452 314 462 326 470C334 475 338 480 340 486C342 480 346 475 354 470C366 462 379 452 378 434Z';
+// between the body and that: a short plain skirt sloping in and a neck band, shorter and simpler than the shoulder and frieze up top
+const SKIRT = 'M277 413H403L380 428H300Z', SKIRT_F = 'M308.5 413H371.5L360 428H320Z';
 const HALF_X = 'translate(340 0) scale(.5 1) translate(-340 0)'; // the front segment of a six-sided shape spans half its width
 const SHOULDER = 'M295 260H385L403 285H277Z', SHOULDER_F = 'M317.5 260H362.5L371.5 285H308.5Z';
-const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="${BOTTOM}"/><path d="M295 244h90v16h-90Z${SHOULDER}M277 285h126v131h-126Z"/>`;
+const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="${BOTTOM}"/><path d="M295 244h90v16h-90Z${SHOULDER}M277 285h126v128h-126Z${SKIRT}M300 428h80v6h-80Z"/>`;
 const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="420"/>
   <rect x="0" y="0" width="680" height="800" fill="url(#lace)" transform="translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
 // a rope-twist rim at height y, `half` wide either side, its front face `front` wide either side
 // Solid bands (class band) hold the light back: frame.js measures them off the drawing and shades the room at their angles.
+// A band that narrows (a sloping skirt) gives its bottom half-width as data-r2.
 const ROPE = (y, half = 63, front = 31.5) => `<path class="band" d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
   <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="url(#rope)"/>`;
 const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="#fff" stroke-width="1.3">
@@ -34,8 +37,8 @@ const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="u
   <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
   <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 244) scale(.4 .88) translate(-340 -244)"/></clipPath>
-  <clipPath id="bottomSide"><path d="${BOTTOM}" transform="translate(340 418) scale(.88 .8) translate(-340 -418)"/></clipPath>
-  <clipPath id="bottomFront"><path d="${BOTTOM}" transform="translate(340 418) scale(.4 .8) translate(-340 -418)"/></clipPath>
+  <clipPath id="bottomSide"><path d="${BOTTOM}" transform="translate(340 434) scale(.88 .8) translate(-340 -434)"/></clipPath>
+  <clipPath id="bottomFront"><path d="${BOTTOM}" transform="translate(340 434) scale(.4 .8) translate(-340 -434)"/></clipPath>
   <clipPath id="shoulderL"><path d="M298 263L315 263L308 282L282 282Z"/></clipPath><clipPath id="shoulderR"><path d="M382 263L365 263L372 282L398 282Z"/></clipPath>
   <clipPath id="shoulderF"><path d="M320 263L360 263L367 282L313 282Z"/></clipPath>
   <clipPath id="faceL"><path d="M281 294h24v110h-24Z"/></clipPath><clipPath id="faceR"><path d="M375 294h24v110h-24Z"/></clipPath><clipPath id="faceF"><path d="M313 294h54v110h-54Z"/></clipPath>
@@ -104,10 +107,11 @@ const STYLES = {
   },
   moroccan: {
     chain: 123, // its chain of links runs from here up past the top of the window (see drawHang)
-    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, shimmer: 0.4, tassel: [340, 470],
+    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, shimmer: 0.4, tassel: [340, 486],
     holder: [404, 10], // the burner cup under the flame: its bottom and half-width; it throws a fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
-    body: { top: 262, bottom: 446, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 416 ? 63 : 38 * (1 - ((y - 416) / 54) ** 2) },
+    body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
+      : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
       <g fill="#24160A">${MOROCCAN_SHAPE}</g><g fill="url(#mg)">${MOROCCAN_SHAPE}</g>
       <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
@@ -130,11 +134,13 @@ const STYLES = {
       </g>
       <path d="M306.5 290h4v118h-4ZM369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
       ${ROPE(285)}${ROPE(408)}
-      <path class="band" d="M279 413h122l-3 3h-116Z" fill="${BRASS.side}"/><path d="M309 413h62l-1 3h-60Z" fill="${BRASS.front}"/>
-      <path class="band" d="M300 416h80v3h-80Z" fill="${BRASS.side}"/><path d="M320 416h40v3h-40Z" fill="${BRASS.lit}"/>
+      <path class="band" data-r2="40" d="${SKIRT}" fill="${BRASS.side}"/><path d="${SKIRT_F}" fill="${BRASS.front}"/>
+      <path d="M308.5 413L320 428M371.5 413L360 428" stroke="${BRASS.lit}" stroke-width="1.4"/>
+      <path class="band" d="M300 428h80v6h-80Z" fill="${BRASS.side}"/><path d="M320 428h40v6h-40Z" fill="${BRASS.front}"/>
+      <path d="M300 428.6h80M300 433.4h80" stroke="${BRASS.lit}" stroke-width="1.2"/>
       <path class="band" d="M295 243.2h90v2.6h-90Z" fill="${BRASS.lit}"/><path class="band" d="M295 258.2h90v2.6h-90Z" fill="${BRASS.lit}"/>
-      <g id="tassel"><path d="M338.8 469h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="476" rx="3.6" ry="3" fill="${BRASS.lit}"/>
-        <ellipse cx="340" cy="482" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 484L340 494L342 484Z" fill="${BRASS.lit}"/></g>`,
+      <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
+        <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
 };
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
