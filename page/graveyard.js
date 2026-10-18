@@ -30,12 +30,12 @@ const flickerNoise = x => { const v = Math.sin(x * 12.9898) * 43758.5453; return
 function makeHusk(p) {
   const rand = seeded(hash(p.url)), model = husk(rand);
   const g = el('g');
-  const feelers = el('path', { d: 'M-3.6 -0.2l-1.2 -1.3M-3.6 0.2l-1.3 1', fill: 'none', stroke: '#2E2740', 'stroke-width': 0.18, 'stroke-linecap': 'round' });
-  const head = el('circle', { cx: -3.1, cy: 0, r: 0.55, fill: '#241E32' });
+  const feelers = el('path', { d: 'M-3.6 -0.2l-1.2 -1.3M-3.6 0.2l-1.3 1', fill: 'none', stroke: '#15111C', 'stroke-width': 0.18, 'stroke-linecap': 'round' });
+  const head = el('circle', { cx: -3.1, cy: 0, r: 0.55, fill: '#15111C' });
   const wings = el('path', { d: 'M-2.6 -0.9Q-1.4 -1.3 -0.9 -0.6L-0.9 0.6Q-1.4 1.3 -2.6 0.9Z' }); // the thorax's shield
-  const legs = el('path', { d: model.legs, fill: 'none', stroke: '#33293F', 'stroke-width': 0.22, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  const legs = el('path', { d: model.legs, fill: 'none', stroke: '#15111C', 'stroke-width': 0.22, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
   const body = el('path', { d: 'M-0.9 -0.75Q1.2 -1.15 2.4 -0.5Q2.7 0 2.4 0.5Q1.2 1.15 -0.9 0.75Z' }); // the abdomen
-  const segments = el('path', { d: 'M0.2 -0.9V0.9M1.1 -0.85V0.85', stroke: '#16121F', 'stroke-width': 0.18 });
+  const segments = el('path', { d: 'M0.2 -0.9V0.9M1.1 -0.85V0.85', stroke: '#0E0B13', 'stroke-width': 0.14 });
   const tail = el('path', { d: 'M1.6 -0.72Q2.4 -0.5 2.6 0Q2.4 0.5 1.6 0.72Z' }); // the light organ, the last two segments
   const rim = el('path', { d: 'M-0.9 -0.75Q1.2 -1.15 2.4 -0.5', fill: 'none', 'stroke-width': 0.2, 'stroke-linecap': 'round' });
   const ember = el('circle', { cx: 2.1, cy: 0, r: 3 });
@@ -123,10 +123,10 @@ function drawGraveyard(dt, s, rim) {
     const wave = Math.sin(s * 6.283 / d.period + d.ph), n = flickerNoise(Math.floor(s * 14) + d.ph * 100);
     const spark = d.flicker ? (wave > 0.94 && n > 0.4 ? 0.35 + 0.65 * n : 0) : Math.max(0, wave) ** 8;
     const glow = 0.3 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0)); // the dead only glow faintly
-    put(d.body, 'fill', mix('#1E1828', '#191424', back)); put(d.wings, 'fill', mix('#241E32', '#1C1728', back));
+    put(d.body, 'fill', '#15111C'); put(d.wings, 'fill', '#15111C'); // all one near-black
     put(d.g, 'opacity', fade.toFixed(2)); // older ones further back fade, and so does a revived one rising
-    put(d.rim, 'stroke', rim); put(d.rim, 'opacity', 0.3);
-    put(d.tail, 'fill', mix(mix(col, '#1E182E', 0.72), col, glow));
+    put(d.rim, 'stroke', rim); put(d.rim, 'opacity', 0.12);
+    put(d.tail, 'fill', mix('#15111C', col, Math.min(1, glow * 3))); // the same black as the rest until it glows
     put(d.ember, 'fill', col); put(d.ember, 'opacity', (0.5 * glow).toFixed(2));
     put(d.zone, 'cx', (x + sway).toFixed(1)); put(d.zone, 'cy', y.toFixed(1));
     d.zone.style.display = show && d.gone === undefined ? '' : 'none';
