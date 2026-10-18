@@ -4,12 +4,14 @@ addEventListener('resize', fitView);
 const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('graveyard', e => { stalePRs = JSON.parse(e.data); }); // the server calls them the graveyard
+const PINNED = new URLSearchParams(location.search).get('style'); // ?style= previews one lantern, whatever the settings say
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
 es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
-  if (STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
+  const key = PINNED || st.style;
+  if (STYLES[key] && STYLES[key] !== style) applyStyle(key);
   const quietStarted = recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   quietUntil = st.quietUntil || 0;
   if (/^\d{1,2}:\d{2}$/.test(st.quietEnd || '')) quietEnd = st.quietEnd;
@@ -49,7 +51,7 @@ $('style').onchange = e => {
   applyStyle(e.target.value);
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style: e.target.value }) });
 };
-applyStyle('barrel'); // until the server says which lantern is chosen
+applyStyle(STYLES[PINNED] ? PINNED : 'barrel'); // until the server says which lantern is chosen
 
 // The macOS screensaver's web view never fires requestAnimationFrame, so when it goes quiet a timer takes over,
 // and the screensaver also calls lanternTick() on its own animation clock. In a normal window rAF runs and these idle.

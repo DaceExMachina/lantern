@@ -18,6 +18,19 @@ function findPerch(m, rand, from) {
   return best;
 }
 
+// A pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
+/** @type {Element | undefined} */
+let firstBand;
+let bands = [];
+function measureBands() {
+  if (!firstBand?.isConnected) {
+    const els = [...document.querySelectorAll('#lantern .band')];
+    firstBand = els[0];
+    bands = els.map(e => { const b = /** @type {SVGGraphicsElement} */ (e).getBBox(); return [b.y + b.height / 2, b.height / 2, b.width / 2]; });
+  }
+  return bands;
+}
+
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   const s = t / 1000;
@@ -361,14 +374,22 @@ function frame(t) {
   }
   drawStale(dt, s);
   // the background last, once every moth has moved, so their shadows fall where they are now
+  const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
+  // a burner cup under the flame (holder: its bottom and half-width) throws a narrow fan straight down, seen from the flame
+  // core's live centre so the fan breathes with it
+  const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = ambient ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
-    ringC: rot(340, 330), ringR, ringA: 0.55 + 0.45 * Math.max(level, cool * 0.5),
+    ringC: rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
-    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
+    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
-    airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters, sway: rad,
-    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
+    airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: rad,
+    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
+      : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
+    // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
+    bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
+    bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
   placeCard();
 }
