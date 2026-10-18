@@ -88,7 +88,6 @@ test('snooze, snooze for good, and wake', t => replay(t, 'snooze'));
 test('a manual /compact ends idle, an automatic one leaves the session as it was', t => replay(t, 'compact'));
 test('SessionEnd removes the session', t => replay(t, 'session-end'));
 test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
-test('with lanternText off the real words stay off the page', t => replay(t, 'prose-off', { 'data/settings.json': '{"lanternText": "off"}' }));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
 // Transcripts on disk, for the seeding cases: one JSON object per line.
@@ -109,7 +108,7 @@ const recent = () => ({
   ...transcript(UUID(5), [user('Go'), answer('Every moth now lands where the light is warmest on the paper.'), turnEnd]),
 });
 test('the newest transcripts fill a shared pool of sentences for the pages', t => replay(t, 'prose-pool', recent()));
-test('with lanternText off the pool stays empty', t => replay(t, 'prose-pool-off', { ...recent(), 'data/settings.json': '{"lanternText": "off"}' }));
+test('with session words off nothing is filtered or read; turning them on reads the pool, turning them off drops every word', t => replay(t, 'prose-toggle', { ...recent(), 'data/settings.json': '{"lanternText": "off"}' }));
 test('a transcript ending on an unanswered task notification seeds as waiting, not working', t => replay(t, 'seed-task-notification', {
   ...transcript(UUID(1), [user('Fix it'), answer('Fixed. **You:** try it'), turnEnd, user('<task-notification><summary>Agent finished</summary></task-notification>')]),
   ...transcript(UUID(2), [user('Start on the docs')]), // mid-turn, for contrast

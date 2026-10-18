@@ -1,0 +1,325 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "The paper glows warmer now, and the shadows fall where the flame sits."
+    }
+  },
+  {
+    "expect": {
+      "prose": [],
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The glow sits a little higher on the paper than before."
+            ]
+          },
+          "id": "00000004-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-4",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every moth now lands where the light is warmest on the paper."
+            ]
+          },
+          "id": "00000005-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-5",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The paper glows warmer now, and the shadows fall where the flame sits."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "post": "/settings",
+    "body": {
+      "lanternText": "sessions"
+    }
+  },
+  {
+    "expect": {
+      "prose": [
+        "Every moth now lands where the light is warmest on the paper.",
+        "The glow sits a little higher on the paper than before."
+      ],
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The glow sits a little higher on the paper than before."
+            ]
+          },
+          "id": "00000004-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-4",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every moth now lands where the light is warmest on the paper."
+            ]
+          },
+          "id": "00000005-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-5",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The paper glows warmer now, and the shadows fall where the flame sits."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Every quiet session dims slowly until something new wakes it again."
+    }
+  },
+  {
+    "expect": {
+      "prose": [
+        "Every moth now lands where the light is warmest on the paper.",
+        "The glow sits a little higher on the paper than before."
+      ],
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The glow sits a little higher on the paper than before."
+            ]
+          },
+          "id": "00000004-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-4",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every moth now lands where the light is warmest on the paper."
+            ]
+          },
+          "id": "00000005-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-5",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every quiet session dims slowly until something new wakes it again."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "prose": [
+            "Every quiet session dims slowly until something new wakes it again."
+          ],
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "post": "/settings",
+    "body": {
+      "lanternText": "off"
+    }
+  },
+  {
+    "expect": {
+      "prose": [],
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The glow sits a little higher on the paper than before."
+            ]
+          },
+          "id": "00000004-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-4",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every moth now lands where the light is warmest on the paper."
+            ]
+          },
+          "id": "00000005-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-5",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every quiet session dims slowly until something new wakes it again."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

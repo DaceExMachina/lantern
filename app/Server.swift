@@ -502,7 +502,7 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
 }
 
 /// A session rebuilt from its transcript, before it joins the live ones.
-func seedSession(_ file: String, live: Bool) -> (JSON, Ordered<JSON>)? {
+func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON>)? {
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
     let lines = tail(file), turn = lastTurn(lines)
@@ -512,7 +512,7 @@ func seedSession(_ file: String, live: Bool) -> (JSON, Ordered<JSON>)? {
                    "unconfirmed": !live]
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
     // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
-    if case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(6)) }
+    if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(6)) }
     s["created"] = createdPRs(file, dir)
     // subagents that look like they're still going: transcript touched in the last two minutes and not finished
     var agents = Ordered<JSON>()
@@ -681,12 +681,12 @@ final class LanternServer {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
-            if settings["lanternText"] as? String == "off" { out["prose"] = nil } // no words at all when turned off
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
         })
     }
-    func proseOut() -> String { jsonText(settings["lanternText"] as? String == "off" ? [] : recentProse) }
+    // Session words (the barrel's pages) are on unless settings.json says "off"; while off, none are read, kept or sent.
+    var wordsOn: Bool { settings["lanternText"] as? String != "off" }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
     func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
@@ -771,8 +771,10 @@ final class LanternServer {
             let tasks = running.isEmpty ? "" : "\(running.count) background task\(running.count > 1 ? "s" : "")"
             s["tasks"] = Array(running.map { $0["description"] }.filter(truthy).prefix(4)).map { $0! }
             s["forYou"] = forYou(e["last_assistant_message"])
-            let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
-            if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(6)) } // the newest few runs
+            if wordsOn {
+                let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
+                if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(6)) } // the newest few runs
+            }
             s["error"] = false
             if !running.isEmpty && q.isEmpty { s["state"] = "paused"; s["note"] = "Waiting on \(tasks)" }
             else { s["state"] = "waiting"; s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
@@ -893,29 +895,41 @@ final class LanternServer {
         }
     }
 
-    // MARK: seeding: rebuild sessions from disk when the server starts, so a restart doesn't forget them
-
-    func seed() {
+    // The barrel's pages also draw on the newest few transcripts, so they aren't blank when little is running: a few runs
+    // from the tail of each, a couple of dozen in all. Read when the server starts and when session words are turned on.
+    func seedProse() {
         DispatchQueue.global().async {
-            var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
-            let take = { (f: String, live: Bool, pid: Int?) in
-                let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
-                if seen.contains(id) { return }
-                // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
-                if var s = seedSession(f, live: live) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
-            }
-            for (f, pid) in liveTranscripts() { take(f, true, pid) }
-            if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
-            } else { print("seeding failed: no \(PROJECTS)") }
-            // the barrel's pages also draw on the newest few transcripts, so they aren't blank when little is running:
-            // a few runs from the tail of each, a couple of dozen in all
             let started = now()
             let newest = ((try? FileManager.default.contentsOfDirectory(atPath: PROJECTS)) ?? []).flatMap { transcripts(PROJECTS + "/" + $0) }
                 .map { ($0, fileTimes($0)?.mtime ?? 0) }.sorted { $0.1 > $1.1 }.prefix(8).map(\.0)
             var pool: [String] = []
             for f in newest { pool += transcriptProse(tail(f)).suffix(3).filter { !pool.contains($0) } }
             print("Read \(pool.count) run(s) of prose from \(newest.count) recent transcript(s) in \(Int(now() - started)) ms")
+            DispatchQueue.main.async {
+                if !self.wordsOn { return } // turned off again while reading
+                self.recentProse = Array(pool.prefix(24))
+                self.send("event: prose\ndata: \(jsonText(self.recentProse))\n\n")
+            }
+        }
+    }
+
+    // MARK: seeding: rebuild sessions from disk when the server starts, so a restart doesn't forget them
+
+    func seed() {
+        let words = wordsOn
+        if words { seedProse() }
+        DispatchQueue.global().async {
+            var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
+            let take = { (f: String, live: Bool, pid: Int?) in
+                let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
+                if seen.contains(id) { return }
+                // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
+                if var s = seedSession(f, live: live, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
+            }
+            for (f, pid) in liveTranscripts() { take(f, true, pid) }
+            if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
+                for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
+            } else { print("seeding failed: no \(PROJECTS)") }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
                 for (s, a) in seeded {
@@ -927,8 +941,6 @@ final class LanternServer {
                     self.loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
                 }
                 print("Seeded \(self.sessions.count) session(s) from disk")
-                self.recentProse = Array(pool.prefix(24))
-                self.send("event: prose\ndata: \(self.proseOut())\n\n")
                 self.linkSpawned()
                 // last known PR status, until the first refresh replaces it
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {
@@ -1367,6 +1379,17 @@ final class LanternServer {
                     settings["goals"] = goals
                 }
                 if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
+                // session words on the barrel: turning them off drops every word held; turning them on reads the pool afresh
+                if let t = j["lanternText"] as? String, ["sessions", "off"].contains(t) {
+                    let was = wordsOn
+                    settings["lanternText"] = t; ok = true
+                    if was && !wordsOn {
+                        recentProse = []
+                        for (id, _) in sessions.items { sessions[id]!["prose"] = nil }
+                        send("event: prose\ndata: []\n\n"); broadcast()
+                    }
+                    if !was && wordsOn { seedProse() }
+                }
                 // the last day a recap opened by itself, so every window shows each one once
                 if let day = j["recapSeen"] as? String, Re("^[0-9]{4}-[0-9]{2}-[0-9]{2}$").test(day) { settings["recapSeen"] = day; ok = true }
                 if let quiet = j["quietUntil"] as? NSNumber, CFGetTypeID(quiet) != CFBooleanGetTypeID(), quiet.doubleValue.isFinite {
@@ -1386,7 +1409,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(proseOut())\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()

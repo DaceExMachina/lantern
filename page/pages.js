@@ -4,7 +4,8 @@
 // fades in over about 18s, lingers for about a minute, and fades out, overlapping the others; some are printed on the
 // inside (mirrored). The words read best where the flame's light is strongest. Besides live sessions' words, the server
 // sends a pool from the newest few transcripts (recentProse), ended sessions too. With no words the paper stays blank.
-// settings.json `lanternText`: "sessions" (the default) or "off".
+// "Show session words" in the settings menu turns it all off (settings.json `lanternText`: "sessions" or "off"): the
+// words fade out and the timer stops, so nothing runs; turned back on, fresh words fade in once the server sends them.
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
 
 let lanternText = 'sessions';
@@ -18,8 +19,7 @@ const FONT = "Georgia, 'Times New Roman', serif";
 let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
 // blocks part way through their lives, as if it had been running a while, so a reload doesn't wipe the paper.
-let pagesData = false, primed = false;
-const loadedAt = performance.now();
+let pagesData = false, primed = false, primeAge = 2 * FADE + HOLD, waitFrom = performance.now(), pagesTimer = 0;
 
 const measure = document.createElement('canvas').getContext('2d');
 const widthOf = (text, size) => { measure.font = `${size}px ${FONT}`; return measure.measureText(text).width; };
@@ -95,16 +95,16 @@ function drawPages(root) {
 function tickPages() {
   const root = $('pages');
   if (!root) return; // not the barrel
-  if (lanternText === 'off') { root.replaceChildren(); blocks = []; return; }
   const now = performance.now();
-  if (!primed) {
-    if (!pagesData && now - loadedAt < 1500) return; // nothing drawn yet
+  if (lanternText === 'off' && !blocks.length) { root.replaceChildren(); clearInterval(pagesTimer); pagesTimer = 0; return; } // faded out: stop
+  if (lanternText !== 'off' && !primed) {
+    if (!pagesData && now - waitFrom < 1500) return; // nothing drawn yet
     primed = true;
-    for (let i = 0; i < SHOWN; i++) addBlock(now, Math.random() * (2 * FADE + HOLD));
+    for (let i = 0; i < SHOWN; i++) addBlock(now, Math.random() * primeAge);
     nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8);
   }
   if (!root.firstChild) drawPages(root);
-  if (now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
+  if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
   const ink = $('pagesInk');
   ink.setAttribute('fill', mix(INK.warm, INK.cool, cool));
   ink.setAttribute('opacity', (0.5 + 0.5 * Math.max(level, cool * 0.45)).toFixed(2)); // brighter flame, clearer words
@@ -117,4 +117,14 @@ function tickPages() {
     return true;
   });
 }
-setInterval(tickPages, 250);
+// Turning words off fades every block out (then the timer stops); turning them on waits for the server's fresh words
+// and fades a set in. Called by main.js with the shared setting.
+function setLanternText(value) {
+  if (value === lanternText) return;
+  lanternText = value;
+  const now = performance.now();
+  if (value === 'off') { for (const b of blocks) b.leaving ??= now; return; }
+  primed = false; pagesData = false; primeAge = 0; waitFrom = now; // a fresh set, all fading in from nothing
+  pagesTimer ||= setInterval(tickPages, 250);
+}
+pagesTimer = setInterval(tickPages, 250);
