@@ -100,6 +100,8 @@ The page is `index.html` plus plain scripts in `page/`, one per part of the scen
 LANTERN_PORT=7718 node <clone-dir>/server.js
 ```
 
+To preview a branch's page with your real sessions and PRs, add `LANTERN_MIRROR=http://127.0.0.1:7717`: it serves the branch's page but takes everything else live from the app, and snoozes, settings and clicks in the preview go nowhere.
+
 To see every state without real sessions:
 
 ```bash

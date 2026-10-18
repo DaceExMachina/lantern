@@ -15,6 +15,9 @@ const { execFile, spawnSync } = require('child_process');
 const path = require('path');
 
 const PORT = Number(process.env.LANTERN_PORT) || 7717;
+// Mirror mode, for previews: serve this checkout's page, but take sessions, PRs and settings from the live app at
+// LANTERN_MIRROR. Writes (snooze, settings, focus, resume, GitHub) stop here, so a preview never changes the live app.
+const MIRROR = process.env.LANTERN_MIRROR;
 const EXPIRE_MS = 20 * 60 * 1000; // a session silent this long is assumed dead (killed terminal, no SessionEnd)
 const WAITING_EXPIRE_MS = 3 * 60 * 60 * 1000; // ...unless it's waiting on me, which can quietly take a while
 const SEED_RECENT_MS = 15 * 60 * 1000; // on startup, also bring back any session whose transcript moved this recently
@@ -547,8 +550,7 @@ async function disconnectGitHub(login) {
 }
 
 function clearGitHub() { reviews = []; graveyard = []; for (const s of sessions.values()) delete s.github; broadcast(); }
-loadAccounts();
-setInterval(refreshGitHub, 2 * 60 * 1000);
+if (!MIRROR) { loadAccounts(); setInterval(refreshGitHub, 2 * 60 * 1000); }
 
 // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk:
 // index.html or any of its scripts in page/.
@@ -573,7 +575,32 @@ setInterval(() => {
   if (changed) broadcast();
 }, 30 * 1000); // checks whether processes are still running, so a closed session's moth leaves within half a minute
 
+// Relays a GET from the live app. On /events it drops the live app's page version and sends this checkout's instead,
+// so the preview reloads when its own page files change, not the live app's.
+function mirror(req, res) {
+  const up = http.get(MIRROR + req.url, r => {
+    res.writeHead(r.statusCode, r.headers);
+    if (req.url !== '/events') return r.pipe(res);
+    res.write(`event: version\ndata: ${pageVersion()}\n\n`);
+    clients.add(res);
+    let buf = '';
+    r.setEncoding('utf8');
+    r.on('data', chunk => {
+      const blocks = (buf + chunk).split('\n\n');
+      buf = blocks.pop() || '';
+      for (const b of blocks) {
+        const kept = b.replace(/^event: version\ndata: .*$\n?/m, '').trim();
+        if (kept) res.write(kept + '\n\n');
+      }
+    });
+    r.on('end', () => res.end());
+  }).on('error', () => res.headersSent ? res.end() : res.writeHead(502).end());
+  req.on('close', () => { up.destroy(); clients.delete(res); });
+}
+
 http.createServer((req, res) => {
+  if (MIRROR && req.method === 'POST') return res.writeHead(204).end();
+  if (MIRROR && (req.url === '/events' || req.url === '/stats')) return mirror(req, res);
   if (req.method === 'POST' && req.url === '/event') {
     let body = '';
     req.on('data', c => { body += c; if (body.length > 1e6) req.destroy(); });
@@ -690,4 +717,4 @@ http.createServer((req, res) => {
     return fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
   }
   res.writeHead(404).end();
-}).listen(PORT, '127.0.0.1', () => { console.log(`Lantern lit at http://127.0.0.1:${PORT}`); seed(); });
+}).listen(PORT, '127.0.0.1', () => { console.log(`Lantern lit at http://127.0.0.1:${PORT}${MIRROR ? `, mirroring ${MIRROR}` : ''}`); if (!MIRROR) seed(); });
