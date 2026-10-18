@@ -401,16 +401,17 @@ final class LanternServer {
     // MARK: the event log: what changed since it last looked, called on every broadcast so it sees what the page sees
 
     func observe() {
-        let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now()
+        let t = now() // one clock reading per look, so spans that change together (a wait and its snooze) share it
+        let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > t
         for (id, s) in sessions.items {
             var was = seen[id] ?? Seen()
             let title = truthy(s["title"]) ? str(s["title"]) : nil, project = s["project"] ?? NSNull()
-            if seen[id] == nil { stats.begin("alive", id, ["title": title ?? NSNull(), "project": project, "seeded": seeded.contains(id)]) }
+            if seen[id] == nil { stats.begin("alive", id, ["title": title ?? NSNull(), "project": project, "seeded": seeded.contains(id)], at: t) }
             else if title != was.title, let title { stats.note("alive", id, ["title": title]); if was.waiting { stats.note("waiting", id, ["title": title]) } }
             was.title = title
             let waiting = str(s["state"]) == "waiting" && !reportsBack(s) // a side session reporting back isn't waiting on Dace
             if waiting != was.waiting {
-                if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project]) } else { stats.end("waiting", id, ["how": "answered"]) }
+                if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project], at: t) } else { stats.end("waiting", id, ["how": "answered"], at: t) }
                 was.waiting = waiting
                 was.snoozed = nil
             }
@@ -419,19 +420,19 @@ final class LanternServer {
             if waiting, let snoozed, snoozed != was.snoozed { stats.note("waiting", id, ["snoozed": snoozed]); was.snoozed = snoozed }
             // the stretches of the wait it was snoozed, by hand or by quiet hours
             let snoozing = waiting && (snoozed != nil || quietNow)
-            if snoozing != was.snoozing { if snoozing { stats.begin("snoozed", id) } else { stats.end("snoozed", id) }; was.snoozing = snoozing }
+            if snoozing != was.snoozing { if snoozing { stats.begin("snoozed", id, at: t) } else { stats.end("snoozed", id, at: t) }; was.snoozing = snoozing }
             seen[id] = was
         }
         for (id, was) in seen where sessions[id] == nil {
-            if was.waiting { stats.end("waiting", id, ["how": "ended"]) }
-            if was.snoozing { stats.end("snoozed", id) }
-            stats.end("alive", id, ["how": "ended"])
+            if was.waiting { stats.end("waiting", id, ["how": "ended"], at: t) }
+            if was.snoozing { stats.end("snoozed", id, at: t) }
+            stats.end("alive", id, ["how": "ended"], at: t)
             seen[id] = nil
         }
         // the lantern's colour, worked out the way the page does it
         let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !reportsBack($0.1) && !truthy($0.1["snoozed"]) && !forGood($0.0) }
-        if quietNow != quiet { if quietNow { stats.begin("quiet") } else { stats.end("quiet") }; quiet = quietNow }
-        if violetNow != violet { if violetNow { stats.begin("violet") } else { stats.end("violet") }; violet = violetNow }
+        if quietNow != quiet { if quietNow { stats.begin("quiet", at: t) } else { stats.end("quiet", at: t) }; quiet = quietNow }
+        if violetNow != violet { if violetNow { stats.begin("violet", at: t) } else { stats.end("violet", at: t) }; violet = violetNow }
         // badges for what's on screen right now (Stats.earn gives each once a day): ten agents in one session, ten open PRs
         // owned by one session, twenty fireflies in flight, stale PRs past their 30 (the faint cloud shows), and one ghost moth
         // (an old session) behind five stale PRs
