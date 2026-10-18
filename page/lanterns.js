@@ -94,6 +94,19 @@ const STYLES = {
       <g id="tassel"><path d="M340 446V452" stroke="#B8873A" stroke-width="2"/><ellipse cx="340" cy="460" rx="6" ry="8" fill="url(#brass)"/><path d="M338 467L340 482L342 467Z" fill="#D9AE52"/></g>`,
   },
 };
+// The holes cut in a pierced lantern (the black shapes in its #cutouts mask), as [x, y, radius, star], for its light
+// to shine out through. Star-shaped holes are marked 1; tiny pinholes are left out.
+function holesIn(svg) {
+  const mask = svg.match(/<mask id="cutouts"[\s\S]*?<\/mask>/)?.[0] || '', holes = [];
+  for (const [, pts] of mask.matchAll(/<polygon points="([^"]+)"/g)) {
+    const p = pts.trim().split(/\s+/).map(q => q.split(',').map(Number)), n = p.length;
+    const x = p.reduce((a, q) => a + q[0], 0) / n, y = p.reduce((a, q) => a + q[1], 0) / n;
+    holes.push([x, y, 0.75 * Math.max(...p.map(q => Math.hypot(q[0] - x, q[1] - y))), 1]);
+  }
+  for (const [, x, y, r] of mask.matchAll(/<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"/g)) if (+r >= 2) holes.push([+x, +y, +r, 0]);
+  for (const [, x, y] of mask.matchAll(/<path d="M([\d.]+) ([\d.]+)q3 -6 6 0/g)) holes.push([+x + 3, +y - 0.5, 2.5, 0]); // the dome's leaf shapes
+  return holes;
+}
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
 let style = STYLES.barrel;
 function applyStyle(key) {

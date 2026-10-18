@@ -60,3 +60,11 @@ test('a wing faces the flame on the side its lit face turns to', () => {
   assert.strictEqual(run(`facesFlame([${up}], ${lift[0]}, ${lift[1]})`), 0, 'the flame on the side the wing opens to is behind its seen face');
   assert.strictEqual(run(`facesFlame([${up}], ${-lift[0]}, ${-lift[1]})`), 1, 'the flame across the body lights its seen face');
 });
+
+test("the Moroccan lantern's holes come from its own mask, and the paper lanterns have none", () => {
+  const holes = run('holesIn(STYLES.moroccan.back)');
+  assert.strictEqual(holes.length, 40);
+  assert.strictEqual(holes.filter(h => h[3]).length, 27, 'the star holes are marked');
+  for (const [x, y, r] of holes) assert.ok(x > 280 && x < 400 && y > 240 && y < 440 && r >= 2 && r < 8, `hole at ${x},${y} r ${r}`);
+  for (const key of ['barrel', 'chochin']) assert.strictEqual(run(`holesIn(STYLES.${key}.back).length`), 0, key);
+});
