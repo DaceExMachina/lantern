@@ -28,7 +28,11 @@ es.addEventListener('settings', e => {
   sync();
 });
 setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
-es.onerror = () => { $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline'; };
+es.onerror = () => {
+  $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline';
+  // WebKit can give up on the stream for good (e.g. while the app restarts); start over once the server is back
+  if (es.readyState === EventSource.CLOSED) setTimeout(() => location.reload(), 3000);
+};
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
 for (const mode of ['panel', 'screensaver', 'ambient']) if (Q.has(mode)) document.body.classList.add(mode);
