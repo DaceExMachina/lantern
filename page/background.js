@@ -30,7 +30,7 @@ uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // ?brass: each 
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 // ?brass band shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
-const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
+const float BAND_PEAK = 0.4, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
