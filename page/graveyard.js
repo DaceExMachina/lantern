@@ -60,12 +60,20 @@ const MOTHS_MAX = 8;
 const deadMoths = new Map(); // session id -> moth
 function makeDeadMoth(o) {
   const rand = seeded(hash(o.id));
-  // It lies on its side: one wing always flat along the ground; the other, by its own seed, lies flat the other way
-  // (spread out), props up partway, or sticks up into the air. Both are the moth's petal turned to lie along x.
-  const dir = rand() < 0.5 ? -1 : 1, pose = rand(), raise = pose < 0.3 ? 0 : pose < 0.65 ? 25 + rand() * 25 : 70 + rand() * 25;
-  const flat = `scale(${dir} 0.3) rotate(96)`;
-  const other = raise ? `scale(${-dir} 1) rotate(${-raise}) scale(1 ${raise > 60 ? 0.75 : 0.55}) rotate(96)` : `scale(${-dir} 0.3) rotate(96)`;
-  const g = el('g'), side = el('path', { d: pathOf(WING_UP), transform: other }), up = el('path', { d: pathOf(WING_UP), transform: flat });
+  // It lies on the ground in 3D, the same moth as the flying ones: its wing plane is the ground, it faces its own way
+  // (seeded, so every window agrees), and one wing stays flat while the other, by pose, lies flat too, props up
+  // partway, or sticks up into the air. Then it's seen from just above the ground with the flying moths' perspective.
+  const heading = rand() * 2 * Math.PI, pose = rand(), raised = pose < 0.3 ? 0 : pose < 0.65 ? 0.5 + rand() * 0.4 : 1.25 + rand() * 0.4;
+  const liftUp = rand() < 0.5; // which wing lifts
+  const ground = (pts, lift) => pts.map(([x, y]) => {
+    const a = x * AU[0] + y * AU[1], r = x * AN[0] + y * AN[1]; // along the body, and across it
+    const up = Math.abs(r) * Math.sin(lift), r2 = r * Math.cos(lift); // a lifted wing swings up around the body
+    const px = a * AU[0] + r2 * AN[0], py = a * AU[1] + r2 * AN[1]; // back in the moth's (now the ground's) plane
+    const gx = px * Math.cos(heading) - py * Math.sin(heading), gy = px * Math.sin(heading) + py * Math.cos(heading); // its heading
+    const view = 0.32, depth = gy * Math.cos(view) + up * Math.sin(view), k = EYE / (EYE - depth); // seen from just above
+    return [gx * k, (gy * Math.sin(view) - up * Math.cos(view)) * k];
+  });
+  const g = el('g'), side = el('path', { d: pathOf(ground(WING_SIDE, liftUp ? 0 : raised)) }), up = el('path', { d: pathOf(ground(WING_UP, liftUp ? raised : 0)) });
   g.append(side, up);
   $('graveyard').append(g);
   const zone = $('zones').appendChild(el('circle', { r: 22 })); // wide enough to take in its little cluster
