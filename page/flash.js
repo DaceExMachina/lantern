@@ -13,7 +13,7 @@ const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') 
 const JOSTLE = Q.has('jostle') ? +Q.get('jostle') || 0 : 1;
 // how many fireflies fill the pill, as a share of the scene-sized packing: fewer are bigger (by 1/√count), so they
 // still overlap enough to read as one light (?count=1 tries the scene's own size)
-const COUNT = Q.has('count') ? Math.min(1, +Q.get('count') || 1) : 0.5;
+const COUNT = Q.has('count') ? Math.min(1, +Q.get('count') || 1) : 0.25;
 // The colours PR fireflies come in: half the yellow of a draft, two fifths the orange of one with changes asked for,
 // and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
 const FLASH_COLOURS = /** @type {[number, string][]} */ ([[0.5, FLY.draft], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.review]]);
@@ -152,7 +152,7 @@ function playFlash(id) {
   };
   const heading = (f, t) => { const a = holdAt(f, t - 1), b = holdAt(f, t + 1); return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]; }; // px per ms
   // rings from the rim in to the innermost, evenly spaced and no further apart than a hexagonal packing's rows
-  const rings = Math.ceil((r - inner) / (step * 0.866)) + 1, strayRings = Math.round(3 * Math.sqrt(COUNT)); // fewer rings stray when they're spaced wider, each more often
+  const rings = Math.ceil((r - inner) / (step * 0.866)) + 1, strayRings = Math.max(1, Math.min(Math.round(3 * Math.sqrt(COUNT)), rings - 2)); // fewer stray when they're spaced wider (each more often), always leaving two at home; as many out at once as at count 1
   for (let ring = 0; ring < rings; ring++) {
     const rr = r - (r - inner) * ring / (rings - 1);
     const loop = 4 * half + 2 * Math.PI * rr, n = Math.max(1, Math.round(loop / step)), at = rand() * step;
@@ -165,7 +165,7 @@ function playFlash(id) {
       flies.push({ rr, s0: at + i * loop / n, v: way * (ring || still ? swarm : Math.max(swarm, 0.008 * px / 1.2)), col, ph: rand() * 6.28,
         ax: wander(), bx: wander(), ay: wander(), by: wander(), every: 2000 + rand() * 3000, dartAt: rand() * 5000, dir: rand() * 6.28,
         land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2,
-        strayBy: ring >= strayRings || !jostle ? 0 : (r - rr) + (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: (4300 + rand() * 3500) * strayRings / 3, overshoot: rand() < 0.3 });
+        strayBy: ring >= strayRings || !jostle ? 0 : (r - rr) + (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: (4300 + rand() * 3500) * strayRings / 3 * (COUNT < 1 ? 0.88 : 1), overshoot: rand() < 0.3 });
     }
   }
   // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
