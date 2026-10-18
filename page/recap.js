@@ -32,12 +32,12 @@ function renderRecap(j, i) {
   const title = isToday ? 'Today’s recap' : i === j.days.length - 2 ? 'Yesterday’s recap' : new Date(d.start).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
   tally = j.tally;
   const r = slices(d, j.spans, j.gauges, 160), earned = j.achievements.filter(a => a[1] === key);
-  const change = d.graveyardChange == null ? '' : d.graveyardChange === 0 ? ', no change' : ` (${d.graveyardChange > 0 ? '+' : ''}${d.graveyardChange})`;
+  const change = d.staleChange == null ? '' : d.staleChange === 0 ? ', no change' : ` (${d.staleChange > 0 ? '+' : ''}${d.staleChange})`;
   const nums = [
     ['lantern warm', pct(d.warmLantern)],
     ['answer time', d.medianWait == null ? '–' : ago(d.medianWait)],
     ['fireflies', `${d.merged} merged${d.open == null ? '' : `, ${d.open} open`}`],
-    ['stale PRs', d.graveyard == null ? '–' : d.graveyard + change],
+    ['stale PRs', d.stale == null ? '–' : d.stale + change],
   ];
   $('recap').innerHTML = `<h3>${title} <button class="close" aria-label="Close">×</button></h3>
     ${d.warmMoths == null ? '<p class="dim">No moths that day. A quiet one.</p>' : `

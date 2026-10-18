@@ -375,7 +375,7 @@ extension LanternServer {
                 // last known PR status, until the first refresh replaces it
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {
                     self.reviews = cache["reviews"] as? [JSON] ?? []
-                    self.graveyard = cache["graveyard"] as? [JSON] ?? []
+                    self.stale = cache["stale"] as? [JSON] ?? []
                     self.owners = cache["owners"] as? JSON ?? [:]
                     for (id, _) in self.sessions.items { if let g = (cache["bySession"] as? JSON)?[id] { self.sessions[id]!["github"] = g } }
                 }

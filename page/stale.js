@@ -3,7 +3,7 @@
 // dimmer. Now and then one slowly brightens and fades again. Up to 30; the
 // oldest beyond that gather into a faint cloud with a count. A new one fades in; one that comes back to life (touched
 // again, or picked up by a session) rises and fades. There's no ground: the lantern floats in the dark and its light
-// carries onto other displays, so they drift instead of lying anywhere. (The server calls this list the graveyard.) Shown unless turned off in the settings
+// carries onto other displays, so they drift instead of lying anywhere. Shown unless turned off in the settings
 // menu, and hidden in quiet hours.
 
 let stalePRs = [], staleOn = true;

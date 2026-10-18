@@ -121,7 +121,7 @@ extension LanternServer {
                 for url in created { if let p = all[url] { prs[url] = p } }
                 github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1)] }
             }
-            // The graveyard: my open PRs that no session owns and nobody has touched for a week, oldest first.
+            // The stale list: my open PRs that no session owns and nobody has touched for a week, oldest first.
             let owned = Set(github.values.flatMap { $0.map { str($0["url"]) } }), weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
             let iso = ISO8601DateFormatter()
             let dead: [JSON] = all.items.compactMap { url, p in
@@ -132,7 +132,7 @@ extension LanternServer {
             DispatchQueue.main.async {
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
                 self.reviews = wanted.items.map(\.1)
-                self.graveyard = dead
+                self.stale = dead
                 for (id, g) in github { self.sessions[id]?["github"] = g }
                 // a failed query would make every PR look gone, so only a complete answer goes in the log
                 if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), closed: closed) }
@@ -141,7 +141,7 @@ extension LanternServer {
                 self.refreshing = false
                 self.broadcast()
                 // then, in the background, find which old sessions made any dead PRs we haven't looked up yet
-                let missing = self.graveyard.map { str($0["url"]) }.filter { self.owners[$0] == nil }
+                let missing = self.stale.map { str($0["url"]) }.filter { self.owners[$0] == nil }
                 if !missing.isEmpty {
                     DispatchQueue.global().async {
                         let found = findOwners(missing)
@@ -154,11 +154,11 @@ extension LanternServer {
 
     func saveGitHubCache() {
         let bySession = sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
-        let text = jsonText(["reviews": reviews, "graveyard": graveyard, "owners": owners, "bySession": bySession]) + "\n"
+        let text = jsonText(["reviews": reviews, "stale": stale, "owners": owners, "bySession": bySession]) + "\n"
         DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
     }
 
-    func clearGitHub() { reviews = []; graveyard = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
+    func clearGitHub() { reviews = []; stale = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
 
     // Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain.
     func loadAccounts() {

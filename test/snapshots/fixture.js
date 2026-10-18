@@ -67,15 +67,15 @@
   const snap = name => async () => { await settle(); tickPages(); await settle(); await new Promise(r => realSetTimeout(r, 50)); return name; };
   const steps = [
     () => {
-      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', graveyard: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
+      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
       emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too' }]);
-      emit('graveyard', stale(false));
+      emit('stale', stale(false));
       emit('prose', words(3));
       emit('message', sessionsAt(0));
     },
     run(6),
     ...(Q.has('hover') ? [() => { moths.get('sess-bravo').zone.dispatchEvent(new PointerEvent('pointerenter')); }, snap('hover'), () => { hideCard(); }] : []),
-    () => { emit('message', sessionsAt(1)); emit('graveyard', stale(true)); },
+    () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
     run(14), snap('t20'),
   ];
   window.__drive = async () => {
