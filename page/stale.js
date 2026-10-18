@@ -71,8 +71,9 @@ function drawStale(dt, s) {
     m.beat += dt * 22.4; // the same wingbeat as a living moth: about 3.6 a second
     const liftAt = lag => 80 * Math.PI / 180 * (0.7 * Math.sin(m.beat - lag) + 0.3), sweep = 0.4 * Math.cos(m.beat);
     const roll = 0.7 * Math.sin(s * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
-    put(m.up, 'd', pathOf(flapWing(WING_UP, liftAt(0), sweep, roll)));
-    put(m.side, 'd', pathOf(flapWing(WING_SIDE, liftAt(0.18), sweep, roll)));
+    const upPts = flapWing(WING_UP, liftAt(0), sweep, roll), sidePts = flapWing(WING_SIDE, liftAt(0.18), sweep, roll);
+    put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
+    wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) scale(${(1 - m.back * 0.3).toFixed(2)})`);
     for (const wing of [m.side, m.up]) { put(wing, 'fill', WISP_TINT); put(wing, 'opacity', (0.14 * (1 - m.back * 0.5)).toFixed(2)); }
     m.zone.style.display = show ? '' : 'none';

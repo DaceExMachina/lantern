@@ -131,7 +131,7 @@ function frame(t) {
         m.hops = 0;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // Every 20-40s a waiting moth fidgets, each kind equally likely: at rest it fans its wings or slowly flutters them;
+      // Every 8-16s a waiting moth fidgets, each kind equally likely: at rest it fans its wings or slowly flutters them;
       // after 15 minutes it's restless and may also hop off the paper. A fan or hop takes 1.6s, a slow flutter 3s.
       // Snoozed ones stay still.
       const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
@@ -139,9 +139,9 @@ function frame(t) {
       m.fidget = '';
       if (m.session.snoozed) m.fidgetAt = 0;
       else {
-        if (!m.fidgetAt) { m.fidgetAt = s + 5 + Math.random() * 15; m.dice = Math.random(); }
+        if (!m.fidgetAt) { m.fidgetAt = s + 3 + Math.random() * 8; m.dice = Math.random(); }
         const kind = kinds[Math.floor(m.dice * kinds.length)], dur = kind === 'flutter' ? 3 : 1.6, into = m.into = s - m.fidgetAt;
-        if (into > dur) { m.fidgetAt = s + 20 + Math.random() * 20; m.dice = Math.random(); }
+        if (into > dur) { m.fidgetAt = s + 8 + Math.random() * 8; m.dice = Math.random(); }
         else if (into > 0) {
           m.fidget = kind;
           if (m.fidget === 'hop') {
@@ -247,8 +247,9 @@ function frame(t) {
     const flutter = m.fidget === 'flutter' ? Math.sin(Math.PI * m.into / 3) * (0.5 - 0.5 * Math.cos(2 * Math.PI * m.into)) : 0;
     const landOpen = m.fidget === 'fan' ? 0.3 + 0.8 * (0.5 + 0.5 * Math.sin(beat)) : 0.14 + 0.2 * m.open + 0.9 * flutter;
     const openAt = (lag, extra) => (Math.PI / 2 - liftAt(lag)) * (1 - f) + (landOpen + extra) * f;
-    put(m.up, 'd', pathOf(wing3d(WING_UP, T, N, openAt(0, 0), sweep * (1 - f))));
-    put(m.side, 'd', pathOf(wing3d(WING_SIDE, T, N, openAt(0.18, 0.06), sweep * (1 - f))));
+    const upPts = wing3d(WING_UP, T, N, openAt(0, 0), sweep * (1 - f)), sidePts = wing3d(WING_SIDE, T, N, openAt(0.18, 0.06), sweep * (1 - f));
+    put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
+    wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline

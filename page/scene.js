@@ -22,12 +22,20 @@ const unit = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / 
 const lerp3 = (u, v, t) => [u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t, u[2] + (v[2] - u[2]) * t];
 function wing3d(pts, T, N, open, sweep = 0) {
   const B = cross(N, T), c = Math.cos(open), sn = Math.sin(open);
-  return pts.map(([x, y]) => {
+  let depth = 0;
+  const flat = pts.map(([x, y]) => {
     const a = x * AU[0] + y * AU[1], r = x * AN[0] + y * AN[1], up = Math.abs(r) * c, out = r * sn, a2 = a + sweep * up;
     const px = T[0] * a2 + N[0] * up + B[0] * out, py = T[1] * a2 + N[1] * up + B[1] * out, pz = T[2] * a2 + N[2] * up + B[2] * out;
     const k = EYE / (EYE - pz);
+    depth += pz;
     return [px * k, py * k];
   });
+  return Object.assign(flat, { depth: depth / pts.length }); // how near the viewer it is, to draw the nearer wing on top
+}
+// Paint a moth's two wings with the nearer one on top (the DOM order is the paint order).
+function wingsInDepthOrder(a, aPts, b, bPts) {
+  const front = aPts.depth > bPts.depth ? a : b;
+  if (front.parentNode.lastChild !== front) front.parentNode.appendChild(front);
 }
 // In flight the body lies along AU and the wings spread across the screen, lifting toward the viewer; `roll` turns
 // the whole moth around its body axis: 0 is seen from above, 90 degrees fully side-on.
