@@ -7,7 +7,7 @@ What everything on screen means. Installing and settings live in [setup](setup.m
 - [Fireflies and stale PRs](#fireflies-and-stale-prs)
 - [Session text on the paper](#session-text-on-the-paper)
 - [Picking a lantern](#picking-a-lantern)
-- [Stats, goals, badges and the recap](#stats-goals-badges-and-the-recap)
+- [Stats, badges and the recap](#stats-badges-and-the-recap)
 - [Quiet hours](#quiet-hours)
 - [The app](#the-app)
 
@@ -81,15 +81,13 @@ Only plain sentences make it onto the paper. Lantern drops anything with code, a
 
 The settings menu (the sliders icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, and GitHub.
 
-## Stats, goals, badges and the recap
+## Stats, badges and the recap
 
 The chart button beside the settings button opens your stats, read from the app's event log.
 
 The headline is warm moths: the share of your sessions' time not spent waiting on you. A snoozed wait still counts as waiting. Below it you'll find how long the lantern stayed warm, how quickly you answered, PRs merged and in flight, and stale PRs.
 
 The day ribbon runs from your first session to now in three strips. The top one is the lantern itself: warm, violet, or dim in quiet hours. The middle shows the share of moths flying, warm when they all are and violet when they've all landed. The bottom counts the sessions alive, with the working ones darker. Ticks along the top mark sessions starting, and the week before sits underneath as mini ribbons.
-
-You can set three goals: fireflies in flight at most N, a median answer time within N minutes, and warm moths at least N%. Each stays off until you give it a number, and glows warm while you're on track. Goals live in the shared settings, so every window sees them.
 
 Badges come from the log too: Warm all day, Clear night, Small batches, Revived, Ghostbuster, Séance, Lights Out, warm streaks, Haunted, Restless spirits, Light Pollution, Swarm Season, Hive Mind, Purple Rain, Ghosted and Snooze Button Champion. None of them are sorted into good or bad, so what each one means is up to you. The panel shows this week's, and **All badges** lists every one. Hover or tap a badge for what it is, how to earn it and when you last did. A tap keeps it open.
 
