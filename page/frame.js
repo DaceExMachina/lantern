@@ -369,6 +369,8 @@ function frame(t) {
     glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: rad,
+    // the flame core's lean (its layer in the loop above), exaggerated so the shimmer visibly follows it
+    shim: [...rot(style.light[0] + wobble(s, 4) * 3 * size * 3, style.light[1]), (style.shimmer || 0) * flick, wobble(s, 4) * 0.5 + wobble(s * 1.6, 3) * 0.25],
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
   });
   placeCard();

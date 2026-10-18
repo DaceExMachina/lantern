@@ -26,6 +26,7 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
+uniform vec4 uShim; // a pierced lantern's shimmer: the flame's live x, y, how strong, and its turn
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
@@ -62,6 +63,10 @@ void main() {
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
   float open = 1.0 - CAPS * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope);
+  // through filigree the light averages out, leaving only a faint, soft texture of rays from the flame; as the flame
+  // leans and flickers its centre and turn shift, so the texture moves with it
+  vec2 fq = p - uShim.xy; float fa = atan(fq.y, fq.x);
+  float shim = 1.0 + uShim.z * smoothstep(15.0, 70.0, length(fq)) * sin(fa * 18.0 + uShim.w) * (0.6 + 0.4 * sin(fa * 7.0 - uShim.w * 1.7));
   vec3 col = uBg;
   if (uAmbient < 0.5) {
     // glow rings: three nested discs, shown together at one opacity
@@ -71,13 +76,13 @@ void main() {
     // soft glow: radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
     float g = length(p - uGlowC) / uGlowR;
     float ga = g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));
-    col = mix(col, uGlowCol, ga * uGlowA * lit * open);
+    col = mix(col, uGlowCol, ga * uGlowA * lit * open * shim);
   }
   if (uAirA > 0.0) {
     // the light in the air: one soft glow from the flame fading out over a long tail (long enough to carry on to a
     // display beside this one, where it's drawn from a light that's off its edge)
     float x = clamp(length(p - uLightC) / uLightScale / 700.0, 0.0, 1.0);
-    col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit * open);
+    col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit * open * shim);
   }
   gl_FragColor = vec4(col, 1.0);
 }`);
@@ -133,7 +138,7 @@ function drawBackground(v) {
   gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR); gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uAirA, v.airA);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
-  gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
+  gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform4f(u.uShim, ...v.shim); gl.uniform1i(u.uMoths, shadows.length);
   if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
