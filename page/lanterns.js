@@ -28,12 +28,21 @@ const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x
   <rect x="0" y="0" width="680" height="800" fill="url(#lace)" transform="translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
 // a rope-twist rim at height y, `half` wide either side, its front face `front` wide either side
 // Solid bands (class band) hold the light back: frame.js measures them off the drawing and shades the room at their angles.
-const ROPE = (y, band = true, half = 63, front = 31.5) => `<path ${band ? 'class="band"' : ''} d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
-  <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="url(#rope)"/>`;
+// The twist's stripes are spaced along the true way round the hexagon, so they carry on across each corner and crowd to half
+// spacing on the side faces, which turn away (half their width shows).
+const ROPE = (y, band = true, half = 63, front = half / 2) => {
+  const at = u => Math.abs(u) <= front ? u : Math.sign(u) * (front + (Math.abs(u) - front) / 2), end = 3 * front; // true distance → x
+  let twist = '';
+  for (let u = -end; u <= end + 2.5; u += 3) {
+    const lo = Math.max(-end, u - 2.5), hi = Math.min(end, u); // each stripe leans 2.5 over the rim's 5
+    twist += `M${(340 + at(lo)).toFixed(2)} ${y + 5 - (lo - u + 2.5) * 2}L${(340 + at(hi)).toFixed(2)} ${y + (u - hi) * 2}`;
+  }
+  return `<path ${band ? 'class="band"' : ''} d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
+  <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="${twist}" stroke="#5A3A12" stroke-width="1"/>`;
+};
 const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="#fff" stroke-width="1.3">
     <path d="M0 0C0 3 5 3 5 6C5 9 10 9 10 12M10 0C10 3 5 3 5 6C5 9 0 9 0 12"/><circle cx="0" cy="6" r="1.3"/><circle cx="10" cy="6" r="1.3"/>
     <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>
-  <pattern id="rope" width="3" height="5" patternUnits="userSpaceOnUse"><path d="M-1.5 5L1 0M1.5 5L4 0" stroke="#5A3A12" stroke-width="1"/></pattern>
   <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
   <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 244) scale(.4 .88) translate(-340 -244)"/></clipPath>
