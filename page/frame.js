@@ -20,7 +20,7 @@ function findPerch(m, rand, from) {
 
 // A pierced lantern's beams, measured on the drawing every frame: the flame's centre and each star hole's centre and size
 // (the stars in its #cutouts mask), mapped into scene coordinates with their real transforms, so each beam runs from the
-// flame through its star and follows the sway. ?beamdebug draws each beam's axis and marks each star.
+// flame through its star and follows the sway. ?beamdebug draws each beam's axis (fainter the weaker it is) and marks each star.
 const BEAMDEBUG = new URLSearchParams(location.search).has('beamdebug');
 /** @type {SVGPolygonElement[]} */
 let starEls = [], starBoxes = [];
@@ -33,12 +33,14 @@ function measureBeams() {
   const stars = starBoxes.map(b => {
     const c = at(starEls[0], b.x + b.width / 2, b.y + b.height / 2), edge = at(starEls[0], b.x + b.width, b.y + b.height / 2);
     const dx = c.x - f.x, dy = c.y - f.y, h = Math.hypot(dx, dy);
-    return { c, h, beam: [Math.atan2(dy, dx), 0.8 * Math.hypot(edge.x - c.x, edge.y - c.y) / Math.max(h, 45), h, 1] };
+    // a star on the front face shines toward the viewer; the further round the side it sits, the more its beam shows
+    const side = Math.abs(b.x + b.width / 2 - 340) / style.body.half(b.y + b.height / 2), w = Math.min(1, Math.max(0, (side - 0.3) / 0.45));
+    return { c, h, w, beam: [Math.atan2(dy, dx), 0.8 * Math.hypot(edge.x - c.x, edge.y - c.y) / Math.max(h, 45), h, w] };
   });
   if (BEAMDEBUG) {
     const g = $('beamDebug') || document.querySelector('svg').appendChild(el('g', { id: 'beamDebug', stroke: '#7CFF8A', 'stroke-width': 0.6, fill: '#FF5C8A' }));
-    g.replaceChildren(el('circle', { cx: f.x, cy: f.y, r: 2.5, fill: '#FFFFFF' }), ...stars.flatMap(({ c, h }) => [
-      el('line', { x1: f.x, y1: f.y, x2: f.x + (c.x - f.x) / h * 400, y2: f.y + (c.y - f.y) / h * 400 }), el('circle', { cx: c.x, cy: c.y, r: 1.6, stroke: 'none' })]));
+    g.replaceChildren(el('circle', { cx: f.x, cy: f.y, r: 2.5, fill: '#FFFFFF' }), ...stars.flatMap(({ c, h, w }) => [
+      el('line', { x1: f.x, y1: f.y, x2: f.x + (c.x - f.x) / h * 400, y2: f.y + (c.y - f.y) / h * 400, opacity: 0.15 + 0.85 * w }), el('circle', { cx: c.x, cy: c.y, r: 1.6, stroke: 'none' })]));
   }
   return { o: [f.x, f.y], beams: stars.map(s => s.beam) };
 }
