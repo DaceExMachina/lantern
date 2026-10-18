@@ -27,11 +27,13 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
-uniform vec4 uSpot[${SPOTS_MAX}]; uniform int uSpots;
+uniform vec4 uSpot[${SPOTS_MAX}]; uniform int uSpots, uSpotMode;
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
-const float BRASS = 0.5, SPOT = 0.8; // a pierced lantern: the glow left round it, and how bright its spots of light are
+// a pierced lantern: the glow left between its beams and how much brighter they are; or, thrown as spots, the glow left
+// round it and how bright the spots are
+const float SHADE = 0.8, BEAM = 0.25, BRASS = 0.5, SPOT = 0.8;
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
@@ -65,20 +67,27 @@ void main() {
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
   float open = 1.0 - CAPS * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope);
-  // A pierced brass lantern holds most of its glow back and throws spots of light through its holes onto everything
-  // round it, each a star or a round spot (centre, size and brightness, negative for a star), soft-edged and turning
-  // with the sway. The further a spot lands, the bigger, softer and fainter it is (that's worked out in frame.js).
+  // A pierced brass lantern's light comes out through its star holes. As beams (the default): each one starts at its star
+  // on the lantern and heads out from the flame through it (direction, half-width, the star's distance and strength),
+  // soft-edged, turning with the sway, only a little brighter than the dimmed glow between them. As spots (?spots): each
+  // hole throws a soft star or round spot onto everything round it (centre, size, brightness, negative for a star).
   float spot = 0.0;
   if (uSpots > 0) {
     vec2 sq = lq / uLightScale;
+    float th = atan(sq.y, sq.x), r = length(sq), beam = 0.0;
     for (int i = 0; i < ${SPOTS_MAX}; i++) {
       if (i >= uSpots) break;
       vec4 s = uSpot[i];
-      vec2 d = sq - s.xy, a = abs(d);
-      float k = s.w < 0.0 ? min(max(a.x, a.y), max(abs(d.x + d.y), abs(d.x - d.y)) * 0.7071) : length(d); // two squares make an eight-point star
-      spot = max(spot, abs(s.w) * smoothstep(s.z, s.z * 0.5, k));
+      if (uSpotMode == 0) {
+        float d = abs(mod(th - s.x + 3.1415927, 6.2831853) - 3.1415927);
+        beam = max(beam, s.w * smoothstep(s.y * 1.8, s.y * 0.3, d) * smoothstep(s.z, s.z + 20.0, r));
+      } else {
+        vec2 d = sq - s.xy, a = abs(d);
+        float k = s.w < 0.0 ? min(max(a.x, a.y), max(abs(d.x + d.y), abs(d.x - d.y)) * 0.7071) : length(d); // two squares make an eight-point star
+        spot = max(spot, abs(s.w) * smoothstep(s.z, s.z * 0.5, k));
+      }
     }
-    open *= BRASS;
+    open *= uSpotMode == 0 ? mix(SHADE, 1.0 + BEAM, beam) : BRASS;
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
@@ -153,7 +162,7 @@ function drawBackground(v) {
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uAirA, v.airA);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
-  gl.uniform1i(u.uSpots, Math.min(v.spots.length, SPOTS_MAX)); if (v.spots.length) gl.uniform4fv(u['uSpot[0]'], v.spots.slice(0, SPOTS_MAX).flat());
+  gl.uniform1i(u.uSpots, Math.min(v.spots.length, SPOTS_MAX)); gl.uniform1i(u.uSpotMode, v.spotMode); if (v.spots.length) gl.uniform4fv(u['uSpot[0]'], v.spots.slice(0, SPOTS_MAX).flat());
   if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
