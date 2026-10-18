@@ -22,6 +22,7 @@ const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions, agent
 // How much of the flame's light reaches a point (1 = all of it): moths' shadows, the caps' fans and a pierced lantern's bands. Shared by the
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.
 const LIGHT = `
+uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lantern's solid bands: each one's slope from the flame, and its spread
@@ -100,20 +101,22 @@ void main() {
     float x = clamp(length(p - uLightC) / uLightScale / 700.0, 0.0, 1.0);
     col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit);
   }
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(mix(col, vec3(0.8, 0.1, 0.1), uDebug * 0.6 * (1.0 - lit)), 1.0);
 }`);
 // dust: soft points, positions worked out in JS each frame. The near specks catch the light: in a shadow they fade
 // out (far more steeply than the room dims, so a moth's shadow or a cap's fan reads as a gap in the dust)
+const DUST_DEBUG = new URLSearchParams(location.search).has('dustdebug') ? 1 : 0;
 const CATCH = 6; // how steeply: full light keeps a speck, the paler shadows (0.7 of the light) leave about a tenth
 const DUST = program(`
-attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uCatch; varying float vA;
+attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uCatch; varying float vA, vS, vD;
 ${LIGHT}
 void main() {
   gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
-  gl_PointSize = a.z * 2.0 * uRes.x / uBox.z + 1.0; vA = a.w * (uCatch > 0.0 ? pow(light(a.xy), uCatch) : 1.0);
+  gl_PointSize = a.z * 2.0 * uRes.x / uBox.z + 1.0; vS = uCatch > 0.0 ? pow(light(a.xy), uCatch) : 1.0; vA = a.w * mix(vS, 1.0, uDebug); vD = uDebug;
 }`, `
-precision mediump float; uniform vec3 uCol; varying float vA;
-void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(uCol, vA * smoothstep(1.0, 0.6, d)); }`);
+precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
+// ?dustdebug: a speck the shadows hold back shows red at full strength instead of fading
+void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(mix(uCol, vec3(1.0, 0.15, 0.1), vD * (1.0 - vS)), vA * smoothstep(1.0, 0.6, d)); }`);
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 const dustBuf = gl.createBuffer(), dustData = new Float32Array(60 * 4);
@@ -144,6 +147,7 @@ function remoteLight() {
 
 // the light term's inputs, set on each program that uses LIGHT
 function setLight(u, v) {
+  gl.uniform1f(u.uDebug, DUST_DEBUG);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uLightR, v.lightR);
   gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);

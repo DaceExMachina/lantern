@@ -97,7 +97,7 @@ function frame(t) {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18;
     dustData.set([gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
-      (0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))], i * 4);
+      (0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (DUST_DEBUG || 0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))], i * 4); // no twinkle with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
