@@ -121,7 +121,7 @@ function playFlash(id) {
   };
   // One frame of the hold: the swirl carries the firefly on, then its place, wander and offset make where it is.
   // Now and then one on the rim strays a spacing or two past the outline (a few, three to five) and comes back, so the
-  // edge looks like a living swarm, not a drawn pill: each about once in 25 to 45 seconds, so only a few are out at once.
+  // edge looks like a living swarm, not a drawn pill: each about once in 12 to 23 seconds, so only a handful are out at once.
   const flow = (f, t) => {
     const b = holdAt(f, t);
     f.off = carry(b, f.off, f.flowT - gather, Math.min(50, t - f.flowT)); f.flowT = t;
@@ -145,7 +145,7 @@ function playFlash(id) {
       flies.push({ rr, s0: at + i * loop / n, v: way * swarm, col, ph: rand() * 6.28,
         ax: wander(), bx: wander(), ay: wander(), by: wander(), every: 2000 + rand() * 3000, dartAt: rand() * 5000, dir: rand() * 6.28,
         land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2,
-        strayBy: ring || !jostle ? 0 : (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: 25000 + rand() * 20000, strayAt: rand() * 25000 });
+        strayBy: ring || !jostle ? 0 : (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: 12500 + rand() * 10000, strayAt: rand() * 12500 });
     }
   }
   // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
