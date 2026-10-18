@@ -9,6 +9,7 @@ const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as t
 // Two speeds, in screen px per ms as they look in a 1024x768 window (the scene's scale there is about 1.2), scaling with
 // the scene: flying in and off (on average along a path), and swarming in the pill. ?flySpeed=0.4&swarmSpeed=0.05 tries others.
 const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') || 0.03;
+const SURGE = Q.get('surge') === '1'; // ?surge=1: the halos brighten to their cores' once the pill forms (off for now)
 const FLASH_COLOUR = FLY.draft; // the warm amber of a draft PR's firefly
 const flashQueue = [];
 let flashing = false;
@@ -111,9 +112,10 @@ function playFlash(id) {
     f.c1 = still ? f.spot : toward(f.from, bend(f.from, f.spot, rand), f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
-  // Once everyone has landed they brighten together: each halo eases up to its core's colour and opacity, so the pill
-  // glows as one light, then settles back a little through the hold, and dims to normal as each firefly leaves.
-  const surgeAt = t => t < settle ? 0 : ease((t - settle) / 500) - 0.25 * ease((t - settle - 500) / 1500);
+  // With ?surge=1, once everyone has landed they brighten together: each halo eases up to its core's colour and
+  // opacity, so the pill glows as one light, then settles back a little through the hold, and dims to normal as each
+  // firefly leaves.
+  const surgeAt = t => !SURGE || t < settle ? 0 : ease((t - settle) / 500) - 0.25 * ease((t - settle - 500) / 1500);
   const surgeFill = new Map(); // halo colour by surge, in twentieths
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now

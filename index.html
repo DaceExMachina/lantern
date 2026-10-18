@@ -110,7 +110,7 @@
   /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+  #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
     display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 12px 30px 13px;
     border-radius: 99px; text-align: center; color: #2B2440; opacity: 0; }
   #flash .pill b { font-size: 14px; font-weight: 700; }
