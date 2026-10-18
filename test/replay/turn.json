@@ -17,7 +17,6 @@
           "started": "<time>",
           "state": "idle",
           "subagents": [],
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
@@ -62,7 +61,6 @@
           "subagents": [],
           "tasks": [],
           "ticks": 1,
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
@@ -119,7 +117,6 @@
           "subagents": [],
           "tasks": [],
           "ticks": 1,
-          "unconfirmed": false,
           "waitingSince": "<time>"
         }
       ]

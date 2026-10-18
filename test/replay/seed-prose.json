@@ -23,7 +23,6 @@
           "started": "<time>",
           "state": "waiting",
           "subagents": [],
-          "unconfirmed": true,
           "waitingSince": "<time>"
         }
       ]

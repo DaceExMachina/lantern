@@ -61,7 +61,6 @@
           "state": "waiting",
           "subagents": [],
           "tasks": [],
-          "unconfirmed": false,
           "waitingSince": "<time>"
         }
       ]

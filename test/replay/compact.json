@@ -47,7 +47,6 @@
           "state": "working",
           "subagents": [],
           "tasks": [],
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
@@ -84,7 +83,6 @@
           "state": "idle",
           "subagents": [],
           "tasks": [],
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
@@ -147,7 +145,6 @@
           "state": "idle",
           "subagents": [],
           "tasks": [],
-          "unconfirmed": false,
           "waitingSince": 0
         },
         {
@@ -169,7 +166,6 @@
           "state": "waiting",
           "subagents": [],
           "tasks": [],
-          "unconfirmed": false,
           "waitingSince": "<time>"
         }
       ]

@@ -47,7 +47,6 @@
           "state": "working",
           "subagents": [],
           "tasks": [],
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
