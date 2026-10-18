@@ -108,6 +108,17 @@
   .screensaver footer, .screensaver #card { display: none; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
   .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
+  /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
+  #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+  #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
+    display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 12px 30px 13px;
+    border-radius: 99px; text-align: center; color: #2B2440; opacity: 0; font-family: Georgia, 'Times New Roman', serif; } /* the book pages' face */
+  #flash .pill b { font-size: 16.8px; font-weight: 700; }
+  #flash .pill span { font-size: 14.4px; font-weight: 700; color: #3A2E52; }
+  #flash .pill:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 4px; }
+  .panel #flash .pill { top: 12px; padding: 8px 20px; max-width: calc(100vw - 24px); }
+  .panel #flash .pill b { font-size: 14.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
   label.unavailable { opacity: .4; cursor: default; }
   label.unavailable input { cursor: default; }
@@ -210,6 +221,7 @@
 <script defer src="page/notify.js"></script>
 <script defer src="page/stats.js"></script>
 <script defer src="page/recap.js"></script>
+<script defer src="page/flash.js"></script>
 <script defer src="page/main.js"></script>
 </body>
 </html>
