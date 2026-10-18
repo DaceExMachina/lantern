@@ -353,6 +353,8 @@ function frame(t) {
     glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters, sway: rad,
+    // each hole's direction and half-width as the flame sees it, worked out once per lantern
+    beams: style.beams ??= holesIn(style.back).map(([x, y, r]) => { const dx = x - style.light[0], dy = y - style.light[1]; return [Math.atan2(dy, dx), 0.6 * r / Math.max(Math.hypot(dx, dy), 45)]; }), // ponytail: holes over the flame shine at the viewer, so just cap their width
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
   });
   placeCard();
