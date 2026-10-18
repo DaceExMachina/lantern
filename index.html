@@ -37,8 +37,9 @@
   #menu > label { display: flex; padding: 5px 0; }
   #menu .time { justify-content: space-between; }
   #menu label:has(#quietFromOn:not(:checked)) #quietFrom { opacity: .45; }
-  #menu select { align-self: stretch; margin: 5px 0; }
-  #menu #gh, #menu #help { margin-top: 5px; }
+  #menu select { flex: 1; }
+  #menu > label:has(#style) { padding-bottom: 10px; } /* down to the GitHub section's line */
+  #menu #help { margin-top: 5px; }
   #menu .ribbon { display: flex; align-items: center; gap: 6px; }
   #menu .ribbon.unavailable { opacity: .4; }
   #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
@@ -225,7 +226,7 @@
     <label class="time"><span><input type="checkbox" id="quietFromOn"> quiet from</span><input type="time" id="quietFrom" value="22:00"></label>
     <label class="time">quiet until <input type="time" id="quietEnd" value="08:00"></label>
     <label class="time">day starts at <input type="time" id="dayStart" value="08:00"></label>
-    <select id="style" aria-label="Lantern style"></select>
+    <label><select id="style" aria-label="Lantern style"></select></label>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
       <summary>What's what?</summary>
