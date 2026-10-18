@@ -31,9 +31,14 @@ function frame(t) {
 
   // sway on the string; anything attached to the lantern goes through rot()
   // swing from the top of the window, with the angle scaled so the lantern moves sideways as much as it did hung at y=20
-  const top = VIEW.top, sway = (Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4) * 310 / (330 - top), rad = sway * Math.PI / 180;
-  const rot = (px, py) => [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
-  put($('lantern'), 'transform', `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
+  const top = VIEW.top, reach = 310 / (330 - top), sway = (Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4) * reach, rad = sway * Math.PI / 180;
+  // The 3D chōchin swings as a real pendulum: its path is an ellipse, so as it sways it also tips toward and away from
+  // you, and it turns a little on its string. The flat lanterns only sway.
+  const in3d = lantern3dOn(), deg = Math.PI / 180;
+  setPose(in3d ? 7 * Math.sin(s * 0.23) * deg : 0, in3d ? (Math.cos(s * 0.7) * 1.6 + Math.cos(s * 1.9) * 0.4) * 2 * reach * deg : 0, rad, top);
+  /** @type {(...p: number[]) => [number, number]} */
+  const rot = (...p) => place(p); // x, y and, for a point off the centre plane, z
+  put($('lantern'), 'transform', in3d ? planeMatrix() : `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
@@ -73,6 +78,7 @@ function frame(t) {
   // the paper takes on the flame's colour, more so the brighter it burns
   put($('paperTint'), 'fill', pal('paper'));
   put($('paperTint'), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
+  if (in3d) drawLantern3d({ paper: pal('paper'), core: pal('core'), size, bright: (0.45 + 0.55 * size) * flick * pulse, cool });
   const [gx, gy] = rot(...style.light);
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs
@@ -121,7 +127,9 @@ function frame(t) {
         m.perch = findPerch(m, m.rand);
         m.hops = 0;
       }
-      [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
+      // on the 3D lantern the spot is a point on its round surface, so it tips and turns with it
+      const [px, py] = m.perch, pz = in3d ? Math.sqrt(Math.max(0, style.body.half(py) ** 2 - (px - 340) ** 2)) : 0;
+      [tx, ty] = rot(px, py, pz); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
       // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
       // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
       // Snoozed ones stay still.
@@ -229,12 +237,11 @@ function frame(t) {
     // Landed, the moth sits on the paper in 3D: belly against it, its body pointing up along the surface (turned a
     // little by its own jitter), its wings standing out along the surface's normal, all swaying with the lantern.
     // In between, the frame turns smoothly from the flying one to the landed one.
-    const n0 = m.perch?.[2] || [0, 0, 1], j = (m.landJitter || 0) * Math.PI / 180, sw = sway * Math.PI / 180;
+    const n0 = m.perch?.[2] || [0, 0, 1], j = (m.landJitter || 0) * Math.PI / 180;
     const t0 = unit([n0[1] * n0[0], n0[1] * n0[1] - 1, n0[1] * n0[2]]); // "up" along the surface
     const tj = unit(lerp3(t0, cross(n0, t0), Math.tan(j))); // turned by the jitter, around the normal
-    const swayed = v => [v[0] * Math.cos(sw) - v[1] * Math.sin(sw), v[0] * Math.sin(sw) + v[1] * Math.cos(sw), v[2]];
     const fly = flightFrame(m.roll), f = m.fold;
-    const T = unit(lerp3(fly.T, swayed(tj), f)), n1 = lerp3(fly.N, swayed(n0), f), N = unit(lerp3(n1, T, -dot(n1, T)));
+    const T = unit(lerp3(fly.T, turn(tj), f)), n1 = lerp3(fly.N, turn(n0), f), N = unit(lerp3(n1, T, -dot(n1, T)));
     // At rest the folded wings sit nearly together, and a breath opens and closes them once, very slowly. In flight
     // each wing's angle comes from its lift.
     m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5);

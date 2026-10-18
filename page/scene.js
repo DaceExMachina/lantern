@@ -72,5 +72,6 @@ function fitView() {
   canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   canvas.style.borderRadius = `${16 * width / w}px`; // the scene's rounded corners (none in the screensaver)
   VIEW.top = y;
-  $('hang')?.setAttribute('d', `M340 ${y - 2}V22`); // the string runs from the top of the window to where each lantern's own string starts
+  $('hang')?.setAttribute('d', `M340 ${y - 2}V22`);
+  fitLantern3d(width); // the string runs from the top of the window to where each lantern's own string starts
 }

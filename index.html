@@ -165,7 +165,7 @@
 </style>
 </head>
 <body>
-<div id="scene"><canvas id="bg"></canvas>
+<div id="scene"><canvas id="bg"></canvas><canvas id="lantern3d" style="visibility: hidden"></canvas>
 <svg viewBox="40 20 600 600" role="img" aria-label="Lantern: live status of Claude Code sessions">
   <defs>
     <radialGradient id="paperGrad" cx="340" cy="350" r="140" gradientUnits="userSpaceOnUse">
@@ -182,6 +182,7 @@
     <filter id="behindPaper" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.8"/></filter>
     <clipPath id="bodyClip"><path d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z"/></clipPath>
     <filter id="soft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
+    <clipPath id="offLantern"><path id="offLanternPath" clip-rule="evenodd"/></clipPath><!-- everywhere but the 3D lantern -->
   </defs>
   <g id="stale"></g>
   <g id="staleCloud" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="staleCloudCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
@@ -226,6 +227,7 @@
 </footer>
 <script defer src="page/scene.js"></script>
 <script defer src="page/lanterns.js"></script>
+<script defer src="page/chochin.js"></script>
 <script defer src="page/state.js"></script>
 <script defer src="page/background.js"></script>
 <script defer src="page/github.js"></script>
