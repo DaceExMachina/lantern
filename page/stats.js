@@ -4,7 +4,7 @@
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // The middle and bottom strips use the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working
 // in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour).
-const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: '#3E3752' };
+const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
 const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', mark: '#D8CCE6' };
 
 const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -64,32 +64,46 @@ function ribbon(r, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
 }
 
-// Hovering (or touching) the day ribbon: a line follows the pointer and the legend's values show that moment; leaving
-// puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change.
-let ribbonTap = new AbortController();
-function followRibbon(el, r, day) {
+// A day's ribbon with its axis and legend, for the stats panel and the recap. `end` labels the right edge.
+const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
+  <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
+  <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span style="grid-area:${k}"><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
+    <span style="grid-area:flying"><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
+    <span style="grid-area:lamp"><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div></div>`;
+
+// Hovering (or touching) a dayRibbon: a line follows the pointer and the legend's values show that moment; leaving
+// puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change. It returns
+// `moment(t)`, which shows time t (or the totals, for null) as a hover would, and `onMoment` hears each one: the recap
+// moves its constellation's line and lights the star that started then, and drives the ribbon from the constellation.
+const ribbonTaps = new WeakMap(); // each popover's tap-elsewhere listener, dropped when it draws a new ribbon
+function followRibbon(box, r, day, onMoment = t => {}) {
+  const el = box.querySelector('.ribbon');
   const show = s => {
     const t = s && clock(s.a), b = s && states(s), out = s
       ? { at: t, lamp: lampOf(s) || 'off', flying: s.flying == null ? '–' : `${Math.round(100 * s.flying)}%`,
           ...Object.fromEntries(Object.entries(b).map(([k, n]) => [k, String(Math.round(n))])) }
       : { at: '', lamp: day.warmLantern == null ? '–' : `${day.warmLantern}% warm`, flying: day.warmMoths == null ? '–' : `${day.warmMoths}%`,
           ...Object.fromEntries(Object.keys(states(r.slices[0])).map(k => [k, ago(r.slices.reduce((ms, s) => ms + states(s)[k] * (s.b - s.a), 0))])) };
-    for (const [k, v] of Object.entries(out)) for (const slot of el.parentNode.querySelectorAll(`[data-v="${k}"]`)) slot.textContent = v;
+    for (const [k, v] of Object.entries(out)) for (const slot of box.querySelectorAll(`[data-v="${k}"]`)) slot.textContent = v;
   };
   const line = el.querySelector('.cursor');
-  const move = e => {
-    const box = el.getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)), t = r.from + f * (r.to - r.from);
-    line.style.left = `${100 * f}%`; line.hidden = false;
-    show(r.slices.find(s => t < s.b) || r.slices[r.slices.length - 1]);
+  const moment = t => {
+    line.hidden = t == null;
+    if (t != null) line.style.left = `${(t - r.from) / (r.to - r.from) * 100}%`;
+    show(t == null ? null : r.slices.find(s => t < s.b) || r.slices[r.slices.length - 1]);
+    onMoment(t);
   };
-  const leave = () => { line.hidden = true; show(null); };
+  const move = e => { const b = el.getBoundingClientRect(); moment(r.from + Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)) * (r.to - r.from)); };
+  const leave = () => moment(null);
   el.addEventListener('pointerdown', move);
   el.addEventListener('pointermove', move);
   el.addEventListener('pointerleave', e => e.pointerType === 'mouse' && leave());
   // a touch keeps its moment until the next tap elsewhere (the panel redraws every minute: drop the last ribbon's listener)
-  ribbonTap.abort(); ribbonTap = new AbortController();
-  el.closest('[popover]').addEventListener('pointerdown', e => !el.contains(e.target) && leave(), { signal: ribbonTap.signal });
+  const root = el.closest('[popover]'), tap = new AbortController();
+  ribbonTaps.get(root)?.abort(); ribbonTaps.set(root, tap);
+  root.addEventListener('pointerdown', e => !el.contains(e.target) && leave(), { signal: tap.signal });
   show(null);
+  return moment;
 }
 
 // Badges the server gives from the event log (Stats.swift decides when). They're not sorted into good or bad: what
@@ -183,13 +197,9 @@ function renderStats(j) {
   $('statsBody').innerHTML = `
     <div class="headline">${today.warmMoths == null ? '<span>No moths yet today. Your first session starts the day.</span>'
       : `<b>${today.warmMoths}%</b><span>of moth time today was warm: flying, not waiting on you</span>`}</div>
-    ${r ? `<div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
-      <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${today.end >= Date.now() - MIN ? 'now' : clock(r.to)}</span></div>
-      <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span style="grid-area:${k}"><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
-        <span style="grid-area:flying"><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
-        <span style="grid-area:lamp"><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div>` : ''}
+    ${r ? dayRibbon(r, today.end >= Date.now() - MIN ? 'now' : clock(r.to)) : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
-  if (r) followRibbon($('statsBody').querySelector('.ribbon'), r, today);
+  if (r) followRibbon($('statsBody').querySelector('.dayRibbon'), r, today);
   tally = j.tally;
   const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
   $('statsWeek').innerHTML = `

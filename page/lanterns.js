@@ -263,6 +263,9 @@ const COOL = { halo: '#8C6CFF', outer: '#7A63F0', mid: '#9FB6FF', core: '#F0F2FF
   paper: '#A99BFF', thread: '#B6A6F5', rings: ['#2E2E58', '#3A3A6E', '#4E4A86'] };
 let pulseIds = 0;
 const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // singed: the turn ended in an API error
+// An idle session's moth resting on the lantern: a touch of the calling violet (frame.js eases it 0.15 of the way), then
+// backlit against the paper. Mostly grey: mix(mix(MOTH_IDLE, MOTH_CALL, 0.15), '#2B2440', 0.45).
+const MOTH_RESTING = '#8B7FA2';
 
 // A faint tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ.
 const hash = str => [...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);

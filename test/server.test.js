@@ -259,11 +259,12 @@ test('stats: warm moths, warm lantern and response times', async t => {
     INSERT INTO spans (kind, session, began, ended, data) VALUES
       ('server', NULL, ${at(10)}, ${at(20)}, '{}'),
       ('violet', NULL, ${at(12)}, ${at(13)}, '{}'), ('violet', NULL, ${at(15)}, ${at(16)}, '{}'),
-      ('alive', 'a', ${at(10)}, ${at(14)}, '{}'), ('alive', 'b', ${at(14)}, ${at(18)}, '{}'),
+      ('alive', 'a', ${at(10)}, ${at(14)}, '{"title":"Fix it","project":"lantern"}'), ('alive', 'b', ${at(14)}, ${at(18)}, '{}'),
       ('waiting', 'a', ${at(11)}, ${at(11) + 10 * min}, '{"how":"answered"}'),
       ('waiting', 'a', ${at(12)}, ${at(12) + 30 * min}, '{"how":"answered"}'),
       ('waiting', 'b', ${at(15)}, ${at(15) + 50 * min}, '{"how":"answered"}'),
-      ('waiting', 'b', ${at(17, 30)}, ${at(18)}, '{"how":"ended"}');`;
+      ('waiting', 'b', ${at(17, 30)}, ${at(18)}, '{"how":"ended"}');
+    INSERT INTO events (time, kind, session, data) VALUES (${at(13)}, 'pr', 'a', '{"url":"https://github.com/o/r/pull/7","change":"merged","from":"ready"}');`;
   execFileSync('sqlite3', [db], { input: sql });
   const base = await serve(t, { 'data/stats.sqlite': fs.readFileSync(db) });
   const stats = await (await fetch(base + '/stats')).json();
@@ -271,6 +272,9 @@ test('stats: warm moths, warm lantern and response times', async t => {
   assert.deepStrictEqual(
     { warmMoths: y.warmMoths, warmLantern: y.warmLantern, medianWait: y.medianWait, slowWait: y.slowWait, waits: y.waits, answered: y.answered },
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });
+  // the recap's session cards: each session's title and project, and what its PRs did
+  assert.deepStrictEqual(stats.spans.find(s => s[0] === 'alive' && s[4] === 'a').slice(4), ['a', 'Fix it', 'lantern']);
+  assert.deepStrictEqual(stats.prs, [[at(13), 'a', 'https://github.com/o/r/pull/7', 'merged', null, null]]);
 });
 
 // A snooze logs a 'snoozed' span for the part of the wait it covered: from the snooze to the end of the wait. The server
