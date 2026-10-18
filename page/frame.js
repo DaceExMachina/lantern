@@ -167,14 +167,19 @@ function swingLantern(elapsed, s) {
 
 // flame: layered tongues that lean and stretch independently, ember-small when idle
 function drawFlame(s, { size, pulse }) {
-  const layers = [['fHalo', 46, 118, 6, 1], ['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
+  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
   for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
     const n = $(id);
     put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
     put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
   put($('fBase'), 'fill', pal('base'));
-  put($('flame'), 'transform', `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
+  const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
+  put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
+  // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
+  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-wobble(s, 1) * 6 / (118 * hh)) * 180 / Math.PI;
+  put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
+  put($('fHalo'), 'color', pal('halo'));
   put($('flame'), 'opacity', pulse.toFixed(3));
 }
 
