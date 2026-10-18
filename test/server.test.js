@@ -30,7 +30,8 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
     fs.writeFileSync(path.join(home, file), text);
   }
   prep(home);
-  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'), ...extra };
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
+    TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
   const child = spawn(BIN, [], { env, stdio: 'ignore' });
   t.after(() => child.kill());
   const base = `http://127.0.0.1:${port}`;
@@ -198,7 +199,7 @@ test('stats: warm moths, warm lantern and response times', async t => {
   execFileSync('sqlite3', [db], { input: sql });
   const base = await serve(t, { 'data/stats.sqlite': fs.readFileSync(db) });
   const stats = await (await fetch(base + '/stats')).json();
-  const y = stats.days.find(d => d.start === day.getTime());
+  const y = stats.days.at(-2); // yesterday: days run oldest first and end with today
   assert.deepStrictEqual(
     { warmMoths: y.warmMoths, warmLantern: y.warmLantern, medianWait: y.medianWait, slowWait: y.slowWait, waits: y.waits, answered: y.answered },
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });

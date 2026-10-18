@@ -1,5 +1,11 @@
-// Demo every lantern state without real sessions: node fake.js
-const PORT = Number(process.env.LANTERN_PORT) || 7717;
+// Demo every lantern state without real sessions, on a throwaway server (7718 unless LANTERN_PORT says otherwise).
+// 7717 is the real app, where fake sessions would land in your stats for good, so that needs --live.
+const PORT = Number(process.env.LANTERN_PORT) || 7718;
+const START = (port = PORT) => `open -n -a Lantern --env LANTERN_PORT=${port} --env LANTERN_DATA="$(mktemp -d)"`;
+if (PORT === 7717 && !process.argv.includes('--live')) {
+  console.error(`:7717 is your real lantern; fake sessions would stay in its stats. Pass --live to do it anyway, or start a throwaway one:\n  ${START(7718)}`);
+  process.exit(1);
+}
 const send = (session_id, hook_event_name, extra = {}) =>
   fetch(`http://127.0.0.1:${PORT}/event`, { method: 'POST', body: JSON.stringify({ session_id, hook_event_name, cwd: `/Users/demo/${session_id}`, ...extra }) });
 const wait = s => new Promise(r => setTimeout(r, s * 1000));
@@ -25,7 +31,7 @@ const steps = [
 (async () => {
   for (const [label, secs, fn] of steps) {
     console.log(label);
-    try { await fn?.(); } catch { console.error(`server not running on :${PORT}? start it with: node server.js`); process.exit(1); }
+    try { await fn?.(); } catch { console.error(`no lantern on :${PORT}? start a throwaway one with:\n  ${START()}`); process.exit(1); }
     await wait(secs);
   }
 })();
