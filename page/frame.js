@@ -131,19 +131,18 @@ function frame(t) {
         m.hops = 0;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // Every 8-16s a waiting moth fidgets. Mostly it breathes: its wings open over 3s, stay open a moment, and close
-      // over 3s. Now and then it fans them quickly or flutters them instead; after 15 minutes it's restless and may
-      // also hop off the paper. A fan or hop takes 1.6s, a flutter 3s, a breath 8s.
+      // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
+      // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
       // Snoozed ones stay still.
       const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
-      const weights = waited >= 15 ? { breathe: 0.5, hop: 0.25, fan: 0.1, flutter: 0.15 } : { breathe: 0.7, fan: 0.15, flutter: 0.15 };
+      const weights = waited >= 15 ? { breathe: 0.65, hop: 0.35 } : { breathe: 1 };
       m.fidget = '';
       if (m.session.snoozed) m.fidgetAt = 0;
       else {
         if (!m.fidgetAt) { m.fidgetAt = s + 3 + Math.random() * 8; m.dice = Math.random(); }
         let kind = 'breathe', acc = 0;
         for (const [k, w] of Object.entries(weights)) if (m.dice < (acc += w)) { kind = k; break; }
-        const dur = { flutter: 3, breathe: 8 }[kind] ?? 1.6, into = m.into = s - m.fidgetAt;
+        const dur = kind === 'breathe' ? 8 : 1.6, into = m.into = s - m.fidgetAt;
         if (into > dur) { m.fidgetAt = s + 8 + Math.random() * 8; m.dice = Math.random(); }
         else if (into > 0) {
           m.fidget = kind;
@@ -222,7 +221,7 @@ function frame(t) {
     // and the two wings are a touch out of step, so no two beats look exactly alike.
     // keep flapping all the way in; only a moth that has reached its spot slows down and folds
     const perched = needsMe && Math.hypot(tx - m.x, ty - m.y) < ((m.fold || 0) > 0.5 ? 10 : 4); // slack once folded, so the sway can't make it flicker
-    const resting = perched && (!m.fidget || m.fidget === 'flutter' || m.fidget === 'breathe'); // perched and not fanning or hopping
+    const resting = perched && m.fidget !== 'hop'; // perched and not hopping
     m.beat = (m.beat ?? m.phase) + (resting ? 1.5 : flap) * dt; // accumulated, so speed changes never jump the wings
     const beat = m.beat;
     const height = (resting ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
@@ -244,15 +243,14 @@ function frame(t) {
     const swayed = v => [v[0] * Math.cos(sw) - v[1] * Math.sin(sw), v[0] * Math.sin(sw) + v[1] * Math.cos(sw), v[2]];
     const fly = flightFrame(m.roll), f = m.fold;
     const T = unit(lerp3(fly.T, swayed(tj), f)), n1 = lerp3(fly.N, swayed(n0), f), N = unit(lerp3(n1, T, -dot(n1, T)));
-    // At rest the folded wings sit nearly together; a flutter opens and closes them three times, a breath once very
-    // slowly, and a fan swings them open and shut. In flight each wing's angle comes from its lift.
+    // At rest the folded wings sit nearly together, and a breath opens and closes them once, very slowly. In flight
+    // each wing's angle comes from its lift.
     m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5);
-    const flutter = m.fidget === 'flutter' ? Math.sin(Math.PI * m.into / 3) * (0.5 - 0.5 * Math.cos(2 * Math.PI * m.into)) : 0;
     // one slow breath: open over 3s, hold for 2s, close over 3s, eased at both ends
     const smooth = t => t * t * (3 - 2 * t), i = m.into || 0;
     const breath = m.fidget === 'breathe' ? (i < 3 ? smooth(i / 3) : i < 5 ? 1 : smooth(Math.max(0, (8 - i) / 3))) : 0;
     // at rest the wings sit nearly together
-    const landOpen = m.fidget === 'fan' ? 0.3 + 0.8 * (0.5 + 0.5 * Math.sin(beat)) : 0.05 + 0.05 * m.open + 0.9 * flutter + 0.75 * breath;
+    const landOpen = 0.05 + 0.05 * m.open + 0.75 * breath;
     const openAt = (lag, extra) => (Math.PI / 2 - liftAt(lag)) * (1 - f) + (landOpen + extra) * f;
     const upPts = wing3d(WING_UP, T, N, openAt(0, 0), sweep * (1 - f)), sidePts = wing3d(WING_SIDE, T, N, openAt(0.18, 0.06), sweep * (1 - f));
     put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));

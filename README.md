@@ -16,7 +16,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **A landed session's card says what it needs from you**: its "You:" line (a `**You:**` line from a status footer if your sessions write one, otherwise the last paragraph of its final message), the links it mentioned (clickable), how many questions it asked, and one line per PR with its state and title. Clicking the card opens the session.
 - **Forgot what something means?** "What's what?" at the bottom of the settings menu explains it all.
 - **Click a moth** to bring that session to the front: its terminal tab, or the session itself in the Claude desktop app (see [Works with](#works-with)). Clicking "N need you" in the footer opens whichever session has waited longest, then the next.
-- **Moths grow restless.** A landed moth now and then fans its wings or slowly flutters them while it waits; after 15 minutes it grows restless, fidgets more, and sometimes hops off the paper.
+- **Moths grow restless.** A landed moth now and then takes a slow breath while it waits, opening its wings and closing them again; after 15 minutes it grows restless and sometimes hops off the paper.
 - **The Lantern app's Dock icon shows how many sessions need you.**
 - **Threads pulse** with a little glow each time a session or one of its agents runs a tool.
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
