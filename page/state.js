@@ -5,14 +5,16 @@ const moths = new Map(); // key -> moth
 let seenWaiting = new Set(), nextUp = 0;
 // ---- state from server -------------------------------------------------------
 let raw = [], quietUntil = 0, reviews = [];
-// from settings.json: when quiet hours end ("HH:MM"), and which agent types count as supervisors (medium moths)
-let quietEnd = '08:00', supervisor = /supervisor|orchestrat/i;
+// from settings.json: when quiet hours end and the day rollover, when a stats day starts ("HH:MM"), and which agent
+// types count as supervisors (medium moths)
+let quietEnd = '08:00', quietEndOn = true, dayStart = '00:00', supervisor = /supervisor|orchestrat/i;
 const quietEndLabel = () => { const [h, m] = quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();
 // quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
 const quiet = () => quietUntil > Date.now();
+const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
 
 function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
@@ -66,7 +68,7 @@ function sync() {
       };
       st.append(' · ', next);
     }
-    if (snoozed || quiet()) st.append(` · ${snoozed ? `${snoozed} ` : ''}snoozed${quiet() ? ` until ${quietEndLabel()}` : ''}`);
+    if (snoozed || quiet()) st.append(` · ${snoozed ? `${snoozed} ` : ''}snoozed${quiet() && quietUntil < QUIET_FOREVER ? ` until ${quietEndLabel()}` : ''}`);
     if (waiting.length) violetAt = Date.now();
     else if (!quiet() && Date.now() - violetAt >= 60000) {
       const m = Math.floor((Date.now() - violetAt) / 60000), warm = document.createElement('span');

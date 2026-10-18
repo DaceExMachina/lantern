@@ -243,30 +243,43 @@ test('a running session the lantern missed is adopted with its process on the ne
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
-// The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
-// eight hours of sessions with two hours of waits (three answered: 10, 30 and 50 minutes; one that ended unanswered).
-test('stats: warm moths, warm lantern and response times', async t => {
-  const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() - 1);
-  const at = (h, m = 0) => new Date(day).setHours(h, m);
-  const min = 60 * 1000;
-  const db = path.join(tmp, `stats-${process.pid}.sqlite`);
-  const sql = `
+// A stats log (stats.sqlite) at the schema of version 2, holding the given spans ([kind, session, began, ended, data]),
+// then any `more` SQL (events, say).
+function statsLog(spans, more = '') {
+  const db = path.join(tmp, `stats-${process.pid}-${Math.random()}.sqlite`);
+  const rows = spans.map(([kind, session, began, ended, data = {}]) => `('${kind}', ${session ? `'${session}'` : 'NULL'}, ${began}, ${ended}, '${JSON.stringify(data)}')`);
+  execFileSync('sqlite3', [db], { input: `
     CREATE TABLE spans (kind TEXT NOT NULL, session TEXT, began INTEGER NOT NULL, ended INTEGER, data TEXT NOT NULL DEFAULT '{}');
     CREATE TABLE events (time INTEGER NOT NULL, kind TEXT NOT NULL, session TEXT, data TEXT NOT NULL DEFAULT '{}');
     CREATE TABLE gauges (time INTEGER NOT NULL, alive INTEGER, working INTEGER, waiting INTEGER, snoozed INTEGER, fireflies INTEGER, agents INTEGER, strays INTEGER, graveyard INTEGER);
     CREATE TABLE achievements (id TEXT NOT NULL, day TEXT NOT NULL, time INTEGER NOT NULL, data TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (id, day));
     PRAGMA user_version = 2;
-    INSERT INTO spans (kind, session, began, ended, data) VALUES
-      ('server', NULL, ${at(10)}, ${at(20)}, '{}'),
-      ('violet', NULL, ${at(12)}, ${at(13)}, '{}'), ('violet', NULL, ${at(15)}, ${at(16)}, '{}'),
-      ('alive', 'a', ${at(10)}, ${at(14)}, '{"title":"Fix it","project":"lantern"}'), ('alive', 'b', ${at(14)}, ${at(18)}, '{}'),
-      ('waiting', 'a', ${at(11)}, ${at(11) + 10 * min}, '{"how":"answered"}'),
-      ('waiting', 'a', ${at(12)}, ${at(12) + 30 * min}, '{"how":"answered"}'),
-      ('waiting', 'b', ${at(15)}, ${at(15) + 50 * min}, '{"how":"answered"}'),
-      ('waiting', 'b', ${at(17, 30)}, ${at(18)}, '{"how":"ended"}');
-    INSERT INTO events (time, kind, session, data) VALUES (${at(13)}, 'pr', 'a', '{"url":"https://github.com/o/r/pull/7","change":"merged","from":"ready"}');`;
-  execFileSync('sqlite3', [db], { input: sql });
-  const base = await serve(t, { 'data/stats.sqlite': fs.readFileSync(db) });
+    INSERT INTO spans (kind, session, began, ended, data) VALUES ${rows.join(', ')};${more}` });
+  return fs.readFileSync(db);
+}
+// The start of the day before the current one, for days starting at `hour`.
+function yesterdayFrom(hour) {
+  const day = new Date(); day.setHours(hour, 0, 0, 0);
+  if (day > new Date()) day.setDate(day.getDate() - 1); // today's day hasn't started yet: it's still yesterday's
+  day.setDate(day.getDate() - 1);
+  return day;
+}
+
+// The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
+// eight hours of sessions with two hours of waits (three answered: 10, 30 and 50 minutes; one that ended unanswered).
+test('stats: warm moths, warm lantern and response times', async t => {
+  const day = yesterdayFrom(0); // days start at midnight unless settings say otherwise
+  const at = (h, m = 0) => new Date(day).setHours(h, m);
+  const min = 60 * 1000, answered = { how: 'answered' };
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([
+    ['server', null, at(10), at(20)],
+    ['violet', null, at(12), at(13)], ['violet', null, at(15), at(16)],
+    ['alive', 'a', at(10), at(14), { title: 'Fix it', project: 'lantern' }], ['alive', 'b', at(14), at(18)],
+    ['waiting', 'a', at(11), at(11) + 10 * min, answered],
+    ['waiting', 'a', at(12), at(12) + 30 * min, answered],
+    ['waiting', 'b', at(15), at(15) + 50 * min, answered],
+    ['waiting', 'b', at(17, 30), at(18), { how: 'ended' }],
+  ], `INSERT INTO events (time, kind, session, data) VALUES (${at(13)}, 'pr', 'a', '{"url":"https://github.com/o/r/pull/7","change":"merged","from":"ready"}');`) });
   const stats = await (await fetch(base + '/stats')).json();
   const y = stats.days.at(-2); // yesterday: days run oldest first and end with today
   assert.deepStrictEqual(
@@ -275,6 +288,43 @@ test('stats: warm moths, warm lantern and response times', async t => {
   // the recap's session cards: each session's title and project, and what its PRs did
   assert.deepStrictEqual(stats.spans.find(s => s[0] === 'alive' && s[4] === 'a').slice(4), ['a', 'Fix it', 'lantern']);
   assert.deepStrictEqual(stats.prs, [[at(13), 'a', 'https://github.com/o/r/pull/7', 'merged', null, null]]);
+});
+
+// A day runs from one day rollover (settings.dayStart) to the next, so an hour of work just before it lands on the day before.
+test('stats: days start at the day rollover', async t => {
+  const start = +yesterdayFrom(6), hour = 3600000;
+  const base = await serve(t, { 'data/settings.json': '{"dayStart": "06:00"}', 'data/stats.sqlite': statsLog([
+    ['alive', 'late', start - 2 * hour, start - hour], // 4am to 5am: still the day before's
+    ['alive', 'early', start + hour, start + 2 * hour], // 7am to 8am
+  ]) });
+  const { days } = await (await fetch(base + '/stats')).json();
+  assert.deepStrictEqual(days.slice(-3, -1).map(d => [d.start, d.mothMs]), [[start - 24 * hour, hour], [start, hour]]);
+});
+
+// Quiet from turns quiet hours on by itself, until quietEnd, as if the moon were pressed; turned off by hand that night,
+// they stay off.
+const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+test('quiet from turns quiet hours on, and leaves them off once ended by hand', async t => {
+  const base = await serve(t);
+  const hour = 3600000, from = new Date(Date.now() - hour), end = new Date(Date.now() + hour);
+  const until = new Date(end); until.setSeconds(0, 0);
+  await post(base, '/settings', { quietFrom: hhmm(from), quietEnd: hhmm(end) });
+  assert.strictEqual((await snapshot(base)).settings.quietUntil, +until);
+  await post(base, '/settings', { quietUntil: 0 }); // the moon, pressed to end it
+  await post(base, '/settings', { quietFrom: hhmm(from) });
+  assert.ok((await snapshot(base)).settings.quietUntil <= Date.now(), 'quiet hours came back on after being turned off');
+});
+
+// With quiet until switched off, quiet hours have no end: quiet from turns them on even with quietEnd behind it, and
+// they last until the moon is pressed. Ended by hand, they stay off that night.
+test('with quiet until off, quiet hours last until the moon is pressed', async t => {
+  const base = await serve(t, { 'data/settings.json': '{"quietEndOn": false}' });
+  const hour = 3600000;
+  await post(base, '/settings', { quietFrom: hhmm(new Date(Date.now() - 2 * hour)), quietEnd: hhmm(new Date(Date.now() - hour)) });
+  assert.strictEqual((await snapshot(base)).settings.quietUntil, 8.64e15);
+  await post(base, '/settings', { quietUntil: 0 });
+  await post(base, '/settings', { quietFrom: hhmm(new Date(Date.now() - 2 * hour)) });
+  assert.ok((await snapshot(base)).settings.quietUntil <= Date.now(), 'quiet hours came back on after being turned off');
 });
 
 // A snooze logs a 'snoozed' span for the part of the wait it covered: from the snooze to the end of the wait. The server

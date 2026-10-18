@@ -143,7 +143,7 @@ const STYLES = {
     <g fill="none" stroke="#B48C66" stroke-width="1" opacity="0.75">${ODAWARA.wires}</g>
     ${DRUM(LACQUER.barrel, 192, 50, 7)}${DRUM(LACQUER.barrel, 198, BARREL.cap, 20, 1)}<!-- the drums, with a narrower step on the outer end -->
     <!-- the bail: a stiff wire arch pinned to the drum on each side, with a crook bent into its top so it sits on a hook without sliding --><path d="M279.5 208C279.5 167 302 147.5 333.5 147.5C334.5 140.5 345.5 140.5 346.5 147.5C378 147.5 400.5 167 400.5 208" fill="none" stroke="#1A1410" stroke-width="4.6" stroke-linecap="round"/><path d="M279.5 208C279.5 167 302 147.5 333.5 147.5C334 144 337 142.25 340 142.25" fill="none" stroke="#8A847C" stroke-width="2.6"/><path d="M340 142.25C343 142.25 346 144 346.5 147.5C378 147.5 400.5 167 400.5 208" fill="none" stroke="#5A544E" stroke-width="2.6"/><!-- the string is tied on: one wrap round the crook, a knot, and a loose tail --><ellipse cx="340" cy="142.4" rx="2" ry="3.6" fill="none" stroke="#C9B49C" stroke-width="1.5"/><g id="knotTail"><path d="M341 139Q345.2 143 344 150.5" fill="none" stroke="#C9B49C" stroke-width="1.4" stroke-linecap="round"/></g><circle cx="340" cy="138.4" r="1.9" fill="#C9B49C" stroke="#7E6C56" stroke-width="0.6"/><circle cx="279.5" cy="208" r="2.6" fill="#8A847C" stroke="#1A1410" stroke-width="1"/><circle cx="400.5" cy="208" r="2.6" fill="#5A544E" stroke="#1A1410" stroke-width="1"/>
-    <path id="ribbonBack" fill="#29567A"/><path id="ribbonFront" fill="#4385B1"/><path id="ribbonEdge" fill="none" stroke="#0D2A44" stroke-width="0.8" stroke-linejoin="round"/><!-- the bookmark (see drawRibbon), tied inside the bottom step -->
+    <path id="ribbonBack" style="fill: var(--ribbonBack, #29567A)"/><path id="ribbonFront" style="fill: var(--ribbonFront, #4385B1)"/><path id="ribbonEdge" fill="none" style="stroke: var(--ribbonEdge, #0D2A44)" stroke-width="0.8" stroke-linejoin="round"/><!-- the bookmark (see drawRibbon), tied inside the bottom step -->
     ${DRUM(LACQUER.barrel, 466, 50, 7)}${DRUM(LACQUER.barrel, 443, BARREL.cap, 24, -1)}`,
   },
   chochin: {
@@ -205,6 +205,16 @@ const STYLES = {
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
 };
+// The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
+const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
+  cerulean: ['#4385B1', '#29567A', '#0D2A44'], madder: ['#A8433A', '#712A25', '#36110E'], ochre: ['#C08A2E', '#82601F', '#3B280A'],
+  moss: ['#6E8B3F', '#4A5E29', '#1E2A0E'], plum: ['#7E4B8C', '#55325F', '#25132B'], ink: ['#46526E', '#2C344A', '#0F131D'],
+});
+function paintRibbon(name) {
+  if (!RIBBONS[name]) name = 'cerulean';
+  RIBBONS[name].forEach((c, i) => document.documentElement.style.setProperty(['--ribbonFront', '--ribbonBack', '--ribbonEdge'][i], c));
+  for (const b of $('ribbons')?.children || []) b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.name === name));
+}
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
 let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
@@ -230,7 +240,15 @@ function applyStyle(key) {
   if (text) {
     text.disabled = !style.surface;
     text.parentElement.classList.toggle('unavailable', !style.surface);
-    text.parentElement.title = style.surface ? '' : 'Only the paper lanterns show session text';
+    const row = text.parentElement; row.dataset.title ??= row.title; // its own title, while it's usable
+    row.title = style.surface ? row.dataset.title : 'Only the paper lanterns show session text';
+  }
+  const ribbons = $('ribbons'); // likewise the ribbon colours, on lanterns without one
+  if (ribbons) {
+    for (const b of ribbons.children) /** @type {HTMLButtonElement} */ (b).disabled = !style.ribbon;
+    ribbons.parentElement.classList.toggle('unavailable', !style.ribbon);
+    const row = ribbons.parentElement; row.dataset.title ??= row.title;
+    row.title = style.ribbon ? row.dataset.title : 'Only the barrel has a ribbon';
   }
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
   $('style').value = key;

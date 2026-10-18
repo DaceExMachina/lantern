@@ -96,13 +96,12 @@ It runs read-only `gh api graphql` queries from each session's folder, and only 
 
 ## Settings
 
-Lantern keeps its settings in `settings.json` in `~/Library/Application Support/Lantern`, and the settings menu handles most of them. You set the few below by hand. The app reads them at startup, so quit and reopen it after an edit.
+Lantern keeps its settings in `settings.json` in `~/Library/Application Support/Lantern`, and the settings menu handles most of them, including quiet from, quiet until, the day rollover (when a stats day starts), and the ribbon colour. You set the few below by hand. The app reads them at startup, so quit and reopen it after an edit.
 
 | Setting | Default | What it does |
 |---|---|---|
 | `port` | `7717` | The server's port. Run the installer with `LANTERN_PORT=7718` to set it: it writes it here and points the hooks, the iTerm2 panel and the screensaver at it. |
 | `claudeDir` | `~/.claude` | Claude Code's config folder. The installer writes it from `CLAUDE_CONFIG_DIR`. |
-| `quietEnd` | `"08:00"` | When "quiet" ends, as `"HH:MM"` in your local time. |
 | `supervisorPattern` | `"supervisor\|orchestrat"` | A regular expression, ignoring case, for agent types that fly as supervisors (a size up). |
 
 `LANTERN_PORT` in the environment beats the file, as in `open --env LANTERN_PORT=7718 ~/Applications/Lantern.app`.

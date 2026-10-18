@@ -31,7 +31,39 @@
   #help b { color: #F0E8FF; font-weight: 600; }
   #help .key { white-space: nowrap; }
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
-  #menu select { align-self: stretch; }
+  /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
+  #menu { padding-top: 7px; }
+  #menu:popover-open { gap: 0; }
+  #menu > label { display: flex; padding: 5px 0; }
+  #menu .time { justify-content: space-between; white-space: nowrap; }
+  /* quiet from and quiet until: their words, an off | on switch built like the time input, then the time (faded while off).
+     The times line up with the day rollover's below.
+     Nothing moves when it flips. The words and each half of the switch run the row's full height, and the halves touch. */
+  #menu .switch { display: flex; }
+  #menu .switch > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
+  #menu .switch > label { display: flex; padding-left: 8px; } /* the time's click area runs the row's full height too */
+  #menu .switch input:disabled { opacity: .4; }
+  #menu input[type=time], .pill button span { box-sizing: border-box; height: 26px; } /* the switch matches the input */
+  #menu input[type=time] { width: 8.6em; } /* one width for every time, the widest value's, so their edges line up */
+  .pill { display: flex; }
+  .pill button { all: unset; cursor: pointer; display: flex; align-items: center; padding: 5px 0; }
+  .pill button span { display: flex; align-items: center; padding: 0 8px; border: 1px solid #4A3B68; background: #2B2440; color: #C3B2FF; }
+  .pill button:first-child span { border-radius: 6px 0 0 6px; }
+  .pill button:last-child span { border-radius: 0 6px 6px 0; border-left: none; }
+  .pill button[aria-pressed=true] span { background: #4A3B68; color: #F5E9FF; }
+  .pill button:hover span { color: #F0E8FF; }
+  .pill button:focus-visible span { outline: 1px solid #B9A8FF; outline-offset: 1px; }
+  #menu #style { flex: 1; }
+  #menu > :has(+ #gh) { padding-bottom: 10px; } /* the last row reaches down to the GitHub section's line */
+  #menu #help { margin-top: 5px; }
+  #menu .ribbon { display: flex; align-items: center; gap: 6px; }
+  #menu .ribbon.unavailable { opacity: .4; }
+  #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
+  #ribbons button { all: unset; flex: 1; display: flex; justify-content: center; padding: 5px 0; cursor: pointer; }
+  #ribbons button::before { content: ''; width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); } /* a pale rim so the dark ones read */
+  #ribbons button[aria-pressed=true]::before { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22), 0 0 0 1.5px #1E1930, 0 0 0 2.6px #F0E8FF; }
+  #ribbons button:focus-visible::before { outline: 1px solid #B9A8FF; outline-offset: 4px; }
+  #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
   #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
@@ -167,7 +199,7 @@
   :is(#card, .starCard) a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
   :is(#card, .starCard) a:hover { color: #F0E8FF; border-color: #B9A8FF; }
   :is(#card, .starCard) .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
-  select { font: inherit; color: inherit; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
+  select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
   :is(#card, .starCard) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
@@ -217,10 +249,14 @@
   </div>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
-    <label class="notify"><input type="checkbox" id="notify"> notify me when a session needs me</label>
-    <label><input type="checkbox" id="staleToggle"> show stale PRs</label>
-    <label><input type="checkbox" id="textToggle"> show session text</label>
-    <select id="style" aria-label="Lantern style"></select>
+    <label class="notify" title="Send a notification when a session starts waiting on you"><input type="checkbox" id="notify"> notify me when a session needs me</label>
+    <label title="Show open PRs that no session owns and nobody touched for a week, as pale wisps"><input type="checkbox" id="staleToggle"> show stale PRs</label>
+    <label title="Print lines your sessions wrote on the paper lanterns"><input type="checkbox" id="textToggle"> show session text</label>
+    <label title="Which lantern hangs in every window, the iTerm2 panel and the screensaver"><select id="style" aria-label="Lantern style"></select></label>
+    <div class="ribbon" title="The barrel lantern's ribbon colour"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour"></span></div>
+    <div class="time switch" id="quietFromRow" title="Every night at this time, quiet turns on by itself and snoozes everything until quiet hours end"><span>quiet from</span><span class="pill" role="group" aria-label="Quiet from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" disabled></label></div>
+    <div class="time switch" id="quietEndRow" title="When quiet hours end and moths can call you again. Off: they last until you press the moon"><span>quiet until</span><span class="pill" role="group" aria-label="Quiet until"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietEnd" value="08:00" aria-label="Quiet until"></label></div>
+    <label class="time" title="When one day ends and the next begins in your stats. Set it later than midnight to keep late nights with the day they belong to">day rollover <input type="time" id="dayStart" value="00:00"></label>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
       <summary>What's what?</summary>
@@ -228,7 +264,8 @@
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
       <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>right-click</b> to snooze it.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
-      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything until <span id="quietUntil">8am</span>.</p>
+      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span id="quietUntil">until 8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
+      <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
     </details>
   </div>

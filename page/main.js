@@ -17,9 +17,16 @@ es.addEventListener('settings', e => {
   if (STYLES[key] && STYLES[key] !== style) applyStyle(key);
   const quietStarted = recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   quietUntil = st.quietUntil || 0;
-  if (/^\d{1,2}:\d{2}$/.test(st.quietEnd || '')) quietEnd = st.quietEnd;
-  const until = quietEndLabel();
-  $('quiet').title = `Treat everything as snoozed until ${until}`;
+  const isTime = /^\d{1,2}:\d{2}$/, hhmm = s => s.padStart(5, '0');
+  if (isTime.test(st.quietEnd || '')) quietEnd = st.quietEnd;
+  if (isTime.test(st.dayStart || '')) dayStart = st.dayStart;
+  $('quietEnd').value = hhmm(quietEnd); $('dayStart').value = hhmm(dayStart);
+  if (isTime.test(st.quietFrom || '')) $('quietFrom').value = hhmm(st.quietFrom);
+  showSwitch($('quietFromRow'), isTime.test(st.quietFrom || ''));
+  quietEndOn = st.quietEndOn !== false; showSwitch($('quietEndRow'), quietEndOn);
+  paintRibbon(st.ribbon);
+  const until = quietEndOn ? `until ${quietEndLabel()}` : 'until you press it again';
+  $('quiet').title = `Treat everything as snoozed ${until}`;
   $('quietUntil').textContent = until;
   setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('textToggle').checked = lanternText !== 'off';
   try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
@@ -42,7 +49,7 @@ fitView();
 $('quiet').onclick = () => {
   const [h, m] = quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);
   if (morning <= new Date()) morning.setDate(morning.getDate() + 1);
-  post('/settings', { quietUntil: quiet() ? 0 : morning.getTime() });
+  post('/settings', { quietUntil: quiet() ? 0 : quietEndOn ? morning.getTime() : QUIET_FOREVER });
 };
 
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
@@ -51,6 +58,24 @@ $('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
   post('/settings', { lanternText });
 };
+// times of day: quiet from and quiet until (each switched off or on, with a time), and the day rollover
+for (const id of ['quietFrom', 'quietEnd', 'dayStart']) $(id).onchange = e => e.target.value && post('/settings', { [id]: e.target.value });
+function showSwitch(row, on) {
+  row.querySelector('input').disabled = !on;
+  for (const b of row.querySelectorAll('.pill button')) b.setAttribute('aria-pressed', String(!!b.dataset.on === on));
+}
+for (const b of document.querySelectorAll('#menu .pill button')) /** @type {HTMLButtonElement} */ (b).onclick = () => {
+  const row = b.closest('.switch'), on = !!/** @type {HTMLButtonElement} */ (b).dataset.on;
+  showSwitch(row, on);
+  post('/settings', row.id === 'quietFromRow' ? { quietFrom: on ? $('quietFrom').value || '22:00' : null } : { quietEndOn: on });
+};
+for (const name of Object.keys(RIBBONS)) {
+  const b = document.createElement('button');
+  b.dataset.name = name; b.title = name; b.setAttribute('aria-label', `${name} ribbon`); b.style.setProperty('--c', RIBBONS[name][0]);
+  b.onclick = () => { paintRibbon(name); post('/settings', { ribbon: name }); };
+  $('ribbons').append(b);
+}
+paintRibbon('cerulean'); // until the server says which
 $('staleToggle').onchange = e => {
   staleOn = e.target.checked;
   post('/settings', { stale: staleOn });
