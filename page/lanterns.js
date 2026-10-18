@@ -4,11 +4,37 @@
 // Each style is drawn behind and in front of one shared flame. `flame` places the flame's base and sets its size,
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
-// the solid top and bottom that the light can't pass: their heights and half-width.
+// the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
+// for a lantern that holds some back (pierced brass), and `shimmer` is how strongly its openings texture that light.
 const FLAME = `<g id="flame"><path id="fHalo" filter="url(#soft)" opacity="0.8"/><path id="fOuter"/><path id="fMid"/><path id="fCore"/>
   <ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g><g id="sparks"></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
 const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop class="paperStop" offset="0" stop-opacity=".9"/><stop class="paperStop" offset="1" stop-opacity="0"/></radialGradient></defs>`;
+// The Moroccan: satin brass in flat tones (the front faces lit, the side faces a step darker), pierced edge to edge with
+// arabesque lace. Its lace and openings are one mask (#cutouts): each panel is cut out whole, then a tile of scrolling
+// brass lace is laid back over it, squeezed sideways on the faces that turn away.
+const BRASS = { front: '#B8893A', side: '#86612A', lit: '#E0BC6A', rim: '#A47C38' };
+const DOME = 'M340 152C342 172 350 182 368 196C386 210 391 225 389 242L291 242C289 225 294 210 312 196C330 182 338 172 340 152Z';
+const HALF_X = 'translate(340 0) scale(.5 1) translate(-340 0)'; // the front segment of a six-sided shape spans half its width
+const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="M290 242h100v12h-100ZM290 254L390 254L406 276L274 276ZM274 276h132v145h-132Z"/>`;
+const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="360"/>
+  <rect x="200" y="100" width="280" height="360" fill="url(#lace)" transform="translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
+const ROPE = y => `<path d="M272 ${y}h136v5h-136Z" fill="${BRASS.side}"/><path d="M305 ${y}h70v5h-70Z" fill="${BRASS.front}"/><path d="M272 ${y}h136v5h-136Z" fill="url(#rope)"/>`;
+const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="#fff" stroke-width="1.3">
+    <path d="M0 0C0 3 5 3 5 6C5 9 10 9 10 12M10 0C10 3 5 3 5 6C5 9 0 9 0 12"/><circle cx="0" cy="6" r="1.3"/><circle cx="10" cy="6" r="1.3"/>
+    <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>
+  <pattern id="rope" width="3" height="5" patternUnits="userSpaceOnUse"><path d="M-1.5 5L1 0M1.5 5L4 0" stroke="#5A3A12" stroke-width="1"/></pattern>
+  <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="346" r="150"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
+  <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 242) scale(.9 .88) translate(-340 -242)"/></clipPath>
+  <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 242) scale(.4 .88) translate(-340 -242)"/></clipPath>
+  <clipPath id="shoulderL"><path d="M292 257L312 257L305 273L280 273Z"/></clipPath><clipPath id="shoulderR"><path d="M388 257L368 257L375 273L400 273Z"/></clipPath>
+  <clipPath id="shoulderF"><path d="M318 257L362 257L369 273L311 273Z"/></clipPath>
+  <clipPath id="faceL"><path d="M278 285h25v122h-25Z"/></clipPath><clipPath id="faceR"><path d="M377 285h25v122h-25Z"/></clipPath><clipPath id="faceF"><path d="M311 285h58v122h-58Z"/></clipPath>
+  <mask id="cutouts" maskUnits="userSpaceOnUse" x="260" y="120" width="160" height="320"><rect x="260" y="120" width="160" height="320" fill="#fff"/>
+    ${LACE('domeSide', 0.55, 0.7)}${LACE('domeFront', 1, 0.7)}
+    <path d="M294 245.5h4v5h-4ZM301 245.5h4v5h-4ZM308 245.5h4v5h-4ZM319 245.5h5v5h-5ZM328 245.5h5v5h-5ZM337 245.5h6v5h-6ZM347 245.5h5v5h-5ZM356 245.5h5v5h-5ZM368 245.5h4v5h-4ZM375 245.5h4v5h-4ZM382 245.5h4v5h-4Z"/>
+    ${LACE('shoulderL', 0.5, 0.8)}${LACE('shoulderR', 0.5, 0.8)}${LACE('shoulderF', 1, 0.8)}
+    ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}</mask>`;
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 462], caps: [216, 445, 50],
@@ -68,30 +94,30 @@ const STYLES = {
         <path d="M93.3 199.4L91.4 210.8Q95 212.6 98.6 210.8L96.7 199.4Z" fill="none" stroke="#6E4A1C" stroke-width="0.35" stroke-linejoin="round"/></g>`, 18),
   },
   moroccan: {
-    chain: 141, // its chain of links runs from here up past the top of the window (see drawHang)
-    name: 'Brass Moroccan', flame: [340, 392, 0.9], light: [340, 340], tassel: [340, 444],
-    body: { top: 282, bottom: 400, half: y => y < 340 ? 52 + (y - 278) / 62 * 12 : 64 - (y - 340) / 64 * 12 },
-    back: `<defs><linearGradient id="brass" x1="0" x2="1"><stop offset="0" stop-color="#6E4618"/><stop offset=".45" stop-color="#D9AE52"/><stop offset="1" stop-color="#7A501C"/></linearGradient>
-      <mask id="cutouts" maskUnits="userSpaceOnUse" x="260" y="200" width="160" height="260"><rect x="260" y="200" width="160" height="260" fill="#fff"/><g fill="#000"><polygon points="326.0,296.0 327.3,299.0 330.2,297.8 329.0,300.7 332.0,302.0 329.0,303.3 330.2,306.2 327.3,305.0 326.0,308.0 324.7,305.0 321.8,306.2 323.0,303.3 320.0,302.0 323.0,300.7 321.8,297.8 324.7,299.0"/><polygon points="340.0,296.0 341.3,299.0 344.2,297.8 343.0,300.7 346.0,302.0 343.0,303.3 344.2,306.2 341.3,305.0 340.0,308.0 338.7,305.0 335.8,306.2 337.0,303.3 334.0,302.0 337.0,300.7 335.8,297.8 338.7,299.0"/><polygon points="354.0,296.0 355.3,299.0 358.2,297.8 357.0,300.7 360.0,302.0 357.0,303.3 358.2,306.2 355.3,305.0 354.0,308.0 352.7,305.0 349.8,306.2 351.0,303.3 348.0,302.0 351.0,300.7 349.8,297.8 352.7,299.0"/><polygon points="293.0,297.0 293.6,299.5 295.1,298.5 294.5,300.9 296.0,302.0 294.5,303.1 295.1,305.5 293.6,304.5 293.0,307.0 292.4,304.5 290.9,305.5 291.5,303.1 290.0,302.0 291.5,300.9 290.9,298.5 292.4,299.5"/><polygon points="387.0,297.0 387.6,299.5 389.1,298.5 388.5,300.9 390.0,302.0 388.5,303.1 389.1,305.5 387.6,304.5 387.0,307.0 386.4,304.5 384.9,305.5 385.5,303.1 384.0,302.0 385.5,300.9 384.9,298.5 386.4,299.5"/><polygon points="333.0,314.0 334.3,317.0 337.2,315.8 336.0,318.7 339.0,320.0 336.0,321.3 337.2,324.2 334.3,323.0 333.0,326.0 331.7,323.0 328.8,324.2 330.0,321.3 327.0,320.0 330.0,318.7 328.8,315.8 331.7,317.0"/><polygon points="347.0,314.0 348.3,317.0 351.2,315.8 350.0,318.7 353.0,320.0 350.0,321.3 351.2,324.2 348.3,323.0 347.0,326.0 345.7,323.0 342.8,324.2 344.0,321.3 341.0,320.0 344.0,318.7 342.8,315.8 345.7,317.0"/><polygon points="293.0,315.0 293.6,317.5 295.1,316.5 294.5,318.9 296.0,320.0 294.5,321.1 295.1,323.5 293.6,322.5 293.0,325.0 292.4,322.5 290.9,323.5 291.5,321.1 290.0,320.0 291.5,318.9 290.9,316.5 292.4,317.5"/><polygon points="387.0,315.0 387.6,317.5 389.1,316.5 388.5,318.9 390.0,320.0 388.5,321.1 389.1,323.5 387.6,322.5 387.0,325.0 386.4,322.5 384.9,323.5 385.5,321.1 384.0,320.0 385.5,318.9 384.9,316.5 386.4,317.5"/><polygon points="326.0,332.0 327.3,335.0 330.2,333.8 329.0,336.7 332.0,338.0 329.0,339.3 330.2,342.2 327.3,341.0 326.0,344.0 324.7,341.0 321.8,342.2 323.0,339.3 320.0,338.0 323.0,336.7 321.8,333.8 324.7,335.0"/><polygon points="340.0,332.0 341.3,335.0 344.2,333.8 343.0,336.7 346.0,338.0 343.0,339.3 344.2,342.2 341.3,341.0 340.0,344.0 338.7,341.0 335.8,342.2 337.0,339.3 334.0,338.0 337.0,336.7 335.8,333.8 338.7,335.0"/><polygon points="354.0,332.0 355.3,335.0 358.2,333.8 357.0,336.7 360.0,338.0 357.0,339.3 358.2,342.2 355.3,341.0 354.0,344.0 352.7,341.0 349.8,342.2 351.0,339.3 348.0,338.0 351.0,336.7 349.8,333.8 352.7,335.0"/><polygon points="293.0,333.0 293.6,335.5 295.1,334.5 294.5,336.9 296.0,338.0 294.5,339.1 295.1,341.5 293.6,340.5 293.0,343.0 292.4,340.5 290.9,341.5 291.5,339.1 290.0,338.0 291.5,336.9 290.9,334.5 292.4,335.5"/><polygon points="387.0,333.0 387.6,335.5 389.1,334.5 388.5,336.9 390.0,338.0 388.5,339.1 389.1,341.5 387.6,340.5 387.0,343.0 386.4,340.5 384.9,341.5 385.5,339.1 384.0,338.0 385.5,336.9 384.9,334.5 386.4,335.5"/><polygon points="333.0,350.0 334.3,353.0 337.2,351.8 336.0,354.7 339.0,356.0 336.0,357.3 337.2,360.2 334.3,359.0 333.0,362.0 331.7,359.0 328.8,360.2 330.0,357.3 327.0,356.0 330.0,354.7 328.8,351.8 331.7,353.0"/><polygon points="347.0,350.0 348.3,353.0 351.2,351.8 350.0,354.7 353.0,356.0 350.0,357.3 351.2,360.2 348.3,359.0 347.0,362.0 345.7,359.0 342.8,360.2 344.0,357.3 341.0,356.0 344.0,354.7 342.8,351.8 345.7,353.0"/><polygon points="293.0,351.0 293.6,353.5 295.1,352.5 294.5,354.9 296.0,356.0 294.5,357.1 295.1,359.5 293.6,358.5 293.0,361.0 292.4,358.5 290.9,359.5 291.5,357.1 290.0,356.0 291.5,354.9 290.9,352.5 292.4,353.5"/><polygon points="387.0,351.0 387.6,353.5 389.1,352.5 388.5,354.9 390.0,356.0 388.5,357.1 389.1,359.5 387.6,358.5 387.0,361.0 386.4,358.5 384.9,359.5 385.5,357.1 384.0,356.0 385.5,354.9 384.9,352.5 386.4,353.5"/><polygon points="326.0,368.0 327.3,371.0 330.2,369.8 329.0,372.7 332.0,374.0 329.0,375.3 330.2,378.2 327.3,377.0 326.0,380.0 324.7,377.0 321.8,378.2 323.0,375.3 320.0,374.0 323.0,372.7 321.8,369.8 324.7,371.0"/><polygon points="340.0,368.0 341.3,371.0 344.2,369.8 343.0,372.7 346.0,374.0 343.0,375.3 344.2,378.2 341.3,377.0 340.0,380.0 338.7,377.0 335.8,378.2 337.0,375.3 334.0,374.0 337.0,372.7 335.8,369.8 338.7,371.0"/><polygon points="354.0,368.0 355.3,371.0 358.2,369.8 357.0,372.7 360.0,374.0 357.0,375.3 358.2,378.2 355.3,377.0 354.0,380.0 352.7,377.0 349.8,378.2 351.0,375.3 348.0,374.0 351.0,372.7 349.8,369.8 352.7,371.0"/><polygon points="293.0,369.0 293.6,371.5 295.1,370.5 294.5,372.9 296.0,374.0 294.5,375.1 295.1,377.5 293.6,376.5 293.0,379.0 292.4,376.5 290.9,377.5 291.5,375.1 290.0,374.0 291.5,372.9 290.9,370.5 292.4,371.5"/><polygon points="387.0,369.0 387.6,371.5 389.1,370.5 388.5,372.9 390.0,374.0 388.5,375.1 389.1,377.5 387.6,376.5 387.0,379.0 386.4,376.5 384.9,377.5 385.5,375.1 384.0,374.0 385.5,372.9 384.9,370.5 386.4,371.5"/><polygon points="333.0,386.0 334.3,389.0 337.2,387.8 336.0,390.7 339.0,392.0 336.0,393.3 337.2,396.2 334.3,395.0 333.0,398.0 331.7,395.0 328.8,396.2 330.0,393.3 327.0,392.0 330.0,390.7 328.8,387.8 331.7,389.0"/><polygon points="347.0,386.0 348.3,389.0 351.2,387.8 350.0,390.7 353.0,392.0 350.0,393.3 351.2,396.2 348.3,395.0 347.0,398.0 345.7,395.0 342.8,396.2 344.0,393.3 341.0,392.0 344.0,390.7 342.8,387.8 345.7,389.0"/><polygon points="293.0,387.0 293.6,389.5 295.1,388.5 294.5,390.9 296.0,392.0 294.5,393.1 295.1,395.5 293.6,394.5 293.0,397.0 292.4,394.5 290.9,395.5 291.5,393.1 290.0,392.0 291.5,390.9 290.9,388.5 292.4,389.5"/><polygon points="387.0,387.0 387.6,389.5 389.1,388.5 388.5,390.9 390.0,392.0 388.5,393.1 389.1,395.5 387.6,394.5 387.0,397.0 386.4,394.5 384.9,395.5 385.5,393.1 384.0,392.0 385.5,390.9 384.9,388.5 386.4,389.5"/><circle cx="333" cy="311" r="1.4"/><circle cx="347" cy="311" r="1.4"/><circle cx="326" cy="329" r="1.4"/><circle cx="340" cy="329" r="1.4"/><circle cx="354" cy="329" r="1.4"/><circle cx="333" cy="347" r="1.4"/><circle cx="347" cy="347" r="1.4"/><circle cx="326" cy="365" r="1.4"/><circle cx="340" cy="365" r="1.4"/><circle cx="354" cy="365" r="1.4"/><circle cx="333" cy="383" r="1.4"/><circle cx="347" cy="383" r="1.4"/><path d="M300 254q3 -6 6 0q-3 5 -6 0z"/><path d="M312 254q3 -6 6 0q-3 5 -6 0z"/><path d="M324 254q3 -6 6 0q-3 5 -6 0z"/><path d="M336 254q3 -6 6 0q-3 5 -6 0z"/><path d="M348 254q3 -6 6 0q-3 5 -6 0z"/><path d="M360 254q3 -6 6 0q-3 5 -6 0z"/><path d="M372 254q3 -6 6 0q-3 5 -6 0z"/><circle cx="314" cy="431" r="2"/><circle cx="324" cy="431" r="2"/><circle cx="334" cy="431" r="2"/><circle cx="344" cy="431" r="2"/><circle cx="354" cy="431" r="2"/><circle cx="364" cy="431" r="2"/></g></mask></defs>
-      ${PAPER_GRAD('.55')}
-      <circle cx="340" cy="153" r="4" fill="none" stroke="#C9973F" stroke-width="1.6"/>
-      <path d="M340 157V208" stroke="#B8873A" stroke-width="2.2"/>
-      <g fill="#24160A"><path d="M340 206C352 222 400 236 398 264L282 264C280 236 328 222 340 206Z"/><path d="M288 278L392 278L404 340L392 404L288 404L276 340Z"/><path d="M300 421L380 421L356 446L324 446Z"/></g>
-      <ellipse id="paperGlow" cx="340" cy="345" rx="66" ry="70" fill="url(#pg)"/>`,
-    front: `<path d="M336 160A7 7 0 1 0 344 172A5.5 5.5 0 1 1 336 160Z" fill="#E2B85C"/>
-      <path d="M337.5 202L340 174L342.5 202Z" fill="#B8873A"/><circle cx="340" cy="203" r="4" fill="#D9AE52"/>
-      <path d="M340 206C352 222 400 236 398 264L282 264C280 236 328 222 340 206Z" fill="url(#brass)" mask="url(#cutouts)"/>
-      <path d="M340 208Q358 236 368 264M340 208Q322 236 312 264M340 208V264M340 208Q376 236 390 264M340 208Q304 236 290 264" fill="none" stroke="#5A3A12" stroke-width="0.9" opacity="0.7"/>
-      <path d="M282 276q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0q4.8 9 9.6 0V270H282Z" fill="url(#brass)"/><rect x="280" y="262" width="120" height="5" fill="#E2B85C"/>
-      <path d="M288 278L392 278L404 340L392 404L288 404L276 340Z" fill="#4E3212" mask="url(#cutouts)"/>
-      
-      <path d="M316 400V312Q316 288 340 284Q364 288 364 312V400" fill="none" stroke="#E2B85C" stroke-width="2.2"/>
-      <path d="M283 398L280 318Q283 296 304 292L309 400M397 398L400 318Q397 296 376 292L371 400" fill="none" stroke="#D9AE52" stroke-width="1.6"/>
-      <path d="M288 278L276 340L288 404M392 278L404 340L392 404" fill="none" stroke="#E2B85C" stroke-width="2.4"/>
-      <rect x="309" y="278" width="5" height="126" fill="url(#brass)"/><rect x="366" y="278" width="5" height="126" fill="url(#brass)"/>
-      <rect x="284" y="404" width="112" height="9" rx="2" fill="url(#brass)"/><g fill="#E2B85C"><circle cx="292" cy="417" r="2.6"/><circle cx="300" cy="417" r="2.6"/><circle cx="308" cy="417" r="2.6"/><circle cx="316" cy="417" r="2.6"/><circle cx="324" cy="417" r="2.6"/><circle cx="332" cy="417" r="2.6"/><circle cx="340" cy="417" r="2.6"/><circle cx="348" cy="417" r="2.6"/><circle cx="356" cy="417" r="2.6"/><circle cx="364" cy="417" r="2.6"/><circle cx="372" cy="417" r="2.6"/><circle cx="380" cy="417" r="2.6"/><circle cx="388" cy="417" r="2.6"/></g>
-      <path d="M300 421L380 421L356 446L324 446Z" fill="url(#brass)" mask="url(#cutouts)"/>
-      <g id="tassel"><path d="M340 446V452" stroke="#B8873A" stroke-width="2"/><ellipse cx="340" cy="460" rx="6" ry="8" fill="url(#brass)"/><path d="M338 467L340 482L342 467Z" fill="#D9AE52"/></g>`,
+    chain: 121, // its chain of links runs from here up past the top of the window (see drawHang)
+    name: 'Brass Moroccan', flame: [340, 394, 0.9], light: [340, 346], dim: 0.6, shimmer: 0.4,
+    // a hexagonal prism seen face-on (front face ±33, side faces out to ±66), under a flared shoulder from ±50
+    body: { top: 256, bottom: 416, half: y => y < 276 ? 50 + Math.max(0, y - 254) / 22 * 16 : 66 },
+    back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
+      <g fill="#24160A">${MOROCCAN_SHAPE}</g><g fill="url(#mg)">${MOROCCAN_SHAPE}</g>
+      <ellipse id="paperGlow" cx="340" cy="340" rx="72" ry="90" fill="url(#pg)"/>`,
+    front: `<circle cx="340" cy="130" r="4" fill="none" stroke="#D9B464" stroke-width="1.8"/>
+      <path d="M338.6 134h2.8v20h-2.8Z" fill="#B8893A"/><ellipse cx="340" cy="140" rx="3" ry="2.4" fill="#D9B464"/><ellipse cx="340" cy="147" rx="4.4" ry="3" fill="#B8893A"/><ellipse cx="340" cy="152.5" rx="2.6" ry="1.8" fill="#D9B464"/>
+      <g mask="url(#cutouts)">
+        <path d="${DOME}" fill="${BRASS.side}"/><path d="${DOME}" fill="${BRASS.front}" transform="${HALF_X}"/>
+        <path d="M290 242h100v12h-100Z" fill="${BRASS.side}"/><path d="M315 242h50v12h-50Z" fill="${BRASS.front}"/>
+        <path d="M290 254L390 254L406 276L274 276Z" fill="${BRASS.side}"/><path d="M315 254L365 254L373 276L307 276Z" fill="${BRASS.front}"/>
+        <path d="M274 281h132v130h-132Z" fill="${BRASS.side}"/><path d="M307 281h66v130h-66Z" fill="${BRASS.front}"/>
+      </g>
+      <g fill="none" stroke-linejoin="round">
+        <path d="${DOME}" stroke="${BRASS.rim}" stroke-width="2"/><path d="${DOME}" stroke="${BRASS.lit}" stroke-width="2.6" transform="${HALF_X}"/>
+        <path d="M290 242.5h100M290 253.5h100M315 242v12M365 242v12" stroke="${BRASS.lit}" stroke-width="1.4"/>
+        <path d="M315 254L307 276M365 254L373 276M290 254L274 276M390 254L406 276" stroke="${BRASS.lit}" stroke-width="1.6"/>
+        <path d="M309.5 283.5h61v125h-61ZM276.5 283.5h28v125h-28ZM375.5 283.5h28v125h-28Z" stroke="${BRASS.rim}" stroke-width="1.2"/>
+      </g>
+      <path d="M305 279h4v134h-4ZM371 279h4v134h-4Z" fill="${BRASS.lit}"/><path d="M272.5 279h3v134h-3ZM404.5 279h3v134h-3Z" fill="${BRASS.rim}"/>
+      ${ROPE(276)}${ROPE(411)}
+      <path d="M278 417h124l-4 4h-116Z" fill="${BRASS.side}"/><path d="M309 417h62l-1 4h-60Z" fill="${BRASS.front}"/>`,
   },
 };
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
