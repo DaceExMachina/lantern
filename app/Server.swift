@@ -154,7 +154,7 @@ final class LanternServer {
     struct Seen { var waiting = false, snoozed: String?, title: String? }
     var seen: [String: Seen] = [:]
     var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
-    var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the barrel's pages; memory only
+    var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the pages; memory only
     var violet = false, quiet = false
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh

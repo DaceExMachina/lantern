@@ -330,20 +330,22 @@ extension LanternServer {
         }
     }
 
-    // The barrel's pages also draw on recent transcripts, so they aren't blank when little is running: up to five runs
-    // from the tail of each, newest first, going further back until there are about forty (reading at most sixty
-    // transcripts). Read when the server starts and when session text is turned on.
+    // The pages also draw on recent transcripts, so they aren't blank when little is running: up to fifteen runs from
+    // the tail of each, newest first, going further back until there are about a hundred and twenty, enough for a paper
+    // full of different paragraphs (reading at most sixty transcripts). Read when the server starts and when session text
+    // is turned on.
     func seedProse() {
+        let most = 120
         DispatchQueue.global().async {
             let started = now()
             let newest = ((try? FileManager.default.contentsOfDirectory(atPath: PROJECTS)) ?? []).flatMap { transcripts(PROJECTS + "/" + $0) }
                 .map { ($0, fileTimes($0)?.mtime ?? 0) }.sorted { $0.1 > $1.1 }.prefix(60).map(\.0)
             var pool: [String] = [], read = 0
-            for f in newest where pool.count < 40 { read += 1; pool += transcriptProse(tail(f)).suffix(5).filter { !pool.contains($0) } }
+            for f in newest where pool.count < most { read += 1; pool += transcriptProse(tail(f)).suffix(15).filter { !pool.contains($0) } }
             print("Read \(pool.count) run(s) of prose from \(read) recent transcript(s) in \(Int(now() - started)) ms")
             DispatchQueue.main.async {
                 if !self.wordsOn { return } // turned off again while reading
-                self.recentProse = Array(pool.prefix(40))
+                self.recentProse = Array(pool.prefix(most))
                 self.send("event: prose\ndata: \(jsonText(self.recentProse))\n\n")
             }
         }

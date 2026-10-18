@@ -19,7 +19,10 @@ let recentProse = []; // from the server's `prose` event
 // The paper's geometry comes from the lantern (style.surface, see lanterns.js): its middle and width, the heights of its
 // wires, and how much each bows at the front. `lines` lines of type share each gap between wires, riding the bow.
 const INK = { warm: '#5A3420', cool: '#2E2350' };
-const FADE = 18000, HOLD = 70000, EVERY = 20000, SHOWN = 6;
+// A paper shows `shown` blocks at most (the surface's), a new one coming every EVERY on a paper of six, sooner on one of
+// more, so the paper keeps about that many going.
+const FADE = 18000, HOLD = 70000, EVERY = 20000;
+const every = d => EVERY * 6 / d.shown * (0.6 + Math.random() * 0.8);
 const FONT = "Georgia, 'Times New Roman', serif";
 // The light the words are read by (the surface's `light` ellipse): brightest just above the flame, falling off to a third
 // at the paper's edges.
@@ -61,7 +64,7 @@ function pickText() {
   const fresh = starts.filter(st => !shownLately.includes(st.run)), pool = fresh.length ? fresh : starts;
   const start = pool[Math.floor(Math.random() * pool.length)];
   if (!start) return;
-  shownLately = [...shownLately, start.run].slice(-8);
+  shownLately = [...shownLately, start.run].slice(-(style.surface.shown + 2)); // a paper's worth and a couple more
   let text = start.run;
   for (let i = start.i + 1; i < start.list.length && text.split(' ').length < 160; i++) text += ' ' + start.list[i];
   return text;
@@ -138,7 +141,7 @@ function addBlock(now, age = 0) {
   blocks.push(block);
   // the oldest leaves early when too many are showing
   const going = blocks.filter(b => !b.leaving);
-  if (going.length > SHOWN) going[0].leaving = now;
+  if (going.length > d.shown) going[0].leaving = now;
 }
 
 // One block typeset on the unrolled page (ctx in paper units: x round from the front, y down the unrolled paper), each
@@ -279,12 +282,12 @@ function tickPages() {
   if (lanternText !== 'off' && !primed) {
     if (!pagesData && now - waitFrom < 1500) return; // nothing drawn yet
     primed = true;
-    for (let i = 0; i < SHOWN; i++) addBlock(now, Math.random() * primeAge);
+    for (let i = 0; i < style.surface.shown; i++) addBlock(now, Math.random() * primeAge);
     introAt = now; clearInterval(introTimer); introTimer = setInterval(inkOpacity, 40);
-    nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8);
+    nextBlockAt = now + every(style.surface);
   }
   if (!root.firstChild) drawPages(root);
-  if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
+  if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(now); nextBlockAt = now + every(style.surface); }
   inkOpacity();
   blocks = blocks.filter(b => {
     if (!b.leaving && now - b.born > FADE + b.hold) b.leaving = now;

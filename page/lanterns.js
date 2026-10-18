@@ -80,18 +80,19 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
 // A paper lantern's paper (style.surface), so whatever is printed on it (pages.js) follows the same curves, in the units
 // it's drawn in: its middle `cx`, its top and bottom, its wires `ribs`, each wire's front bow `bow(y)` (as in SUNKEN), its
 // half-width `half(y)` and widest `r`, the gap between wires its type is sized for and how many `lines` share it (on
-// the chōchin, with its wires twice as far apart, a little larger than the barrel's), and the ellipse its words are read
+// the chōchin, with its wires twice as far apart, a little larger than the barrel's), how many blocks of words it
+// shows at once (`shown`), and the ellipse its words are read
 // by, centred just above the flame. A round one also has `cy` and `ry`, the centre and vertical radius of its curve.
 // the Odawara barrel: a straight cylinder on 20 close wires (top and bottom edges included), each bowed from the flame's
 // height like its drums. `cap` is the half-width of the lacquer drums where they grip the paper.
 const BARREL = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350, half: _y => BARREL.r,
   light: { cx: 340, cy: 340, rx: 88, ry: 165 } };
 BARREL.ribs = Array.from({ length: 20 }, (_, i) => BARREL.top + (BARREL.bottom - BARREL.top) * i / 19);
-BARREL.gap = BARREL.ribs[1] - BARREL.ribs[0]; BARREL.lines = 2;
+BARREL.gap = BARREL.ribs[1] - BARREL.ribs[0]; BARREL.lines = 2; BARREL.shown = 6;
 const ODAWARA = SUNKEN(BARREL.cx, BARREL.half, BARREL.ribs, 1.2, BARREL.bow);
 // the chōchin, in its mockup units: round (a little wider than tall), its wires wider apart and bowing away from the
 // middle, so it sinks in less
-const BALL = { cx: 95, cy: 122, r: 52, ry: 48, top: 74, bottom: 170, gap: 10, lines: 3, bow: y => 0.115 * (y - 122),
+const BALL = { cx: 95, cy: 122, r: 52, ry: 48, top: 74, bottom: 170, gap: 10, lines: 3, shown: 10, bow: y => 0.115 * (y - 122),
   ribs: [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], light: { cx: 95, cy: 120, rx: 76, ry: 69 } };
 BALL.half = y => BALL.r * Math.sqrt(Math.max(0, 1 - ((y - BALL.cy) / BALL.ry) ** 2));
 const CHOCHIN = SUNKEN(BALL.cx, BALL.half, BALL.ribs, 0.35, BALL.bow);
