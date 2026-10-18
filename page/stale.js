@@ -107,7 +107,6 @@ function drawStale(dt, s) {
     put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
     wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) scale(${(1 - m.back * 0.3).toFixed(2)})`);
-    m.shade = caster(m.x, m.y, 0, 1 - m.back * 0.3, [...upPts, ...sidePts], 0.4 * (1 - m.back * 0.5)); // ghosts barely block the light
     for (const wing of [m.side, m.up]) { put(wing, 'fill', WISP_TINT); put(wing, 'opacity', (0.14 * (1 - m.back * 0.5)).toFixed(2)); }
     m.zone.style.display = show ? '' : 'none';
     put(m.zone, 'cx', m.x.toFixed(1)); put(m.zone, 'cy', m.y.toFixed(1));

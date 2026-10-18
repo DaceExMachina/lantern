@@ -354,7 +354,7 @@ function frame(t) {
   }
   drawStale(dt, s);
   // the background last, once every moth has moved, so their shadows fall where they are now
-  const casters = ambient ? [] : [...moths.values(), ...(staleOn && !quiet() ? ghosts.values() : [])].map(m => m.shade).filter(Boolean);
+  const casters = ambient ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
     ringC: rot(340, 330), ringR, ringA: 0.55 + 0.45 * Math.max(level, cool * 0.5),
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
