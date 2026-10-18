@@ -243,8 +243,9 @@ test('a running session the lantern missed is adopted with its process on the ne
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
-// A stats log (stats.sqlite) at the schema of version 2, holding the given spans: [kind, session, began, ended, data].
-function statsLog(spans) {
+// A stats log (stats.sqlite) at the schema of version 2, holding the given spans ([kind, session, began, ended, data]),
+// then any `more` SQL (events, say).
+function statsLog(spans, more = '') {
   const db = path.join(tmp, `stats-${process.pid}-${Math.random()}.sqlite`);
   const rows = spans.map(([kind, session, began, ended, data = {}]) => `('${kind}', ${session ? `'${session}'` : 'NULL'}, ${began}, ${ended}, '${JSON.stringify(data)}')`);
   execFileSync('sqlite3', [db], { input: `
@@ -253,7 +254,7 @@ function statsLog(spans) {
     CREATE TABLE gauges (time INTEGER NOT NULL, alive INTEGER, working INTEGER, waiting INTEGER, snoozed INTEGER, fireflies INTEGER, agents INTEGER, strays INTEGER, graveyard INTEGER);
     CREATE TABLE achievements (id TEXT NOT NULL, day TEXT NOT NULL, time INTEGER NOT NULL, data TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (id, day));
     PRAGMA user_version = 2;
-    INSERT INTO spans (kind, session, began, ended, data) VALUES ${rows.join(', ')};` });
+    INSERT INTO spans (kind, session, began, ended, data) VALUES ${rows.join(', ')};${more}` });
   return fs.readFileSync(db);
 }
 // The start of the day before the current one, for days starting at `hour`.
@@ -273,17 +274,20 @@ test('stats: warm moths, warm lantern and response times', async t => {
   const base = await serve(t, { 'data/stats.sqlite': statsLog([
     ['server', null, at(10), at(20)],
     ['violet', null, at(12), at(13)], ['violet', null, at(15), at(16)],
-    ['alive', 'a', at(10), at(14)], ['alive', 'b', at(14), at(18)],
+    ['alive', 'a', at(10), at(14), { title: 'Fix it', project: 'lantern' }], ['alive', 'b', at(14), at(18)],
     ['waiting', 'a', at(11), at(11) + 10 * min, answered],
     ['waiting', 'a', at(12), at(12) + 30 * min, answered],
     ['waiting', 'b', at(15), at(15) + 50 * min, answered],
     ['waiting', 'b', at(17, 30), at(18), { how: 'ended' }],
-  ]) });
+  ], `INSERT INTO events (time, kind, session, data) VALUES (${at(13)}, 'pr', 'a', '{"url":"https://github.com/o/r/pull/7","change":"merged","from":"ready"}');`) });
   const stats = await (await fetch(base + '/stats')).json();
   const y = stats.days.at(-2); // yesterday: days run oldest first and end with today
   assert.deepStrictEqual(
     { warmMoths: y.warmMoths, warmLantern: y.warmLantern, medianWait: y.medianWait, slowWait: y.slowWait, waits: y.waits, answered: y.answered },
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });
+  // the recap's session cards: each session's title and project, and what its PRs did
+  assert.deepStrictEqual(stats.spans.find(s => s[0] === 'alive' && s[4] === 'a').slice(4), ['a', 'Fix it', 'lantern']);
+  assert.deepStrictEqual(stats.prs, [[at(13), 'a', 'https://github.com/o/r/pull/7', 'merged', null, null]]);
 });
 
 // A day runs from one day rollover (settings.dayStart) to the next, so an hour of work just before it lands on the day before.

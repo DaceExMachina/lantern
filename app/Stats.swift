@@ -147,12 +147,17 @@ final class Stats {
                 UNION ALL SELECT time, alive, working, fireflies, stale, waiting, snoozed FROM gauges WHERE time >= ?1 ORDER BY time
                 """, [from]).map { $0.map { num($0) ?? -1 } }
             // the spans themselves, clipped to the window, for the ribbons and the recap's constellation: [kind, began, ended,
-            // seeded (already running at startup), session, title (sessions only)]
+            // seeded (already running at startup), session, title and project (sessions only)]
             let spans = self.run("""
                 SELECT kind, max(began, ?1), min(coalesce(ended, ?2), ?2), coalesce(json_extract(data, '$.seeded'), 0), session,
-                  iif(kind = 'alive', json_extract(data, '$.title'), NULL) FROM spans
+                  iif(kind = 'alive', json_extract(data, '$.title'), NULL), iif(kind = 'alive', json_extract(data, '$.project'), NULL) FROM spans
                 WHERE began < ?2 AND coalesce(ended, ?2) > ?1 ORDER BY began
-                """, [from, to]).map { r -> [Any] in [r[0] ?? "", num(r[1]) ?? 0, num(r[2]) ?? 0, r[3] == "1", r[4] ?? NSNull(), r[5] ?? NSNull()] }
+                """, [from, to]).map { r -> [Any] in [r[0] ?? "", num(r[1]) ?? 0, num(r[2]) ?? 0, r[3] == "1", r[4] ?? NSNull(), r[5] ?? NSNull(), r[6] ?? NSNull()] }
+            // what happened to each session's PRs, for the recap's session cards: [time, session, url, change, need, title]
+            let prs = self.run("""
+                SELECT time, session, json_extract(data, '$.url'), json_extract(data, '$.change'), json_extract(data, '$.need'), json_extract(data, '$.title')
+                FROM events WHERE kind = 'pr' AND time >= ?1 AND time < ?2 ORDER BY time
+                """, [from, to]).map { r -> [Any] in [num(r[0]) ?? 0] + r[1...].map { $0 ?? NSNull() as Any } }
 
             let lastGauge = { (t: Double) in gauges.last { $0[0] < t } }
             let value = { (g: [Double]?, i: Int) -> Double? in g.flatMap { $0[i] >= 0 ? $0[i] : nil } } // a gauge's column, if it was recorded
@@ -174,7 +179,7 @@ final class Stats {
             // every badge ever earned: how many times, and the last day
             let tally = self.run("SELECT id, count(*), max(day) FROM achievements GROUP BY id").reduce(into: JSON()) { $0[$1[0] ?? ""] = [Int($1[1] ?? "") ?? 0, $1[2] ?? ""] }
             let result: JSON = ["days": out, "spans": spans, "gauges": gauges.filter { $0[0] >= from }.map { [$0[0], $0[1], $0[2], $0[5], $0[6]] },
-                                "achievements": achievements, "tally": tally, "streak": self.streak(warmGoal), "warmGoal": warmGoal]
+                                "achievements": achievements, "prs": prs, "tally": tally, "streak": self.streak(warmGoal), "warmGoal": warmGoal]
             DispatchQueue.main.async { done(result) }
         }
     }

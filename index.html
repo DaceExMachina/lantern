@@ -75,19 +75,19 @@
   :is(#stats, #recap) .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
   #stats .headline span { color: #C9B8DA; }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
-  #stats .ribbon { position: relative; touch-action: pan-y; }
-  #stats .ribbon .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
-  #stats [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
-  #stats .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
-  #stats .axis [data-v] { min-width: 6em; text-align: center; }
-  :is(#stats, #recap) .axis, #stats .legend { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
+  :is(#stats, #recap) .ribbon { position: relative; touch-action: pan-y; }
+  :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
+  :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
+  :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
+  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
   /* the session states as a 2x2 block, then the strip-level items as the ribbon stacks them: beside the block when
      three columns fit, under it when not. Columns fit the widest item ("moths flying" and its value slot, 141px at 11px, so 13em; three of them and two gaps need 457px). */
-  #statsBody { container-type: inline-size; }
-  #stats .legend { display: grid; grid-template-columns: repeat(2, minmax(13em, 1fr)); grid-template-areas: "working waiting" "snoozed idle" "flying lamp"; gap: 2px 14px; margin-top: 0; }
-  @container (min-width: 457px) { #stats .legend { grid-template-columns: repeat(3, minmax(13em, 1fr)); grid-template-areas: "working waiting flying" "snoozed idle lamp"; } }
-  #stats .legend span { white-space: nowrap; }
-  #stats .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
+  :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
+  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(2, minmax(13em, 1fr)); grid-template-areas: "working waiting" "snoozed idle" "flying lamp"; gap: 2px 14px; margin-top: 0; }
+  @container (min-width: 457px) { :is(#stats, #recap) .legend { grid-template-columns: repeat(3, minmax(13em, 1fr)); grid-template-areas: "working waiting flying" "snoozed idle lamp"; } }
+  :is(#stats, #recap) .legend span { white-space: nowrap; }
+  :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
   :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
   :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }
   :is(#stats, #recap) dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
@@ -121,7 +121,21 @@
   #recap .close:hover { color: #F0E8FF; }
   #recap dl { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   #recap dd { font-size: 15px; }
-  #recap .stars { display: block; width: 100%; height: auto; }
+  #recap .starsBox { position: relative; }
+  #recap .star.lit circle:first-child { opacity: .35; }
+  #recap .stars { display: block; width: 100%; height: auto; overflow: visible; } /* dots at the day's edges show whole */
+  #recap .star { cursor: default; outline: none; }
+  #recap .star:focus-visible circle:last-child { stroke: #F5E9FF; stroke-width: 1; }
+  #recap .starCard { z-index: 10; box-sizing: border-box; max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-content: start; }
+  #recap .starCard h3 { grid-column: 1 / -1; display: block; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #recap .starCard > div { min-width: 0; }
+  #recap .starCard > div + div { margin-top: 0; }
+  #recap .starCard > div:last-child { min-height: calc(8 * 1.45em + 7 * 3px + 1px); } /* the PR heading, six PRs and "and more" (their links sit a hair taller than a line): one height for every session */
+  #recap .starCard .agents:first-child { margin-top: 0; }
+  #recap .star.picked circle:last-child { stroke: #F5E9FF; stroke-width: 1.2; }
+  #recap .starCard h3 .link { all: unset; cursor: pointer; border-bottom: 1px solid #5B4A8A; }
+  #recap .starCard h3 .link:hover { color: #F0E8FF; border-color: #B9A8FF; }
+  #recap .starCard.show { opacity: 1; pointer-events: auto; } /* beats the shared card rule, whose #card lends it an id's weight */
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
   #status .warm { color: #8F7FA6; }
@@ -175,31 +189,31 @@
   .moth { pointer-events: none; }
   /* each session's hover area: still while its moth wanders, so the card doesn't chase it */
   #zones circle { fill: transparent; cursor: pointer; }
-  #card .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
-  #card .agent { color: #E8DCF2; }
-  #card .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
-  #card .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
-  #card .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #B8AACB; }
-  #card ul { margin: 6px 0 2px; padding-left: 16px; }
-  #card li { margin: 2px 0; }
-  #card a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
-  #card a:hover { color: #F0E8FF; border-color: #B9A8FF; }
-  #card .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
+  :is(#card, .starCard) .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+  :is(#card, .starCard) .agent { color: #E8DCF2; }
+  :is(#card, .starCard) .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
+  :is(#card, .starCard) .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
+  :is(#card, .starCard) .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #B8AACB; }
+  :is(#card, .starCard) ul { margin: 6px 0 2px; padding-left: 16px; }
+  :is(#card, .starCard) li { margin: 2px 0; }
+  :is(#card, .starCard) a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
+  :is(#card, .starCard) a:hover { color: #F0E8FF; border-color: #B9A8FF; }
+  :is(#card, .starCard) .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
   select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
-  #card { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
+  :is(#card, .starCard) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
   #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
-  #card h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: flex-start; }
+  :is(#card, .starCard) h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: flex-start; }
   #card .chip { white-space: nowrap; flex-shrink: 0; margin-top: 2px; font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 99px; background: #4A3B58; color: #F2DCC0; }
   #card .chip.waiting { background: #5B44C9; color: #F0ECFF; }
   #card .chip.idle { background: #3A3050; color: #B9A8C8; }
   #card .chip.error { background: #4A3A40; color: #E8C8C8; }
   #card .chip.paused { background: #33405E; color: #C4D2F0; }
-  #card .note { color: #C3B2FF; font-weight: 500; }
-  #card .prompt { font-style: italic; color: #E8DCF2; overflow-wrap: anywhere; }
-  #card .dim { color: #8F7FA6; overflow-wrap: anywhere; }
-  #card div + div { margin-top: 3px; }
+  :is(#card, .starCard) .note { color: #C3B2FF; font-weight: 500; }
+  :is(#card, .starCard) .prompt { font-style: italic; color: #E8DCF2; overflow-wrap: anywhere; }
+  :is(#card, .starCard) .dim { color: #8F7FA6; overflow-wrap: anywhere; }
+  :is(#card, .starCard) div + div { margin-top: 3px; }
   .moth .wing { fill: var(--wing); }
 </style>
 </head>
