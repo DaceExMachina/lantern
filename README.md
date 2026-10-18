@@ -178,6 +178,8 @@ With more than one display, the biggest one gets the lantern and the others get 
 
 The first time you click a moth in iTerm2 or Terminal, macOS asks whether Lantern can control it. Allow it. See [Works with](#works-with) for what a click does in each terminal.
 
+Using a terminal Lantern doesn't know yet? Adding it is a small change, and pull requests are welcome. The hook already sends `TERM_PROGRAM` and the terminal app's bundle id with every event (`install.js`), and `focusElsewhere` in `app/Server.swift` is where each terminal gets its own way of bringing a session forward; add a case there next to the others.
+
 ### Without the app (`server.js`)
 
 `server.js` is the server from before Lantern.app, kept as a plain fallback: the installer runs it under launchd when your Mac has no Xcode command line tools, and it's the way to run Lantern off macOS. It needs only Node 18. It's frozen, so it lacks everything added since the app took over:
