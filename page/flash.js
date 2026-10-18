@@ -12,6 +12,9 @@ let flashing = false;
 
 // a point on a quadratic curve from a to b bending through c, at u in [0, 1]
 const curve = (a, c, b, u) => [0, 1].map(k => (1 - u) ** 2 * a[k] + 2 * (1 - u) * u * c[k] + u * u * b[k]);
+// a point on a cubic curve from a to d with handles b and c: leaving a towards b, arriving at d from c
+const cubic = (a, b, c, d, u) => [0, 1].map(k => (1 - u) ** 3 * a[k] + 3 * (1 - u) ** 2 * u * b[k] + 3 * (1 - u) * u * u * c[k] + u ** 3 * d[k]);
+const toward = (a, b, len) => { const d = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [a[0] + (b[0] - a[0]) / d * len, a[1] + (b[1] - a[1]) / d * len]; };
 // a bend for the path from a to b: off to one side by a share of its length
 function bend(a, b, rand) {
   const dx = b[0] - a[0], dy = b[1] - a[1], k = (0.2 + rand() * 0.25) * (rand() < 0.5 ? -1 : 1);
@@ -67,33 +70,46 @@ function playFlash(id) {
 
   // The pill is filled by currents: nested loops inset from its outline 0.7 halo radii apart, each holding fireflies
   // 0.8 halo radii apart (the density of a hexagonal packing), so the halos cover it solidly end to end. Each loop
-  // streams round the pill at its own pace, neighbours going opposite ways, and every firefly weaves in and out across
-  // its neighbours' loops (the outermost only a little, so the rim stays full). A loop moving along itself never thins,
-  // so the coverage stays even, and nobody leaves the outline.
+  // streams round the pill, neighbours going opposite ways, and every firefly weaves in and out across its neighbours'
+  // loops (the outermost only a little, so the rim stays full). A loop moving along itself never thins, so the coverage
+  // stays even, and nobody leaves the outline.
+  // It's all one motion at one speed: they fly in at the currents' speed, join their loop at the place and heading it
+  // has reached when they land, stream at it, and carry it into the fly-off.
   const step = radii[1] * 0.8, r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, weave = step * 0.35, flies = [];
-  // where a firefly is at `t` while it holds: along its loop, its pace easing up from a standstill once it lands
+  const inner = step * 0.6; // the tightest loop: round, not a flat line that would turn its fireflies back in an instant, and it doesn't weave
+  // where a firefly's place in the current is at `t` (its loop runs from the start, so it lands on a moving spot)
   const holdAt = (f, t) => {
-    const since = Math.max(0, t - f.land), run = since - 500 * (1 - Math.exp(-since / 500));
-    const rr = Math.max(0, Math.min(r, f.rr + Math.sin(t * f.wf + f.ph) * f.weave)); // weaving in and out, never past the edge
-    return aroundPill((f.s0 + f.v * run) / f.loop * (4 * half + 2 * Math.PI * rr), half, rr, cx, cy); // the same share of the way round
+    const rr = Math.max(inner, Math.min(r, f.rr + Math.sin(t * f.wf + f.ph) * f.weave)); // weaving in and out, never past the edge
+    return aroundPill((f.s0 + f.v * t) / f.loop * (4 * half + 2 * Math.PI * rr), half, rr, cx, cy); // the same share of the way round
   };
+  const heading = (f, t) => { const a = holdAt(f, t - 1), b = holdAt(f, t + 1); return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]; }; // px per ms
   for (let ring = 0, rr = r; rr > -0.01; ring++, rr -= step * 0.866) {
-    const loop = 4 * half + 2 * Math.PI * Math.max(0, rr), n = Math.max(1, Math.round(loop / step)), at = rand() * step;
-    const v = (ring % 2 ? -1 : 1) * (0.018 + rand() * 0.012) * px; // px per ms: a lap of a big pill in about half a minute
+    const loop = 4 * half + 2 * Math.PI * Math.max(inner, rr), n = Math.max(1, Math.round(loop / step)), at = rand() * step, way = (ring % 2 ? -1 : 1) * (0.9 + rand() * 0.2); // one pace per loop, so its fireflies never bunch
     for (let i = 0; i < n; i++) {
-      const delay = rand() * 700, arrive = FLASH.gather * (0.75 + rand() * 0.25);
-      const f = { rr: Math.max(0, rr), loop, weave: ring ? weave : weave * 0.4, s0: at + i * loop / n, v, wf: 0.0007 + rand() * 0.0007, ph: rand() * 6.28, delay, arrive, land: delay + arrive,
-        lift: leaveAt + rand() * 500, go: FLASH.leave * (0.75 + rand() * 0.25) };
-      f.spot = holdAt(f, f.land);
-      // in from the nearer side mostly, from anywhere along its height, and back out to a side when they go
-      const side = (f.spot[0] < cx) !== (rand() < 0.2) ? -radii[0] : W + radii[0], out = rand() < 0.5 ? -radii[0] : W + radii[0];
-      f.from = still ? f.spot : [side, rand() * H];
-      f.away = [out, f.spot[1] + (rand() - 0.2) * H * 0.6];
-      f.c1 = bend(f.from, f.spot, rand); f.bendOut = rand;
-      if (still) f.v = 0;
+      const f = { rr: Math.max(inner, rr), loop, weave: rr <= inner ? 0 : ring ? weave : weave * 0.4, s0: at + i * loop / n, way,
+        wf: 0.0015 + rand() * 0.001, ph: rand() * 6.28, land: FLASH.gather - 100 + rand() * 700, lift: leaveAt + rand() * 500, go: FLASH.leave * (0.75 + rand() * 0.25) };
       flies.push(f);
     }
   }
+  // The one speed (px per ms), fast enough to cross the window corner to corner before landing. Each firefly's landing
+  // time is set first, which fixes where it joins its loop and which way the stream there is heading; it comes in from
+  // the side behind that heading, so it flies straight on into the stream instead of turning back against it (the
+  // nearer side where the stream runs up or down), and sets off as long before landing as its path takes.
+  const speed = still ? 0 : Math.max(0.22 * px, Math.hypot(W, H) * 1.15 / (FLASH.gather - 100));
+  for (const f of flies) {
+    f.v = f.way * speed;
+    f.spot = holdAt(f, f.land);
+    const vel = heading(f, f.land), side = Math.abs(vel[0]) > 0.3 * Math.abs(vel[1]) ? vel[0] > 0 : f.spot[0] < cx;
+    f.from = still ? f.spot : [side ? -radii[0] : W + radii[0], rand() * H];
+    const len = Math.hypot(f.spot[0] - f.from[0], f.spot[1] - f.from[1]) * 1.15;
+    f.arrive = still ? 800 : len / speed;
+    f.delay = f.land - f.arrive;
+    // handles a third of the way along: out of the edge towards a bend, and into the spot along the stream's heading
+    f.c1 = still ? f.spot : toward(f.from, bend(f.from, f.spot, rand), len / 3);
+    f.c2 = [f.spot[0] - vel[0] * f.arrive / 3, f.spot[1] - vel[1] * f.arrive / 3];
+    f.tilt = (rand() - 0.5) * 1.2;
+  }
+
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
@@ -110,12 +126,18 @@ function playFlash(id) {
       for (const f of flies) {
         let p, fade, lit = surge;
         if (t < f.delay) continue;
-        if (t < f.delay + f.arrive) { const u = (t - f.delay) / f.arrive; p = curve(f.from, f.c1, f.spot, (1 - Math.cos(Math.PI * u)) / 2); fade = Math.min(1, u * 3); }
+        if (t < f.land) { const u = (t - f.delay) / f.arrive; p = cubic(f.from, f.c1, f.c2, f.spot, u); fade = Math.min(1, u * 3); }
         else if (t < f.lift) { p = holdAt(f, t); fade = 1; }
         else {
-          // off from wherever the current had carried it when it lifted
-          if (!f.p0) { f.p0 = holdAt(f, f.lift); if (still) f.away = f.p0; f.c2 = bend(f.p0, f.away, f.bendOut); }
-          const u = Math.min(1, (t - f.lift) / f.go); p = curve(f.p0, f.c2, f.away, 1 - Math.cos(Math.PI * u / 2)); fade = 1 - u; lit *= 1 - ease(u * 2);
+          // off from wherever the current had carried it, on along its heading at the same speed
+          if (!f.p0) {
+            f.p0 = holdAt(f, f.lift);
+            // straight on along its heading, turned up to a third of a right angle either way and a little upward
+            const vel = heading(f, f.lift), len = speed * f.go, a = Math.atan2(vel[1], vel[0]) + f.tilt * 0.6 - 0.15 * Math.sign(vel[0] || 1);
+            f.away = still ? f.p0 : [f.p0[0] + Math.cos(a) * len, f.p0[1] + Math.sin(a) * len];
+            f.c3 = [f.p0[0] + vel[0] * f.go / 3, f.p0[1] + vel[1] * f.go / 3]; f.c4 = toward(f.away, f.p0, len / 3);
+          }
+          const u = Math.min(1, (t - f.lift) / f.go); p = cubic(f.p0, f.c3, f.c4, f.away, u); fade = 1 - u; lit *= 1 - ease(u * 2);
         }
         const look = fireflyLook(FLASH_COLOUR, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade), q = Math.round(lit * 20);
         if (q) {
