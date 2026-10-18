@@ -298,11 +298,12 @@ function tickPages() {
   if (busy) return; // the last picture isn't up yet; what changed is still dirty next tick
   if (dirty || Math.abs(s - drawn.scale) > 0.01 || Math.abs(cool - drawn.cool) > 0.03) render(s);
 }
-// Brighter flame, clearer words, times the first set's quick fade in.
+// Brighter flame, clearer words, times the first set's quick fade in. INK_OPACITY keeps the words faint on any paper.
+const INK_OPACITY = 0.75;
 function inkOpacity() {
   const intro = Math.min(1, (performance.now() - introAt) / INTRO);
   if (intro >= 1) { clearInterval(introTimer); introTimer = 0; }
-  $('pagesInk')?.setAttribute('opacity', ((0.5 + 0.5 * Math.max(level, cool * 0.45)) * intro).toFixed(3));
+  $('pagesInk')?.setAttribute('opacity', (INK_OPACITY * (0.5 + 0.5 * Math.max(level, cool * 0.45)) * intro).toFixed(3));
 }
 
 function stopPages() { clearInterval(pagesTimer); clearInterval(introTimer); pagesTimer = introTimer = 0; }
