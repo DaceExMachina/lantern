@@ -74,32 +74,38 @@ const badge = (id, extra = '', unearned = false) => {
   return `<button class="badge${unearned ? ' unearned' : ''}" data-id="${id}" aria-label="${name}: ${how}">${name}${extra}</button>`;
 };
 
-// What a badge is: shown under its row while the pointer is on it (or it has focus), and kept open by a click or tap
-// until it's clicked again. One card at a time per panel. `tally` is every badge ever earned, as id -> [times, last day].
+// What a badge is: a small card floating over it while the pointer is on it (or it has focus), like a moth's card,
+// out of the panel's layout so nothing moves; a click or tap keeps it until clicked again. One tip per panel, inside
+// it (the panel sits in the top layer). `tally` is every badge ever earned, as id -> [times, last day].
 let tally = {}, pinnedBadge = null, badgeTimer;
 const longDay = day => new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 function showBadge(el) {
   clearTimeout(badgeTimer);
-  const row = el.closest('.badges'), [name, how] = ACHIEVEMENTS[el.dataset.id] || [el.dataset.id, ''];
+  const root = el.closest('[popover]'), [name, how] = ACHIEVEMENTS[el.dataset.id] || [el.dataset.id, ''];
   const [times, last] = tally[el.dataset.id] || [0, ''];
-  for (const other of el.closest('[popover]').querySelectorAll('.badgeInfo')) if (other !== row.nextElementSibling) other.remove();
-  let info = row.nextElementSibling;
-  if (!info?.classList.contains('badgeInfo')) { info = document.createElement('div'); info.className = 'badgeInfo'; row.after(info); }
-  info.innerHTML = `<b>${name}</b><div>${how}.</div>
+  let tip = root.querySelector('.badgeTip');
+  if (!tip) { tip = document.createElement('div'); tip.className = 'badgeTip'; tip.setAttribute('role', 'tooltip'); root.append(tip); }
+  tip.innerHTML = `<b>${name}</b><div>${how}.</div>
     <div class="dim">${times ? `Earned ${times === 1 ? 'once' : `${times} times`}, last on ${longDay(last)}.` : 'Not earned yet.'}</div>`;
+  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+  const top = r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8; // above the badge, or below when there's no room
+  tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  tip.style.top = `${top}px`;
+  tip.classList.add('show');
 }
-// back to the pinned badge's card, or none
+// back to the pinned badge's tip, or none
 function restoreBadge(root) {
   const el = pinnedBadge && root.querySelector(`.badge[data-id="${pinnedBadge}"]`);
-  if (el) showBadge(el); else for (const info of root.querySelectorAll('.badgeInfo')) info.remove();
+  if (el) showBadge(el); else root.querySelector('.badgeTip')?.classList.remove('show');
 }
 for (const root of [$('stats'), $('recap')]) {
   root.addEventListener('pointerover', e => { const el = e.target.closest('.badge'); if (el) showBadge(el); });
   root.addEventListener('focusin', e => { const el = e.target.closest('.badge'); if (el) showBadge(el); });
   root.addEventListener('pointerout', e => {
     const el = e.target.closest('.badge');
-    if (el && !el.contains(e.relatedTarget)) badgeTimer = setTimeout(() => restoreBadge(root), 200); // a moment, so crossing to the next badge doesn't flash
+    if (el && !el.contains(e.relatedTarget)) badgeTimer = setTimeout(() => restoreBadge(root), 150); // a moment, so crossing to the next badge doesn't flash
   });
+  root.addEventListener('scroll', () => restoreBadge(root), true); // a tip stays over its badge, so it can't ride a scroll
   root.addEventListener('click', e => {
     const el = e.target.closest('.badge'); if (!el) return;
     pinnedBadge = pinnedBadge === el.dataset.id ? null : el.dataset.id;
