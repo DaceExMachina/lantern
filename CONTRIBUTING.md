@@ -18,9 +18,10 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | `app/Stats.swift` | The event log behind the stats panel. Its schema is described at the top of the file. |
 | `app/main.swift` | The app's window, Dock badge and login item. |
 | `screensaver/`, `iterm/` | The screensaver and the iTerm2 toolbelt panel. Both show the page served by the app. |
+| `scripts/` | `npm run preview` and `npm run snapshots`. |
 | `install.js` | The installer: hooks, building the app and screensaver, the iTerm2 panel. |
 | `fake.js` | Plays every lantern state without real sessions, on a throwaway lantern (see below). |
-| `test/` | The tests (see below). |
+| `test/` | The tests and the snapshots (see below). |
 
 On startup, the server rebuilds your open sessions from their transcripts in `~/.claude/projects` (or under `CLAUDE_CONFIG_DIR`), so a restart doesn't lose them.
 
@@ -77,6 +78,22 @@ npm install && npm run check && npm test
 `npm test` uses Node's built-in test runner. It needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with a temporary home folder of its own, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, plus `expect` steps holding the sessions the page should have by that point.
 
 When you change what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps to match. Read the diff before you commit it. If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
+
+### Snapshots
+
+```bash
+npm run snapshots
+```
+
+This checks that the page still looks the same. It renders a few scenes in WebKit and compares them pixel by pixel with the pictures in `test/snapshots/`: each lantern, the second screen's ambient view, and a hover card. The scenes are deterministic, with a seeded `Math.random`, a clock that only moves when the script steps it, and a made-up event stream (`test/snapshots/fixture.js`) that has sessions in every state, every PR colour, satellites, subagents, review fireflies, stale wisps and ghosts, and session text on the barrel. WebKit runs in a window that is never shown, so nothing pops up or takes focus.
+
+Run it before and after a change that shouldn't change what you see, like a refactor or a speedup. When a scene differs, it says how many pixels, and writes the new picture and a diff (the differences in red) to `test/snapshots/out/`. When you change the look on purpose, refresh the pictures, then look at them before you commit:
+
+```bash
+npm run snapshots -- --update
+```
+
+It needs macOS, so it isn't part of `npm test` or CI. The pictures were made on a Retina Mac, and a Mac with a different screen may draw a few pixels differently. If a scene fails before you've changed anything, run `--update` on main first and compare against that.
 
 CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the type check and the tests on every pull request and push to main, and makes sure the app and the screensaver compile.
 
