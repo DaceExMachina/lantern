@@ -138,7 +138,7 @@ func questionIn(_ message: Any?) -> String {
     return (blocker.flatMap { $0.isEmpty ? nil : $0 } ?? asked).trim.cut(160)
 }
 
-// What a finished turn hands me, for its card: the "You:" line from its status footer, PRs and other links, and
+// What a finished turn hands me, for its card: the "You:" line from its status footer (or its last paragraph), PRs and other links, and
 // the questions it asked. Links come from the model's own text, so only http(s) ones are kept.
 func forYou(_ message: Any?) -> JSON {
     let text = Re("```[\\s\\S]*?```").replace(message == nil ? "" : str(message), "") // nothing inside code blocks
@@ -156,8 +156,16 @@ func forYou(_ message: Any?) -> JSON {
     let isBlocker = Re("Blocker:", .caseInsensitive)
     let blockers = lines.filter(isBlocker.test).map { plain(Re("^.*?Blocker:\\**\\s*", .caseInsensitive).replace($0, "")) }
     let asked = lines.filter { !isBlocker.test($0) }.flatMap { Re("(?<=[.!?])\\s+").split(plain($0)) }.filter { $0.hasSuffix("?") }
-    // the You: line is the TL;DR of what to do; keep its links, split into plain text and {label, url} pieces
-    let youRaw = Re("\\*\\*You:\\*\\*\\s*(.+)").match(text)?[1] ?? ""
+    // the You: line from a status footer is the TL;DR of what to do. Without one, the final paragraph (headings dropped, list
+    // items joined with dots) stands in, unless it's only a question the card lists anyway. Its links are kept either way,
+    // split into plain text and {label, url} pieces.
+    let footer = Re("\\*\\*You:\\*\\*\\s*(.+)").match(text)?[1]
+    let item = Re("^\\s*([-*+]|[0-9]+[.)])\\s+")
+    let lastParagraph = Re("\\n\\s*\\n").split(text).map { $0.components(separatedBy: "\n").filter { !Re("^\\s*#").test($0) } }
+        .last { !$0.joined().trim.isEmpty }.map { lines in
+            lines.enumerated().map { i, l in (i > 0 ? item.test(l) ? " · " : " " : "") + item.replace(l, "").trim }.joined()
+        }
+    let youRaw = footer ?? lastParagraph.flatMap { asked.contains(plain($0)) ? nil : $0 } ?? ""
     var you: [Any] = [], at = 0
     let strip = Re("[*_`]")
     for m in Re("\\[([^\\]]+)\\]\\((https?://[^\\s)]+)\\)").matches(youRaw) {
@@ -166,6 +174,16 @@ func forYou(_ message: Any?) -> JSON {
         at = m.range.location + m.range.length
     }
     if at < youRaw.utf16.count { you.append(strip.replace(youRaw.sub(NSRange(location: at, length: youRaw.utf16.count - at))!, "")) }
+    if footer == nil { // a whole paragraph can run long: keep about 200 characters, ending on a word
+        var left = 200, kept: [Any] = []
+        for piece in you where left > 0 {
+            let shown = (piece as? String) ?? str((piece as? JSON)?["label"])
+            if shown.utf16.count <= left { kept.append(piece); left -= shown.utf16.count; continue }
+            if piece is String { kept.append(Re("\\s+\\S*$").replace(shown.cut(left), "") + "…") }
+            left = 0
+        }
+        you = kept
+    }
     var questions: [String] = []
     for q in blockers + asked where !questions.contains(q) { questions.append(q) }
     return ["you": you.filter { ($0 as? String)?.isEmpty != true },
