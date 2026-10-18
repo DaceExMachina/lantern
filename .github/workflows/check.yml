@@ -18,6 +18,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Lantern.app compiles
-        run: swiftc -typecheck app/main.swift app/Server.swift app/Stats.swift
+        run: swiftc -typecheck app/*.swift
       - name: The screensaver compiles
         run: swiftc -typecheck screensaver/LanternView.swift

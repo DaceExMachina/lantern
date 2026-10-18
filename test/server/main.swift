@@ -1,4 +1,4 @@
-// The Lantern server without the app around it, for the replay tests: Server.swift and Stats.swift, run headless on
+// The Lantern server without the app around it, for the replay tests: the files of app/ other than main.swift, run headless on
 // LANTERN_PORT with its data in LANTERN_DATA.
 import Foundation
 
