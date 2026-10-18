@@ -2,10 +2,10 @@
 // and the week before as mini ribbons. Hygiene over volume: the headline is how much of the moths' time was warm.
 
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-// The middle strip uses the moths' own colours (lanterns.js, as frame.js's mothColour blends them): flying, landed,
-// and snoozed (a landed moth only half way to the calling colour).
-const MOTHS = { flying: MOTH_IDLE, landed: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5) };
-const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', alive: '#7A6A9C', working: '#43365F', mark: '#D8CCE6' };
+// The bottom strip uses the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working in flight,
+// waiting on the lantern, and snoozed (a landed moth only half way to the calling colour).
+const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: '#3E3752' };
+const RIBBON = { warm: WARM.outer, violet: COOL.outer, snoozed: '#5F5677', quiet: '#3A3050', mark: '#D8CCE6' };
 
 const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -28,27 +28,31 @@ function slices(day, spans, gauges, count) {
     const g = gauges.filter(g => g[0] <= mid && g[0] > mid - 6 * MIN).pop();
     const snoozed = b <= since && g && g[3] > 0 ? (cover.waiting || 0) * Math.max(0, g[4]) / g[3] : cover.snoozed || 0;
     out.push({ a, b, ran: (cover.server || 0) / (b - a), violet: (cover.violet || 0) / (b - a), quiet: (cover.quiet || 0) / (b - a),
-      alive: (cover.alive || 0) / (b - a), flying: cover.alive ? 1 - (cover.waiting || 0) / cover.alive : null,
-      hushed: cover.waiting ? Math.min(1, snoozed / cover.waiting) : 0, working: g ? g[2] : null });
+      alive: (cover.alive || 0) / (b - a), waiting: (cover.waiting || 0) / (b - a), snoozed: Math.min(cover.waiting || 0, snoozed) / (b - a),
+      flying: cover.alive ? 1 - (cover.waiting || 0) / cover.alive : null, working: g ? g[2] : null });
   }
   return { from, to, slices: out, starts: alive.filter(s => !s[3] && s[1] >= from).map(s => s[1]) };
 }
 
-// Three strips touching: the lantern (warm or violet, quiet dim), the share of moths flying (whitish) vs landed (indigo,
-// paler for the share of landed time that was snoozed), and the moths alive with the working ones as a darker band
-// inside. Small ticks on top mark sessions starting.
+// Three strips touching: the lantern (warm or violet, quiet dim), the share of moths flying (warm) vs landed (violet,
+// greyer for the share of landed time that was snoozed), and the sessions alive stacked by state in the moths' colours:
+// working, waiting, snoozed, then the idle rest. Small ticks on top mark sessions starting.
 function ribbon(r, w, h) {
   const top = Math.round(h * .18), mid = Math.round(h * .3), low = h - top - mid - 3, x = t => (t - r.from) / (r.to - r.from) * w;
-  const most = Math.max(1, ...r.slices.map(s => Math.max(s.alive, s.working || 0)));
+  const most = Math.max(1, ...r.slices.map(s => s.alive));
   let svg = '';
   for (const s of r.slices) {
     const x0 = x(s.a), sw = x(s.b) - x0 + .4;
     const lamp = s.ran < .5 ? null : s.quiet > .5 ? RIBBON.quiet : s.violet > .5 ? RIBBON.violet : RIBBON.warm;
     if (lamp) svg += `<rect x="${x0}" y="3" width="${sw}" height="${top}" fill="${lamp}"/>`;
-    if (s.flying != null) svg += `<rect x="${x0}" y="${3 + top}" width="${sw}" height="${mid}" fill="${mix(mix(MOTHS.landed, MOTHS.snoozed, s.hushed), MOTHS.flying, s.flying)}"/>`;
-    const ah = low * s.alive / most, wh = low * Math.min(s.alive, s.working ?? 0) / most;
-    if (ah) svg += `<rect x="${x0}" y="${h - ah}" width="${sw}" height="${ah}" fill="${RIBBON.alive}"/>`;
-    if (wh) svg += `<rect x="${x0}" y="${h - wh}" width="${sw}" height="${wh}" fill="${RIBBON.working}"/>`;
+    if (s.flying != null) svg += `<rect x="${x0}" y="${3 + top}" width="${sw}" height="${mid}" fill="${mix(mix(COOL.outer, RIBBON.snoozed, s.waiting ? s.snoozed / s.waiting : 0), WARM.outer, s.flying)}"/>`;
+    // bottom up; the working count is a gauge, so it only fills what the waits leave
+    const working = Math.min(s.working ?? 0, s.alive - s.waiting);
+    let y = h;
+    for (const [n, fill] of [[working, MOTHS.working], [s.waiting - s.snoozed, MOTHS.waiting], [s.snoozed, MOTHS.snoozed], [s.alive - s.waiting - working, MOTHS.idle]]) {
+      const bh = low * Math.max(0, n) / most;
+      if (bh) { y -= bh; svg += `<rect x="${x0}" y="${y}" width="${sw}" height="${bh}" fill="${fill}"/>`; }
+    }
   }
   for (const t of r.starts) svg += `<path d="M${x(t)} 0V3" stroke="${RIBBON.mark}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`;
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
@@ -147,9 +151,10 @@ function renderStats(j) {
       : `<b>${today.warmMoths}%</b><span>of moth time today was warm: flying, not waiting on you</span>`}</div>
     ${r ? `<div class="ribbon">${ribbon(r, 600, 50)}</div>
       <div class="axis"><span>${clock(r.from)}</span><span>${today.end >= Date.now() - MIN ? 'now' : clock(r.to)}</span></div>
-      <div class="legend"><span><i style="background:${RIBBON.warm}"></i>lantern</span><span><i style="background:linear-gradient(90deg, ${MOTHS.landed}, ${MOTHS.flying})"></i>moths flying</span>
-        <span><i style="background:${MOTHS.snoozed}"></i>snoozed</span>
-        <span><i style="background:${RIBBON.alive}"></i>sessions</span><span><i style="background:${RIBBON.working}"></i>working</span></div>` : ''}
+      <div class="legend"><span><i style="background:${RIBBON.warm}"></i>lantern</span><span><i style="background:linear-gradient(90deg, ${COOL.outer}, ${WARM.outer})"></i>moths flying</span>
+        <span><i style="background:${RIBBON.snoozed}"></i>landed, snoozed</span></div>
+      <div class="legend">sessions:<span><i style="background:${MOTHS.working}"></i>working</span><span><i style="background:${MOTHS.waiting}"></i>waiting</span>
+        <span><i style="background:${MOTHS.snoozed}"></i>snoozed</span><span><i style="background:${MOTHS.idle}"></i>idle</span></div>` : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   tally = j.tally;
   const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
