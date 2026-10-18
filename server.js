@@ -534,9 +534,11 @@ function clearGitHub() { reviews = []; for (const s of sessions.values()) delete
 loadAccounts();
 setInterval(refreshGitHub, 2 * 60 * 1000);
 
-// Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when index.html changes on disk.
-const pageVersion = () => { try { return fs.statSync(path.join(__dirname, 'index.html')).mtimeMs; } catch { return 0; } };
-fs.watchFile(path.join(__dirname, 'index.html'), { interval: 1000 }, () => { for (const c of clients) c.write(`event: version\ndata: ${pageVersion()}\n\n`); });
+// Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk:
+// index.html or any of its scripts in page/.
+const pageFiles = () => [path.join(__dirname, 'index.html'), ...(fs.existsSync(path.join(__dirname, 'page')) ? fs.readdirSync(path.join(__dirname, 'page')).map(f => path.join(__dirname, 'page', f)) : [])];
+const pageVersion = () => Math.max(0, ...pageFiles().map(f => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } }));
+for (const f of pageFiles()) fs.watchFile(f, { interval: 1000 }, () => { for (const c of clients) c.write(`event: version\ndata: ${pageVersion()}\n\n`); });
 
 // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
@@ -662,6 +664,10 @@ http.createServer((req, res) => {
     return fs.createReadStream(path.join(__dirname, req.url)).pipe(res);
   }
   const page = (req.url || '').split('?')[0]; // ?panel and friends are for the page, not the server
+  if (/^\/page\/[a-z]+\.js$/.test(page) && fs.existsSync(path.join(__dirname, page))) {
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+    return fs.createReadStream(path.join(__dirname, page)).pipe(res);
+  }
   if (page === '/' || page === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);

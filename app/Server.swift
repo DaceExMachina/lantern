@@ -462,7 +462,7 @@ final class LanternServer {
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep() }
-        // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when index.html changes on disk.
+        // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
         pageMtime = pageVersion()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             let v = self.pageVersion()
@@ -491,7 +491,11 @@ final class LanternServer {
         let text = String(decoding: (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
         DispatchQueue.global().async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
     }
-    func pageVersion() -> Double { fileTimes(web + "/index.html")?.mtime ?? 0 }
+    // the newest change to index.html or any of its scripts in page/
+    func pageVersion() -> Double {
+        let scripts = ((try? FileManager.default.contentsOfDirectory(atPath: web + "/page")) ?? []).map { web + "/page/" + $0 }
+        return ([web + "/index.html"] + scripts).compactMap { fileTimes($0)?.mtime }.max() ?? 0
+    }
 
     // MARK: hook events
 
@@ -998,6 +1002,9 @@ final class LanternServer {
         let icons = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = icons[req.url] { return respond(c, 200, type, FileManager.default.contents(atPath: web + req.url) ?? Data()) }
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
+        if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil, let js = FileManager.default.contents(atPath: web + page) {
+            return respond(c, 200, "text/javascript; charset=utf-8", js)
+        }
         if page == "/" || page == "/index.html" { return respond(c, 200, "text/html; charset=utf-8", FileManager.default.contents(atPath: web + "/index.html") ?? Data()) }
         respond(c, 404)
     }

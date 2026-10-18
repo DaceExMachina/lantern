@@ -8,7 +8,7 @@ OUT=build/Lantern.app
 rm -rf build && mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources" build/Lantern.iconset
 cp Info.plist "$OUT/Contents/"
 # the page rides along inside the app
-cp ../index.html ../icon.svg ../icon.png ../icon-indigo.svg ../icon-indigo.png "$OUT/Contents/Resources/"
+cp -R ../index.html ../page ../icon.svg ../icon.png ../icon-indigo.svg ../icon-indigo.png "$OUT/Contents/Resources/"
 for s in 16 32 128 256 512; do
   sips -z $s $s ../icon.png --out build/Lantern.iconset/icon_${s}x${s}.png >/dev/null
   [ $s = 512 ] || sips -z $((s * 2)) $((s * 2)) ../icon.png --out build/Lantern.iconset/icon_${s}x${s}@2x.png >/dev/null
