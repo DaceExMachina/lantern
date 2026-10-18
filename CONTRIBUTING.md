@@ -31,7 +31,13 @@ git worktree add ../lantern-my-change -b my-change
 
 ## Previewing a change
 
-A Swift-based preview command is coming, for seeing a branch's page with your real sessions and PRs.
+To see a branch with your real sessions, PRs and session text, run this in its worktree:
+
+```bash
+npm run preview
+```
+
+It builds the branch's server without the app's window, gives it a copy of your settings, PR cache and stats from `~/Library/Application Support/Lantern`, and prints a URL on a spare port. Add page options after `--`, for example `npm run preview -- style=chochin`. Edits to `index.html` or `page/` reload the page; after changing `app/`, stop it with Ctrl-C and run it again. It reads `~/.claude` but never writes there, and snoozes or settings changed in the preview stay in its copy, which is deleted when it stops. Two things are real, though: it polls GitHub on its own while it runs, and clicking a moth brings that session's terminal to the front. Claude Code's hooks only reach the app, so the preview finds sessions from their processes and transcripts, and their states can differ from what the app shows.
 
 To see every lantern state without real sessions, start a throwaway copy of the app on a spare port with its own empty data folder, then point `fake.js` at it:
 

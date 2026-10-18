@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// npm run preview [-- style=book]: this checkout's page and server, with your real sessions, PRs and settings.
+// npm run preview [-- style=chochin]: this checkout's page and server, with your real sessions, PRs and settings.
 // It builds the app's server without its window, gives it a copy of the live app's data folder, and serves this
 // checkout's page on a spare port. Your ~/.claude is only read, and the copy is thrown away when you stop it, so
 // snoozes and settings changed in the preview never reach the app. Two things do reach the world: it polls GitHub
