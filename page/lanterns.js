@@ -79,13 +79,38 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
 };
 // the Odawara barrel: a straight cylinder on 20 close wires (top and bottom edges included), each bowed from the flame's
 // height like its drums. style.drum, so whatever is drawn on the paper can follow the same curves.
-const BARREL = { cx: 340, r: 60, top: 216, bottom: 445, ribs: Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), bow: y => 120 * (y - 350) / 1350 };
+// `cap` is the half-width of the lacquer drums where they grip the paper.
+const BARREL = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350 };
+BARREL.ribs = Array.from({ length: 20 }, (_, i) => BARREL.top + (BARREL.bottom - BARREL.top) * i / 19);
 const ODAWARA = SUNKEN(BARREL.cx, _y => BARREL.r, BARREL.ribs, 1.2, BARREL.bow);
 // the chōchin, in its mockup units: round, its wires wider apart and bowing away from the middle, so it sinks in less
 const CHOCHIN = SUNKEN(95, y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)), [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], 0.35, y => 0.115 * (y - 122));
+// A lacquered drum (the barrel's ends, the chōchin's caps), cel-shaded in flat tones: lit lacquer with a darker side on
+// the right, and an ink outline. Where it grips the paper (`paper` 1 for paper below it, -1 above, 0 for neither) it has a
+// dark lip, and a rim facing the paper that catches the flame (class paperLit, coloured each frame). Its top edge is at y,
+// and its edges bow like the wires, seen from the flame's height: `kit.bow(y)` per unit of half-width.
+// A kit is one lantern's lacquer: its centre, bow, where the dark side starts (a share of the half-width), colours, the
+// outline's weight, the lip's height and colour, and the rim's inset, gap from the drum, and weight.
+const LACQUER = {
+  barrel: { cx: BARREL.cx, bow: y => BARREL.bow(y) / BARREL.r, side: 0.44, lit: '#3B2A24', dark: '#1F1512', ink: '#0E0907', line: 1.2,
+    lip: [3.2, '#140D0B'], rim: [3, 1.3, 1.4] },
+  chochin: { cx: 95, bow: y => (y < 122 ? -4 : 4) / 19, side: 8 / 19, lit: '#46302F', dark: '#22171A', ink: '#140C0E', line: 0.55,
+    lip: [1.4, '#1A1012'], rim: [1.5, 0.4, 0.6] },
+};
+const DRUM = (kit, y, half, height, paper = 0) => {
+  const { cx, bow, lip: [lipH, lipFill], rim: [inset, gap, rimW] } = kit, n = v => +v.toFixed(2), bottom = y + height;
+  const arc = (y, h, d) => `Q${cx} ${n(y + h * bow(y))} ${n(cx + d * h)} ${n(y)}`; // an edge's front arc, ending on side d
+  const band = (a, b) => `M${n(cx - half)} ${n(a)}${arc(a, half, 1)}V${n(b)}${arc(b, half, -1)}Z`;
+  const on = (y, f) => `${n(cx + f * half)} ${n(y + half * bow(y) * (1 - f * f) / 2)}`; // f of the way out along that arc
+  const fs = [0, 1, 2, 3, 4].map(i => kit.side + (1 - kit.side) * i / 4), rimY = paper > 0 ? bottom + gap : y - gap;
+  return `<path d="${band(y, bottom)}" fill="${kit.lit}"/><path d="M${[...fs.map(f => on(y, f)), ...fs.reverse().map(f => on(bottom, f))].join('L')}Z" fill="${kit.dark}"/>`
+    + (paper ? `<path d="${paper > 0 ? band(bottom - lipH, bottom) : band(y, y + lipH)}" fill="${lipFill}"/>` : '')
+    + `<path d="${band(y, bottom)}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`
+    + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
+};
 const STYLES = {
   barrel: {
-    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [216, 445, 63],
+    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
     drum: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: _y => BARREL.r }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
@@ -98,14 +123,10 @@ const STYLES = {
     front: `<path d="${ODAWARA.outline}" fill="#F2DCC0" opacity="0.2"/>
     <g fill="#A27C58" opacity="0.13" clip-path="url(#bodyClip)">${ODAWARA.bands}</g>
     <g fill="none" stroke="#B48C66" stroke-width="1" opacity="0.75">${ODAWARA.wires}</g>
-    <!-- the drums: black lacquer, cel-shaded (a lit side, a dark side, a dark lip where they grip the paper, an ink
-         outline), with a narrower step on the outer end; the faces toward the paper catch the flame -->
-    <path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="#3B2A24"/><path d="M362 187.28L369 188.12L376 189.18L383 190.48L390 192L390 199L383 197.54L376 196.31L369 195.29L362 194.49Z" fill="#1F1512"/><path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M277 198Q340 183.81 403 198V218Q340 205.68 277 218Z" fill="#3B2A24"/><path d="M367.72 192.28L376.54 193.29L385.36 194.58L394.18 196.15L403 198L403 218L394.18 216.4L385.36 215.03L376.54 213.91L367.72 213.03Z" fill="#1F1512"/><path d="M277 214.8Q340 202.18 403 214.8V218Q340 205.68 277 218Z" fill="#140D0B"/><path d="M277 198Q340 183.81 403 198V218Q340 205.68 277 218Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 219.3Q340 207.68 400 219.3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    ${DRUM(LACQUER.barrel, 192, 50, 7)}${DRUM(LACQUER.barrel, 198, BARREL.cap, 20, 1)}<!-- the drums, with a narrower step on the outer end -->
     <!-- the bail: a stiff wire arch pinned to the drum on each side, with a crook bent into its top so it sits on a hook without sliding --><path d="M279.5 208C279.5 167 302 147.5 333.5 147.5C334.5 140.5 345.5 140.5 346.5 147.5C378 147.5 400.5 167 400.5 208" fill="none" stroke="#1A1410" stroke-width="4.6" stroke-linecap="round"/><path d="M279.5 208C279.5 167 302 147.5 333.5 147.5C334 144 337 142.25 340 142.25" fill="none" stroke="#8A847C" stroke-width="2.6"/><path d="M340 142.25C343 142.25 346 144 346.5 147.5C378 147.5 400.5 167 400.5 208" fill="none" stroke="#5A544E" stroke-width="2.6"/><path d="M281 196C283 170 304 151.6 330 148.6" fill="none" stroke="#D8D2C8" stroke-width="0.9" stroke-linecap="round"/><!-- the string is tied on: one wrap round the crook, a knot, and a loose tail --><ellipse cx="340" cy="142.4" rx="2" ry="3.6" fill="none" stroke="#C9B49C" stroke-width="1.5"/><g id="knotTail"><path d="M341 139Q345.2 143 344 150.5" fill="none" stroke="#C9B49C" stroke-width="1.4" stroke-linecap="round"/></g><circle cx="340" cy="138.4" r="1.9" fill="#C9B49C" stroke="#7E6C56" stroke-width="0.6"/><circle cx="279.5" cy="208" r="2.6" fill="#8A847C" stroke="#1A1410" stroke-width="1"/><circle cx="400.5" cy="208" r="2.6" fill="#5A544E" stroke="#1A1410" stroke-width="1"/>
     <path id="ribbonBack" fill="#29567A"/><path id="ribbonFront" fill="#4385B1"/><path id="ribbonEdge" fill="none" stroke="#0D2A44" stroke-width="0.8" stroke-linejoin="round"/><!-- the bookmark (see drawRibbon), tied inside the bottom step -->
-    <path d="M290 466Q340 474.59 390 466V473Q340 482.11 290 473Z" fill="#3B2A24"/><path d="M362 469.46L369 468.85L376 468.07L383 467.12L390 466L390 473L383 474.19L376 475.19L369 476.02L362 476.67Z" fill="#1F1512"/><path d="M290 466Q340 474.59 390 466V473Q340 482.11 290 473Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="#3B2A24"/><path d="M367.72 446.5L376.54 445.88L385.36 445.09L394.18 444.13L403 443L403 467L394.18 468.42L385.36 469.63L376.54 470.62L367.72 471.4Z" fill="#1F1512"/><path d="M277 443Q340 451.68 403 443V446.2Q340 455.18 277 446.2Z" fill="#140D0B"/><path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 441.7Q340 449.85 400 441.7" fill="none" stroke="currentColor" stroke-width="1.4"/>`,
+    ${DRUM(LACQUER.barrel, 466, 50, 7)}${DRUM(LACQUER.barrel, 443, BARREL.cap, 24, -1)}`,
   },
   chochin: {
     name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], knot: [95.4, 56.5], caps: [218, 441, 46], // pivot in the drawing's own units
@@ -119,15 +140,8 @@ const STYLES = {
       <g fill="#A8967E" opacity="0.08" clip-path="url(#bodyClip)">${CHOCHIN.bands}</g><!-- the paper sinks in a little between wires -->
       <g fill="none" stroke="#C9BBA8" opacity="0.9"><path d="M70.1 79.9Q95 75.3 119.9 79.8" stroke-width="0.45"/><path d="M56.5 90.2Q95 86.5 133.5 89.8" stroke-width="0.6"/><path d="M49.1 99.8Q95 97.5 140.9 99.8" stroke-width="0.45"/><path d="M45.0 109.8Q95 109.1 145.0 110.0" stroke-width="0.45"/><path d="M43.3 120.3Q95 120.1 146.7 120.1" stroke-width="0.45"/><path d="M44.0 130.0Q95 131.6 146.0 129.9" stroke-width="0.45"/><path d="M47.1 140.0Q95 142.3 142.9 139.8" stroke-width="0.6"/><path d="M53.1 149.8Q95 153.9 136.9 149.9" stroke-width="0.45"/><path d="M63.5 159.8Q95 164.6 126.5 160.0" stroke-width="0.45"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below, each a little uneven -->
       <path d="M101.6 74L106.8 80 113.2 90 116.7 100 118.6 110 119.4 120 119.1 130 117.6 140 114.8 150 109.9 160 101.6 170" fill="none" stroke="#C9BBA8" stroke-width="0.4" stroke-linejoin="round" opacity="0.6"/><!-- the seam, a little way round the side so it curves like a meridian -->
-      <!-- the caps: lacquered drums, cel-shaded. Their edges bow like the ribs; flat tones (lit lacquer and a dark side), a
-           dark lip for their thickness, and an ink outline -->
       <path d="M95 63.3V64.6" stroke="#2A1E1E" stroke-width="1.4"/><ellipse cx="95" cy="60.4" rx="2.4" ry="2.9" fill="none" stroke="#B8935A" stroke-width="0.8"/><path d="M93.3 59.2Q93.6 58 94.6 57.6" fill="none" stroke="#F0D9A6" stroke-width="0.4" stroke-linecap="round"/><ellipse cx="95" cy="57.7" rx="1.1" ry="0.65" fill="none" stroke="#C9B49C" stroke-width="0.5"/><g id="knotTail"><path d="M95.4 56.5Q97.1 58.2 96.7 61.4" fill="none" stroke="#C9B49C" stroke-width="0.5" stroke-linecap="round"/></g><circle cx="95" cy="56.3" r="0.75" fill="#C9B49C" stroke="#7E6C56" stroke-width="0.25"/><!-- the string tied round the ring -->
-      <path d="M76 66.5Q95 62.5 114 66.5V74Q95 70 76 74Z" fill="#46302F"/><path d="M103.0 64.85L105.8 65.14L108.5 65.51L111.2 65.96L114.0 66.50L114.0 74.00L111.2 73.46L108.5 73.01L105.8 72.64L103.0 72.35Z" fill="#22171A"/><path d="M76 72.6Q95 68.6 114 72.6V74Q95 70 76 74Z" fill="#1A1012"/>
-      <path d="M76 66.5Q95 62.5 114 66.5V74Q95 70 76 74Z" fill="none" stroke="#140C0E" stroke-width="0.55" stroke-linejoin="round"/>
-      <path class="paperLit" d="M77.5 74.4Q95 70.5 112.5 74.4" fill="none" stroke="currentColor" stroke-width="0.6"/>
-      <path d="M76 168Q95 172 114 168V176.5Q95 180.5 76 176.5Z" fill="#46302F"/><path d="M103.0 169.65L105.8 169.36L108.5 168.99L111.2 168.54L114.0 168.00L114.0 176.50L111.2 177.04L108.5 177.49L105.8 177.86L103.0 178.15Z" fill="#22171A"/><path d="M76 168Q95 172 114 168V169.4Q95 173.4 76 169.4Z" fill="#1A1012"/>
-      <path d="M76 168Q95 172 114 168V176.5Q95 180.5 76 176.5Z" fill="none" stroke="#140C0E" stroke-width="0.55" stroke-linejoin="round"/>
-      <path class="paperLit" d="M77.5 167.6Q95 171.5 112.5 167.6" fill="none" stroke="currentColor" stroke-width="0.6"/>
+      ${DRUM(LACQUER.chochin, 66.5, 19, 7.5, 1)}${DRUM(LACQUER.chochin, 168, 19, 8.5, -1)}<!-- the caps -->
       <g id="tassel"><path d="M95 178.5V193" stroke="#3A2626" stroke-width="1.1"/>
         <circle cx="95" cy="195.4" r="2.7" fill="#D9AE52"/><path d="M96.4 193.1A2.7 2.7 0 0 1 95 198.1 3.6 3.6 0 0 0 96.4 193.1Z" fill="#A87A2E"/><circle cx="95" cy="195.4" r="2.7" fill="none" stroke="#6E4A1C" stroke-width="0.35"/>
         <rect x="93" y="197.6" width="4" height="1.8" rx="0.5" fill="#C29440" stroke="#6E4A1C" stroke-width="0.3"/>
