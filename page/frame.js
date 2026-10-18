@@ -244,8 +244,9 @@ function frame(t) {
     st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(246,240,255,${(m.cool * 0.9).toFixed(2)})`);
 
     // one thread from the light to each session moth, bowing gently
-    if (m.thread) {
-      const [ax, ay] = orbit && !orbit.leaving ? [orbit.x, orbit.y] : rot(...style.light); // a satellite's thread runs to its parent
+    if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : ''; // satellites fly untethered
+    if (m.thread && !(orbit && !orbit.leaving)) {
+      const [ax, ay] = rot(...style.light);
       const dx = m.x - ax, dy = m.y - ay, len = Math.hypot(dx, dy) || 1;
       const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
