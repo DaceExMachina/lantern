@@ -34,23 +34,30 @@ function measureBands() {
 // A long ribbon bookmark (style.ribbon: where it's tied, in the lantern's own units). A short chain of points under gravity
 // and a light breeze, pinned at the top and held at fixed spacing, so it trails the sway and settles. It twists along its
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
-const BOOKMARK = { n: 13, half: 4.6, gravity: 700 };
+const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
 // One wind for the scene, in the sway's degrees: the ribbon feels it as it blows, the lantern swings with it a moment later.
 const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
-// heading for `length` long. A long frame only advances it 0.05s; when a resize moves the knot the chain is carried with
-// it, and a new length grows in instead of snapping (either used to fling it about); anything that still goes wrong (not
-// a number, or stretched far past its length) hangs it straight from the knot again.
-/** @param {{pts?: {x: number, y: number, px: number, py: number, vx: number, vy: number}[], seg?: number}} r */
+// heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
+// short as a frame can be (two timers firing together) turned the constraint fix-ups into huge speeds and flung it about.
+// A long frame runs at most maxSteps and drops the rest. When a resize moves the knot the chain is carried with it, and a
+// new length grows in instead of snapping; anything that still goes wrong (not a number, or stretched far past its length)
+// hangs it straight from the knot again.
+/** @param {{pts?: {x: number, y: number, px: number, py: number, vx: number, vy: number}[], seg?: number, acc?: number}} r */
 function stepRibbon(r, ax, ay, length, dt, s) {
-  const { n, gravity } = BOOKMARK, target = length / (n - 1);
+  const { n, gravity, h, maxSteps, iterations } = BOOKMARK, target = length / (n - 1);
   const hang = () => { r.seg = target; r.pts = Array.from({ length: n }, (_, i) => ({ x: ax, y: ay + i * target, px: 0, py: 0, vx: 0, vy: 0 })); };
   if (!r.pts || r.seg === undefined) hang();
   const pts = /** @type {NonNullable<typeof r.pts>} */ (r.pts), jx = ax - pts[0].x, jy = ay - pts[0].y;
   if (Math.hypot(jx, jy) > 20) for (const p of pts) { p.x += jx; p.y += jy; }
-  dt = Math.max(0, Math.min(dt, 0.05));
-  const seg = r.seg = /** @type {number} */ (r.seg) + (target - /** @type {number} */ (r.seg)) * Math.min(1, dt);
-  const steps = Math.ceil(dt * 120), h = dt / steps, keep = Math.pow(0.5, h); // keep: air drag
+  const acc = (r.acc || 0) + Math.max(0, dt) || 0, steps = Math.min(maxSteps, Math.floor(acc / h));
+  r.acc = steps < maxSteps ? acc - steps * h : 0; // behind even after the most steps: let the rest go
+  if (steps === maxSteps && acc > steps * h) { // and carry the chain through the knot's move in that time: a yank at the top ripples down it as a zigzag
+    const f = 1 - steps * h / acc, mx = (ax - pts[0].x) * f, my = (ay - pts[0].y) * f;
+    for (const p of pts) { p.x += mx; p.y += my; }
+  }
+  const seg = r.seg = /** @type {number} */ (r.seg) + (target - /** @type {number} */ (r.seg)) * Math.min(1, steps * h);
+  const keep = Math.pow(0.5, h); // air drag
   for (let k = 0; k < steps; k++) {
     for (const [i, p] of pts.entries()) {
       p.px = p.x; p.py = p.y;
@@ -58,7 +65,7 @@ function stepRibbon(r, ax, ay, length, dt, s) {
       p.vx += (GUST(s) * 70 + Math.sin(s * 2.3 + i * 0.7) * 12) * i / (n - 1) * h; p.vy += gravity * h; // the wind, strongest at the free end
       p.x += p.vx * h; p.y += p.vy * h;
     }
-    for (let it = 0; it < 4; it++) for (let i = 1; i < n; i++) { // the pinned end never moves, so the first link pulls only the second point
+    for (let it = 0; it < iterations; it++) for (let i = 1; i < n; i++) { // the pinned end never moves, so the first link pulls only the second point
       const a = pts[i - 1], b = pts[i], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, f = (d - seg) / d, wa = i === 1 ? 0 : 0.5;
       a.x += dx * f * wa; a.y += dy * f * wa; b.x -= dx * f * (1 - wa); b.y -= dy * f * (1 - wa);
     }
@@ -103,7 +110,7 @@ function drawRibbon(dt, s, rot, rad, top) {
 }
 
 function frame(t) {
-  const dt = Math.min(0.05, (t - last) / 1000); last = t;
+  const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
   const calling = sessions.some(x => x.state === 'waiting' && !x.snoozed);
@@ -119,7 +126,7 @@ function frame(t) {
   const rot = (px, py) => [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
   put($('lantern'), 'transform', `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
-  if (style.ribbon) drawRibbon(dt, s, rot, rad, top);
+  if (style.ribbon) drawRibbon(elapsed, s, rot, rad, top); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
