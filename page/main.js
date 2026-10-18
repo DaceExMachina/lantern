@@ -61,3 +61,12 @@ box.onchange = () => {
   try { localStorage.setItem('lantern-notify', box.checked ? '1' : '0'); } catch {}
   if (box.checked) { audio ??= new AudioContext(); if (Notification.permission === 'default') Notification.requestPermission(); }
 };
+
+// the stats panel takes the settings menu's place (opened from script, so it isn't nested in the menu and closing the
+// menu leaves it open); it reads the log when it opens, and again every minute while it stays open
+$('statsButton').onclick = () => { $('menu').hidePopover(); $('stats').showPopover(); };
+let statsTimer;
+$('stats').addEventListener('toggle', e => {
+  clearInterval(statsTimer);
+  if (e.newState === 'open') { loadStats(); statsTimer = setInterval(loadStats, MIN); }
+});
