@@ -285,5 +285,6 @@ function frame(t) {
       });
     }
   }
+  drawGraveyard(dt, s, pal('thread'));
   placeCard();
 }

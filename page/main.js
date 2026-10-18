@@ -3,6 +3,7 @@
 addEventListener('resize', fitView);
 const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
+es.addEventListener('graveyard', e => { graveyard = JSON.parse(e.data); });
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
 es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
@@ -11,6 +12,7 @@ es.addEventListener('settings', e => {
   if (STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
   quietUntil = st.quietUntil || 0;
   usingGh = !!st.github; renderGitHub();
+  graveyardOn = st.graveyard !== false; $('graveToggle').checked = graveyardOn;
   sync();
 });
 setInterval(() => quiet() || !quietUntil || sync(), 60 * 1000); // notice when quiet hours end, even with nothing else happening
@@ -27,6 +29,11 @@ $('quiet').onclick = () => {
 };
 
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
+
+$('graveToggle').onchange = e => {
+  graveyardOn = e.target.checked;
+  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ graveyard: graveyardOn }) });
+};
 
 // lantern picker
 for (const [key, st] of Object.entries(STYLES)) $('style').append(new Option(st.name, key, false, st === style));
