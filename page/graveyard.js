@@ -18,7 +18,7 @@ function makeWisp(p) {
   const ember = [el('circle', { r: 18 }), el('circle', { r: 8 }), el('circle', { r: 2.8 })]; // a firefly's own glow: wide, halo, core
   $('graveyard').append(...ember);
   const zone = $('zones').appendChild(el('circle', { r: 12 }));
-  const d = { p, ember, zone, u: 0.05 + rand() * 0.9, wob: rand(), ph: rand() * 6.28,
+  const d = { p, ember, zone, u: 0.05 + rand() * 0.9, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30, flicker: rand() < 0.5,
     born: graveSeeded ? 0 : 1, gone: undefined };
   // hovering shows the PR's card; clicking (or clicking the card) opens it
@@ -87,8 +87,14 @@ function drawGraveyard(dt, s) {
     }
     d.born = Math.min(1, d.born + dt / 2);
     const back = drifting.length > 1 && entry ? 1 - entry[1] / (drifting.length - 1) : 0.5; // older: lower and dimmer
-    const x = x0 + w * d.u + Math.sin(s * 0.09 + d.ph) * 24;
-    const y = low + (floor - low) * (0.2 + back * 0.75) + Math.sin(s * 0.13 + d.ph * 1.7) * 8 - (d.gone || 0) * 70;
+    let x = x0 + w * d.u + Math.sin(s * 0.09 + d.ph) * 24, y = low + (floor - low) * (0.2 + back * 0.75) + Math.sin(s * 0.13 + d.ph * 1.7) * 8;
+    const moth = deadMoths.get(d.p.owner?.id);
+    if (moth) { // circling the ghost of the session that made it, the way fireflies circle a living moth
+      d.a += d.w * dt;
+      const r = 22 + d.wob * 16;
+      x = moth.x + Math.cos(d.a) * r; y = moth.y + Math.sin(d.a) * r * 0.7;
+    }
+    y -= (d.gone || 0) * 70;
     const fade = (1 - back * 0.5) * d.born * (1 - (d.gone || 0));
     const pale = mix(FLY[['ready', 'failing', 'changes', 'draft'].includes(d.p.need) ? d.p.need : 'quiet'], WISP_TINT, 0.55);
     // a faint steady glow, and now and then a brightening: half pulse slowly, half flicker like a dying bulb
