@@ -2,10 +2,10 @@
 // and the week before as mini ribbons. Hygiene over volume: the headline is how much of the moths' time was warm.
 
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-// The bottom strip uses the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working in flight,
-// waiting on the lantern, and snoozed (a landed moth only half way to the calling colour).
+// The middle and bottom strips use the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working
+// in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour).
 const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: '#3E3752' };
-const RIBBON = { warm: WARM.outer, violet: COOL.outer, snoozed: '#5F5677', quiet: '#3A3050', mark: '#D8CCE6' };
+const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', mark: '#D8CCE6' };
 
 const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -34,8 +34,8 @@ function slices(day, spans, gauges, count) {
   return { from, to, slices: out, starts: alive.filter(s => !s[3] && s[1] >= from).map(s => s[1]) };
 }
 
-// Three strips touching: the lantern (warm or violet, quiet dim), the share of moths flying (warm) vs landed (violet,
-// greyer for the share of landed time that was snoozed), and the sessions alive stacked by state in the moths' colours:
+// Three strips touching: the lantern (warm or violet, quiet dim), the share of moths flying vs landed (blending the
+// moths' colours below by share), and the sessions alive stacked by state in the moths' colours:
 // working, waiting, snoozed, then the idle rest. Small ticks on top mark sessions starting.
 function ribbon(r, w, h) {
   const top = Math.round(h * .18), mid = Math.round(h * .3), low = h - top - mid - 3, x = t => (t - r.from) / (r.to - r.from) * w;
@@ -45,7 +45,7 @@ function ribbon(r, w, h) {
     const x0 = x(s.a), sw = x(s.b) - x0 + .4;
     const lamp = s.ran < .5 ? null : s.quiet > .5 ? RIBBON.quiet : s.violet > .5 ? RIBBON.violet : RIBBON.warm;
     if (lamp) svg += `<rect x="${x0}" y="3" width="${sw}" height="${top}" fill="${lamp}"/>`;
-    if (s.flying != null) svg += `<rect x="${x0}" y="${3 + top}" width="${sw}" height="${mid}" fill="${mix(mix(COOL.outer, RIBBON.snoozed, s.waiting ? s.snoozed / s.waiting : 0), WARM.outer, s.flying)}"/>`;
+    if (s.flying != null) svg += `<rect x="${x0}" y="${3 + top}" width="${sw}" height="${mid}" fill="${mix(mix(MOTHS.waiting, MOTHS.snoozed, s.waiting ? s.snoozed / s.waiting : 0), MOTHS.working, s.flying)}"/>`;
     // bottom up; the working count is a gauge, so it only fills what the waits leave
     const working = Math.min(s.working ?? 0, s.alive - s.waiting);
     let y = h;
@@ -151,8 +151,7 @@ function renderStats(j) {
       : `<b>${today.warmMoths}%</b><span>of moth time today was warm: flying, not waiting on you</span>`}</div>
     ${r ? `<div class="ribbon">${ribbon(r, 600, 50)}</div>
       <div class="axis"><span>${clock(r.from)}</span><span>${today.end >= Date.now() - MIN ? 'now' : clock(r.to)}</span></div>
-      <div class="legend"><span><i style="background:${RIBBON.warm}"></i>lantern</span><span><i style="background:linear-gradient(90deg, ${COOL.outer}, ${WARM.outer})"></i>moths flying</span>
-        <span><i style="background:${RIBBON.snoozed}"></i>landed, snoozed</span></div>
+      <div class="legend"><span><i style="background:${RIBBON.warm}"></i>lantern</span><span><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying</span></div>
       <div class="legend">sessions:<span><i style="background:${MOTHS.working}"></i>working</span><span><i style="background:${MOTHS.waiting}"></i>waiting</span>
         <span><i style="background:${MOTHS.snoozed}"></i>snoozed</span><span><i style="background:${MOTHS.idle}"></i>idle</span></div>` : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
