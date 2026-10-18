@@ -98,6 +98,7 @@ function frame(t) {
   put($('lantern'), 'transform', `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(dt, s, rot, rad, top);
+  if (style.knot) put($('knotTail'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.5) * 5 + Math.sin(s * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
   const size = 0.3 + 0.7 * Math.max(level, cool * 0.45);
