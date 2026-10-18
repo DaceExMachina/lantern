@@ -19,7 +19,7 @@ es.addEventListener('settings', e => {
   const until = quietEndLabel();
   $('quiet').title = `Treat everything as snoozed until ${until}`;
   $('quietUntil').textContent = until;
-  setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('wordsToggle').checked = lanternText !== 'off';
+  setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('textToggle').checked = lanternText !== 'off';
   try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();
@@ -42,7 +42,7 @@ $('quiet').onclick = () => {
 
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
 
-$('wordsToggle').onchange = e => {
+$('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lanternText: lanternText }) });
 };

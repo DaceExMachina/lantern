@@ -4,7 +4,7 @@
 // fades in over about 18s, lingers for about a minute, and fades out, overlapping the others; some are printed on the
 // inside (mirrored). The words read best where the flame's light is strongest. Besides live sessions' words, the server
 // sends a pool from the newest few transcripts (recentProse), ended sessions too. With no words the paper stays blank.
-// "Show session words" in the settings menu turns it all off (settings.json `lanternText`: "sessions" or "off"): the
+// "Show session text" in the settings menu turns it all off (settings.json `lanternText`: "sessions" or "off"): the
 // words fade out and the timer stops, so nothing runs; turned back on, fresh words fade in once the server sends them.
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
 

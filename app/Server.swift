@@ -685,7 +685,7 @@ final class LanternServer {
             return out
         })
     }
-    // Session words (the barrel's pages) are on unless settings.json says "off"; while off, none are read, kept or sent.
+    // Session text (the barrel's pages) are on unless settings.json says "off"; while off, none are read, kept or sent.
     var wordsOn: Bool { settings["lanternText"] as? String != "off" }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
     func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
@@ -896,7 +896,7 @@ final class LanternServer {
     }
 
     // The barrel's pages also draw on the newest few transcripts, so they aren't blank when little is running: a few runs
-    // from the tail of each, a few dozen in all. Read when the server starts and when session words are turned on.
+    // from the tail of each, a few dozen in all. Read when the server starts and when session text is turned on.
     func seedProse() {
         DispatchQueue.global().async {
             let started = now()
@@ -1379,7 +1379,7 @@ final class LanternServer {
                     settings["goals"] = goals
                 }
                 if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
-                // session words on the barrel: turning them off drops every word held; turning them on reads the pool afresh
+                // session text on the barrel: turning them off drops every word held; turning them on reads the pool afresh
                 if let t = j["lanternText"] as? String, ["sessions", "off"].contains(t) {
                     let was = wordsOn
                     settings["lanternText"] = t; ok = true
