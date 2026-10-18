@@ -9,34 +9,47 @@ const GRAVE_MAX = 30;
 const dead = new Map(); // url -> husk
 let graveSeeded = false; // the first list just lies there; later arrivals fall in
 
-// Four ways a firefly can lie, each picked by its PR so every window agrees: wings folded over its back, wings splayed
-// open, curled up short, or on its side with a wing raised. Body, wings, the lantern-lit rim, and where the tail sits.
-const ELLIPSE = 'M-3.4 0A3.4 1.7 0 1 0 3.4 0A3.4 1.7 0 1 0 -3.4 0Z';
-const HUSKS = [
-  { body: ELLIPSE, wings: 'M-3 -0.4Q-0.5 -2.6 2 -0.6', rim: 'M-3.2 -0.6Q0 -2.4 3.2 -0.6', tail: 3.1 },
-  { body: 'M-3 0A3 1.3 0 1 0 3 0A3 1.3 0 1 0 -3 0Z', wings: 'M-0.6 -0.5Q-3.6 -4.2 -5.2 -1.3Q-3 -0.4 -0.6 -0.5ZM0.4 -0.5Q2.8 -4.6 4.6 -2.1Q3 -0.6 0.4 -0.5Z', rim: 'M-5 -1.5Q-3.4 -4 -0.8 -0.8M0.6 -0.8Q2.8 -4.4 4.4 -2.3', tail: 3 },
-  { body: 'M-2.6 0.6Q-3 -1.8 0 -1.9Q2.6 -1.6 2.4 0.4Q0 1.4 -2.6 0.6Z', wings: 'M-2 -0.9Q0 -2.4 1.6 -1.1', rim: 'M-2.6 -0.6Q-0.6 -2.6 2.2 -1', tail: 2.2 },
-  { body: ELLIPSE, wings: 'M-0.8 -0.9Q-2 -5.8 0.8 -6.2Q2.2 -3 0.4 -0.9Z', rim: 'M-0.9 -1.2Q-1.9 -5.6 0.7 -6', tail: 3.1 },
-];
+// Each dead firefly lies on its back, tiny and dark: a small head with antennae, a shield of a thorax, and a segmented
+// abdomen whose last two segments are the light organ (on a real firefly the light is on the underside of the tail,
+// so a belly-up one shows it). Six spindly legs in the air, each either bent at a crooked angle or curled back; the
+// angles come from its PR, so every window draws it the same and no two lie alike.
+function husk(rand) {
+  const legs = [];
+  for (const x of [-1.9, -1.2]) for (const side of [-1, 1]) {
+    if (rand() < 0.5) { // bent at the knee
+      const kx = x + side * (0.3 + rand() * 0.8), ky = -1.9 - rand() * 1.2;
+      legs.push(`M${x} -0.7L${kx.toFixed(2)} ${ky.toFixed(2)}L${(kx + side * (rand() - 0.25) * 1.4).toFixed(2)} ${(ky + (rand() - 0.6) * 1.5).toFixed(2)}`);
+    } else { // curled back toward the body
+      legs.push(`M${x} -0.7Q${(x + side * (1.2 + rand() * 0.5)).toFixed(2)} ${(-2.4 - rand() * 0.8).toFixed(2)} ${(x + side * (0.2 + rand() * 0.4)).toFixed(2)} ${(-1.8 - rand() * 0.5).toFixed(2)}`);
+    }
+  }
+  return { legs: legs.join('') };
+}
 const flickerNoise = x => { const v = Math.sin(x * 12.9898) * 43758.5453; return v - Math.floor(v); };
 
 function makeHusk(p) {
-  const rand = seeded(hash(p.url)), model = HUSKS[Math.floor(rand() * HUSKS.length)];
-  const g = el('g'), body = el('path', { d: model.body }), wings = el('path', { d: model.wings });
-  const rim = el('path', { d: model.rim, fill: 'none', 'stroke-width': 0.5, 'stroke-linecap': 'round' });
-  const ember = el('circle', { cx: model.tail, cy: 0, r: 4.5 }), tail = el('circle', { cx: model.tail, cy: 0, r: 1.25 });
-  const back = rand() < 1 / 6; // now and then one lies on its back, legs in the air
-  if (back) for (const x of [-1.6, 0, 1.6]) g.append(el('path', { d: `M${x} -1.2l${(rand() - 0.5) * 1.2} -1.8`, stroke: '#6A5E7C', 'stroke-width': 0.35, 'stroke-linecap': 'round' }));
-  g.append(ember, body, wings, rim, tail);
+  const rand = seeded(hash(p.url)), model = husk(rand);
+  const g = el('g');
+  const feelers = el('path', { d: 'M-3.6 -0.2l-1.2 -1.3M-3.6 0.2l-1.3 1', fill: 'none', stroke: '#2E2740', 'stroke-width': 0.18, 'stroke-linecap': 'round' });
+  const head = el('circle', { cx: -3.1, cy: 0, r: 0.55, fill: '#241E32' });
+  const wings = el('path', { d: 'M-2.6 -0.9Q-1.4 -1.3 -0.9 -0.6L-0.9 0.6Q-1.4 1.3 -2.6 0.9Z' }); // the thorax's shield
+  const legs = el('path', { d: model.legs, fill: 'none', stroke: '#33293F', 'stroke-width': 0.22, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+  const body = el('path', { d: 'M-0.9 -0.75Q1.2 -1.15 2.4 -0.5Q2.7 0 2.4 0.5Q1.2 1.15 -0.9 0.75Z' }); // the abdomen
+  const segments = el('path', { d: 'M0.2 -0.9V0.9M1.1 -0.85V0.85', stroke: '#16121F', 'stroke-width': 0.18 });
+  const tail = el('path', { d: 'M1.6 -0.72Q2.4 -0.5 2.6 0Q2.4 0.5 1.6 0.72Z' }); // the light organ, the last two segments
+  const rim = el('path', { d: 'M-0.9 -0.75Q1.2 -1.15 2.4 -0.5', fill: 'none', 'stroke-width': 0.2, 'stroke-linecap': 'round' });
+  const ember = el('circle', { cx: 2.1, cy: 0, r: 3 });
+  const back = false;
+  g.append(ember, feelers, head, legs, wings, body, segments, tail, rim);
   $('graveyard').append(g);
   const zone = $('zones').appendChild(el('circle', { r: 10 }));
-  const husk = { p, g, body, wings, rim, ember, tail, zone, back, u: 0.05 + rand() * 0.9, wob: rand(), turn: (rand() - 0.5) * 50,
+  const h = { p, g, body, wings, legs, rim, ember, tail, zone, back, u: 0.05 + rand() * 0.9, wob: rand(), turn: (rand() - 0.5) * 40,
     period: 30 + rand() * 30, ph: rand() * 6.28, flicker: rand() < 0.5, fall: graveSeeded ? 0 : 1, gone: undefined };
   // hovering shows the PR's card; clicking (or clicking the card) opens it
-  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { dead: husk.p, zone }; renderCard(); });
+  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { dead: h.p, zone }; renderCard(); });
   zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
-  zone.addEventListener('click', () => { open(husk.p.url, '_blank', 'noopener'); hovered = null; $('card').classList.remove('show'); });
-  return husk;
+  zone.addEventListener('click', () => { open(h.p.url, '_blank', 'noopener'); hovered = null; $('card').classList.remove('show'); });
+  return h;
 }
 
 // Dead moths: an old session that made some of the dead PRs lies on the ground with its dead fireflies around it,
@@ -97,9 +110,9 @@ function drawGraveyard(dt, s, rim) {
     d.fall = Math.min(1, d.fall + dt / 2.5);
     // older ones lie further back: higher up the band, smaller and dimmer
     const back = lying.length > 1 && entry ? 1 - entry[1] / (lying.length - 1) : 0.5;
-    let x = x0 + w * d.u, rest = ground - 14 - back * 34 - d.wob * 4, k = 2.4 - back * 1;
+    let x = x0 + w * d.u, rest = ground - 12 - back * 34 - d.wob * 4, k = 0.8 - back * 0.3; // tiny: the flying ones are barely more than their light
     const moth = deadMoths.get(d.p.owner?.id);
-    if (moth) { x = moth.x + (d.u - 0.5) * 50; rest = moth.y + 3 + (d.wob - 0.5) * 8; k = 2.2 - moth.back * 0.9; } // gather around the session that made it
+    if (moth) { x = moth.x + (d.u - 0.5) * 50; rest = moth.y + 3 + (d.wob - 0.5) * 8; k = 0.75 - moth.back * 0.25; } // gather around the session that made it
     const drop = (1 - d.fall) ** 2, y = rest - drop * (rest - y0 - 40) - (d.gone || 0) * 80;
     const sway = drop * Math.sin(s * 3 + d.ph) * 14;
     put(d.g, 'transform', `translate(${(x + sway).toFixed(1)} ${y.toFixed(1)}) rotate(${(d.back ? 180 : 0) + d.turn * (1 - drop) + sway}) scale(${k.toFixed(2)})`);
@@ -110,11 +123,11 @@ function drawGraveyard(dt, s, rim) {
     const wave = Math.sin(s * 6.283 / d.period + d.ph), n = flickerNoise(Math.floor(s * 14) + d.ph * 100);
     const spark = d.flicker ? (wave > 0.94 && n > 0.4 ? 0.35 + 0.65 * n : 0) : Math.max(0, wave) ** 8;
     const glow = 0.3 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0)); // the dead only glow faintly
-    put(d.body, 'fill', mix('#3E3550', '#2A2240', back)); put(d.body, 'opacity', fade.toFixed(2));
-    put(d.wings, 'fill', mix('#544A68', '#2E2644', back)); put(d.wings, 'opacity', fade.toFixed(2));
-    put(d.rim, 'stroke', rim); put(d.rim, 'opacity', (0.45 * fade).toFixed(2));
-    put(d.tail, 'fill', mix(mix(col, '#1E182E', 0.62), col, glow)); put(d.tail, 'opacity', fade.toFixed(2));
-    put(d.ember, 'fill', col); put(d.ember, 'opacity', (0.5 * glow * fade).toFixed(2));
+    put(d.body, 'fill', mix('#1E1828', '#191424', back)); put(d.wings, 'fill', mix('#241E32', '#1C1728', back));
+    put(d.g, 'opacity', fade.toFixed(2)); // older ones further back fade, and so does a revived one rising
+    put(d.rim, 'stroke', rim); put(d.rim, 'opacity', 0.3);
+    put(d.tail, 'fill', mix(mix(col, '#1E182E', 0.72), col, glow));
+    put(d.ember, 'fill', col); put(d.ember, 'opacity', (0.5 * glow).toFixed(2));
     put(d.zone, 'cx', (x + sway).toFixed(1)); put(d.zone, 'cy', y.toFixed(1));
     d.zone.style.display = show && d.gone === undefined ? '' : 'none';
   }
