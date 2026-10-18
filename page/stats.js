@@ -56,10 +56,10 @@ const ACHIEVEMENTS = {
   ghostbuster: ['Ghostbuster', 'Merged or closed 5 stale PRs in one day'],
   seance: ['Séance', 'Revived 5 stale PRs in a week'],
   lights_out: ['Lights Out', 'Took a real break: two hours with nothing running between sessions'],
-  streak_3: ['Warm streak: 3 days', 'Three days in a row at or over your warm moths goal'],
-  streak_7: ['Warm streak: a week', 'Seven days in a row at or over your warm moths goal'],
-  streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over your warm moths goal'],
-  streak_30: ['Warm streak: a month', 'Thirty days in a row at or over your warm moths goal'],
+  streak_3: ['Warm streak: 3 days', 'Three days in a row at or over the warm moths mark'],
+  streak_7: ['Warm streak: a week', 'Seven days in a row at or over the warm moths mark'],
+  streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over the warm moths mark'],
+  streak_30: ['Warm streak: a month', 'Thirty days in a row at or over the warm moths mark'],
   haunted: ['Haunted', 'Stale PRs past 30, so the faint cloud shows'],
   restless_spirits: ['Restless spirits', 'One old session (a ghost moth) behind 5 or more stale PRs'],
   light_pollution: ['Light Pollution', '20 or more fireflies in flight'],
@@ -140,7 +140,6 @@ function renderStats(j) {
       <div class="legend"><span><i style="background:${RIBBON.warm}"></i>lantern</span><span><i style="background:linear-gradient(90deg, ${COOL.outer}, ${WARM.outer})"></i>moths flying</span>
         <span><i style="background:${RIBBON.alive}"></i>sessions</span><span><i style="background:${RIBBON.working}"></i>working</span></div>` : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
-  statsToday = today; renderGoals();
   tally = j.tally;
   const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
   $('statsWeek').innerHTML = `
@@ -156,29 +155,6 @@ function renderStats(j) {
       badge(id, tally[id]?.[0] > 1 ? ` <small>×${tally[id][0]}</small>` : '', !tally[id])).join('')}</div></details>`;
   if (shelfOpen) $('statsWeek').querySelector('.shelf').open = true;
   restoreBadge($('statsWeek'));
-}
-
-// Goals: a few targets kept in the shared settings, each off until it has a number. Progress is said quietly: a goal
-// that's met glows warm, one that isn't just shows where today stands.
-let goals = {}, statsToday = null;
-const GOALS = {
-  fireflies: t => t.open == null ? null : [t.open <= goals.fireflies, `${t.open} now`],
-  answer: t => t.medianWait == null ? null : [t.medianWait <= goals.answer * MIN, `median ${ago(t.medianWait)}`],
-  warm: t => t.warmMoths == null ? null : [t.warmMoths >= goals.warm, `${t.warmMoths}% today`],
-};
-function renderGoals() {
-  for (const [key, judge] of Object.entries(GOALS)) {
-    const input = $('goal-' + key), out = $('goalNow-' + key), set = goals[key] != null;
-    if (document.activeElement !== input) input.value = set ? goals[key] : '';
-    const [met, now] = set && statsToday && judge(statsToday) || [false, ''];
-    out.textContent = !set ? '' : now ? (met ? `on track, ${now}` : now) : 'nothing yet today';
-    out.classList.toggle('met', met);
-  }
-}
-function setGoal(key, text) {
-  const n = text.trim() === '' ? null : Math.max(0, Number(text));
-  if (n !== null && !Number.isFinite(n)) return;
-  post('/settings', { goals: { [key]: n } });
 }
 
 async function loadStats() {
