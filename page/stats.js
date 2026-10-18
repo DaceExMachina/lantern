@@ -4,6 +4,7 @@
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', alive: '#7A6A9C', working: '#43365F', mark: '#D8CCE6' };
 
+const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 // The ribbon's slices for one day: from the first session that day to `end` (now, or the last session's end).
@@ -45,6 +46,29 @@ function ribbon(r, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
 }
 
+// Badges the server gives from the event log (Stats.swift decides when): good ones reward hygiene, and the cheeky
+// shame badges sit right beside them. [name, how it's earned, shame?]
+const ACHIEVEMENTS = {
+  warm_all_day: ['Warm all day', 'The lantern stayed warm nine tenths of a day with sessions running'],
+  clean_floor: ['Clean floor', 'An empty graveyard for a whole week'],
+  small_batches: ['Small batches', 'Never more than 3 fireflies in flight for a week'],
+  revived: ['Revived', 'Brought a dead PR back and merged it'],
+  streak_3: ['Warm streak: 3 days', 'Three days in a row at or over your warm moths goal'],
+  streak_7: ['Warm streak: a week', 'Seven days in a row at or over your warm moths goal'],
+  streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over your warm moths goal'],
+  streak_30: ['Warm streak: a month', 'Thirty days in a row at or over your warm moths goal'],
+  mass_grave: ['Mass Grave', 'The graveyard went over its 30', true],
+  light_pollution: ['Light Pollution', '20 or more fireflies in flight', true],
+  swarm_season: ['Swarm Season', 'One session owned 10 open PRs', true],
+  hive_mind: ['Hive Mind', 'One session ran 10 agents at once', true],
+  purple_rain: ['Purple Rain', 'The lantern stayed violet for a whole hour', true],
+  ghosted: ['Ghosted', 'A moth waited 3 hours or more', true],
+  snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day', true],
+  lights_out: ['Lights Out', 'Two hours with nothing running between sessions', true],
+  necromancer: ['Necromancer', 'Revived 5 dead PRs in a week', true],
+};
+const badge = (id, extra = '') => { const [name, how, shame] = ACHIEVEMENTS[id] || [id, '']; return `<span class="badge${shame ? ' shame' : ''}" title="${how}">${name}${extra}</span>`; };
+
 function renderStats(j) {
   const days = j.days, today = days[days.length - 1], pct = v => v == null ? '–' : `${v}%`;
   const r = slices(today, j.spans, j.gauges, 160);
@@ -72,10 +96,19 @@ function renderStats(j) {
         <span><i style="background:${RIBBON.alive}"></i>sessions</span><span><i style="background:${RIBBON.working}"></i>working</span></div>` : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   statsToday = today; renderGoals();
+  const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
   $('statsWeek').innerHTML = `
     <h4>The week before</h4>
     <div class="week">${week}</div>
-    ${days.slice(0, -1).some(d => d.mothMs) ? '' : '<p class="dim">The lantern started keeping a log recently, so the week fills in as the days go by.</p>'}`;
+    ${days.slice(0, -1).some(d => d.mothMs) ? '' : '<p class="dim">The lantern started keeping a log recently, so the week fills in as the days go by.</p>'}
+    <h4>Badges this week</h4>
+    ${j.achievements.length ? `<div class="badges">${j.achievements.slice().reverse().map(([id, day]) =>
+      badge(id, ` <small>${day === dayKey(Date.now()) ? 'today' : DAY_NAMES[new Date(day + 'T12:00').getDay()]}</small>`)).join('')}</div>`
+      : '<p class="dim">None yet this week. They come from the log as the days go by, the cheeky ones too.</p>'}
+    ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}
+    <details class="shelf"><summary>All badges</summary><div class="badges">${Object.keys(ACHIEVEMENTS).map(id =>
+      j.tally[id] ? badge(id, j.tally[id] > 1 ? ` <small>×${j.tally[id]}</small>` : '') : badge(id).replace('class="badge', 'class="badge unearned')).join('')}</div></details>`;
+  if (shelfOpen) $('statsWeek').querySelector('.shelf').open = true;
 }
 
 // Goals: a few targets kept in the shared settings, each off until it has a number. Progress is said quietly: a goal

@@ -52,6 +52,13 @@
   #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
   #stats .day b { color: #D8CCE6; font-weight: 500; }
   #stats .dim { color: #8F7FA6; margin: 0; }
+  #stats .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  #stats .badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; cursor: default; }
+  #stats .badge.shame { background: #3E3270; color: #DCD2FF; }
+  #stats .badge.unearned { background: none; color: #6B5C88; box-shadow: inset 0 0 0 1px #3A2E52; }
+  #stats .badge small { opacity: .7; font-size: 10px; }
+  #stats .shelf summary { cursor: pointer; color: #C3B2FF; font-size: 12px; margin-bottom: 6px; }
+  #stats .shelf summary:hover { color: #F0E8FF; }
   #goals { display: flex; flex-direction: column; gap: 4px; }
   #goals h4 { margin-bottom: 0; }
   #goals label { cursor: default; flex-wrap: wrap; gap: 4px 6px; }
