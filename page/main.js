@@ -10,7 +10,9 @@ es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
   if (STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
+  const quietStarted = recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   quietUntil = st.quietUntil || 0;
+  recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();
   staleOn = st.graveyard !== false; $('staleToggle').checked = staleOn;
   goals = st.goals || {}; renderGoals();
@@ -72,3 +74,9 @@ $('stats').addEventListener('toggle', e => {
   clearInterval(statsTimer);
   if (e.newState === 'open') { loadStats(); statsTimer = setInterval(loadStats, MIN); }
 });
+
+// the daily recap: checked when the window comes back into view, and every minute (a window left open overnight)
+addEventListener('visibilitychange', () => maybeRecap());
+setInterval(() => maybeRecap(), MIN);
+$('todayRecap').onclick = () => openRecap(7);
+$('statsWeek').addEventListener('click', e => { const day = e.target.closest('.day'); if (day && day.dataset.day) openRecap(+day.dataset.day); });

@@ -132,11 +132,13 @@ final class Stats {
                 SELECT * FROM (SELECT time, alive, working, fireflies, graveyard FROM gauges WHERE time < ?1 ORDER BY time DESC LIMIT 1)
                 UNION ALL SELECT time, alive, working, fireflies, graveyard FROM gauges WHERE time >= ?1 ORDER BY time
                 """, [from]).map { $0.map { num($0) ?? -1 } }
-            // the spans themselves, clipped to the window, for the ribbons; `seeded` sessions were already running at startup
+            // the spans themselves, clipped to the window, for the ribbons and the recap's constellation: [kind, began, ended,
+            // seeded (already running at startup), session, title (sessions only)]
             let spans = self.run("""
-                SELECT kind, max(began, ?1), min(coalesce(ended, ?2), ?2), coalesce(json_extract(data, '$.seeded'), 0) FROM spans
+                SELECT kind, max(began, ?1), min(coalesce(ended, ?2), ?2), coalesce(json_extract(data, '$.seeded'), 0), session,
+                  iif(kind = 'alive', json_extract(data, '$.title'), NULL) FROM spans
                 WHERE began < ?2 AND coalesce(ended, ?2) > ?1 ORDER BY began
-                """, [from, to]).map { r -> [Any] in [r[0] ?? "", num(r[1]) ?? 0, num(r[2]) ?? 0, r[3] == "1"] }
+                """, [from, to]).map { r -> [Any] in [r[0] ?? "", num(r[1]) ?? 0, num(r[2]) ?? 0, r[3] == "1", r[4] ?? NSNull(), r[5] ?? NSNull()] }
 
             let lastGauge = { (t: Double) in gauges.last { $0[0] < t } }
             let value = { (g: [Double]?, i: Int) -> Double? in g.flatMap { $0[i] >= 0 ? $0[i] : nil } } // a gauge's column, if it was recorded
