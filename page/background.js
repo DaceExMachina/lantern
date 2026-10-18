@@ -26,11 +26,11 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
-uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // ?brass: each solid band's slope from the flame, and its spread
+uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lantern's solid bands: each one's slope from the flame, and its spread
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
-// ?brass band shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
-const float BAND_PEAK = 0.4, BAND_SPREAD = 0.7;
+// the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
+const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;

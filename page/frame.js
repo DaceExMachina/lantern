@@ -18,8 +18,7 @@ function findPerch(m, rand, from) {
   return best;
 }
 
-// ?brass: the pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
-const BRASS_SHADOWS = new URLSearchParams(location.search).has('brass');
+// A pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
 /** @type {Element | undefined} */
 let firstBand;
 let bands = [];
@@ -390,7 +389,7 @@ function frame(t) {
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
-    bands: BRASS_SHADOWS && !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
+    bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
   placeCard();
 }
