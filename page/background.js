@@ -19,7 +19,7 @@ function program(vert, frag) {
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
 const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions, agents and ghosts)
-const BEAMS_MAX = 32; // star holes a pierced lantern's light can beam out through
+const BEAMS_MAX = 48; // star holes a pierced lantern's light can beam out through
 const BG = program(`attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`, `
 precision highp float;
 uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;

@@ -20,7 +20,8 @@ function findPerch(m, rand, from) {
 
 // A pierced lantern's beams, measured on the drawing every frame: the flame's centre and each star hole's centre and size
 // (the stars in its #cutouts mask), mapped into scene coordinates with their real transforms, so each beam runs from the
-// flame through its star and follows the sway. ?beamdebug draws each beam's axis (fainter the weaker it is) and marks each star.
+// flame through its star and follows the sway. ?beamdebug draws each beam's axis (fainter the weaker it is) and marks each
+// star (blue for the side panels' stars, which aren't drawn).
 const BEAMDEBUG = new URLSearchParams(location.search).has('beamdebug');
 /** @type {SVGPolygonElement[]} */
 let starEls = [], starBoxes = [];
@@ -31,17 +32,24 @@ function measureBeams() {
   const toScene = document.querySelector('svg').getScreenCTM().inverse(), starM = toScene.multiply(starEls[0].getScreenCTM()); // the stars share one transform
   const at = (m, x, y) => new DOMPoint(x, y).matrixTransform(m);
   const fb = core.getBBox(), f = at(toScene.multiply(core.getScreenCTM()), fb.x + fb.width / 2, fb.y + fb.height / 2);
-  const stars = starBoxes.map(b => {
-    const c = at(starM, b.x + b.width / 2, b.y + b.height / 2), edge = at(starM, b.x + b.width, b.y + b.height / 2);
+  // the stars in the lantern's own units: the drawn ones, and, since a real lantern has more panels like the front one
+  // angled round the sides out of view, that front panel's pattern again on a panel just past each side edge
+  // (foreshortened, as they face away), all placed from the body's half-width at each star's height
+  const drawn = starBoxes.map(b => ({ x: b.x + b.width / 2, y: b.y + b.height / 2, r: b.width / 2, virtual: false }));
+  const front = drawn.filter(d => Math.abs(d.x - CX) / style.body.half(d.y) < 0.3), span = Math.max(...front.map(d => Math.abs(d.x - CX))) || 1;
+  const panels = [-1, 1].flatMap(sd => front.map(d => ({ x: CX + sd * (style.body.half(d.y) + 6 + (d.x - CX + span) / (2 * span) * 10), y: d.y, r: d.r * 0.5, virtual: true })));
+  const stars = [...drawn, ...panels].map(d => {
+    const c = at(starM, d.x, d.y), edge = at(starM, d.x + d.r, d.y);
     const dx = c.x - f.x, dy = c.y - f.y, h = Math.hypot(dx, dy);
     // a star on the front face shines toward the viewer; the further round the side it sits, the more its beam shows
-    const side = Math.abs(b.x + b.width / 2 - 340) / style.body.half(b.y + b.height / 2), w = Math.min(1, Math.max(0, (side - 0.3) / 0.45));
-    return { c, h, w, beam: [Math.atan2(dy, dx), 0.8 * Math.hypot(edge.x - c.x, edge.y - c.y) / Math.max(h, 45), h, w] };
+    const side = Math.abs(d.x - CX) / style.body.half(d.y), w = Math.min(1, Math.max(0, (side - 0.3) / 0.45));
+    return { c, h, w, virtual: d.virtual, beam: [Math.atan2(dy, dx), 0.8 * Math.hypot(edge.x - c.x, edge.y - c.y) / Math.max(h, 45), h, w] };
   });
   if (BEAMDEBUG) {
-    const g = $('beamDebug') || document.querySelector('svg').appendChild(el('g', { id: 'beamDebug', stroke: '#7CFF8A', 'stroke-width': 0.6, fill: '#FF5C8A' }));
-    g.replaceChildren(el('circle', { cx: f.x, cy: f.y, r: 2.5, fill: '#FFFFFF' }), ...stars.flatMap(({ c, h, w }) => [
-      el('line', { x1: f.x, y1: f.y, x2: f.x + (c.x - f.x) / h * 400, y2: f.y + (c.y - f.y) / h * 400, opacity: 0.15 + 0.85 * w }), el('circle', { cx: c.x, cy: c.y, r: 1.6, stroke: 'none' })]));
+    const g = $('beamDebug') || document.querySelector('svg').appendChild(el('g', { id: 'beamDebug', 'stroke-width': 0.6 }));
+    g.replaceChildren(el('circle', { cx: f.x, cy: f.y, r: 2.5, fill: '#FFFFFF' }), ...stars.flatMap(({ c, h, w, virtual }) => [
+      el('line', { x1: f.x, y1: f.y, x2: f.x + (c.x - f.x) / h * 400, y2: f.y + (c.y - f.y) / h * 400, stroke: virtual ? '#5CD6FF' : '#7CFF8A', opacity: 0.15 + 0.85 * w }),
+      el('circle', { cx: c.x, cy: c.y, r: 1.6, fill: virtual ? '#5CD6FF' : '#FF5C8A' })]));
   }
   return { o: [f.x, f.y], beams: stars.filter(s => s.w > 0).map(s => s.beam) };
 }
