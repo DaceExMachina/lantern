@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const page = vm.createContext({});
+const page = vm.createContext({ URLSearchParams, location: { search: '' } }); // a plain window, no query string
 for (const f of ['scene', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
