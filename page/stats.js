@@ -46,8 +46,8 @@ function ribbon(r, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
 }
 
-// Badges the server gives from the event log (Stats.swift decides when): good ones reward hygiene, and the cheeky
-// shame badges sit right beside them. [name, how it's earned, shame?]
+// Badges the server gives from the event log (Stats.swift decides when). They're not sorted into good or bad: what
+// each one means is up to whoever earns it. [name, how it's earned]
 const ACHIEVEMENTS = {
   warm_all_day: ['Warm all day', 'The lantern stayed warm nine tenths of a day with sessions running'],
   clear_night: ['Clear night', 'No stale PRs for a whole week'],
@@ -60,18 +60,18 @@ const ACHIEVEMENTS = {
   streak_7: ['Warm streak: a week', 'Seven days in a row at or over your warm moths goal'],
   streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over your warm moths goal'],
   streak_30: ['Warm streak: a month', 'Thirty days in a row at or over your warm moths goal'],
-  haunted: ['Haunted', 'Stale PRs past 30, so the faint cloud shows', true],
-  restless_spirits: ['Restless spirits', 'One old session (a ghost moth) behind 5 or more stale PRs', true],
-  light_pollution: ['Light Pollution', '20 or more fireflies in flight', true],
-  swarm_season: ['Swarm Season', 'One session owned 10 open PRs', true],
-  hive_mind: ['Hive Mind', 'One session ran 10 agents at once', true],
-  purple_rain: ['Purple Rain', 'The lantern stayed violet for a whole hour', true],
-  ghosted: ['Ghosted', 'A moth waited 3 hours or more', true],
-  snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day', true],
+  haunted: ['Haunted', 'Stale PRs past 30, so the faint cloud shows'],
+  restless_spirits: ['Restless spirits', 'One old session (a ghost moth) behind 5 or more stale PRs'],
+  light_pollution: ['Light Pollution', '20 or more fireflies in flight'],
+  swarm_season: ['Swarm Season', 'One session owned 10 open PRs'],
+  hive_mind: ['Hive Mind', 'One session ran 10 agents at once'],
+  purple_rain: ['Purple Rain', 'The lantern stayed violet for a whole hour'],
+  ghosted: ['Ghosted', 'A moth waited 3 hours or more'],
+  snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day'],
 };
 const badge = (id, extra = '', unearned = false) => {
-  const [name, how, shame] = ACHIEVEMENTS[id] || [id, ''];
-  return `<button class="badge${shame ? ' shame' : ''}${unearned ? ' unearned' : ''}" data-id="${id}" aria-label="${name}: ${how}">${name}${extra}</button>`;
+  const [name, how] = ACHIEVEMENTS[id] || [id, ''];
+  return `<button class="badge${unearned ? ' unearned' : ''}" data-id="${id}" aria-label="${name}: ${how}">${name}${extra}</button>`;
 };
 
 // What a badge is: shown under its row while the pointer is on it (or it has focus), and kept open by a click or tap
@@ -80,12 +80,12 @@ let tally = {}, pinnedBadge = null, badgeTimer;
 const longDay = day => new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 function showBadge(el) {
   clearTimeout(badgeTimer);
-  const row = el.closest('.badges'), [name, how, shame] = ACHIEVEMENTS[el.dataset.id] || [el.dataset.id, ''];
+  const row = el.closest('.badges'), [name, how] = ACHIEVEMENTS[el.dataset.id] || [el.dataset.id, ''];
   const [times, last] = tally[el.dataset.id] || [0, ''];
   for (const other of el.closest('[popover]').querySelectorAll('.badgeInfo')) if (other !== row.nextElementSibling) other.remove();
   let info = row.nextElementSibling;
   if (!info?.classList.contains('badgeInfo')) { info = document.createElement('div'); info.className = 'badgeInfo'; row.after(info); }
-  info.innerHTML = `<b>${name}</b> <span class="kind${shame ? ' shame' : ''}">${shame ? 'cheeky' : 'good'}</span><div>${how}.</div>
+  info.innerHTML = `<b>${name}</b><div>${how}.</div>
     <div class="dim">${times ? `Earned ${times === 1 ? 'once' : `${times} times`}, last on ${longDay(last)}.` : 'Not earned yet.'}</div>`;
 }
 // back to the pinned badge's card, or none
@@ -144,7 +144,7 @@ function renderStats(j) {
     <h4>Badges this week</h4>
     ${j.achievements.length ? `<div class="badges">${j.achievements.slice().reverse().map(([id, day]) =>
       badge(id, ` <small>${day === dayKey(Date.now()) ? 'today' : DAY_NAMES[new Date(day + 'T12:00').getDay()]}</small>`)).join('')}</div>`
-      : '<p class="dim">None yet this week. They come from the log as the days go by, the cheeky ones too.</p>'}
+      : '<p class="dim">None yet this week. They come from the log as the days go by.</p>'}
     ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}
     <details class="shelf"><summary>All badges</summary><div class="badges">${Object.keys(ACHIEVEMENTS).map(id =>
       badge(id, tally[id]?.[0] > 1 ? ` <small>×${tally[id][0]}</small>` : '', !tally[id])).join('')}</div></details>`;
