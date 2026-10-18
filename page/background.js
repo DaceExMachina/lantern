@@ -41,9 +41,11 @@ void main() {
     float ll = length(dl), along = dot(dm, dl) / ll; // how far toward the light the moth is, from here
     if (along > ll) continue; // the moth is beyond the light
     float lm = max(length(dm), 0.001);
-    float am = min(m.z / lm, 2.0), al = uLightR / ll, sep = abs(dm.x * dl.y - dm.y * dl.x) / (lm * ll);
+    // close to the lantern more of its light gets round a moth: there the light acts bigger and the shadow is fainter
+    float near = 1.0 - smoothstep(70.0, 210.0, length(m.xy - uLightC) / uLightScale);
+    float am = min(m.z / lm, 2.0), al = uLightR * (1.0 + 1.5 * near) / ll, sep = abs(dm.x * dl.y - dm.y * dl.x) / (lm * ll);
     float cover = min(1.0, am * am / (al * al)) * smoothstep(am + al, abs(am - al), sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
-    lit *= 1.0 - m.w * (0.5 * smoothstep(0.17, 0.23, cover) + 0.5 * smoothstep(0.57, 0.63, cover));
+    lit *= 1.0 - m.w * (1.0 - 0.6 * near) * (0.5 * smoothstep(0.17, 0.23, cover) + 0.5 * smoothstep(0.57, 0.63, cover));
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
