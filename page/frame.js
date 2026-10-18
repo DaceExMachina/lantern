@@ -37,15 +37,20 @@ function measureBands() {
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700 };
 // One wind for the scene, in the sway's degrees: the ribbon feels it as it blows, the lantern swings with it a moment later.
 const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
-/** @type {{x: number, y: number, px: number, py: number, vx: number, vy: number}[]} */
-let ribbonPts = [];
-let ribbonFor;
-function drawRibbon(dt, s, rot, rad, top) {
-  const [ax, ay] = rot(...style.ribbon), { n, half, gravity } = BOOKMARK;
-  // long, but never past the bottom of the window: most of the room below the knot, within limits
-  const floor = VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620, seg = Math.min(260, Math.max(60, (floor - style.ribbon[1]) * 0.85)) / (n - 1);
-  if (ribbonFor !== style) { ribbonFor = style; ribbonPts = Array.from({ length: n }, (_, i) => ({ x: ax, y: ay + i * seg, px: 0, py: 0, vx: 0, vy: 0 })); }
-  const pts = ribbonPts, steps = Math.ceil(dt * 120), h = dt / steps, keep = Math.pow(0.5, h); // keep: air drag
+// One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
+// heading for `length` long. A long frame only advances it 0.05s; when a resize moves the knot the chain is carried with
+// it, and a new length grows in instead of snapping (either used to fling it about); anything that still goes wrong (not
+// a number, or stretched far past its length) hangs it straight from the knot again.
+/** @param {{pts?: {x: number, y: number, px: number, py: number, vx: number, vy: number}[], seg?: number}} r */
+function stepRibbon(r, ax, ay, length, dt, s) {
+  const { n, gravity } = BOOKMARK, target = length / (n - 1);
+  const hang = () => { r.seg = target; r.pts = Array.from({ length: n }, (_, i) => ({ x: ax, y: ay + i * target, px: 0, py: 0, vx: 0, vy: 0 })); };
+  if (!r.pts || r.seg === undefined) hang();
+  const pts = /** @type {NonNullable<typeof r.pts>} */ (r.pts), jx = ax - pts[0].x, jy = ay - pts[0].y;
+  if (Math.hypot(jx, jy) > 20) for (const p of pts) { p.x += jx; p.y += jy; }
+  dt = Math.max(0, Math.min(dt, 0.05));
+  const seg = r.seg = /** @type {number} */ (r.seg) + (target - /** @type {number} */ (r.seg)) * Math.min(1, dt);
+  const steps = Math.ceil(dt * 120), h = dt / steps, keep = Math.pow(0.5, h); // keep: air drag
   for (let k = 0; k < steps; k++) {
     for (const [i, p] of pts.entries()) {
       p.px = p.x; p.py = p.y;
@@ -59,6 +64,19 @@ function drawRibbon(dt, s, rot, rad, top) {
     }
     for (const p of pts) { p.vx = (p.x - p.px) / h * keep; p.vy = (p.y - p.py) / h * keep; }
   }
+  let len = 0;
+  for (let i = 1; i < n; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  if (!(len < 1.5 * seg * (n - 1))) hang(); // also catches NaN
+}
+const bookmark = {};
+let bookmarkFor;
+function drawRibbon(dt, s, rot, rad, top) {
+  const [ax, ay] = rot(...style.ribbon), { n, half } = BOOKMARK;
+  if (bookmarkFor !== style) { bookmarkFor = style; delete bookmark.pts; }
+  // long, but never past the bottom of the window: most of the room below the knot, within limits
+  const floor = VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620;
+  stepRibbon(bookmark, ax, ay, Math.min(260, Math.max(60, (floor - style.ribbon[1]) * 0.85)), dt, s);
+  const pts = bookmark.pts;
   const cos = Math.cos(rad), sin = Math.sin(rad);
   const P = pts.map(p => [340 + (p.x - 340) * cos + (p.y - top) * sin, top - (p.x - 340) * sin + (p.y - top) * cos]); // into the lantern's units
   // signed half-width: the twist grows down the ribbon (flat where it's tied); past a quarter turn the back shows
