@@ -47,8 +47,8 @@ const STYLES = {
       <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/><ellipse id="paperGlow" cx="95" cy="122" rx="52" ry="48" fill="url(#pg)"/>
       <ellipse id="paperTint" cx="95" cy="122" rx="52" ry="48"/>`, 18),
     front: MOCK(`<ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2" opacity="0.22"/>
-      <g fill="none" stroke="#C9BBA8" stroke-width="0.55" opacity="0.9"><path d="M69.8 80Q95 85 120.2 80"/><path d="M56.2 90Q95 95 133.8 90"/><path d="M48.8 100Q95 105 141.2 100"/><path d="M44.7 110Q95 115 145.3 110"/><path d="M43.0 120Q95 125 147.0 120"/><path d="M43.7 130Q95 135 146.3 130"/><path d="M46.8 140Q95 145 143.2 140"/><path d="M52.8 150Q95 155 137.2 150"/><path d="M63.2 160Q95 165 126.8 160"/></g>
-      <path d="M95 74V170" stroke="#C9BBA8" stroke-width="0.4" opacity="0.6"/>
+      <g fill="none" stroke="#C9BBA8" stroke-width="0.55" opacity="0.9"><path d="M69.8 80Q95 75.2 120.2 80"/><path d="M56.2 90Q95 86.4 133.8 90"/><path d="M48.8 100Q95 97.6 141.2 100"/><path d="M44.7 110Q95 108.8 145.3 110"/><path d="M43.0 120Q95 120.0 147.0 120"/><path d="M43.7 130Q95 131.2 146.3 130"/><path d="M46.8 140Q95 142.4 143.2 140"/><path d="M52.8 150Q95 153.6 137.2 150"/><path d="M63.2 160Q95 164.8 126.8 160"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below -->
+      <path d="M101.6 74L106.8 80 113.2 90 116.7 100 118.6 110 119.4 120 119.1 130 117.6 140 114.8 150 109.9 160 101.6 170" fill="none" stroke="#C9BBA8" stroke-width="0.4" stroke-linejoin="round" opacity="0.6"/><!-- the seam, a little way round the side so it curves like a meridian -->
       <rect x="76" y="66" width="38" height="9" rx="2" fill="#2A1E1E"/><rect x="76" y="68" width="38" height="1.2" fill="#4A3434"/>
       <rect x="76" y="168" width="38" height="9" rx="2" fill="#2A1E1E"/>
       <g id="tassel"><path d="M95 177V194" stroke="#2A1E1E" stroke-width="1"/><circle cx="95" cy="196" r="2.6" fill="#D9AE52"/>
