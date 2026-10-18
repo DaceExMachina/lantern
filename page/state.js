@@ -7,10 +7,11 @@ let seenWaiting = new Set(), nextUp = 0;
 let raw = [], quietUntil = 0, reviews = [];
 // from settings.json: when quiet hours end ("HH:MM"), and which agent types count as supervisors (medium moths)
 let quietEnd = '08:00', supervisor = /supervisor|orchestrat/i;
+const quietEndLabel = () => { const [h, m] = quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();
-// quiet hours: until 8am every waiting session counts as snoozed, so nothing turns violet, notifies or badges
+// quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
 const quiet = () => quietUntil > Date.now();
 
 function sync() {
@@ -20,7 +21,7 @@ function sync() {
   const base = raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
   sessions = quiet() ? base.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : base;
   const q = $('quiet');
-  q.textContent = quiet() ? 'quiet until 8am' : 'quiet';
+  q.textContent = quiet() ? `quiet until ${quietEndLabel()}` : 'quiet';
   q.classList.toggle('on', quiet());
   const live = new Set();
   for (const s of sessions) {

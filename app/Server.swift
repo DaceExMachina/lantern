@@ -1293,6 +1293,8 @@ final class LanternServer {
                     settings["goals"] = goals
                 }
                 if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
+                // the last day a recap opened by itself, so every window shows each one once
+                if let day = j["recapSeen"] as? String, Re("^[0-9]{4}-[0-9]{2}-[0-9]{2}$").test(day) { settings["recapSeen"] = day; ok = true }
                 if let quiet = j["quietUntil"] as? NSNumber, CFGetTypeID(quiet) != CFBooleanGetTypeID(), quiet.doubleValue.isFinite {
                     settings["quietUntil"] = quiet; ok = true // quiet hours: every wait counts as snoozed until then
                 }

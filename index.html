@@ -47,18 +47,39 @@
   #stats dt { color: #8F7FA6; font-size: 11px; }
   #stats dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-  #stats .day { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #8F7FA6; min-width: 0; }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
   #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
   #stats .day b { color: #D8CCE6; font-weight: 500; }
   #stats .dim { color: #8F7FA6; margin: 0; }
   #stats .badges { display: flex; flex-wrap: wrap; gap: 5px; }
-  #stats .badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; cursor: default; }
-  #stats .badge.shame { background: #3E3270; color: #DCD2FF; }
+  #stats .badge, #recap .badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; cursor: default; }
+  #stats .badge.shame, #recap .badge.shame { background: #3E3270; color: #DCD2FF; }
   #stats .badge.unearned { background: none; color: #6B5C88; box-shadow: inset 0 0 0 1px #3A2E52; }
   #stats .badge small { opacity: .7; font-size: 10px; }
   #stats .shelf summary { cursor: pointer; color: #C3B2FF; font-size: 12px; margin-bottom: 6px; }
   #stats .shelf summary:hover { color: #F0E8FF; }
+  #stats .day { all: unset; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #8F7FA6; min-width: 0; }
+  #stats button.day { cursor: pointer; border-radius: 4px; }
+  #stats button.day:hover span, #stats button.day:hover b { color: #F0E8FF; }
+  #stats button.day:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  #stats h3 .link { all: unset; cursor: pointer; float: right; text-transform: none; letter-spacing: 0; color: #C3B2FF; font-size: 12px; }
+  #stats h3 .link:hover { color: #F0E8FF; }
+  /* the daily recap: the stats panel's look */
+  #recap { inset: 0; margin: auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 24px); padding: 14px 18px 16px; }
+  #recap:popover-open { gap: 8px; }
+  #recap h3 { margin: 0; font-size: 15px; font-weight: 500; color: #F5E9FF; display: flex; justify-content: space-between; }
+  #recap .close { all: unset; cursor: pointer; color: #8F7FA6; font-size: 18px; line-height: 1; }
+  #recap .close:hover { color: #F0E8FF; }
+  #recap .headline { display: flex; align-items: baseline; gap: 10px; }
+  #recap .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
+  #recap .ribbon svg { display: block; width: 100%; height: 50px; }
+  #recap .axis { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
+  #recap dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
+  #recap dt { color: #8F7FA6; font-size: 11px; }
+  #recap dd { margin: 0; color: #F5E9FF; font-size: 15px; font-variant-numeric: tabular-nums; }
+  #recap .stars { display: block; width: 100%; height: auto; }
+  #recap .dim { color: #8F7FA6; margin: 0; }
+  #recap .badges { display: flex; flex-wrap: wrap; gap: 5px; }
   #goals { display: flex; flex-direction: column; gap: 4px; }
   #goals h4 { margin-bottom: 0; }
   #goals label { cursor: default; flex-wrap: wrap; gap: 4px 6px; }
@@ -188,13 +209,14 @@
       <p><b>N need you</b> opens the one waiting longest. <b>quiet</b> snoozes everything until <span id="quietUntil">8am</span>.</p>
     </details>
   </div>
-  <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today</h3><div id="statsBody"><p class="dim">Reading the log…</p></div>
+  <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today <button id="todayRecap" class="link">recap</button></h3><div id="statsBody"><p class="dim">Reading the log…</p></div>
     <section id="goals" aria-label="Goals"><h4>Goals</h4>
       <label>Fireflies in flight at most <input id="goal-fireflies" type="number" min="0" placeholder="off"> <span id="goalNow-fireflies"></span></label>
       <label>Answer within <input id="goal-answer" type="number" min="0" placeholder="off"> min (median) <span id="goalNow-answer"></span></label>
       <label>Warm moths at least <input id="goal-warm" type="number" min="0" max="100" placeholder="off"> % <span id="goalNow-warm"></span></label>
     </section>
     <div id="statsWeek"></div></div>
+  <div id="recap" class="flyup" popover aria-label="Recap"></div>
 </footer>
 <script defer src="page/scene.js"></script>
 <script defer src="page/lanterns.js"></script>
@@ -207,6 +229,7 @@
 <script defer src="page/card.js"></script>
 <script defer src="page/notify.js"></script>
 <script defer src="page/stats.js"></script>
+<script defer src="page/recap.js"></script>
 <script defer src="page/main.js"></script>
 </body>
 </html>
