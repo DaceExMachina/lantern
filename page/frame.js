@@ -62,7 +62,7 @@ function drawRibbon(dt, s, rot, rad, top) {
   const cos = Math.cos(rad), sin = Math.sin(rad);
   const P = pts.map(p => [340 + (p.x - 340) * cos + (p.y - top) * sin, top - (p.x - 340) * sin + (p.y - top) * cos]); // into the lantern's units
   // signed half-width: the twist grows down the ribbon (flat where it's tied); past a quarter turn the back shows
-  const w = pts.map((p, i) => { const c = Math.cos((2 * Math.sin(s * 0.45 - i * 0.35) + p.vx * 0.015) * i / (n - 1)); return Math.sign(c || 1) * Math.max(half * Math.abs(c), 1 / (VIEW.px || 1)); }); // edge-on it's still a 2px strip of cloth
+  const w = pts.map((p, i) => { const c = Math.cos((2 * Math.sin(s * 0.45 - i * 0.35) + p.vx * 0.015) * i / (n - 1)); return Math.sign(c || 1) * Math.max(half * Math.abs(c), 1.875 / (VIEW.px || 1)); }); // edge-on it still shows the cloth's thickness, ~3.75px
   const L = [], R = [];
   P.forEach(([x, y], i) => {
     const [x0, y0] = P[Math.max(0, i - 1)], [x1, y1] = P[Math.min(n - 1, i + 1)], d = Math.hypot(x1 - x0, y1 - y0) || 1;
