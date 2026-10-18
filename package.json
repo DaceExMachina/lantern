@@ -12,6 +12,6 @@
   "engines": { "node": ">=18" },
   "repository": "github:DaceExMachina/lantern",
   "license": "MIT",
-  "scripts": { "preview": "node scripts/preview.js", "check": "tsc -p tsconfig.json && tsc -p tsconfig.page.json", "test": "node --test test/*.test.js" },
+  "scripts": { "preview": "node scripts/preview.js", "check": "tsc -p tsconfig.json && tsc -p tsconfig.page.json", "test": "node --test test/*.test.js", "snapshots": "swift scripts/snapshots.swift" },
   "devDependencies": { "@types/node": "^20.0.0", "typescript": "^5.6.0" }
 }
