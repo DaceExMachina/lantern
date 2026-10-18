@@ -93,7 +93,15 @@
   #recap .stars { display: block; width: 100%; height: auto; overflow: visible; } /* dots at the day's edges show whole */
   #recap .star { cursor: default; outline: none; }
   #recap .star:focus-visible circle:last-child { stroke: #F5E9FF; stroke-width: 1; }
-  #recap .starCard { z-index: 10; }
+  #recap .starCard { z-index: 10; box-sizing: border-box; max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-content: start; }
+  #recap .starCard h3 { grid-column: 1 / -1; display: block; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #recap .starCard > div { min-width: 0; }
+  #recap .starCard > div + div { margin-top: 0; }
+  #recap .starCard > div:last-child { min-height: calc(8 * 1.45em + 7 * 3px + 1px); } /* the PR heading, six PRs and "and more" (their links sit a hair taller than a line): one height for every session */
+  #recap .starCard .agents:first-child { margin-top: 0; }
+  #recap .star.picked circle:last-child { stroke: #F5E9FF; stroke-width: 1.2; }
+  #recap .starCard h3 .link { all: unset; cursor: pointer; border-bottom: 1px solid #5B4A8A; }
+  #recap .starCard h3 .link:hover { color: #F0E8FF; border-color: #B9A8FF; }
   #recap .starCard.show { opacity: 1; pointer-events: auto; } /* beats the shared card rule, whose #card lends it an id's weight */
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }

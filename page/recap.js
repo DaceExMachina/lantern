@@ -40,43 +40,61 @@ function constellation(stars, from, to) {
   return `<div class="starsBox"><svg class="stars" viewBox="0 0 ${w} ${h}" role="img" aria-label="${stars.length} sessions"><g stroke="${WARM.thread}" stroke-width=".6" opacity=".35" fill="none">${lines}</g>${dots}</svg><i class="cursor" hidden></i></div>`;
 }
 
-// A session's day, as a card like a moth's: over its dot while the pointer is on it (or on the card, for its PR links),
-// or after a tap until the next tap elsewhere. `ongoing` is today's last moment, so a session still running ends "now".
-function starCard(root, g, s, ongoing) {
+// A session's day, as a card like a moth's, docked just below the recap (or above it when a short window has no room
+// below), so it never covers the ribbon or the constellation. Its facts sit on the left and its PRs on the right, with
+// rows reserved for six of them, so it keeps one height from session to session. Hovering a star shows its card, and
+// moving to another switches it; a click or tap pins it (the star is ringed) so the pointer can go down to its links,
+// until the same star, empty space or Escape unpins it. `ongoing` is today's last moment, so a session still running
+// ends "now".
+let recapStars = [], recapOngoing = 0, pickedStar = null, starTimer;
+function showStar(i) {
+  clearTimeout(starTimer);
+  const root = $('recap');
+  for (const g of root.querySelectorAll('.stars .star')) g.classList.toggle('picked', +g.dataset.i === pickedStar);
   let card = root.querySelector('.starCard');
-  if (!card) { card = document.createElement('div'); card.className = 'starCard'; card.setAttribute('role', 'tooltip'); root.append(card); }
-  const h = document.createElement('h3'), pct = n => `${Math.round(100 * n)}%`;
-  h.textContent = s.title || s.project || 'A session';
-  card.replaceChildren(h,
-    line(`${clock(s.from)} to ${s.to >= ongoing - MIN ? 'now' : clock(s.to)}, ran ${ago(s.ms)}`),
-    line(`${pct(s.warm)} warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs)} waiting, ${ago(s.snoozedMs)} snoozed`),
+  if (i == null) return card?.classList.remove('show');
+  if (!card) { card = document.createElement('div'); card.className = 'starCard'; card.setAttribute('role', 'status'); root.append(card); }
+  const s = recapStars[i], h = document.createElement('h3'), facts = document.createElement('div'), prs = document.createElement('div');
+  const name = s.title || s.project || 'A session';
+  if (sessions.some(o => o.id === s.id)) { // still alive: its title goes to its terminal, like clicking its moth
+    const go = document.createElement('button');
+    go.className = 'link'; go.textContent = name; go.title = 'Go to this session';
+    go.onclick = () => post('/focus', { id: s.id });
+    h.append(go);
+  } else h.textContent = name;
+  facts.append(
+    line(`${clock(s.from)} to ${s.to >= recapOngoing - MIN ? 'now' : clock(s.to)}, ran ${ago(s.ms)}`),
+    line(`${Math.round(100 * s.warm)}% warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs)} waiting, ${ago(s.snoozedMs)} snoozed`),
     line(s.waits ? `Waited on you ${s.waits === 1 ? 'once' : `${s.waits} times`}, the longest ${ago(s.longest)}` : 'Never waited on you', 'dim'),
-    ...(s.prs.size ? prRows([...s.prs.values()]).slice(0, 7) : []), // the heading and six PRs
-    ...(s.prs.size > 6 ? [line(`and ${s.prs.size - 6} more`, 'dim')] : []),
     // ponytail: the log keeps Claude's folder name for the project, so a dash in a real folder name reads as a slash
     ...(s.project ? [line(String(s.project).replace(/-/g, '/').replace(/^\/Users\/[^/]+/, '~'), 'dim')] : []));
-  const r = g.querySelector('circle:last-child').getBoundingClientRect(), w = card.offsetWidth, ch = card.offsetHeight;
-  card.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
-  card.style.top = `${r.top - ch - 10 >= 8 ? r.top - ch - 10 : r.bottom + 10}px`; // above the dot, or below when there's no room
+  prs.append(...(s.prs.size ? prRows([...s.prs.values()]).slice(0, 7) : [line('No PRs that day', 'dim')]), // the heading and six
+    ...(s.prs.size > 6 ? [line(`and ${s.prs.size - 6} more`, 'dim')] : []));
+  card.replaceChildren(h, facts, prs);
+  const r = root.getBoundingClientRect(), below = r.bottom + 8;
+  card.style.left = `${r.left}px`; card.style.width = `${r.width}px`;
+  card.style.top = `${below + card.offsetHeight <= innerHeight - 8 || r.top - 8 - card.offsetHeight < 8 ? below : r.top - 8 - card.offsetHeight}px`;
   card.classList.add('show');
 }
-let recapStars = [], recapOngoing = 0, starTimer; // the open recap's sessions, for its dots' cards
-const hideStar = () => $('recap').querySelector('.starCard')?.classList.remove('show');
 function followStars(stars, ongoing) {
-  recapStars = stars; recapOngoing = ongoing;
+  recapStars = stars; recapOngoing = ongoing; pickedStar = null;
   for (const g of $('recap').querySelectorAll('.stars .star')) {
-    const show = () => { clearTimeout(starTimer); starCard($('recap'), g, recapStars[+g.dataset.i], recapOngoing); };
-    g.addEventListener('pointerenter', show);
-    g.addEventListener('focus', show);
-    g.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') starTimer = setTimeout(hideStar, 300); });
-    g.addEventListener('blur', hideStar);
+    const i = +g.dataset.i, pick = () => { pickedStar = pickedStar === i ? null : i; showStar(i); };
+    g.addEventListener('pointerenter', () => { if (pickedStar == null) showStar(i); });
+    g.addEventListener('focus', () => { if (pickedStar == null) showStar(i); });
+    g.addEventListener('click', pick);
+    g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } });
+    // a moment's grace, so crossing from one star to the next doesn't flash the card away
+    g.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && pickedStar == null) starTimer = setTimeout(() => showStar(null), 150); });
+    g.addEventListener('blur', () => { if (pickedStar == null) showStar(null); });
   }
 }
-// the card stays while the pointer is on it (its PR links), and a tap anywhere else puts it away
-$('recap').addEventListener('pointerover', e => { if (e.target.closest?.('.starCard')) clearTimeout(starTimer); });
-$('recap').addEventListener('pointerout', e => { if (e.target.closest?.('.starCard') && !e.relatedTarget?.closest?.('.starCard')) starTimer = setTimeout(hideStar, 300); });
-$('recap').addEventListener('pointerdown', e => { if (!e.target.closest?.('.star, .starCard')) hideStar(); });
-$('recap').addEventListener('scroll', hideStar, true);
+// empty space or Escape unpins (Escape then leaves the recap open)
+const unpinStar = () => { pickedStar = null; showStar(null); };
+$('recap').addEventListener('pointerdown', e => { if (!e.target.closest?.('.star, .starCard')) unpinStar(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && pickedStar != null && $('recap').matches(':popover-open')) { e.preventDefault(); e.stopPropagation(); unpinStar(); }
+}, true);
 
 function renderRecap(j, i) {
   const d = j.days[i], key = dayKey(d.start), isToday = i === j.days.length - 1, pct = v => v == null ? '–' : `${v}%`;
