@@ -52,6 +52,13 @@
   #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
   #stats .day b { color: #D8CCE6; font-weight: 500; }
   #stats .dim { color: #8F7FA6; margin: 0; }
+  #goals { display: flex; flex-direction: column; gap: 4px; }
+  #goals h4 { margin-bottom: 0; }
+  #goals label { cursor: default; flex-wrap: wrap; gap: 4px 6px; }
+  #goals input { width: 4.2em; font: inherit; color: #F5E9FF; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 1px 5px; }
+  #goals input::placeholder { color: #6B5C88; }
+  #goals span { color: #8F7FA6; }
+  #goals span.met { color: #FFC266; }
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
   #status .warm { color: #8F7FA6; }
@@ -174,7 +181,13 @@
       <p><b>N need you</b> opens the one waiting longest. <b>quiet</b> snoozes everything until 8am.</p>
     </details>
   </div>
-  <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today</h3><div id="statsBody"><p class="dim">Reading the log…</p></div></div>
+  <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today</h3><div id="statsBody"><p class="dim">Reading the log…</p></div>
+    <section id="goals" aria-label="Goals"><h4>Goals</h4>
+      <label>Fireflies in flight at most <input id="goal-fireflies" type="number" min="0" placeholder="off"> <span id="goalNow-fireflies"></span></label>
+      <label>Answer within <input id="goal-answer" type="number" min="0" placeholder="off"> min (median) <span id="goalNow-answer"></span></label>
+      <label>Warm moths at least <input id="goal-warm" type="number" min="0" max="100" placeholder="off"> % <span id="goalNow-warm"></span></label>
+    </section>
+    <div id="statsWeek"></div></div>
 </footer>
 <script defer src="page/scene.js"></script>
 <script defer src="page/lanterns.js"></script>
