@@ -5,10 +5,10 @@
 // They're the scene's own fireflies (FIREFLY_R, fireflyBlink and fireflyLook in fireflies.js, at the scene's scale),
 // drawn on one canvas that only exists while a flash plays; nothing goes near the per-frame-rotated #lantern.
 
-const FLASH = { total: 10000, minHold: 2500, leave: 1800 }; // ms; the arrival takes as long as the farthest flight needs
-// the swarm's speed in screen px per ms as it looks in a 1024x768 window (the scene's scale there is about 1.2), scaling
-// with the scene; ?swarmSpeed=0.15 tries another
-const SWARM_SPEED = +Q.get('swarmSpeed') || 0.2;
+const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as the farthest flight needs
+// Two speeds, in screen px per ms as they look in a 1024x768 window (the scene's scale there is about 1.2), scaling with
+// the scene: flying in and off (on average along a path), and swarming in the pill. ?flySpeed=0.4&swarmSpeed=0.05 tries others.
+const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') || 0.03;
 const FLASH_COLOUR = FLY.draft; // the warm amber of a draft PR's firefly
 const flashQueue = [];
 let flashing = false;
@@ -69,11 +69,11 @@ function playFlash(id) {
   // streams round the pill, neighbours going opposite ways, and every firefly weaves in and out across its neighbours'
   // loops (the outermost only a little, so the rim stays full). A loop moving along itself never thins, so the coverage
   // stays even, and nobody leaves the outline.
-  // It's all one motion at one speed: they fly in at the currents' speed, join their loop at the place and heading it
-  // has reached when they land, stream at it, and carry it into the fly-off.
+  // They fly in fast and slow down steadily as they land, reaching their loop at its own gentle pace and carrying on with
+  // it, never stopping; when they leave they speed up again from that pace.
   const step = radii[1] * 0.8, r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, weave = step * 0.35, flies = /** @type {any[]} */ ([]);
   const inner = step * 0.6; // the tightest loop: round, not a flat line that would turn its fireflies back in an instant, and it doesn't weave
-  const speed = still ? 0 : SWARM_SPEED * px / 1.2; // px per ms
+  const fly = FLY_SPEED * px / 1.2, swarm = still ? 0 : SWARM_SPEED * px / 1.2; // px per ms
   // Landings fall in the 400ms from `gather` (set below, once the longest flight is known); the currents' clock starts
   // there, so where a firefly lands doesn't depend on how long the arrival takes.
   let gather = 0;
@@ -88,25 +88,26 @@ function playFlash(id) {
     const loop = 4 * half + 2 * Math.PI * Math.max(inner, rr), n = Math.max(1, Math.round(loop / step)), at = rand() * step;
     const way = (ring % 2 ? -1 : 1) * (0.9 + rand() * 0.2); // one pace per loop, so its fireflies never bunch
     for (let i = 0; i < n; i++) flies.push({ rr: Math.max(inner, rr), loop, weave: rr <= inner ? 0 : ring ? weave : weave * 0.4, s0: at + i * loop / n,
-      v: way * speed, wf: 0.0015 + rand() * 0.001, ph: rand() * 6.28, land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2 });
+      v: way * swarm, wf: 0.0007 + rand() * 0.0007, ph: rand() * 6.28, land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2 });
   }
-  // Each firefly's landing time is set first, which fixes where it joins its loop and which way the stream there is
-  // heading. It comes in from the side behind that heading (the nearer side where the stream runs up or down), at a
-  // height around the pill's, so it flies straight on into the stream instead of turning back against it.
+  // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
+  // comes in from the side behind that heading (the nearer side where its loop runs up or down), from anywhere along
+  // its height, so it eases into the loop going the same way instead of hooking round to turn back.
   for (const f of flies) {
     f.spot = holdAt(f, f.land);
     f.vel = heading(f, f.land);
-    const side = Math.abs(f.vel[0]) > 0.3 * Math.abs(f.vel[1]) ? f.vel[0] > 0 : f.spot[0] < cx;
-    f.from = still ? f.spot : [side ? -radii[0] : W + radii[0], rand() * Math.min(H, f.spot[1] + 0.35 * H)];
+    const behind = Math.abs(f.vel[0]) > 0.3 * Math.abs(f.vel[1]) ? f.vel[0] > 0 : f.spot[0] < cx;
+    f.from = still ? f.spot : [behind ? -radii[0] : W + radii[0], rand() * H];
     f.len = Math.hypot(f.spot[0] - f.from[0], f.spot[1] - f.from[1]) * 1.15;
-    f.arrive = still ? 800 : f.len / speed;
+    f.arrive = still ? 800 : f.len / fly;
   }
-  // The arrival lasts as long as the longest flight; the hold gets what's left of the total, and never less than minHold.
+  // The arrival lasts as long as the longest flight.
   gather = Math.max(...flies.map(f => f.arrive), 800);
-  const settle = gather + 400, leaveAt = settle + Math.max(FLASH.minHold, FLASH.total - gather - 800 - FLASH.leave), end = leaveAt + 400 + FLASH.leave;
+  const settle = gather + 400, leaveAt = settle + FLASH.hold, end = leaveAt + 400 + FLASH.leave;
   for (const f of flies) {
     f.land += gather; f.delay = f.land - f.arrive; f.lift = leaveAt + f.land - gather;
-    // handles a third of the way along: out of the edge towards a bend, and into the spot along the stream's heading
+    // handles: out of the edge a third of the way towards a bend, and into the spot at its loop's pace and heading, so it
+    // slows all the way down to that pace instead of stopping
     f.c1 = still ? f.spot : toward(f.from, bend(f.from, f.spot, rand), f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
@@ -133,13 +134,15 @@ function playFlash(id) {
         if (t < f.land) { const u = (t - f.delay) / f.arrive; p = cubic(f.from, f.c1, f.c2, f.spot, u); fade = Math.min(1, u * 3); }
         else if (t < f.lift) { p = holdAt(f, t); fade = 1; }
         else {
-          // off from wherever the current had carried it, on along its heading at the same speed
+          // off from wherever the current had carried it, out towards a side (a little upward), speeding up from its
+          // loop's pace to the fly speed on a gently curving path
           if (!f.p0) {
             f.p0 = holdAt(f, f.lift);
-            // straight on along its heading, turned up to a third of a right angle either way and a little upward
-            const vel = heading(f, f.lift), len = speed * f.go, a = Math.atan2(vel[1], vel[0]) + f.tilt * 0.6 - 0.15 * Math.sign(vel[0] || 1);
-            f.away = still ? f.p0 : [f.p0[0] + Math.cos(a) * len, f.p0[1] + Math.sin(a) * len];
-            f.c3 = [f.p0[0] + vel[0] * f.go / 3, f.p0[1] + vel[1] * f.go / 3]; f.c4 = toward(f.away, f.p0, len / 3);
+            const vel = heading(f, f.lift), len = fly * f.go, side = f.tilt > 0 ? W + radii[0] : -radii[0];
+            f.away = still ? f.p0 : toward(f.p0, [side, f.p0[1] - H * 0.15 + f.tilt * H * 0.4], len);
+            const along = toward(f.away, f.p0, len / 3), curl = f.tilt * len * 0.3;
+            f.c3 = [f.p0[0] + vel[0] * f.go / 3, f.p0[1] + vel[1] * f.go / 3];
+            f.c4 = [along[0] - (f.away[1] - f.p0[1]) / len * curl, along[1] + (f.away[0] - f.p0[0]) / len * curl];
           }
           const u = Math.min(1, (t - f.lift) / f.go); p = cubic(f.p0, f.c3, f.c4, f.away, u); fade = 1 - u; lit *= 1 - ease(u * 2);
         }
