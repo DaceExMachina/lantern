@@ -96,6 +96,7 @@ The Lantern server is part of the app, so there's nothing else to run and no Nod
 - **Quitting the app stops the server.** Until you open it again, the hooks quietly do nothing.
 - **It opens at login**, so the server is there before your first session. Turn that off in System Settings > General > Login Items.
 - **Your settings** (the lantern you picked, and the GitHub status cache) live in `~/Library/Application Support/Lantern`, since an app can't write inside itself.
+- **It keeps a log for stats** in `stats.sqlite` in the same folder: when sessions wait on you, when the lantern turns violet, what happens to your PRs, and a few counts every five minutes. Nothing reads it yet; it's there so stats and daily recaps have history to work with. The schema is described at the top of `app/Stats.swift`, and `server.js` doesn't keep one.
 - **Rebuilding the app makes macOS ask again** whether Lantern can control iTerm2, because an app signed on your own Mac counts as a new app each time it's built.
 
 The app is built on your Mac and signed for your Mac alone, so macOS opens it without asking, and you don't need an Apple developer account. To rebuild it by hand after changing it:

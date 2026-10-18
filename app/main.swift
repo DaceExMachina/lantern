@@ -56,6 +56,8 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         web.load(URLRequest(url: home))
     }
 
+    func applicationWillTerminate(_ note: Notification) { server.stats.shutdown() } // close the event log's open spans
+
     // The server lives as long as the app, so closing the window keeps both running. Clicking the Dock icon brings it back.
     func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !hasVisibleWindows { window.makeKeyAndOrderFront(nil) }
