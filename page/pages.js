@@ -12,7 +12,11 @@ let recentProse = []; // from the server's `prose` event
 const PAGES = [{ x: 286, y: 238, w: 90, h: 140, rot: -6 }, { x: 310, y: 305, w: 86, h: 125, rot: 5 }, { x: 298, y: 270, w: 72, h: 95, rot: 1.5 }];
 const INK = { warm: '#5A3420', cool: '#2E2350' };
 const FADE = 18000, HOLD = 70000, EVERY = 9000, SHOWN = 10;
-let fragments = [], shownLately = [], nextFragmentAt = performance.now() + EVERY;
+let fragments = [], shownLately = [], nextFragmentAt = 0;
+// The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
+// fragments part way through their lives, as if it had been running a while, so a reload doesn't wipe the pages.
+let pagesData = false, primed = false;
+const loadedAt = performance.now();
 
 const wrapWords = (text, width) => text.split(' ').reduce((lines, w) => {
   const last = lines[lines.length - 1];
@@ -29,17 +33,20 @@ function pickText() {
   return text;
 }
 
-function addFragment(now) {
+// `age` backdates it: a fragment that has lived longer than its fade and hold is already fading out.
+function addFragment(now, age = 0) {
   const text = pickText();
   if (!text) return;
   const r = Math.random, page = Math.floor(r() * PAGES.length), pg = PAGES[page];
   const size = 4.4 + r() * 1.6;
   fragments.push({
-    page, born: now, hold: HOLD * (0.6 + r() * 0.8), peak: 0.35 + r() * 0.35, mirror: r() < 0.4, size,
+    page, born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.35 + r() * 0.35, mirror: r() < 0.4, size,
     lines: wrapWords(text, Math.round(26 + r() * 10)).slice(0, 1 + Math.floor(r() * 3)),
     x: pg.x - 10 + r() * pg.w * 0.55, y: pg.y + 8 + r() * (pg.h - 10), // can start off the page's left edge and get cut off
   });
   // the oldest leaves early when too many are showing
+  const f = fragments[fragments.length - 1];
+  if (age > FADE + f.hold) f.leaving = now - (age - FADE - f.hold);
   const going = fragments.filter(f => !f.leaving);
   if (going.length > SHOWN) going[0].leaving = now;
 }
@@ -73,8 +80,14 @@ function tickPages() {
   const root = $('pages');
   if (!root) return; // not the barrel
   if (lanternText === 'off') { root.replaceChildren(); fragments = []; return; }
-  if (!root.firstChild) drawPages(root);
   const now = performance.now();
+  if (!primed) {
+    if (!pagesData && now - loadedAt < 1500) return; // nothing drawn yet, not even the pages
+    primed = true;
+    for (let i = 0; i < SHOWN; i++) addFragment(now, Math.random() * (2 * FADE + HOLD));
+    nextFragmentAt = now + EVERY * (0.6 + Math.random() * 0.8);
+  }
+  if (!root.firstChild) drawPages(root);
   if (now >= nextFragmentAt) { addFragment(now); nextFragmentAt = now + EVERY * (0.6 + Math.random() * 0.8); }
   const ink = $('pagesInk');
   ink.setAttribute('fill', mix(INK.warm, INK.cool, cool));

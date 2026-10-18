@@ -8,7 +8,7 @@ es.addEventListener('graveyard', e => { stalePRs = JSON.parse(e.data); }); // th
 const PINNED = new URLSearchParams(location.search).get('style'); // ?style= previews one lantern, whatever the settings say
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
-es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
+es.onmessage = e => { raw = JSON.parse(e.data); pagesData = true; sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
   const key = PINNED || st.style;
