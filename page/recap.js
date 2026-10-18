@@ -25,18 +25,19 @@ function daySessions(day, spans, prs) {
   return [...runs.values()].filter(r => r.ms > 0).map(r => ({ ...r, warm: 1 - Math.min(1, r.waitMs / r.ms) })).sort((a, b) => a.from - b.from);
 }
 
-// One dot per session that day, sized by how long it ran, laid out left to right by when it started and top to bottom
+// One dot per session that day, sized by how long it ran, laid out left to right by when it started, on the ribbon's
+// time axis (`from` to `to`, so each dot sits over its start and the hover line runs through both), and top to bottom
 // by how warm it ran (the share of its time not waiting on me), tinted from the working moth's colour to the waiting
 // one's by the same share. Faint lines join them in order.
-function constellation(stars) {
+function constellation(stars, from, to) {
   if (!stars.length) return '';
-  const w = 600, h = 90, from = stars[0].from, to = Math.max(from + 1, stars[stars.length - 1].from);
-  const at = stars.map(s => [stars.length === 1 ? w / 2 : 20 + (s.from - from) / (to - from) * (w - 40), 14 + (1 - s.warm) * (h - 28),
+  const w = 600, h = 90;
+  const at = stars.map(s => [Math.max(0, s.from - from) / (to - from) * w, 14 + (1 - s.warm) * (h - 28),
     Math.min(9, 1.6 + Math.sqrt(s.ms / MIN) / 2.2), mix(MOTHS.waiting, MOTHS.working, s.warm)]);
   const lines = at.slice(1).map(([x, y], i) => `<path d="M${at[i][0]} ${at[i][1]}L${x} ${y}"/>`).join('');
   const dots = at.map(([x, y, r, fill], i) => `<g class="star" data-i="${i}" tabindex="0" aria-label="${esc(stars[i].title || 'a session')}">
     <circle cx="${x}" cy="${y}" r="${Math.max(r * 2.6, 9)}" fill="${fill}" opacity=".12"/><circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/></g>`).join('');
-  return `<svg class="stars" viewBox="0 0 ${w} ${h}" role="img" aria-label="${stars.length} sessions"><g stroke="${WARM.thread}" stroke-width=".6" opacity=".35" fill="none">${lines}</g>${dots}</svg>`;
+  return `<div class="starsBox"><svg class="stars" viewBox="0 0 ${w} ${h}" role="img" aria-label="${stars.length} sessions"><g stroke="${WARM.thread}" stroke-width=".6" opacity=".35" fill="none">${lines}</g>${dots}</svg><i class="cursor" hidden></i></div>`;
 }
 
 // A session's day, as a card like a moth's: over its dot while the pointer is on it (or on the card, for its PR links),
@@ -94,7 +95,7 @@ function renderRecap(j, i) {
       <div class="headline"><b>${d.warmMoths}%</b><span>of moth time was warm</span></div>
       ${r ? dayRibbon(r, isToday ? 'now' : clock(r.to)) : ''}
       <dl>${nums.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
-      ${constellation(stars)}`}
+      ${r ? constellation(stars, r.from, r.to) : ''}`}
     ${earned.length ? `<div class="badges">${earned.map(([id]) => badge(id)).join('')}</div>` : ''}
     ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}`;
   const box = $('recap').querySelector('.dayRibbon');

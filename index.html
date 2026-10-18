@@ -44,7 +44,7 @@
   #stats .headline span { color: #C9B8DA; }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
   :is(#stats, #recap) .ribbon { position: relative; touch-action: pan-y; }
-  :is(#stats, #recap) .ribbon .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
+  :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
   :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
@@ -89,7 +89,8 @@
   #recap .close:hover { color: #F0E8FF; }
   #recap dl { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   #recap dd { font-size: 15px; }
-  #recap .stars { display: block; width: 100%; height: auto; }
+  #recap .starsBox { position: relative; }
+  #recap .stars { display: block; width: 100%; height: auto; overflow: visible; } /* dots at the day's edges show whole */
   #recap .star { cursor: default; outline: none; }
   #recap .star:focus-visible circle:last-child { stroke: #F5E9FF; stroke-width: 1; }
   #recap .starCard { z-index: 10; }

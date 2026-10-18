@@ -84,13 +84,13 @@ function followRibbon(box, r, day) {
           ...Object.fromEntries(Object.keys(states(r.slices[0])).map(k => [k, ago(r.slices.reduce((ms, s) => ms + states(s)[k] * (s.b - s.a), 0))])) };
     for (const [k, v] of Object.entries(out)) for (const slot of box.querySelectorAll(`[data-v="${k}"]`)) slot.textContent = v;
   };
-  const line = el.querySelector('.cursor');
+  const lines = el.closest('[popover]').querySelectorAll('.cursor'); // the recap's constellation has one too
   const move = e => {
     const box = el.getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)), t = r.from + f * (r.to - r.from);
-    line.style.left = `${100 * f}%`; line.hidden = false;
+    for (const line of lines) { line.style.left = `${100 * f}%`; line.hidden = false; }
     show(r.slices.find(s => t < s.b) || r.slices[r.slices.length - 1]);
   };
-  const leave = () => { line.hidden = true; show(null); };
+  const leave = () => { for (const line of lines) line.hidden = true; show(null); };
   el.addEventListener('pointerdown', move);
   el.addEventListener('pointermove', move);
   el.addEventListener('pointerleave', e => e.pointerType === 'mouse' && leave());
