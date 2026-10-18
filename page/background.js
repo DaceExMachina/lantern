@@ -29,7 +29,7 @@ uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // ?brass: each solid band's slope from the flame, and its spread
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
-const float BAND = 0.06; // how deep a band's shadow gets at its middle: a gentle dip in the glow, never a line
+const float BAND = 0.08; // how deep a band's shadow gets at its middle, right beside the lantern: a gentle dip, never a line
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
@@ -64,13 +64,15 @@ void main() {
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
   float open = 1.0 - CAPS * step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope); // no cap, no fan
-  // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers
+  // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
+  // strongest and narrowest beside the lantern, spreading wider and fading out further away (like a moth's, by distance)
   vec2 bq = p - uBandO;
   float tb = (-bq.x * sin(uSway) + bq.y * cos(uSway)) / max(abs(bq.x * cos(uSway) + bq.y * sin(uSway)), 0.001);
+  float bd = length(bq) / uLightScale, spread = 1.0 + bd / 90.0, fade = 1.0 - smoothstep(70.0, 330.0, bd);
   for (int i = 0; i < 8; i++) {
     if (i >= uBands) break;
-    float k = (tb - uBand[i].x) / uBand[i].y;
-    open *= 1.0 - BAND * exp(-k * k);
+    float k = (tb - uBand[i].x) / (uBand[i].y * spread);
+    open *= 1.0 - BAND * fade * exp(-k * k);
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
