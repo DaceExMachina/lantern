@@ -512,7 +512,7 @@ func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON
                    "unconfirmed": !live]
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
     // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
-    if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(6)) }
+    if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
     // subagents that look like they're still going: transcript touched in the last two minutes and not finished
     var agents = Ordered<JSON>()
@@ -773,7 +773,7 @@ final class LanternServer {
             s["forYou"] = forYou(e["last_assistant_message"])
             if wordsOn {
                 let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
-                if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(6)) } // the newest few runs
+                if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(10)) } // the newest few runs
             }
             s["error"] = false
             if !running.isEmpty && q.isEmpty { s["state"] = "paused"; s["note"] = "Waiting on \(tasks)" }
@@ -896,18 +896,18 @@ final class LanternServer {
     }
 
     // The barrel's pages also draw on the newest few transcripts, so they aren't blank when little is running: a few runs
-    // from the tail of each, a couple of dozen in all. Read when the server starts and when session words are turned on.
+    // from the tail of each, a few dozen in all. Read when the server starts and when session words are turned on.
     func seedProse() {
         DispatchQueue.global().async {
             let started = now()
             let newest = ((try? FileManager.default.contentsOfDirectory(atPath: PROJECTS)) ?? []).flatMap { transcripts(PROJECTS + "/" + $0) }
                 .map { ($0, fileTimes($0)?.mtime ?? 0) }.sorted { $0.1 > $1.1 }.prefix(8).map(\.0)
             var pool: [String] = []
-            for f in newest { pool += transcriptProse(tail(f)).suffix(3).filter { !pool.contains($0) } }
+            for f in newest { pool += transcriptProse(tail(f)).suffix(5).filter { !pool.contains($0) } }
             print("Read \(pool.count) run(s) of prose from \(newest.count) recent transcript(s) in \(Int(now() - started)) ms")
             DispatchQueue.main.async {
                 if !self.wordsOn { return } // turned off again while reading
-                self.recentProse = Array(pool.prefix(24))
+                self.recentProse = Array(pool.prefix(40))
                 self.send("event: prose\ndata: \(jsonText(self.recentProse))\n\n")
             }
         }

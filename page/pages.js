@@ -10,9 +10,8 @@
 
 let lanternText = 'sessions';
 let recentProse = []; // from the server's `prose` event
-// The Odawara barrel's drum (ODAWARA in lanterns.js): centred on x 340, radius 60, 19 gaps between its 20 wires from
-// y 216 to 445, each wire bowing by bow(y) at the front. A line of type sits in a gap, near its lower wire.
-const DRUM = { cx: 340, r: 60, top: 216, gap: 229 / 19, rows: 19, bow: y => 120 * (y - 350) / 1350 };
+// The drum's geometry comes from the barrel (style.drum): its centre and radius, the heights of its wires, and how much
+// each bows at the front. Two lines of type share each gap between wires, riding the bow.
 const INK = { warm: '#5A3420', cool: '#2E2350' };
 const FADE = 18000, HOLD = 70000, EVERY = 20000, SHOWN = 6;
 const FONT = "Georgia, 'Times New Roman', serif";
@@ -30,7 +29,7 @@ const wrapWords = (text, width, size) => text.split(' ').reduce((lines, w) => {
 }, /** @type {string[]} */ ([]));
 
 // A paragraph from one place: a live session's runs, or the recent transcripts' pool, both oldest first. From a random
-// starting run it takes the ones after it until there are about 45 words, skipping starts shown lately. Nothing when
+// starting run it takes the ones after it until there are about 160 words, skipping starts shown lately. Nothing when
 // there are no words.
 function pickText() {
   const sources = [...raw.map(s => s.prose || []), recentProse].filter(list => list.length);
@@ -40,7 +39,7 @@ function pickText() {
   if (!start) return;
   shownLately = [...shownLately, start.run].slice(-8);
   let text = start.run;
-  for (let i = start.i + 1; i < start.list.length && text.split(' ').length < 45; i++) text += ' ' + start.list[i];
+  for (let i = start.i + 1; i < start.list.length && text.split(' ').length < 160; i++) text += ' ' + start.list[i];
   return text;
 }
 
@@ -50,10 +49,12 @@ function pickText() {
 function addBlock(now, age = 0) {
   const text = pickText();
   if (!text) return;
-  const r = Math.random, size = DRUM.gap * (0.55 + r() * 0.1), width = DRUM.r * (2.2 + r() * 1.4);
+  const r = Math.random, d = style.drum, gap = d.ribs[1] - d.ribs[0], size = gap * (0.28 + r() * 0.05), width = d.r * (1.8 + r() * 1.0);
   const block = {
     born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.4 + r() * 0.3, mirror: r() < 0.4, size,
-    from: -DRUM.r * (1 + r() * 1.4), row: Math.floor(r() * (DRUM.rows - 3)), lines: wrapWords(text, width, size),
+    from: -d.r * (1 + r() * 1.4), row: Math.floor(r() * 2 * (d.ribs.length - 1)) - 6, lines: wrapWords(text, width, size),
+    // pasted on a little askew: 4 to 8 degrees either way, so the baseline climbs or falls as it goes round
+    slope: Math.tan((4 + r() * 4) * Math.PI / 180) * (r() < 0.5 ? -1 : 1),
   };
   if (age > FADE + block.hold) block.leaving = now - (age - FADE - block.hold);
   blocks.push(block);
@@ -62,22 +63,24 @@ function addBlock(now, age = 0) {
   if (going.length > SHOWN) going[0].leaving = now;
 }
 
-// One glyph at a time, each placed where its middle falls on the drum and squeezed sideways as the paper turns away,
-// riding the wire's bow. Mirrored blocks run the other way round with their glyphs flipped, like print seen through.
+// One glyph at a time, laid out on the paper unrolled (tilted with the block), then placed where its middle falls on
+// the drum: squeezed sideways as the paper turns away and riding the wire's bow. Mirrored blocks run the other way
+// round with their glyphs flipped, like print seen through.
 function blockMarkup(b) {
   const esc = c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] || c;
+  const d = style.drum, gap = d.ribs[1] - d.ribs[0], tilt = Math.atan(b.slope) * 180 / Math.PI, k = b.mirror ? -1 : 1;
   let out = '';
   b.lines.forEach((line, i) => {
-    const row = b.row + i;
-    if (row >= DRUM.rows) return; // runs off the bottom of the paper
-    const base = DRUM.top + DRUM.gap * (row + 0.8), bow = DRUM.bow(base);
-    let s = b.from;
+    const row = b.row + i, g = Math.floor(row / 2);
+    if (g < 0 || g >= d.ribs.length - 1) return; // above or below the paper
+    const base = d.ribs[g] + gap * (row % 2 ? 0.93 : 0.46), bow = d.bow(base);
+    let s = b.from - i * gap / 2 * b.slope; // a tilted page's lines start a little further along as they go down
     for (const c of line) {
-      const w = widthOf(c, b.size), a = (s + w / 2) / DRUM.r;
+      const w = widthOf(c, b.size), mid = s + w / 2, a = mid / d.r;
       s += w;
       if (c === ' ' || Math.abs(a) >= Math.PI / 2 - 0.05) continue; // round the back
-      const k = b.mirror ? -1 : 1, x = DRUM.cx + k * DRUM.r * Math.sin(a), y = base + bow * Math.cos(a) ** 2 / 2;
-      out += `<text transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(k * Math.cos(a)).toFixed(3)} 1)">${esc(c)}</text>`;
+      const x = d.cx + k * d.r * Math.sin(a), y = base + mid * b.slope + bow * Math.cos(a) ** 2 / 2;
+      out += `<text transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(k * Math.cos(a)).toFixed(3)} 1) rotate(${tilt.toFixed(1)})">${esc(c)}</text>`;
     }
   });
   return `<g font-size="${b.size.toFixed(2)}" text-anchor="middle">${out}</g>`;
