@@ -30,8 +30,9 @@ void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
   // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this pixel. Right
-  // behind a moth that's the whole light, so the shadow starts sharp; further out the moth covers less of it, so the
-  // shadow widens and fades. Each moth is x, y, radius and how dark it can get.
+  // behind a moth that's the whole light; further out the moth covers less of it. Drawn cel-shaded, in two flat tones
+  // with crisp edges: a dark core while it hides most of the light, a paler band while it hides some, then nothing.
+  // Each moth is x, y, radius and how dark it can get.
   float lit = 1.0;
   for (int i = 0; i < ${SHADOWS_MAX}; i++) {
     if (i >= uMoths) break;
@@ -42,7 +43,7 @@ void main() {
     float lm = max(length(dm), 0.001);
     float am = min(m.z / lm, 2.0), al = uLightR / ll, sep = abs(dm.x * dl.y - dm.y * dl.x) / (lm * ll);
     float cover = min(1.0, am * am / (al * al)) * smoothstep(am + al, abs(am - al), sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
-    lit *= 1.0 - cover * m.w;
+    lit *= 1.0 - m.w * (0.5 * smoothstep(0.17, 0.23, cover) + 0.5 * smoothstep(0.57, 0.63, cover));
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
