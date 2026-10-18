@@ -37,8 +37,11 @@ const lantern3dOn = () => L3D && style === STYLES.chochin;
 const CHOCHIN_3D = { paper: true, back: '', front: '' };
 // The paper is STYLES.chochin's body (so moths land on what's drawn); the black caps are short cylinders. Scene units.
 const CAP = { r: 45.6, top: [196.4, 218], bottom: [441.2, 462.8], bevel: 3 };
-const BOX = [190, 0, 300, 535]; // the part of the scene the canvas covers: x, top (set to the window's top), width, height
-const BOX_BOTTOM = 535; // below the tassel's strands, however far it swings
+// The tassel, measured down from where it hangs on the bottom cap: a short cord, a bead, a binding, and the fringe
+const TASSEL = { cord: 22, bead: [28, 6.2], band: [33, 38, 3.8], fringe: [37, 70, 3.6, 9.5] };
+// the part of the scene the canvas covers: x, top (the window's top, set by fitLantern3d), width, height. It reaches
+// past the tassel's tip by enough that a full swing, tipped toward you (so a little bigger), never meets its edge.
+const BOX = [170, 0, 340, 0], BOX_BOTTOM = CAP.bottom[1] + TASSEL.fringe[1] + 40;
 const RIBS = 14, SEAM = 0.07, PERCHES = 16; // bamboo hoops between the caps; the paper's seam, a little way round to the right
 
 const gl3 = L3D ? $('lantern3d').getContext('webgl2', { antialias: true, premultipliedAlpha: true }) : null;
@@ -69,17 +72,6 @@ function lathe(profile, smooth, around = 96, cx = 340) {
 }
 // A ball (or a squashed one, `squash` < 1) of radius r centred on (340, y).
 const ball = (y, r, squash = 1) => lathe(Array.from({ length: 13 }, (_, i) => { const a = Math.PI * i / 12; return [r * Math.sin(a), y - r * squash * Math.cos(a)]; }), true, 24);
-// An open tube of radius r from point a to point b, for the tassel's strands.
-function tube(a, b, r, sides = 6) {
-  const ax = unit([b[0] - a[0], b[1] - a[1], b[2] - a[2]]), u = unit(cross(ax, Math.abs(ax[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0])), v = cross(ax, u);
-  const data = [], idx = [];
-  for (const p of [a, b]) for (let j = 0; j <= sides; j++) {
-    const t = 2 * Math.PI * j / sides, n = [0, 1, 2].map(k => u[k] * Math.cos(t) + v[k] * Math.sin(t));
-    data.push(p[0] + n[0] * r, p[1] + n[1] * r, p[2] + n[2] * r, ...n, ...n, j / sides, 0);
-  }
-  for (let j = 0; j < sides; j++) idx.push(j, j + sides + 1, j + 1, j + 1, j + sides + 1, j + sides + 2);
-  return { data, idx };
-}
 const merge = (...parts) => parts.reduce((m, p) => { const base = m.data.length / 11; m.data.push(...p.data); m.idx.push(...p.idx.map(i => i + base)); return m; }, { data: [], idx: [] });
 function upload({ data, idx }) {
   const vao = gl3.createVertexArray(); gl3.bindVertexArray(vao);
@@ -90,17 +82,13 @@ function upload({ data, idx }) {
   return { vao, count: idx.length, free: () => { gl3.deleteVertexArray(vao); gl3.deleteBuffer(vb); gl3.deleteBuffer(ib); } };
 }
 
-// The tassel, hanging from the bottom cap at (340, CAP.bottom[1]): a dark cord, a gold bead, a gold binding, and a
-// bundle of gold strands spreading into a cone. Drawing units are STYLES.chochin's, scaled by 2.4.
+// The tassel, hanging from the bottom cap at (340, CAP.bottom[1]), in a few chunky forms to match the caps: a short
+// dark cord, a gold bead, a gold binding, and the fringe as one tapered cone, grooved into tufts, flaring at its tip.
 function tasselParts() {
-  const y0 = CAP.bottom[1], cord = lathe([[1.0, y0 - 4], [1.0, y0 + 42]], false, 10);
-  const gold = [ball(y0 + 45.6, 6.2), lathe([[0, y0 + 50], [3.6, y0 + 50], [3.6, y0 + 56], [0, y0 + 56]], false, 16)];
-  const strands = [];
-  for (const [n, r0, r1, len] of [[9, 2.6, 8.5, 34], [5, 1.0, 4.0, 37]]) for (let i = 0; i < n; i++) {
-    const a = 2 * Math.PI * (i + 0.5 * (r0 < 2 ? 1 : 0)) / n, s = Math.sin(a), c = Math.cos(a), l = len - 3 * Math.sin(i * 2.7);
-    strands.push(tube([340 + r0 * s, y0 + 55, r0 * c], [340 + r1 * s, y0 + 55 + l, r1 * c], 0.6));
-  }
-  return { cord: upload(cord), gold: upload(merge(...gold, ...strands)) };
+  const y0 = CAP.bottom[1], { cord, bead, band, fringe: [f0, f1, fr0, fr1] } = TASSEL;
+  const gold = merge(ball(y0 + bead[0], bead[1]), lathe([[0, y0 + band[0]], [band[2], y0 + band[0]], [band[2], y0 + band[1]], [0, y0 + band[1]]], false, 24),
+    lathe([[0, y0 + f0, 1], [fr0, y0 + f0, 1], [fr0 + (fr1 - fr0) * 0.45, y0 + f0 + (f1 - f0) * 0.6, 1], [fr1, y0 + f1 - 2, 1], [fr1 - 2, y0 + f1, 1], [0, y0 + f1, 1]], false, 24)); // v 1: the fringe
+  return { cord: upload(lathe([[1.2, y0 - 4], [1.2, y0 + cord + 2]], false, 10)), gold: upload(gold) };
 }
 
 function build3d() {
@@ -162,6 +150,7 @@ void main() {
     vec3 c = mix(uColor * 0.55, uColor, band(dot(Nw, L), 0.1));
     c = mix(c, mix(uColor, vec3(1.0), 0.6), 0.6 * band(dot(Nw, H), 0.97));
     c = mix(c, c * 0.6 + uBounce * 0.9, 0.5 * band(dot(Nw, normalize(uGlowW - vWorld)), 0.55));
+    if (vUV.y > 0.5) c = mix(c, uColor * 0.45, 0.6 * line(vUV.x * 8.0)); // the fringe: a few broad tufts, grooved between
     o = vec4(c, 1.0);
   }
 }`;
@@ -206,9 +195,9 @@ function capFans3d() {
 
 // The tassel is a pendulum of its own on the bottom cap: gravity keeps it hanging down while the lantern tips, and
 // the cap's sideways acceleration makes it lag behind and swing a little; a faint breeze keeps it from ever settling.
-const TASSEL = { a: 0, w: 0, x: null, vx: 0, ax: 0 }; // angle (radians, bottom toward +x), its speed, the cap's x motion
+const SWING = { a: 0, w: 0, x: null, vx: 0, ax: 0 }; // the tassel's angle (radians, bottom toward +x), its speed, the cap's x motion
 function swingTassel(dt, s) {
-  const [bx] = place([340, CAP.bottom[1]]), t = TASSEL, L = 40, g = 9 * L; // about 3 rad/s natural swing, a short cord
+  const [bx] = place([340, CAP.bottom[1]]), t = SWING, L = 40, g = 9 * L; // about 3 rad/s natural swing, a short cord
   if (t.x !== null && dt > 0) {
     const vx = (bx - t.x) / dt;
     t.ax += ((vx - t.vx) / dt - t.ax) * Math.min(1, dt * 8); // smoothed, so frame-time jitter doesn't kick it
@@ -271,14 +260,14 @@ function drawLantern3d({ paper, core, size, bright, cool }) {
   const pivot = [340, top, 0], world = p => turn([p[0] - 340, p[1] - top, p[2] || 0]).map((v, i) => v + pivot[i]);
   g.uniform3fv(u.uGlowW, world([340, 336, 0]));
   const cols = m => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]; // GL wants columns
-  const ca = Math.cos(-TASSEL.a), sa = Math.sin(-TASSEL.a), cy = Math.cos(POSE.yaw), sy = Math.sin(POSE.yaw);
+  const ca = Math.cos(-SWING.a), sa = Math.sin(-SWING.a), cy = Math.cos(POSE.yaw), sy = Math.sin(POSE.yaw);
   const frames = {
     lantern: [cols(POSE.m), pivot, pivot],
     tassel: [cols(mul3([ca, -sa, 0, sa, ca, 0, 0, 0, 1], [cy, 0, sy, 0, 1, 0, -sy, 0, cy])), [340, CAP.bottom[1], 0], world([340, CAP.bottom[1], 0])],
   };
   // [mesh, material, frame, outline width in CSS px, colour]: paper 0, caps 1, the rest 3 in their own colour
   const parts = [[L3.paper, 0, 'lantern', 1.6], [L3.caps, 1, 'lantern', 1.6], [L3.knot, 3, 'lantern', 0.9, '#2A1E1E'],
-    [L3.string, 3, 'lantern', 0.6, '#C9B49C'], [L3.cord, 3, 'tassel', 0.6, '#3A2626'], [L3.gold, 3, 'tassel', 0.6, '#D9AE52']];
+    [L3.string, 3, 'lantern', 0.6, '#C9B49C'], [L3.cord, 3, 'tassel', 1.0, '#3A2626'], [L3.gold, 3, 'tassel', 1.4, '#D9AE52']];
   for (const ink of [false, true]) { // the surfaces, then the outline: the back faces of a slightly bigger shell, in ink
     g.cullFace(ink ? g.FRONT : g.BACK);
     for (const [mesh, mat, f, w, col] of parts) {
