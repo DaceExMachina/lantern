@@ -124,6 +124,7 @@ function frame(t) {
         m.hops = 0;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
+      m.perchAim = m.perch; // the spot this frame's target came from (a hop below may pick the next one)
       // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
       // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
       // Snoozed ones stay still.
@@ -199,8 +200,8 @@ function frame(t) {
     }
     // a landed moth is carried with its spot as the lantern sways (easing alone would always trail it, so it'd seem to float);
     // the easing is only for getting there: landing, and the jump to a new spot after a hop
-    if (needsMe && m.wasLanded && m.perch === m.lastPerch) { m.x += tx - m.lastT[0]; m.y += ty - m.lastT[1]; }
-    m.lastPerch = needsMe ? m.perch : undefined; m.lastT = [tx, ty];
+    if (needsMe && m.wasLanded && m.perchAim === m.lastAim) { m.x += tx - m.lastT[0]; m.y += ty - m.lastT[1]; }
+    m.lastAim = needsMe ? m.perchAim : undefined; m.lastT = [tx, ty];
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
     // lean gently into the direction of travel, eased so position jitter doesn't shake it
     // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
