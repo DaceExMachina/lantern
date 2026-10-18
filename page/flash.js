@@ -13,7 +13,8 @@ const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') 
 const JOSTLE = Q.has('jostle') ? +Q.get('jostle') || 0 : 1;
 // how many fireflies fill the pill, as a share of the densest packing; fewer are spaced wider and stay the scene's
 // size, so the pill gets lighter and lacier (?count=1 is the densest)
-const COUNT = Q.has('count') ? Math.min(1, +Q.get('count') || 1) : 0.25;
+const BACKING = Q.get('backing') === '1'; // ?backing=1: a soft glow behind the words, so the text keeps its contrast over gaps
+const COUNT = Q.has('count') ? Math.min(1, +Q.get('count') || 1) : 0.5;
 // The colours PR fireflies come in: half the yellow of a draft, two fifths the orange of one with changes asked for,
 // and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
 const FLASH_COLOURS = /** @type {[number, string][]} */ ([[0.5, FLY.draft], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.review]]);
@@ -202,17 +203,28 @@ function playFlash(id) {
     f.c1 = still ? f.spot : toward(f.from, via, f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
-  // A soft amber backing behind the words, under the fireflies, coming and going with them: where the swarm thins
-  // behind a letter the dark sky doesn't show through, so the text keeps its contrast. Blurred once, drawn each frame.
-  const words = [...pill.children].map(e => e.getBoundingClientRect()), pad = 24, blur = 8; // solid under every letter, fading out beyond them
-  const bx = Math.min(...words.map(b => b.left)) - pad, by = Math.min(...words.map(b => b.top)) - pad;
-  const backing = document.createElement('canvas'), bw = Math.max(...words.map(b => b.right)) + pad - bx, bh = Math.max(...words.map(b => b.bottom)) + pad - by;
-  backing.width = Math.ceil((bw + 4 * blur) * k); backing.height = Math.ceil((bh + 4 * blur) * k);
-  const bg = backing.getContext('2d');
-  // blurred as a shadow (WebKit's canvas has no filter): the shape itself is drawn off to the side, out of view
-  const away = backing.width * 2;
-  bg.shadowColor = FLY.draft; bg.shadowBlur = 2 * blur * k; bg.shadowOffsetX = away; bg.fillStyle = FLY.draft;
-  bg.beginPath(); bg.roundRect(2 * blur * k - away, 2 * blur * k, bw * k, bh * k, bh * k / 2); bg.fill();
+  // A soft amber glow in the shape of the words, under the fireflies, coming and going with them: where the swarm thins
+  // behind a letter the dark sky doesn't show through, so the text keeps its contrast, and it hugs the letters rather
+  // than reading as a shape of its own. The words are drawn blurred once (as a shadow, since WebKit's canvas has no
+  // filter, with the words themselves off to the side, out of view), then stamped each frame.
+  const words = [...pill.children], pad = 16, blur = 5;
+  const boxes = words.map(e => e.getBoundingClientRect());
+  const bx = Math.min(...boxes.map(b => b.left)) - pad, by = Math.min(...boxes.map(b => b.top)) - pad;
+  const bw = Math.max(...boxes.map(b => b.right)) + pad - bx, bh = Math.max(...boxes.map(b => b.bottom)) + pad - by;
+  const backing = document.createElement('canvas');
+  backing.width = Math.ceil(bw * k); backing.height = Math.ceil(bh * k);
+  const bg = backing.getContext('2d'), away = backing.width * 2;
+  bg.scale(k, k);
+  bg.shadowColor = FLY.draft; bg.shadowBlur = 2 * blur * k; bg.shadowOffsetX = away * k; bg.fillStyle = FLY.draft; bg.lineWidth = 4;
+  bg.strokeStyle = FLY.draft; bg.textAlign = 'center'; bg.textBaseline = 'middle'; bg.lineJoin = 'round';
+  words.forEach((e, i) => {
+    const css = getComputedStyle(e), b = boxes[i];
+    bg.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;
+    for (let pass = 0; pass < 3; pass++) { // a few passes, so the glow is solid right around the strokes
+      bg.fillText(e.textContent, b.left + b.width / 2 - bx - away, b.top + b.height / 2 - by);
+      bg.strokeText(e.textContent, b.left + b.width / 2 - bx - away, b.top + b.height / 2 - by);
+    }
+  });
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
@@ -226,7 +238,7 @@ function playFlash(id) {
       if (t >= end) { layer.remove(); return done(); }
       g.clearRect(0, 0, W, H);
       const text = Math.max(0, Math.min(1, (t - settle - 300) / 600, 1 - (t - leaveAt) / 500));
-      if (text) { g.globalAlpha = text; g.drawImage(backing, bx - 2 * blur, by - 2 * blur, bw + 4 * blur, bh + 4 * blur); }
+      if (text && BACKING) { g.globalAlpha = text; g.drawImage(backing, bx, by, bw, bh); }
       for (const f of flies) {
         let p, fade;
         if (t < f.delay) continue;
