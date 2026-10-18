@@ -124,6 +124,8 @@
   /* ambient (a second display's screensaver): the lantern's light, the drifting specks and the wisps */
   .ambient #lantern { display: none; } /* no moths or fireflies are made there; the lantern drawing is the one thing to skip */
   label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
+  label.unavailable { opacity: .4; cursor: default; }
+  label.unavailable input { cursor: default; }
   input[type=checkbox] { appearance: none; margin: 0; width: 13px; height: 13px; border: 1px solid #6B5C88; border-radius: 3px; background: #2B2440; display: grid; place-content: center; cursor: pointer; }
   input[type=checkbox]:checked { background: #7B5CFF; border-color: #7B5CFF; }
   input[type=checkbox]:checked::after { content: ''; width: 6px; height: 3px; border: solid #F6F0FF; border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }

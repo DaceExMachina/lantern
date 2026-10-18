@@ -192,6 +192,13 @@ function applyStyle(key) {
     + `<g ${style.paper ? 'filter="url(#behindPaper)"' : ''} transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME}</g>`
     + style.front;
   drawHang();
+  // only a lantern with a paper drum to print on shows session text; elsewhere the toggle stays put but can't be used
+  const text = $('textToggle');
+  if (text) {
+    text.disabled = !style.drum;
+    text.parentElement.classList.toggle('unavailable', !style.drum);
+    text.parentElement.title = style.drum ? '' : 'Only the book-page barrel shows session text';
+  }
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
   $('style').value = key;
 }
