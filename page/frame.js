@@ -90,17 +90,8 @@ function frame(t) {
     dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
       (0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)], (34 + i) * 4);
   });
-  const wall = Date.now() / 1000 % 3600; // the real clock, so the rays line up across displays
-  const ambient = document.body.classList.contains('ambient'), remote = ambient && REMOTE ? remoteRays() : null;
+  const ambient = document.body.classList.contains('ambient'), remote = ambient && REMOTE ? remoteLight() : null;
   swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
-  drawBackground({
-    time: wall, ringC: rot(340, 330), ringR, ringA: 0.55 + 0.45 * Math.max(level, cool * 0.5),
-    ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
-    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
-    rayC: remote ? remote.c : [gx, gy], rayScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky),
-    rayA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse,
-    rotA: (wall * 3 % 360) * Math.PI / 180, rotB: (-wall * 2 % 360) * Math.PI / 180, dustCol: pal('core'),
-  });
 
   // moths
   for (const [k, m] of moths) {
@@ -257,6 +248,7 @@ function frame(t) {
     put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
     wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
+    m.shade = caster(m.x, m.y, m.tilt, m.size, [...upPts, ...sidePts], 0.6);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
     // snoozed moths rest on the lantern in a paler indigo; agents circling a landed moth take on its colour too
@@ -349,5 +341,14 @@ function frame(t) {
     }
   }
   drawStale(dt, s);
+  // the background last, once every moth has moved, so their shadows fall where they are now
+  const casters = ambient ? [] : [...moths.values(), ...(staleOn && !quiet() ? ghosts.values() : [])].map(m => m.shade).filter(Boolean);
+  drawBackground({
+    ringC: rot(340, 330), ringR, ringA: 0.55 + 0.45 * Math.max(level, cool * 0.5),
+    ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
+    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse, glowCol: pal('glow'),
+    lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
+    airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters,
+  });
   placeCard();
 }
