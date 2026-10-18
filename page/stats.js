@@ -54,6 +54,8 @@ const ACHIEVEMENTS = {
   small_batches: ['Small batches', 'Never more than 3 fireflies in flight for a week'],
   revived: ['Revived', 'Brought a stale PR back and merged it'],
   ghostbuster: ['Ghostbuster', 'Merged or closed 5 stale PRs in one day'],
+  seance: ['Séance', 'Revived 5 stale PRs in a week'],
+  lights_out: ['Lights Out', 'Took a real break: two hours with nothing running between sessions'],
   streak_3: ['Warm streak: 3 days', 'Three days in a row at or over your warm moths goal'],
   streak_7: ['Warm streak: a week', 'Seven days in a row at or over your warm moths goal'],
   streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over your warm moths goal'],
@@ -66,8 +68,6 @@ const ACHIEVEMENTS = {
   purple_rain: ['Purple Rain', 'The lantern stayed violet for a whole hour', true],
   ghosted: ['Ghosted', 'A moth waited 3 hours or more', true],
   snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day', true],
-  lights_out: ['Lights Out', 'Two hours with nothing running between sessions', true],
-  seance: ['Séance', 'Revived 5 stale PRs in a week', true],
 };
 const badge = (id, extra = '', unearned = false) => {
   const [name, how, shame] = ACHIEVEMENTS[id] || [id, ''];
