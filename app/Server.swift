@@ -154,7 +154,7 @@ final class LanternServer {
     var pageMtime = 0.0
     // The event log (Stats.swift), and what it last saw, so it only records changes.
     let stats: Stats
-    struct Seen { var waiting = false, snoozed: String?, title: String? }
+    struct Seen { var waiting = false, snoozed: String?, snoozing = false, title: String? }
     var seen: [String: Seen] = [:]
     var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
     var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the pages; memory only
@@ -401,6 +401,7 @@ final class LanternServer {
     // MARK: the event log: what changed since it last looked, called on every broadcast so it sees what the page sees
 
     func observe() {
+        let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now()
         for (id, s) in sessions.items {
             var was = seen[id] ?? Seen()
             let title = truthy(s["title"]) ? str(s["title"]) : nil, project = s["project"] ?? NSNull()
@@ -416,15 +417,18 @@ final class LanternServer {
             // snoozed during the wait: for a while (until it does something new) or for good
             let snoozed = forGood(id) ? "forGood" : truthy(s["snoozed"]) ? "temporary" : nil
             if waiting, let snoozed, snoozed != was.snoozed { stats.note("waiting", id, ["snoozed": snoozed]); was.snoozed = snoozed }
+            // the stretches of the wait it was snoozed, by hand or by quiet hours
+            let snoozing = waiting && (snoozed != nil || quietNow)
+            if snoozing != was.snoozing { if snoozing { stats.begin("snoozed", id) } else { stats.end("snoozed", id) }; was.snoozing = snoozing }
             seen[id] = was
         }
         for (id, was) in seen where sessions[id] == nil {
             if was.waiting { stats.end("waiting", id, ["how": "ended"]) }
+            if was.snoozing { stats.end("snoozed", id) }
             stats.end("alive", id, ["how": "ended"])
             seen[id] = nil
         }
         // the lantern's colour, worked out the way the page does it
-        let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now()
         let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !reportsBack($0.1) && !truthy($0.1["snoozed"]) && !forGood($0.0) }
         if quietNow != quiet { if quietNow { stats.begin("quiet") } else { stats.end("quiet") }; quiet = quietNow }
         if violetNow != violet { if violetNow { stats.begin("violet") } else { stats.end("violet") }; violet = violetNow }

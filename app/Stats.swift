@@ -1,8 +1,8 @@
 // The event log: what the lantern saw, kept in stats.sqlite for the stats panel (report(), served as GET /stats).
 // Three tables, times in ms since 1970:
 //   spans  (kind, session, began, ended, data): stretches of time. kind is server (the app running), alive (a session),
-//          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), violet (the lantern
-//          calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
+//          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), snoozed (the part of
+//          a wait it was snoozed, by hand or by quiet hours), violet (the lantern calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
 //   events (time, kind, session, data): moments. kind is pr (data.change: appeared, need, merged, closed, stray, gone),
 //          stale (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
 //          singed moth) or compact.
@@ -110,7 +110,8 @@ final class Stats {
     }
 
     /// What GET /stats serves: each day's headline numbers (`days`, oldest first, each [start, end) in ms, the last one
-    /// ending now), plus the spans and gauges the page draws its day ribbons from. Runs on the log's queue, then hands
+    /// ending now), plus the spans and gauges ([time, alive, working, waiting, snoozed], -1 where not recorded) the page
+    /// draws its day ribbons from. Runs on the log's queue, then hands
     /// the result to `done` on the main queue, so the server never waits on it.
     func report(warmGoal: Double, done: @escaping (JSON) -> Void) {
         let days = localDays(7)
@@ -139,8 +140,8 @@ final class Stats {
                 """, [bounds]) { if let d = Int(r[0] ?? "") { merged[d] = Int(r[1] ?? "") ?? 0 } }
             // gauges in the window, and the last one before it so the first day's stale count has something to compare to
             let gauges = self.run("""
-                SELECT * FROM (SELECT time, alive, working, fireflies, stale FROM gauges WHERE time < ?1 ORDER BY time DESC LIMIT 1)
-                UNION ALL SELECT time, alive, working, fireflies, stale FROM gauges WHERE time >= ?1 ORDER BY time
+                SELECT * FROM (SELECT time, alive, working, fireflies, stale, waiting, snoozed FROM gauges WHERE time < ?1 ORDER BY time DESC LIMIT 1)
+                UNION ALL SELECT time, alive, working, fireflies, stale, waiting, snoozed FROM gauges WHERE time >= ?1 ORDER BY time
                 """, [from]).map { $0.map { num($0) ?? -1 } }
             // the spans themselves, clipped to the window, for the ribbons and the recap's constellation: [kind, began, ended,
             // seeded (already running at startup), session, title (sessions only)]
@@ -157,7 +158,7 @@ final class Stats {
                 let c = cover[d], answered = waits[d].filter(\.answered).map(\.ms).sorted()
                 let at = { (q: Double) -> Any in answered.isEmpty ? NSNull() : answered[min(answered.count - 1, Int(Double(answered.count) * q))] }
                 let end = lastGauge(day.1), start = lastGauge(day.0)
-                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0,
+                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0, "snoozedMs": c["snoozed"] ?? 0,
                         "warmMoths": pct(c["waiting"] ?? 0, c["alive"] ?? 0),
                         // the lantern's warm share of the time it ran outside quiet hours (it's never violet in quiet hours)
                         "warmLantern": pct(c["violet"] ?? 0, (c["server"] ?? 0) - (c["quiet"] ?? 0)),
@@ -169,7 +170,7 @@ final class Stats {
                 .map { [$0[0] ?? "", $0[1] ?? "", num($0[2]) ?? 0] as [Any] }
             // every badge ever earned: how many times, and the last day
             let tally = self.run("SELECT id, count(*), max(day) FROM achievements GROUP BY id").reduce(into: JSON()) { $0[$1[0] ?? ""] = [Int($1[1] ?? "") ?? 0, $1[2] ?? ""] }
-            let result: JSON = ["days": out, "spans": spans, "gauges": gauges.filter { $0[0] >= from }.map { Array($0[0...2]) },
+            let result: JSON = ["days": out, "spans": spans, "gauges": gauges.filter { $0[0] >= from }.map { [$0[0], $0[1], $0[2], $0[5], $0[6]] },
                                 "achievements": achievements, "tally": tally, "streak": self.streak(warmGoal), "warmGoal": warmGoal]
             DispatchQueue.main.async { done(result) }
         }
