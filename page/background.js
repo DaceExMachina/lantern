@@ -1,7 +1,8 @@
-// The background drawn on the GPU: rings, glow, rays and dust (WebGL), plus rays carried across onto other displays.
+// The background drawn on the GPU: rings, glow, the light in the air with moths' shadows in it, and dust (WebGL), plus
+// the light carried across onto other displays.
 
 // ---- background on the GPU ------------------------------------------------------------------------------
-// The full-screen layer (background, glow rings, soft glow, turning rays, dust) is drawn by a WebGL shader on a canvas
+// The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust) is drawn by a WebGL shader on a canvas
 // behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
 const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
 function program(vert, frag) {
@@ -17,41 +18,60 @@ function program(vert, frag) {
   return { p, u };
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
+const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions, agents and ghosts)
 const BG = program(`attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`, `
 precision highp float;
-uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient, uTime;
+uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
-uniform vec2 uRayC; uniform float uRayScale, uRayA, uRotA, uRotB;
+uniform vec2 uLightC; uniform float uLightScale, uAirA, uLightR;
+uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
+// how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
+const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
+  // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this pixel. Right
+  // behind a moth that's the whole light; further out the moth covers less of it. Drawn cel-shaded, in two flat tones
+  // with crisp edges: a dark core while it hides most of the light, a paler band while it hides some, then nothing.
+  // Each moth is x, y, radius and how dark it can get.
+  float lit = 1.0;
+  for (int i = 0; i < ${SHADOWS_MAX}; i++) {
+    if (i >= uMoths) break;
+    vec4 m = uMoth[i];
+    vec2 dm = m.xy - p, dl = uLightC - p;
+    float ll = length(dl), along = dot(dm, dl) / ll; // how far toward the light the moth is, from here
+    if (along > ll) continue; // the moth is beyond the light
+    float lm = max(length(dm), 0.001);
+    // close to the lantern even more of its light gets round a moth: there the light acts bigger and the shadow is fainter still
+    float near = 1.0 - smoothstep(70.0, 210.0, length(m.xy - uLightC) / uLightScale);
+    float am = min(m.z / lm, 2.0), al = uLightR * (1.0 + 1.5 * near) / ll, sep = abs(dm.x * dl.y - dm.y * dl.x) / (lm * ll);
+    float cover = min(1.0, am * am / (al * al)) * smoothstep(am + al, abs(am - al), sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
+    float edge = 0.03 + 0.05 * near; // softer still up close
+    float shade = (1.0 - 0.75 * near) * (OUTER * smoothstep(0.2 - edge, 0.2 + edge, cover) + (CORE - OUTER) * smoothstep(0.6 - edge, 0.6 + edge, cover));
+    // The closer a moth is to the lantern, the bigger the lit paper behind it looks next to the moth, so its full
+    // shadow narrows to a point sooner (where the moth and the light look the same size) and only a soft spike shows:
+    // a moth sitting on the paper is the far end of that, and one out at its home keeps the shadow above.
+    float close = 1.0 - smoothstep(120.0, 260.0, length(m.xy - uLightC) / uLightScale), al0 = uLightR / ll;
+    float spike = SPIKE * smoothstep(-0.4 * am * close, (0.1 + 0.7 * close) * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
+    lit *= 1.0 - m.w * mix(shade, spike, close);
+  }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
     // glow rings: three nested discs, shown together at one opacity
     float d = length(p - uRingC);
     vec3 ring = mix(mix(uRing0, uRing1, smoothstep(px, -px, d - uRingR.y)), uRing2, smoothstep(px, -px, d - uRingR.z));
-    col = mix(col, ring, smoothstep(px, -px, d - uRingR.x) * uRingA);
+    col = mix(col, ring, smoothstep(px, -px, d - uRingR.x) * uRingA * lit);
     // soft glow: radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
     float g = length(p - uGlowC) / uGlowR;
     float ga = g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));
-    col = mix(col, uGlowCol, ga * uGlowA);
+    col = mix(col, uGlowCol, ga * uGlowA * lit);
   }
-  if (uRayA > 0.0) {
-    // rays: two sets of nine wedges turning opposite ways, twinkling on their own, fading out over a long soft tail
-    // (long enough to carry on to a display beside this one, where they're drawn from a light that's off its edge)
-    vec2 q = (p - uRayC) / uRayScale;
-    float r = length(q), th = atan(q.y, q.x), x = clamp(r / 700.0, 0.0, 1.0), fall = 0.9 * (1.0 - x) * (1.0 - x);
-    float clear = 1.0;
-    for (int i = 0; i < 18; i++) {
-      float fi = float(i), k = mod(fi, 9.0), setB = step(9.0, fi);
-      float a = k / 9.0 * 6.2831853 + setB * 0.35 + mix(uRotA, uRotB, setB);
-      float w = 0.05 + mod(k, 3.0) * 0.025, diff = abs(mod(th - a + 3.1415927, 6.2831853) - 3.1415927);
-      float edge = px / max(r * uRayScale, px);
-      float tw = sin(uTime * (0.4 + mod(fi, 5.0) * 0.13) + fi * 1.7);
-      clear *= 1.0 - smoothstep(w + edge, w - edge, diff) * fall * (0.35 + 0.65 * tw * tw);
-    }
-    col = mix(col, uGlowCol, (1.0 - clear) * uRayA);
+  if (uAirA > 0.0) {
+    // the light in the air: one soft glow from the flame fading out over a long tail (long enough to carry on to a
+    // display beside this one, where it's drawn from a light that's off its edge)
+    float x = clamp(length(p - uLightC) / uLightScale / 700.0, 0.0, 1.0);
+    col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit);
   }
   gl_FragColor = vec4(col, 1.0);
 }`);
@@ -76,13 +96,13 @@ const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 
   ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
 
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
-// screens' frames (global points, y up), so the rays can carry on from where the lantern's light is, off this screen's edge.
+// screens' frames (global points, y up), so its light can carry on from where the lantern's light is, off this screen's edge.
 const REMOTE = (() => {
   const q = new URLSearchParams(location.search), f = k => q.get(k)?.split(',').map(Number);
   const L = f('lantern'), S = f('self');
   return L?.length === 4 && S?.length === 4 && ![...L, ...S].some(isNaN) ? { L, S } : null;
 })();
-function remoteRays() {
+function remoteLight() {
   const { L: [lx, ly, lw, lh], S: [sx, sy, sw, sh] } = REMOTE;
   // the lantern display's view, worked out the same way fitView does it there
   const kx = Math.max(1, lw / lh), ky = Math.max(1, lh / lw), vw = 600 * kx, vh = 600 * ky, vx = 340 - vw / 2, vy = 320 - vh / 2;
@@ -101,11 +121,14 @@ function drawBackground(v) {
   gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const u = BG.u;
   gl.uniform2f(u.uRes, c.width, c.height); gl.uniform4f(u.uBox, x, y, w, h); gl.uniform3fv(u.uBg, rgb('#2B2440'));
-  gl.uniform1f(u.uAmbient, document.body.classList.contains('ambient') ? 1 : 0); gl.uniform1f(u.uTime, v.time);
+  gl.uniform1f(u.uAmbient, document.body.classList.contains('ambient') ? 1 : 0);
   gl.uniform2f(u.uRingC, ...v.ringC); gl.uniform3f(u.uRingR, ...v.ringR); gl.uniform1f(u.uRingA, v.ringA);
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR); gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
-  gl.uniform2f(u.uRayC, ...v.rayC); gl.uniform1f(u.uRayScale, v.rayScale); gl.uniform1f(u.uRayA, v.rayA); gl.uniform1f(u.uRotA, v.rotA); gl.uniform1f(u.uRotB, v.rotB);
+  gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uAirA, v.airA);
+  const shadows = v.shadows.slice(0, SHADOWS_MAX);
+  gl.uniform1f(u.uLightR, v.lightR); gl.uniform1i(u.uMoths, shadows.length);
+  if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
