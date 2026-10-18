@@ -5,6 +5,10 @@
 // The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust, the fireflies' light) is drawn by a WebGL shader on a canvas
 // behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
 const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
+// A GPU reset (sleep, a display change, the GPU process restarting) loses the context and every shader and buffer on it.
+// Asking for it back (preventDefault) and reloading once it's restored rebuilds them all from scratch.
+$('bg').addEventListener('webglcontextlost', e => e.preventDefault());
+$('bg').addEventListener('webglcontextrestored', () => location.reload());
 function program(vert, frag) {
   const p = gl.createProgram();
   for (const [type, src] of [[gl.VERTEX_SHADER, vert], [gl.FRAGMENT_SHADER, frag]]) {
@@ -226,4 +230,6 @@ function drawBackground(v) {
   gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
   if (flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
   flyLightN = 0;
+  // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up
+  if (!gl.isContextLost()) window.lanternFrames = (window.lanternFrames || 0) + 1;
 }

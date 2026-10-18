@@ -2,36 +2,31 @@
 // so this only has to point a web view at it.
 import ScreenSaver
 import WebKit
+import os
+
+// What each copy did, for when the screen goes black:
+// log show --predicate 'subsystem == "com.lantern.screensaver"' --last 1h
+private let logger = Logger(subsystem: "com.lantern.screensaver", category: "view")
 
 @objc(LanternView)
 final class LanternView: ScreenSaverView, WKNavigationDelegate {
-    private let web: WKWebView
+    private var web: WKWebView?
     // macOS starts each screensaver twice per display, a few seconds apart, and the later copy is the one on screen.
     // Each display remembers its newest copy; an older one unloads its page so it stops drawing for nobody.
     private static var newest: [String: ObjectIdentifier] = [:]
     private let display: String
     private var retired = false
     private var page: URL!
+    private static var count = 0
+    private let name: String // "#3 preview" or "#4 {{0, 0}, {2560, 1440}}", to tell copies apart in the log
+    private var ticks = 0, frames = -1, seen = -2, checks = 0, failures = 0, retrying = false
+    private var health: Timer?
 
     override init?(frame: NSRect, isPreview: Bool) {
-        // Inside the screensaver's sandbox WebKit can't tell the window is on screen, so it treats the page as
-        // hidden and freezes it. These private switches keep it running; each is only used if this macOS has it.
-        let config = WKWebViewConfiguration()
-        for (key, setter) in [("hiddenPageDOMTimerThrottlingEnabled", "_setHiddenPageDOMTimerThrottlingEnabled:"),
-                              ("hiddenPageDOMTimerThrottlingAutoIncreases", "_setHiddenPageDOMTimerThrottlingAutoIncreases:")]
-        where config.preferences.responds(to: Selector(setter)) {
-            config.preferences.setValue(false, forKey: key)
-        }
-        web = WKWebView(frame: .zero, configuration: config)
         display = isPreview ? "preview" : NSStringFromRect(frame)
-        if web.responds(to: Selector("_setWindowOcclusionDetectionEnabled:")) {
-            web.setValue(false, forKey: "windowOcclusionDetectionEnabled")
-        }
+        Self.count += 1
+        name = "#\(Self.count) \(display)"
         super.init(frame: frame, isPreview: isPreview)
-        web.frame = bounds
-        web.autoresizingMask = [.width, .height]
-        web.setValue(false, forKey: "drawsBackground") // no white flash before the page paints
-        addSubview(web)
         animationTimeInterval = 1.0 / 60
 
         // With several displays, the biggest one gets the lantern and the rest get just the ambient specks.
@@ -46,38 +41,122 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         let selfFrame = NSScreen.screens.first { $0.frame.size == frame.size && $0.frame != biggestFrame }?.frame ?? frame
         let f = { (r: NSRect) in [r.minX, r.minY, r.width, r.height].map { String(Int($0)) }.joined(separator: ",") }
         let mode = ambient ? "screensaver&ambient&lantern=\(f(biggestFrame))&self=\(f(selfFrame))" : "screensaver"
+        // screensavers don't get your shell's env, so the installer builds the port into the saver's Info.plist
+        let port = Bundle(for: Self.self).object(forInfoDictionaryKey: "LanternPort") as? String ?? "7717"
+        page = URL(string: "http://127.0.0.1:\(port)/?\(mode)")!
+        Self.newest[display] = ObjectIdentifier(self)
+        note("init \(mode) preview=\(isPreview)")
+        load()
+        // Every 10s, check the page is still drawing. This runs on its own timer, so it keeps going even if macOS stops
+        // calling animateOneFrame (the page then draws from its own timer, see page/main.js).
+        let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in self?.check() }
+        RunLoop.main.add(timer, forMode: .common)
+        health = timer
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    private func note(_ s: String) { logger.log("\(self.name, privacy: .public) \(s, privacy: .public)") }
+
+    // Each load gets a new web view (and with it a new web process): one whose process was killed or hung can stay
+    // stuck loading for good, whatever it's asked to load next.
+    private func load() {
+        note("load \(page.absoluteString)")
+        frames = -1; seen = -2 // a fresh page: the first check only asks
+        web?.navigationDelegate = nil
+        web?.removeFromSuperview()
+        // Inside the screensaver's sandbox WebKit can't tell the window is on screen, so it treats the page as
+        // hidden and freezes it. These private switches keep it running; each is only used if this macOS has it.
+        let config = WKWebViewConfiguration()
+        for (key, setter) in [("hiddenPageDOMTimerThrottlingEnabled", "_setHiddenPageDOMTimerThrottlingEnabled:"),
+                              ("hiddenPageDOMTimerThrottlingAutoIncreases", "_setHiddenPageDOMTimerThrottlingAutoIncreases:")]
+        where config.preferences.responds(to: Selector(setter)) {
+            config.preferences.setValue(false, forKey: key)
+        }
+        let web = WKWebView(frame: bounds, configuration: config)
+        if web.responds(to: Selector("_setWindowOcclusionDetectionEnabled:")) {
+            web.setValue(false, forKey: "windowOcclusionDetectionEnabled")
+        }
         // The screensaver draws without much GPU help, and a Retina or 5K screen is a lot of pixels; the scene is soft
         // and glowy, so drawing it at standard resolution looks the same and is several times cheaper.
         if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
             web.setValue(1.0, forKey: "overrideDeviceScaleFactor")
         }
-        // screensavers don't get your shell's env, so the installer builds the port into the saver's Info.plist
-        let port = Bundle(for: Self.self).object(forInfoDictionaryKey: "LanternPort") as? String ?? "7717"
-        page = URL(string: "http://127.0.0.1:\(port)/?\(mode)")!
+        web.autoresizingMask = [.width, .height]
+        web.setValue(false, forKey: "drawsBackground") // no white flash before the page paints
         web.navigationDelegate = self
+        addSubview(web)
+        self.web = web
         web.load(URLRequest(url: page))
-        Self.newest[display] = ObjectIdentifier(self)
     }
 
-    required init?(coder: NSCoder) { nil }
-
-    // If the server isn't answering yet (just restarted, or still starting at login), keep trying instead of staying black.
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+    // Load the page again after something went wrong (the server not answering yet, the web process dying, a page that
+    // stopped drawing), waiting 2, 4, 8, 16, then 30s between tries so a server that's down isn't hammered.
+    private func retry(_ why: String) {
+        guard !retired, !retrying else { return }
+        failures += 1
+        let delay = min(30, 1 << min(failures, 5))
+        note("retry in \(delay)s: \(why)")
+        retrying = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in
             guard let self, !self.retired else { return }
-            self.web.load(URLRequest(url: self.page))
+            self.retrying = false
+            self.load()
         }
+    }
+
+    // The page counts the frames it really drew (page/background.js). If that count hasn't moved since the last check, or the
+    // page never answered (its web process is gone), the page is blank, an error page, hung, or lost its GPU for good: load it
+    // again. Once a minute, log how it's doing.
+    private func check() {
+        if retireIfStale() { return }
+        checks += 1
+        if checks % 6 == 0 {
+            let w = window
+            note("heartbeat ticks=\(ticks) frames=\(frames) window=\(w?.windowNumber ?? -1) visible=\(w?.isVisible ?? false) "
+                + "onscreen=\(w?.occlusionState.contains(.visible) ?? false)")
+        }
+        if frames <= seen { retry("page not drawing (frames=\(frames))") } else if frames > 0 { failures = 0 }
+        seen = frames
+        web?.evaluateJavaScript("window.lanternFrames") { [weak self] result, _ in self?.frames = result as? Int ?? -1 }
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        failed(error, "load failed")
+    }
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { failed(error, "page failed") }
+    private func failed(_ error: Error, _ what: String) {
+        // cancelled just means another load took over (the page reloading itself, say), and that one reports for itself
+        if (error as NSError).code == NSURLErrorCancelled { return }
+        retry("\(what): \(error.localizedDescription)")
+    }
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { note("loaded") }
+    func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        if let r = navigationResponse.response as? HTTPURLResponse, r.statusCode != 200 { note("HTTP \(r.statusCode)") }
+        decisionHandler(.allow) // an error page then never draws a frame, and check() reloads it
+    }
+    // The page's web process can crash, or be killed by macOS when memory is short, leaving the view black for good.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { retry("web process ended") }
+
+    // An older copy on the same display unloads its page so it stops drawing for nobody (see `newest`).
+    private func retireIfStale() -> Bool {
+        if retired { return true }
+        guard Self.newest[display] != ObjectIdentifier(self) else { return false }
+        let w = window
+        note("retire (window=\(w?.windowNumber ?? -1) visible=\(w?.isVisible ?? false) onscreen=\(w?.occlusionState.contains(.visible) ?? false))")
+        retired = true
+        health?.invalidate()
+        web?.removeFromSuperview()
+        web = nil
+        return true
     }
 
     // The web view never fires requestAnimationFrame inside a screensaver, so drive the page from the screensaver's clock.
     override func animateOneFrame() {
-        if retired { return }
-        if Self.newest[display] != ObjectIdentifier(self) {
-            retired = true
-            web.loadHTMLString("", baseURL: nil)
-            return
-        }
-        web.evaluateJavaScript("window.lanternTick && lanternTick()")
+        if retireIfStale() { return }
+        ticks += 1
+        web?.evaluateJavaScript("window.lanternTick && lanternTick()")
     }
 
     // Mouse and keyboard belong to the screensaver (they wake the Mac), not the page.
