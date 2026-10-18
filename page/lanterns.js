@@ -78,13 +78,13 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
   };
 };
 // the Odawara barrel: a straight cylinder on 19 close wires, bowed from the flame's height like its drums
-const ODAWARA = SUNKEN(340, () => 60, Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), 1.2, y => 120 * (y - 350) / 1350);
+const ODAWARA = SUNKEN(340, _y => 60, Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), 1.2, y => 120 * (y - 350) / 1350);
 // the chōchin, in its mockup units: round, its wires wider apart and bowing away from the middle, so it sinks in less
 const CHOCHIN = SUNKEN(95, y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)), [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], 0.35, y => 0.115 * (y - 122));
 const STYLES = {
   barrel: {
-    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 477.56], caps: [216, 445, 63],
-    body: { top: 216, bottom: 445, half: () => 60 }, // a straight cylinder
+    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], caps: [216, 445, 63],
+    body: { top: 216, bottom: 445, half: _y => 60 }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
     <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
@@ -100,12 +100,9 @@ const STYLES = {
     <path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="#3B2A24"/><path d="M362 187.28L369 188.12L376 189.18L383 190.48L390 192L390 199L383 197.54L376 196.31L369 195.29L362 194.49Z" fill="#1F1512"/><path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
     <path d="M277 198Q340 183.81 403 198V218Q340 205.68 277 218Z" fill="#3B2A24"/><path d="M367.72 192.28L376.54 193.29L385.36 194.58L394.18 196.15L403 198L403 218L394.18 216.4L385.36 215.03L376.54 213.91L367.72 213.03Z" fill="#1F1512"/><path d="M277 214.8Q340 202.18 403 214.8V218Q340 205.68 277 218Z" fill="#140D0B"/><path d="M277 198Q340 183.81 403 198V218Q340 205.68 277 218Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 219.3Q340 207.68 400 219.3" fill="none" stroke="currentColor" stroke-width="1.4"/>
     <!-- the bail: a stiff wire arch pinned to the drum on each side, with a loop on top for the string --><path d="M279.5 208C279.5 166 304 147 340 147C376 147 400.5 166 400.5 208" fill="none" stroke="#1A1410" stroke-width="4.6" stroke-linecap="round"/><path d="M279.5 208C279.5 166 304 147 340 147" fill="none" stroke="#8A847C" stroke-width="2.6"/><path d="M340 147C376 147 400.5 166 400.5 208" fill="none" stroke="#5A544E" stroke-width="2.6"/><path d="M281 196C283 170 304 151.6 330 148.6" fill="none" stroke="#D8D2C8" stroke-width="0.9" stroke-linecap="round"/><circle cx="340" cy="141" r="3.4" fill="none" stroke="#1A1410" stroke-width="3.2"/><circle cx="340" cy="141" r="3.4" fill="none" stroke="#8A847C" stroke-width="1.4"/><circle cx="279.5" cy="208" r="2.6" fill="#8A847C" stroke="#1A1410" stroke-width="1"/><circle cx="400.5" cy="208" r="2.6" fill="#5A544E" stroke="#1A1410" stroke-width="1"/>
+    <path id="ribbonBack" fill="#641E1E"/><path id="ribbonFront" fill="#9A3430"/><path id="ribbonEdge" fill="none" stroke="#3E1C12" stroke-width="0.8" stroke-linejoin="round"/><!-- the bookmark (see drawRibbon), tied inside the bottom step -->
     <path d="M290 466Q340 474.59 390 466V473Q340 482.11 290 473Z" fill="#3B2A24"/><path d="M362 469.46L369 468.85L376 468.07L383 467.12L390 466L390 473L383 474.19L376 475.19L369 476.02L362 476.67Z" fill="#1F1512"/><path d="M290 466Q340 474.59 390 466V473Q340 482.11 290 473Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="#3B2A24"/><path d="M367.72 446.5L376.54 445.88L385.36 445.09L394.18 444.13L403 443L403 467L394.18 468.42L385.36 469.63L376.54 470.62L367.72 471.4Z" fill="#1F1512"/><path d="M277 443Q340 451.68 403 443V446.2Q340 455.18 277 446.2Z" fill="#140D0B"/><path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 441.7Q340 449.85 400 441.7" fill="none" stroke="currentColor" stroke-width="1.4"/>
-    <g id="tassel"><g transform="translate(0 22.56)">
-      <path d="M336 455C335 470 338 482 335.5 499L339.8 494.5 344.2 500C346 483 343 470 344 455Z" fill="#9A3430"/><path d="M341.4 455C341.8 470 344.4 483 343.2 498.7L344.2 500C346 483 343 470 344 455Z" fill="#641E1E"/>
-      <path d="M336 455C335 470 338 482 335.5 499L339.8 494.5 344.2 500C346 483 343 470 344 455Z" fill="none" stroke="#3E1C12" stroke-width="0.9" stroke-linejoin="round"/>
-    </g></g>`,
+    <path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="#3B2A24"/><path d="M367.72 446.5L376.54 445.88L385.36 445.09L394.18 444.13L403 443L403 467L394.18 468.42L385.36 469.63L376.54 470.62L367.72 471.4Z" fill="#1F1512"/><path d="M277 443Q340 451.68 403 443V446.2Q340 455.18 277 446.2Z" fill="#140D0B"/><path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 441.7Q340 449.85 400 441.7" fill="none" stroke="currentColor" stroke-width="1.4"/>`,
   },
   chochin: {
     name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], caps: [218, 441, 46], // pivot in the drawing's own units
