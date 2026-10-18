@@ -72,9 +72,11 @@ const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribb
     <span style="grid-area:lamp"><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div></div>`;
 
 // Hovering (or touching) a dayRibbon: a line follows the pointer and the legend's values show that moment; leaving
-// puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change.
+// puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change. It returns
+// `moment(t)`, which shows time t (or the totals, for null) as a hover would, and `onMoment` hears each one: the recap
+// moves its constellation's line and lights the star that started then, and drives the ribbon from the constellation.
 const ribbonTaps = new WeakMap(); // each popover's tap-elsewhere listener, dropped when it draws a new ribbon
-function followRibbon(box, r, day) {
+function followRibbon(box, r, day, onMoment = t => {}) {
   const el = box.querySelector('.ribbon');
   const show = s => {
     const t = s && clock(s.a), b = s && states(s), out = s
@@ -84,13 +86,15 @@ function followRibbon(box, r, day) {
           ...Object.fromEntries(Object.keys(states(r.slices[0])).map(k => [k, ago(r.slices.reduce((ms, s) => ms + states(s)[k] * (s.b - s.a), 0))])) };
     for (const [k, v] of Object.entries(out)) for (const slot of box.querySelectorAll(`[data-v="${k}"]`)) slot.textContent = v;
   };
-  const lines = el.closest('[popover]').querySelectorAll('.cursor'); // the recap's constellation has one too
-  const move = e => {
-    const box = el.getBoundingClientRect(), f = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width)), t = r.from + f * (r.to - r.from);
-    for (const line of lines) { line.style.left = `${100 * f}%`; line.hidden = false; }
-    show(r.slices.find(s => t < s.b) || r.slices[r.slices.length - 1]);
+  const line = el.querySelector('.cursor');
+  const moment = t => {
+    line.hidden = t == null;
+    if (t != null) line.style.left = `${(t - r.from) / (r.to - r.from) * 100}%`;
+    show(t == null ? null : r.slices.find(s => t < s.b) || r.slices[r.slices.length - 1]);
+    onMoment(t);
   };
-  const leave = () => { for (const line of lines) line.hidden = true; show(null); };
+  const move = e => { const b = el.getBoundingClientRect(); moment(r.from + Math.min(1, Math.max(0, (e.clientX - b.left) / b.width)) * (r.to - r.from)); };
+  const leave = () => moment(null);
   el.addEventListener('pointerdown', move);
   el.addEventListener('pointermove', move);
   el.addEventListener('pointerleave', e => e.pointerType === 'mouse' && leave());
@@ -99,6 +103,7 @@ function followRibbon(box, r, day) {
   ribbonTaps.get(root)?.abort(); ribbonTaps.set(root, tap);
   root.addEventListener('pointerdown', e => !el.contains(e.target) && leave(), { signal: tap.signal });
   show(null);
+  return moment;
 }
 
 // Badges the server gives from the event log (Stats.swift decides when). They're not sorted into good or bad: what
