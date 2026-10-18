@@ -127,10 +127,13 @@ async function streamed(base, during) {
   req.destroy();
   return blocks;
 }
-const snapshots = blocks => blocks.filter(b => b.startsWith('data:'));
+// The server also sends snapshots of its own (its startup pass sends one about 1.5s after seeding, which a slow machine
+// reaches mid-test), so these tests follow one session's tool-call count through the snapshots rather than counting them.
+const ticksSeen = (blocks, id) => blocks.filter(b => b.startsWith('data:')).map(b => JSON.parse(b.slice(5)).find(s => s.id === id)?.ticks).filter(Boolean);
 const toolCall = id => ({ session_id: id, hook_event_name: 'PreToolUse', cwd: '/work', tool_name: 'Read', tool_input: { file_path: '/work/a' } });
-// The server sends one snapshot 150ms after the first event of a burst. How many events land inside that window depends on
-// how fast the machine posts them, so the guarantee is one snapshot per 150ms the burst took, and one when it was quick.
+// The server sends one snapshot 150ms after the first change of a burst, and changes inside that window join it. So a burst
+// shows up in one snapshot per 150ms it took, plus one if a window someone else opened was already running when it began.
+// Snapshots from outside the burst repeat a count already seen, so the distinct counts are the burst's own snapshots.
 test('a burst of hook events reaches the page as one snapshot per coalescing window, not one per event', async t => {
   const base = await serve(t);
   let took;
@@ -138,19 +141,19 @@ test('a burst of hook events reaches the page as one snapshot per coalescing win
     const began = Date.now();
     await Promise.all(Array.from({ length: 10 }, () => post(base, '/event', toolCall(UUID(1)))));
     took = Date.now() - began;
-    await until(() => snapshots(blocks).length, 'the burst\'s snapshot');
+    await until(() => ticksSeen(blocks, UUID(1)).includes(10), 'a snapshot with all 10 tool calls');
   });
-  assert.ok(snapshots(blocks).length <= 1 + Math.floor(took / 150), `${snapshots(blocks).length} snapshots for a burst of 10 events that took ${took}ms`);
+  const counts = [...new Set(ticksSeen(blocks, UUID(1)))];
+  assert.ok(counts.length <= 2 + Math.floor(took / 150), `the burst of 10 events that took ${took}ms reached the page in ${counts.length} snapshots: ${counts}`);
 });
 test('the PR lists are sent when they change, not with every snapshot', async t => {
   const base = await serve(t);
   const blocks = await streamed(base, async blocks => {
     await post(base, '/event', toolCall(UUID(1)));
-    await until(() => snapshots(blocks).length === 1, 'the first snapshot'); // a second event inside its window would join it
+    await until(() => ticksSeen(blocks, UUID(1)).includes(1), 'the first event\'s snapshot');
     await post(base, '/event', toolCall(UUID(1)));
-    await until(() => snapshots(blocks).length === 2, 'the second snapshot');
+    await until(() => ticksSeen(blocks, UUID(1)).includes(2), 'the second event\'s snapshot');
   });
-  assert.strictEqual(snapshots(blocks).length, 2, 'both events produced a snapshot');
   assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|graveyard)/.test(b)), []);
 });
 
