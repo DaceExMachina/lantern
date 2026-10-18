@@ -22,8 +22,7 @@ function place([x, y, z = 0]) {
   const [wx, wy, wz] = turn([x - 340, y - POSE.top, z]), k = EYE_Z / (EYE_Z - wz);
   return [340 + wx * k, 330 + (wy + POSE.top - 330) * k];
 }
-// The SVG parts that hang with the lantern (string, flame, tassel) all sit near its centre plane, so one affine
-// transform that matches place() there carries them along.
+// The flame sits on the lantern's centre plane, so one affine transform that matches place() there carries it along.
 function planeMatrix() {
   const [o, x, y] = [place([340, 330]), place([440, 330]), place([340, 430])];
   const a = (x[0] - o[0]) / 100, b = (x[1] - o[1]) / 100, c = (y[0] - o[0]) / 100, d = (y[1] - o[1]) / 100;
@@ -33,12 +32,12 @@ function planeMatrix() {
 // ---- the 3D chōchin ---------------------------------------------------------------------------------------------
 const L3D = new URLSearchParams(location.search).has('lantern3d');
 const lantern3dOn = () => L3D && style === STYLES.chochin;
-// What stays SVG: the string down to the top cap, and the tassel (in the drawing's own units, like STYLES.chochin).
+// What stays SVG: the string (#hang, run straight from where the lantern hangs to the top cap), the flame (carried by
+// the pose), and the tassel, drawn hanging from 0,0 in scene units so it can swing on its own.
 const CHOCHIN_3D = {
-  paper: true,
-  back: MOCK(`<path d="M95 -7.5V66" stroke="#C9B49C" stroke-width="0.8"/>`, 18),
-  front: MOCK(`<g id="tassel"><path d="M95 177V194" stroke="#2A1E1E" stroke-width="1"/><circle cx="95" cy="196" r="2.6" fill="#D9AE52"/>
-    <path d="M93.5 198L92 210M95 198V212M96.5 198L98 210" stroke="#D9AE52" stroke-width="0.6"/></g>`, 18),
+  paper: true, back: '',
+  front: `<g id="tassel"><g transform="scale(2.4) translate(-95 -177)"><path d="M95 177V194" stroke="#2A1E1E" stroke-width="1"/><circle cx="95" cy="196" r="2.6" fill="#D9AE52"/>
+    <path d="M93.5 198L92 210M95 198V212M96.5 198L98 210" stroke="#D9AE52" stroke-width="0.6"/></g></g>`,
 };
 // The paper is STYLES.chochin's body (so moths land on what's drawn); the black caps are short cylinders. Scene units.
 const CAP = { r: 45.6, top: [196.4, 218], bottom: [441.2, 462.8], bevel: 3 };
@@ -88,32 +87,32 @@ void main() {
   vLocal = aPos; vN = aNrm; vUV = aUV;
   vView = transpose(uM) * (vec3(340.0, 330.0, ${EYE_Z.toFixed(1)}) - w); // toward the viewer, in the lantern's own axes
 }`;
-  // Cel-shaded: every tone is a flat colour with a crisp, antialiased edge. The paper's light is how much of the
-  // flame shines through it toward you: brighter close to the flame and where the paper faces you, dimmer where you
-  // look across it near the edges. Three bands of that, with the ribs and the seam as thin darker lines on top.
+  // The paper's light is how much of the flame shines through it toward you: brighter close to the flame and where
+  // the paper faces you, dimmer where you look across it near the edges. It ramps smoothly from the dusky edge tone
+  // through the paper's colour to the flame's core, with the ribs and the seam as thin darker lines on top.
   const fs = `#version 300 es
 precision highp float;
 in vec3 vLocal, vN, vView; in vec2 vUV;
 uniform int uMat; uniform mat3 uM; uniform vec3 uFlame; uniform float uBright, uLine;
 uniform vec3 uHot, uMid, uShade, uRib, uInk, uCapDark, uCapLit, uCapShine, uBounce;
 out vec4 o;
-float band(float x, float t) { float a = fwidth(x) * 0.7; return smoothstep(t - a, t + a, x); }
+
 float line(float x) { float d = abs(fract(x + 0.5) - 0.5) / max(fwidth(x), 1e-5); return 1.0 - smoothstep(uLine * 0.5, uLine * 0.5 + 1.0, d); }
 void main() {
   if (uMat == 2) { o = vec4(uInk, 1.0); return; }
   vec3 N = normalize(vN), V = normalize(vView);
   if (uMat == 0) {
-    float d = length(vLocal - uFlame) / 110.0, through = uBright / (d * d * d) * (0.2 + 0.8 * max(dot(N, V), 0.0));
-    vec3 c = mix(mix(uShade, uMid, band(through, 0.32)), uHot, band(through, 1.05));
+    float d = length(vLocal - uFlame) / 110.0, through = uBright * pow(d, -2.5) * (0.35 + 0.65 * max(dot(N, V), 0.0));
+    vec3 c = mix(mix(uShade, uMid, smoothstep(0.1, 0.95, through)), uHot, smoothstep(0.8, 2.2, through));
     c = mix(c, uRib, 0.55 * line(vUV.y * ${RIBS.toFixed(1)}));
     c = mix(c, uRib, 0.4 * line(vUV.x - ${SEAM}));
     o = vec4(c, 1.0);
   } else {
-    // black lacquer caps: lit and shadowed sides, a hard shine, and the faces turned to the paper catch its glow
+    // black lacquer caps: a soft key light, a broad gentle shine, and the faces turned to the paper catch its glow
     vec3 Nw = uM * N, L = normalize(vec3(-0.45, -0.6, 0.66)), H = normalize(L + normalize(uM * V));
-    vec3 c = mix(uCapDark, uCapLit, band(dot(Nw, L), 0.3));
-    c = mix(c, uCapShine, band(dot(Nw, H), 0.985));
-    c = mix(c, uBounce, band(dot(N, normalize(vec3(340.0, 330.0, 0.0) - vLocal)), 0.6));
+    vec3 c = mix(uCapDark, uCapLit, smoothstep(-0.2, 0.8, dot(Nw, L)));
+    c = mix(c, uCapShine, 0.8 * pow(max(dot(Nw, H), 0.0), 24.0));
+    c = mix(c, uBounce, smoothstep(0.3, 0.9, dot(N, normalize(vec3(340.0, 330.0, 0.0) - vLocal))));
     o = vec4(c, 1.0);
   }
 }`;
@@ -136,6 +135,26 @@ void main() {
   const side = [...cap(CAP.top).slice(1, 5), ...paper.filter((_, i) => i % 4 === 0), ...cap(CAP.bottom).slice(1, 5)].map(([r, y]) => [r, y]);
   return { p, u, paper: lathe(paper, true), caps: [lathe(cap(CAP.top), false), lathe(cap(CAP.bottom), false)],
     outline: [...side.map(([r, y]) => [340 + r, y]), ...side.reverse().map(([r, y]) => [340 - r, y])] };
+}
+
+// The string runs straight down to the top cap's real attachment point, wherever the pose puts it. The tassel is a
+// pendulum of its own on the bottom cap: gravity keeps it hanging down while the lantern tips, and the cap's sideways
+// acceleration makes it lag behind and swing a little; a faint breeze keeps it from ever settling dead still.
+const TASSEL = { a: 0, w: 0, x: null, vx: 0, ax: 0 }; // angle (radians, bottom toward +x), its speed, the cap's x motion
+function hangParts3d(dt, s) {
+  const [tx, ty] = place([340, CAP.top[0]]), [bx, by] = place([340, CAP.bottom[1]]);
+  put($('hang'), 'd', `M340 ${(POSE.top - 2).toFixed(1)}L${tx.toFixed(2)} ${ty.toFixed(2)}`);
+  const t = TASSEL, L = 40, g = 9 * L; // about 3 rad/s natural swing, a short cord
+  if (t.x !== null && dt > 0) {
+    const vx = (bx - t.x) / dt;
+    t.ax += ((vx - t.vx) / dt - t.ax) * Math.min(1, dt * 8); // smoothed, so frame-time jitter doesn't kick it
+    t.vx = vx;
+    const breeze = 0.5 * Math.sin(s * 1.3) + 0.3 * Math.sin(s * 2.9 + 1);
+    t.w += (-(g / L) * Math.sin(t.a) - (t.ax / L) * Math.cos(t.a) - 1.2 * t.w + breeze) * dt;
+    t.a += t.w * dt;
+  }
+  t.x = bx;
+  put($('tassel'), 'transform', `translate(${bx.toFixed(2)} ${by.toFixed(2)}) rotate(${(-t.a * 180 / Math.PI).toFixed(2)})`);
 }
 
 // Show or hide the canvas with the lantern style; behind it, threads and ghosts are clipped to the lantern's outline.
@@ -172,14 +191,14 @@ function drawLantern3d({ paper, core, size, bright, cool }) {
   // tones: the paper's cream takes on the flame's colour the brighter it burns, deepening toward dusk at the edges
   const mid = mix('#F3ECE2', paper, 0.4 + 0.45 * size), shade = mix(paper, mix('#7A2E48', '#2E2A70', cool), 0.5 - 0.15 * size);
   const tones = { uHot: mix(core, paper, 0.12), uMid: mid, uShade: shade, uRib: mix(shade, '#3A1E2C', 0.4),
-    uInk: mix('#1A1016', '#14122A', cool), uCapDark: '#22171A', uCapLit: '#44302F', uCapShine: mix('#A07A62', core, 0.25), uBounce: mix('#22171A', paper, 0.5 * size) };
+    uInk: mix('#2A1A1C', '#1C1A34', cool), uCapDark: '#22171A', uCapLit: '#44302F', uCapShine: mix('#A07A62', core, 0.25), uBounce: mix('#22171A', paper, 0.5 * size) };
   for (const [k, c] of Object.entries(tones)) g.uniform3fv(u[k], rgb(c));
   const draw = (mat, grow, cull) => {
     g.uniform1i(u.uMat, mat); g.uniform1f(u.uGrow, grow); g.cullFace(cull);
     for (const mesh of mat === 0 ? [L3.paper] : mat === 1 ? L3.caps : [L3.paper, ...L3.caps]) { g.bindVertexArray(mesh.vao); g.drawElements(g.TRIANGLES, mesh.count, g.UNSIGNED_SHORT, 0); }
   };
   draw(0, 0, g.BACK); draw(1, 0, g.BACK);
-  draw(2, 2.4 * L3D_PX * (devicePixelRatio || 1), g.FRONT); // the outline: the back faces of a slightly bigger shell, in ink
+  draw(2, 1.6 * L3D_PX * (devicePixelRatio || 1), g.FRONT); // the outline: the back faces of a slightly bigger shell, in ink
   // the clip that hides threads and ghosts behind the lantern follows its outline as it swings
   put($('offLanternPath'), 'd', 'M-9999 -9999H9999V9999H-9999Z M' + L3.outline.map(p => place(p).map(v => v.toFixed(1)).join(' ')).join('L') + 'Z');
 }

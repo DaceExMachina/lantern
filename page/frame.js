@@ -35,11 +35,13 @@ function frame(t) {
   // The 3D chōchin swings as a real pendulum: its path is an ellipse, so as it sways it also tips toward and away from
   // you, and it turns a little on its string. The flat lanterns only sway.
   const in3d = lantern3dOn(), deg = Math.PI / 180;
-  setPose(in3d ? 7 * Math.sin(s * 0.23) * deg : 0, in3d ? (Math.cos(s * 0.7) * 1.6 + Math.cos(s * 1.9) * 0.4) * 2 * reach * deg : 0, rad, top);
+  setPose(in3d ? 4 * Math.sin(s * 0.13) * deg : 0, in3d ? (Math.cos(s * 0.7) * 1.6 + Math.cos(s * 1.9) * 0.4) * 1.2 * reach * deg : 0, rad, top);
   /** @type {(...p: number[]) => [number, number]} */
   const rot = (...p) => place(p); // x, y and, for a point off the centre plane, z
-  put($('lantern'), 'transform', in3d ? planeMatrix() : `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
-  if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
+  // the 3D chōchin's string and tassel hang on their own, so only its flame takes the pose
+  put($('lantern'), 'transform', in3d ? '' : `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
+  if (in3d) { put($('plane'), 'transform', planeMatrix()); hangParts3d(dt, s); }
+  else if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
   const size = 0.3 + 0.7 * Math.max(level, cool * 0.45);
