@@ -93,6 +93,11 @@ function frame(t) {
   // moths
   for (const [k, m] of moths) {
     let tx, ty, ease = 1.5, flap = 22.4; // radians per second: about 3.6 wingbeats a second
+    const orbit = m.satellite && moths.get(m.satellite);
+    if (orbit?.home) { // a satellite's home circles its parent's, slowly
+      const a = m.phase + s * 0.12;
+      m.home = [orbit.home[0] + Math.cos(a) * 62, orbit.home[1] + Math.sin(a) * 44];
+    }
     const parent = m.parentId && moths.get(m.parentId);
     if (m.parentId && (!parent || parent.leaving)) m.leaving = true;
     const needsMe = !m.leaving && !m.parentId && m.session?.state === 'waiting';
@@ -240,7 +245,7 @@ function frame(t) {
 
     // one thread from the light to each session moth, bowing gently
     if (m.thread) {
-      const [ax, ay] = rot(...style.light);
+      const [ax, ay] = orbit && !orbit.leaving ? [orbit.x, orbit.y] : rot(...style.light); // a satellite's thread runs to its parent
       const dx = m.x - ax, dy = m.y - ay, len = Math.hypot(dx, dy) || 1;
       const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
       const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;

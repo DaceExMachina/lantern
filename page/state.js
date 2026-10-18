@@ -18,6 +18,12 @@ function sync() {
     live.add(s.id);
     if (!moths.has(s.id)) moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
     moths.get(s.id).session = s;
+    // A session another session started (the Claude app's side sessions) is a satellite: it orbits its parent's moth,
+    // smaller, with its thread to the parent; it still lands on the lantern on its own when it needs you.
+    const m = moths.get(s.id), parent = s.parent && moths.get(s.parent);
+    m.satellite = parent && !parent.leaving ? s.parent : null;
+    m.size = m.satellite ? SIZE.supervisor * 1.15 : SIZE.session;
+    if (m.satellite) m.slot = -1; // it doesn't hold one of the home spots
     for (const a of s.subagents) {
       const k = s.id + '/' + a.id;
       live.add(k);

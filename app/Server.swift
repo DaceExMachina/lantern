@@ -306,6 +306,22 @@ func findOwners(_ urls: [String]) -> [String: Any] {
     return found
 }
 
+// Sessions the Claude app starts from another session (its side sessions) name their parent in the app's own
+// per-session files, alongside their Claude Code session id. Returns child id -> parent id, in Claude Code ids.
+let APP_SESSIONS = HOME + "/Library/Application Support/Claude/claude-code-sessions"
+func spawnLinks() -> [String: String] {
+    var cliOf: [String: String] = [:], parentOf: [String: String] = [:]
+    let walk = FileManager.default.enumerator(atPath: APP_SESSIONS)
+    while let f = walk?.nextObject() as? String {
+        guard (f as NSString).lastPathComponent.hasPrefix("local_"), f.hasSuffix(".json"),
+              let data = FileManager.default.contents(atPath: APP_SESSIONS + "/" + f), let j = parse(data) as? JSON,
+              let cli = j["cliSessionId"] as? String, let local = j["sessionId"] as? String else { continue }
+        cliOf[local] = cli
+        if let from = (j["spawnedFrom"] as? JSON)?["sessionId"] as? String { parentOf[cli] = from }
+    }
+    return parentOf.compactMapValues { cliOf[$0] }
+}
+
 func createdPRs(_ file: String, _ dir: String) -> [String] {
     var calls = Set<String>(), urls: [String] = []
     for f in [file] + transcripts(dir + "/subagents") {
@@ -505,7 +521,7 @@ final class LanternServer {
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
-        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep() }
+        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in self.observe() } // quiet hours end with nothing else happening
         Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in self.gauge() }
         // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
@@ -752,6 +768,7 @@ final class LanternServer {
                     self.loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
                 }
                 print("Seeded \(self.sessions.count) session(s) from disk")
+                self.linkSpawned()
                 // last known PR status, until the first refresh replaces it
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {
                     self.reviews = cache["reviews"] as? [JSON] ?? []
@@ -869,6 +886,21 @@ final class LanternServer {
             }
         }
     }
+    // Mark each session the Claude app started from another live session with its parent, so its moth orbits the parent's.
+    func linkSpawned() {
+        DispatchQueue.global().async {
+            let links = spawnLinks()
+            DispatchQueue.main.async {
+                var changed = false
+                for (id, s) in self.sessions.items {
+                    let parent: Any = links[id].flatMap { self.sessions[$0] != nil ? $0 : nil } ?? NSNull()
+                    if str(s["parent"]) != str(parent) { self.sessions[id]!["parent"] = parent; changed = true }
+                }
+                if changed { self.broadcast() }
+            }
+        }
+    }
+
     func saveGitHubCache() {
         let bySession = sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
         let text = jsonText(["reviews": reviews, "graveyard": graveyard, "owners": owners, "bySession": bySession]) + "\n"

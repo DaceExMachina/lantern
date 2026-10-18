@@ -9,6 +9,7 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **The flame and glow** grow brighter with every working session. Five or more is fully lit.
 - **Big moths are sessions.** Each one has its own spot in the dark, a thread of light back to the lantern, and a wingbeat that drifts between a top-down and a side view.
 - **Small moths are subagents** circling the session that started them. Supervisor agents are a size up.
+- **Side sessions orbit their parent.** A session the Claude desktop app started from another session flies as a satellite around that session's moth, a little smaller, with its thread running to the parent. It still lands on the lantern by itself when it needs you.
 - **A moth that needs you lands on the lantern**, folds its wings, and turns indigo. The flame, paper, and glow all shift to violet.
 - **Waiting on agents isn't the same as waiting on you.** A session whose turn ended while its background agents keep running stays in the air. If it also asked you something, it lands.
 - **Hover a session's moth** for its name, what it's doing right now, your last prompt, the question it's asking, and what each of its agents is working on. The hover area stays put while the moth wanders, so the card holds still.
