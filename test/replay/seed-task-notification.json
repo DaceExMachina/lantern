@@ -19,7 +19,6 @@
           "started": "<time>",
           "state": "waiting",
           "subagents": [],
-          "unconfirmed": true,
           "waitingSince": "<time>"
         },
         {
@@ -31,8 +30,7 @@
           "project": "-work-2",
           "started": "<time>",
           "state": "working",
-          "subagents": [],
-          "unconfirmed": true
+          "subagents": []
         }
       ]
     }

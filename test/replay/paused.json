@@ -75,7 +75,6 @@
             "Audit the server",
             "Audit the page"
           ],
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
@@ -140,7 +139,6 @@
             "Audit the page"
           ],
           "ticks": 1,
-          "unconfirmed": false,
           "waitingSince": 0
         }
       ]
@@ -190,7 +188,6 @@
           "subagents": [],
           "tasks": [],
           "ticks": 1,
-          "unconfirmed": false,
           "waitingSince": "<time>"
         }
       ]

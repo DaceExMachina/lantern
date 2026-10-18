@@ -1,7 +1,6 @@
-// Lantern's server, in Swift, inside the app. It does what server.js does (server.js still runs the npx and launchd
-// setups): takes Claude Code hook events, keeps session state, streams it to the page over SSE, and rebuilds sessions
-// from their transcripts on start. Sessions are kept as plain JSON dictionaries, like server.js's objects, so the page
-// gets exactly the same snapshot. All state lives on the main queue; disk, process and network work runs on background
+// Lantern's server, in Swift, inside the app: takes Claude Code hook events, keeps session state, streams it to the
+// page over SSE, and rebuilds sessions from their transcripts on start. Sessions are kept as plain JSON dictionaries,
+// so the page gets the snapshot as they are. All state lives on the main queue; disk, process and network work runs on background
 // queues and hops back.
 import Foundation
 import Network
@@ -20,7 +19,7 @@ var PROJECTS: String { CLAUDE_DIR + "/projects" }
 
 typealias JSON = [String: Any]
 
-// MARK: - Small JS-alikes, so the ported logic reads like server.js and treats odd input the same way
+// MARK: - Small JS-alikes, so the logic treats odd input the way JavaScript would
 
 func now() -> Double { (Date().timeIntervalSince1970 * 1000).rounded(.down) }
 
@@ -310,7 +309,7 @@ func byNewest(_ files: [String]) -> [String] {
     return dated.sorted { $0.mtime != $1.mtime ? $0.mtime > $1.mtime : $0.at < $1.at }.map(\.file) // stable, like JS sort
 }
 
-/// Runs a command (found on PATH, as server.js does, unless it's a full path) and returns its output, whatever its exit status.
+/// Runs a command (found on PATH unless it's a full path) and returns its output, whatever its exit status.
 func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 10) -> (ok: Bool, out: String) {
     let p = Process(), out = Pipe()
     p.executableURL = URL(fileURLWithPath: cmd.hasPrefix("/") ? cmd : "/usr/bin/env")
@@ -387,16 +386,27 @@ func findOwners(_ urls: [String]) -> [String: Any] {
 // The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session
 // id, and for its side sessions the session that started them. Only those three fields are read.
 let APP_SESSIONS = HOME + "/Library/Application Support/Claude/claude-code-sessions"
-func appSessions() -> [(cli: String, local: String, from: String?)] {
-    var found: [(cli: String, local: String, from: String?)] = []
-    let walk = FileManager.default.enumerator(atPath: APP_SESSIONS)
-    while let f = walk?.nextObject() as? String {
-        guard (f as NSString).lastPathComponent.hasPrefix("local_"), f.hasSuffix(".json"),
-              let data = FileManager.default.contents(atPath: APP_SESSIONS + "/" + f), let j = parse(data) as? JSON,
-              let cli = j["cliSessionId"] as? String, let local = j["sessionId"] as? String else { continue }
-        found.append((cli, local, (j["spawnedFrom"] as? JSON)?["sessionId"] as? String))
+typealias AppSession = (cli: String, local: String, from: String?)
+// Each file is parsed again only when it has changed (by modification time); files that are gone drop out.
+var appSessionCache: [String: (mtime: Date, session: AppSession?)] = [:]
+let appSessionLock = NSLock()
+func appSessions() -> [AppSession] {
+    appSessionLock.lock(); defer { appSessionLock.unlock() }
+    var seen: [String: (mtime: Date, session: AppSession?)] = [:]
+    let walk = FileManager.default.enumerator(at: URL(fileURLWithPath: APP_SESSIONS), includingPropertiesForKeys: [.contentModificationDateKey])
+    while let file = walk?.nextObject() as? URL {
+        guard file.lastPathComponent.hasPrefix("local_"), file.pathExtension == "json",
+              let mtime = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { continue }
+        if let known = appSessionCache[file.path], known.mtime == mtime { seen[file.path] = known; continue }
+        var session: AppSession?
+        if let data = FileManager.default.contents(atPath: file.path), let j = parse(data) as? JSON,
+           let cli = j["cliSessionId"] as? String, let local = j["sessionId"] as? String {
+            session = (cli, local, (j["spawnedFrom"] as? JSON)?["sessionId"] as? String)
+        }
+        seen[file.path] = (mtime, session)
     }
-    return found
+    appSessionCache = seen
+    return seen.values.compactMap(\.session)
 }
 /// child id -> parent id, in Claude Code ids, for the side sessions the Claude app started from another session
 func spawnLinks() -> [String: String] {
@@ -570,6 +580,17 @@ func ghGraphql(_ cwd: String) -> JSON? {
     if let d = data(prQuery(PR_GQL)), d["mine"] != nil { return d }
     return data(prQuery(Re(" commits\\(.*$").replace(PR_GQL, "")))
 }
+// Through gh, which GitHub account a folder gets can depend on where it is (a wrapper that picks a token by the
+// top folder under home, say: ~/work for one account, ~/projects for another). So the PR query runs once per top folder
+// under home (one more for everything outside it), from any one of that folder's repos, not once per repo.
+func accountFolders(_ cwds: [String]) -> [String] {
+    var byTop: [String: String] = [:]
+    for cwd in cwds {
+        let top = cwd.hasPrefix(HOME + "/") ? cwd.dropFirst(HOME.count + 1).split(separator: "/").first.map(String.init) ?? "" : ""
+        byTop[top] = byTop[top] ?? cwd
+    }
+    return Array(byTop.values)
+}
 /// A blocking HTTPS request, for background queues only.
 func fetch(_ url: String, method: String = "GET", headers: [String: String], body: Any? = nil) -> (status: Int, json: JSON?) {
     var req = URLRequest(url: URL(string: url)!, timeoutInterval: 30)
@@ -585,7 +606,7 @@ func fetch(_ url: String, method: String = "GET", headers: [String: String], bod
     done.wait()
     return result
 }
-// The Keychain through Apple's own `security` tool: tokens server.js saved stay readable without a prompt, and a
+// The Keychain through Apple's own `security` tool: tokens saved by earlier versions stay readable without a prompt, and a
 // rebuilt (newly signed) app doesn't have to be allowed in again.
 func security(_ args: [String]) -> String? {
     let r = run("/usr/bin/security", args)
@@ -610,6 +631,7 @@ final class LanternServer {
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var refreshing = false
+    var broadcastDue = false, sentReviews = "[]", sentGraveyard = "[]" // see broadcast()
     var listener: NWListener?
     var started = false
     var pageMtime = 0.0
@@ -635,7 +657,7 @@ final class LanternServer {
         stats = Stats(data + "/stats.sqlite")
     }
 
-    // Takes the port, or, while something else holds it (server.js from a checkout, say), keeps trying every few seconds.
+    // Takes the port, or, while something else holds it (a lantern run from a checkout, say), keeps trying every few seconds.
     func start() {
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: port)!)
@@ -685,6 +707,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
+            for key in ["titleRead", "unconfirmed", "kitty"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -693,7 +716,21 @@ final class LanternServer {
     // Session text (the barrel's pages) are on unless settings.json says "off"; while off, none are read, kept or sent.
     var wordsOn: Bool { settings["lanternText"] as? String != "off" }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
-    func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
+    /// Tells the pages something changed. Hook events arrive in bursts, so one send, a moment later, covers them all.
+    func broadcast() {
+        if broadcastDue { return }
+        broadcastDue = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.broadcastDue = false; self.sendState() }
+    }
+    // The sessions go out every time; the PR lists only when they differ from what the pages last got.
+    func sendState() {
+        observe()
+        var msg = ""
+        let r = jsonText(reviews), g = jsonText(graveyardOut())
+        if r != sentReviews { sentReviews = r; msg += "event: reviews\ndata: \(r)\n\n" }
+        if g != sentGraveyard { sentGraveyard = g; msg += "event: graveyard\ndata: \(g)\n\n" }
+        send(msg + "data: \(snapshot())\n\n")
+    }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
     func broadcastGitHub() { send("event: github\ndata: \(jsonText(githubState()))\n\n") }
     func saveSettings() {
@@ -729,7 +766,6 @@ final class LanternServer {
         }
         s["unconfirmed"] = false
         if truthy(e["cwd"]) { s["cwd"] = e["cwd"] }
-        if truthy(e["permission_mode"]) { s["mode"] = e["permission_mode"] }
         if let pid = e["pid"] as? String, Re("^[0-9]+$").test(pid) { s["pid"] = Int(pid) ?? Double(pid)! } // the Claude Code process the hook ran under ($PPID)
         let iterm = ((e["iterm"] as? String) ?? "").components(separatedBy: ":").last! // ITERM_SESSION_ID looks like w0t1p0:<uuid>
         if UUID_RE.test(iterm) { s["iterm"] = iterm }
@@ -823,7 +859,8 @@ final class LanternServer {
         DispatchQueue.global().async {
             let title = readTitle(dir, current)
             DispatchQueue.main.async {
-                if self.sessions[id] != nil { self.sessions[id]!["title"] = title }
+                guard self.sessions[id] != nil, str(self.sessions[id]!["title"]) != str(title) else { return }
+                self.sessions[id]!["title"] = title
                 self.broadcast()
             }
         }
@@ -1031,7 +1068,7 @@ final class LanternServer {
             let live = list.filter { !$0.1.isEmpty && git($0.1, ["rev-parse", "--is-inside-work-tree"]) != nil }
             var errors: [String: String] = [:]
             let queries: [() -> JSON?] = tokens.isEmpty
-                ? Array(Set(live.map(\.1))).map { cwd in { ghGraphql(cwd) } }
+                ? accountFolders(live.map(\.1)).map { cwd in { ghGraphql(cwd) } }
                 : tokens.map { login, token in {
                     let r = fetch("https://api.github.com/graphql", method: "POST", headers: ["Authorization": "Bearer \(token)", "User-Agent": "claude-lantern"], body: ["query": prQuery(PR_GQL)])
                     if r.status == 401 { DispatchQueue.main.sync { errors[login] = "expired" }; return nil } // the token was revoked or expired: reconnect
@@ -1266,7 +1303,7 @@ final class LanternServer {
         c.start(queue: .main)
         receive(c, Data())
     }
-    // Reads one request: headers, then a Content-Length body. Bodies past the endpoint's limit drop the connection, as server.js does.
+    // Reads one request: headers, then a Content-Length body. Bodies past the endpoint's limit drop the connection.
     func receive(_ c: NWConnection, _ buffer: Data) {
         c.receive(minimumIncompleteLength: 1, maximumLength: 65536) { data, _, isComplete, error in
             var buffer = buffer

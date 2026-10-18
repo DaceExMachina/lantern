@@ -92,6 +92,36 @@ test('SessionEnd removes the session', t => replay(t, 'session-end'));
 test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
+// What an open page receives after its first load: the SSE blocks sent while `during` runs, then 600ms more.
+async function streamed(base, during) {
+  const blocks = [];
+  let text = '', ready;
+  const first = new Promise(r => ready = r);
+  const req = http.get(base + '/events', res => res.on('data', chunk => {
+    text += chunk;
+    const parts = text.split('\n\n'); text = parts.pop();
+    if (!ready.done) { if (parts.some(b => !b.includes('event:') && b.startsWith('data:'))) { ready.done = true; ready(); } return; }
+    blocks.push(...parts);
+  }));
+  await first;
+  await during();
+  await wait(600);
+  req.destroy();
+  return blocks;
+}
+const toolCall = id => ({ session_id: id, hook_event_name: 'PreToolUse', cwd: '/work', tool_name: 'Read', tool_input: { file_path: '/work/a' } });
+test('a burst of hook events reaches the page as one snapshot', async t => {
+  const base = await serve(t);
+  const blocks = await streamed(base, () => Promise.all(Array.from({ length: 10 }, () => post(base, '/event', toolCall(UUID(1))))));
+  assert.strictEqual(blocks.filter(b => b.startsWith('data:')).length, 1);
+});
+test('the PR lists are sent when they change, not with every snapshot', async t => {
+  const base = await serve(t);
+  const blocks = await streamed(base, async () => { await post(base, '/event', toolCall(UUID(1))); await wait(300); await post(base, '/event', toolCall(UUID(1))); });
+  assert.strictEqual(blocks.filter(b => b.startsWith('data:')).length, 2, 'both events produced a snapshot');
+  assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|graveyard)/.test(b)), []);
+});
+
 // Transcripts on disk, for the seeding cases: one JSON object per line.
 const UUID = n => `0000000${n}-0000-4000-8000-000000000000`;
 const jsonl = lines => lines.map(l => JSON.stringify(l)).join('\n') + '\n';
@@ -146,7 +176,7 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
   let s;
   for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
   assert.ok(s, 'the live session was not seeded');
-  assert.deepStrictEqual({ pid: s.pid, unconfirmed: s.unconfirmed, state: s.state }, { pid: proc.pid, unconfirmed: false, state: 'waiting' });
+  assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
 // A `claude` the hooks never told the lantern about (iTerm restarted, a hook failed) shows up after startup: the next
@@ -172,7 +202,7 @@ test('a running session the lantern missed is adopted with its process on the ne
   let s;
   for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
   assert.ok(s, 'the running session was not adopted');
-  assert.deepStrictEqual({ pid: s.pid, unconfirmed: s.unconfirmed, state: s.state }, { pid: proc.pid, unconfirmed: false, state: 'waiting' });
+  assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
 // The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
