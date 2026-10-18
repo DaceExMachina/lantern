@@ -11,10 +11,11 @@
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 48px; flex-wrap: wrap; position: relative; }
+  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 76px; flex-wrap: wrap; position: relative; }
   /* the settings button in the corner, and the menu that flies up from it */
   .corner { all: unset; cursor: pointer; color: #C3B2FF; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; padding: 4px; border-radius: 6px; }
   .corner:hover { color: #F0E8FF; }
+  #statsButton { right: 46px; } /* the stats button sits just left of the settings one */
   .corner:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
     padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
@@ -26,11 +27,9 @@
   #help b { color: #F0E8FF; font-weight: 600; }
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
   #menu select { align-self: stretch; }
-  #menu .item { all: unset; cursor: pointer; color: #C3B2FF; }
-  #menu .item:hover { color: #F0E8FF; }
-  #menu .item:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
-  /* the stats panel: the settings menu's look, centred over the scene */
-  #stats { inset: 0; margin: auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 24px); padding: 14px 18px 16px; }
+  /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
+     doesn't shift the badges */
+  #stats { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
   #stats:popover-open { gap: 8px; }
   #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
   #stats h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
@@ -52,8 +51,14 @@
   #stats .day b { color: #D8CCE6; font-weight: 500; }
   #stats .dim { color: #8F7FA6; margin: 0; }
   #stats .badges { display: flex; flex-wrap: wrap; gap: 5px; }
-  #stats .badge, #recap .badge { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; cursor: default; }
+  #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; }
   #stats .badge.shame, #recap .badge.shame { background: #3E3270; color: #DCD2FF; }
+  #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  .badgeInfo { margin-top: 6px; padding: 7px 10px; border: 1px solid #3A2E52; border-radius: 8px; background: rgba(43, 36, 64, .6); font-size: 12px; line-height: 1.45; }
+  .badgeInfo b { color: #F5E9FF; font-weight: 600; }
+  .badgeInfo .kind { font-size: 10.5px; padding: 0 6px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; margin-left: 4px; }
+  .badgeInfo .kind.shame { background: #3E3270; color: #DCD2FF; }
+  .badgeInfo .dim { color: #8F7FA6; }
   #stats .badge.unearned { background: none; color: #6B5C88; box-shadow: inset 0 0 0 1px #3A2E52; }
   #stats .badge small { opacity: .7; font-size: 10px; }
   #stats .shelf summary { cursor: pointer; color: #C3B2FF; font-size: 12px; margin-bottom: 6px; }
@@ -65,7 +70,7 @@
   #stats h3 .link { all: unset; cursor: pointer; float: right; text-transform: none; letter-spacing: 0; color: #C3B2FF; font-size: 12px; }
   #stats h3 .link:hover { color: #F0E8FF; }
   /* the daily recap: the stats panel's look */
-  #recap { inset: 0; margin: auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 24px); padding: 14px 18px 16px; }
+  #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
   #recap:popover-open { gap: 8px; }
   #recap h3 { margin: 0; font-size: 15px; font-weight: 500; color: #F5E9FF; display: flex; justify-content: space-between; }
   #recap .close { all: unset; cursor: pointer; color: #8F7FA6; font-size: 18px; line-height: 1; }
@@ -107,8 +112,9 @@
   #status .next:hover { color: #E4DAFF; }
   #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
-  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 32px; } /* room for the menu button */
+  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 56px; } /* room for the stats and menu buttons */
   .panel .corner { right: 6px; }
+  .panel #statsButton { right: 30px; }
   .panel .flyup { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
   .panel #card { max-width: 210px; font-size: 11.5px; }
   .panel .notify { display: none; }
@@ -189,10 +195,10 @@
 <footer>
   <span id="status" class="offline">connecting…</span>
   <button id="quiet" class="quiet" title="Treat everything as snoozed until 8am">quiet</button>
+  <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 14h12M4 11V8M8 11V3M12 11V6"/></svg></button>
   <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="#1E182E"/><circle cx="11" cy="8" r="1.6" fill="#1E182E"/><circle cx="7" cy="12" r="1.6" fill="#1E182E"/></svg></button>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
-    <button class="item" id="statsButton">Stats</button>
     <label class="notify"><input type="checkbox" id="notify"> notify me</label>
     <label><input type="checkbox" id="staleToggle"> show stale PRs</label>
     <select id="style" aria-label="Lantern style"></select>
@@ -205,7 +211,7 @@
       <p><b>Fireflies</b> are a session's PRs:<span class="swatch" style="background:#C8F48A"></span>ready<span class="swatch" style="background:#FF9E8C"></span>failing<span class="swatch" style="background:#FFAA6E"></span>changes<span class="swatch" style="background:#FFD27A"></span>draft<span class="swatch" style="background:#8CCBFF"></span>in review. Hover a cluster for the list.</p>
       <p>The <b>wisps</b> drifting low are your open PRs that no session owns and nobody has touched for a week, the oldest lowest. Hover one for what it needs, click to open it. Touch it again and it rises away. A faint <b>ghost moth</b> behind them is an old session that made some: click it to resume that session in a new iTerm tab.</p>
       <p><b>Threads</b> pulse when a session runs a tool. A <b>grey moth</b> hit an API error. Landed moths get <b>restless</b> after 15 minutes.</p>
-      <p><b>Stats</b> shows how much of your moths' time was warm today, with the day as a ribbon and the week before it.</p>
+      <p>The <b>chart button</b> opens your stats: how much of your moths' time was warm today, the day as a ribbon, the week before it, goals and badges. Hover or tap a badge to see what it is.</p>
       <p><b>N need you</b> opens the one waiting longest. <b>quiet</b> snoozes everything until <span id="quietUntil">8am</span>.</p>
     </details>
   </div>

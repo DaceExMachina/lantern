@@ -30,6 +30,7 @@ function constellation(day, spans) {
 function renderRecap(j, i) {
   const d = j.days[i], key = dayKey(d.start), isToday = i === j.days.length - 1, pct = v => v == null ? '–' : `${v}%`;
   const title = isToday ? 'Today’s recap' : i === j.days.length - 2 ? 'Yesterday’s recap' : new Date(d.start).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+  tally = j.tally;
   const r = slices(d, j.spans, j.gauges, 160), earned = j.achievements.filter(a => a[1] === key);
   const change = d.graveyardChange == null ? '' : d.graveyardChange === 0 ? ', no change' : ` (${d.graveyardChange > 0 ? '+' : ''}${d.graveyardChange})`;
   const nums = [

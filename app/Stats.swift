@@ -157,7 +157,8 @@ final class Stats {
             }
             let achievements = self.run("SELECT id, day, time FROM achievements WHERE time >= ?1 OR day >= ?2 ORDER BY time", [from, dayKey(from)])
                 .map { [$0[0] ?? "", $0[1] ?? "", num($0[2]) ?? 0] as [Any] }
-            let tally = self.run("SELECT id, count(*) FROM achievements GROUP BY id").reduce(into: JSON()) { $0[$1[0] ?? ""] = Int($1[1] ?? "") ?? 0 }
+            // every badge ever earned: how many times, and the last day
+            let tally = self.run("SELECT id, count(*), max(day) FROM achievements GROUP BY id").reduce(into: JSON()) { $0[$1[0] ?? ""] = [Int($1[1] ?? "") ?? 0, $1[2] ?? ""] }
             let result: JSON = ["days": out, "spans": spans, "gauges": gauges.filter { $0[0] >= from }.map { Array($0[0...2]) },
                                 "achievements": achievements, "tally": tally, "streak": self.streak(warmGoal), "warmGoal": warmGoal]
             DispatchQueue.main.async { done(result) }

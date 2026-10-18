@@ -69,7 +69,43 @@ const ACHIEVEMENTS = {
   lights_out: ['Lights Out', 'Two hours with nothing running between sessions', true],
   seance: ['Séance', 'Revived 5 stale PRs in a week', true],
 };
-const badge = (id, extra = '') => { const [name, how, shame] = ACHIEVEMENTS[id] || [id, '']; return `<span class="badge${shame ? ' shame' : ''}" title="${how}">${name}${extra}</span>`; };
+const badge = (id, extra = '', unearned = false) => {
+  const [name, how, shame] = ACHIEVEMENTS[id] || [id, ''];
+  return `<button class="badge${shame ? ' shame' : ''}${unearned ? ' unearned' : ''}" data-id="${id}" aria-label="${name}: ${how}">${name}${extra}</button>`;
+};
+
+// What a badge is: shown under its row while the pointer is on it (or it has focus), and kept open by a click or tap
+// until it's clicked again. One card at a time per panel. `tally` is every badge ever earned, as id -> [times, last day].
+let tally = {}, pinnedBadge = null, badgeTimer;
+const longDay = day => new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+function showBadge(el) {
+  clearTimeout(badgeTimer);
+  const row = el.closest('.badges'), [name, how, shame] = ACHIEVEMENTS[el.dataset.id] || [el.dataset.id, ''];
+  const [times, last] = tally[el.dataset.id] || [0, ''];
+  for (const other of el.closest('[popover]').querySelectorAll('.badgeInfo')) if (other !== row.nextElementSibling) other.remove();
+  let info = row.nextElementSibling;
+  if (!info?.classList.contains('badgeInfo')) { info = document.createElement('div'); info.className = 'badgeInfo'; row.after(info); }
+  info.innerHTML = `<b>${name}</b> <span class="kind${shame ? ' shame' : ''}">${shame ? 'cheeky' : 'good'}</span><div>${how}.</div>
+    <div class="dim">${times ? `Earned ${times === 1 ? 'once' : `${times} times`}, last on ${longDay(last)}.` : 'Not earned yet.'}</div>`;
+}
+// back to the pinned badge's card, or none
+function restoreBadge(root) {
+  const el = pinnedBadge && root.querySelector(`.badge[data-id="${pinnedBadge}"]`);
+  if (el) showBadge(el); else for (const info of root.querySelectorAll('.badgeInfo')) info.remove();
+}
+for (const root of [$('stats'), $('recap')]) {
+  root.addEventListener('pointerover', e => { const el = e.target.closest('.badge'); if (el) showBadge(el); });
+  root.addEventListener('focusin', e => { const el = e.target.closest('.badge'); if (el) showBadge(el); });
+  root.addEventListener('pointerout', e => {
+    const el = e.target.closest('.badge');
+    if (el && !el.contains(e.relatedTarget)) badgeTimer = setTimeout(() => restoreBadge(root), 200); // a moment, so crossing to the next badge doesn't flash
+  });
+  root.addEventListener('click', e => {
+    const el = e.target.closest('.badge'); if (!el) return;
+    pinnedBadge = pinnedBadge === el.dataset.id ? null : el.dataset.id;
+    restoreBadge(root);
+  });
+}
 
 function renderStats(j) {
   const days = j.days, today = days[days.length - 1], pct = v => v == null ? '–' : `${v}%`;
@@ -99,6 +135,7 @@ function renderStats(j) {
         <span><i style="background:${RIBBON.alive}"></i>sessions</span><span><i style="background:${RIBBON.working}"></i>working</span></div>` : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   statsToday = today; renderGoals();
+  tally = j.tally;
   const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
   $('statsWeek').innerHTML = `
     <h4>The week before</h4>
@@ -110,8 +147,9 @@ function renderStats(j) {
       : '<p class="dim">None yet this week. They come from the log as the days go by, the cheeky ones too.</p>'}
     ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}
     <details class="shelf"><summary>All badges</summary><div class="badges">${Object.keys(ACHIEVEMENTS).map(id =>
-      j.tally[id] ? badge(id, j.tally[id] > 1 ? ` <small>×${j.tally[id]}</small>` : '') : badge(id).replace('class="badge', 'class="badge unearned')).join('')}</div></details>`;
+      badge(id, tally[id]?.[0] > 1 ? ` <small>×${tally[id][0]}</small>` : '', !tally[id])).join('')}</div></details>`;
   if (shelfOpen) $('statsWeek').querySelector('.shelf').open = true;
+  restoreBadge($('statsWeek'));
 }
 
 // Goals: a few targets kept in the shared settings, each off until it has a number. Progress is said quietly: a goal
