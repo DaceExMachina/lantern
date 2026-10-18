@@ -28,7 +28,7 @@ uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
-const float CAPS = 0.3; // how much light the caps' fans hold back
+const float CAPS = 0.5; // how much light the caps' fans hold back
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
