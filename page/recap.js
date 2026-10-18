@@ -6,32 +6,82 @@
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let recapSeen = null; // the last day (yyyy-MM-dd) a recap opened by itself, once settings say
 
-// One dot per session that day, sized by how long it ran, laid out left to right by when it started (the height is
-// its own, from its id), with faint lines joining them in order.
-function constellation(day, spans) {
-  const runs = new Map();
-  for (const [kind, b, e, , id, title] of spans) {
-    if (kind !== 'alive' || !id || e <= day.start || b >= day.end) continue;
-    const r = runs.get(id) || { id, title, from: b, ms: 0 };
-    r.from = Math.min(r.from, b); r.ms += Math.min(e, day.end) - Math.max(b, day.start); r.title ||= title;
-    runs.set(id, r);
+// Each session alive that day, from the log: when it ran, how long it waited on me (snoozed waits too, as in warm
+// moths), how much of that was snoozed, how many waits began that day and the longest, and what its PRs did.
+function daySessions(day, spans, prs) {
+  const runs = new Map(), clip = (b, e) => Math.max(0, Math.min(e, day.end) - Math.max(b, day.start));
+  for (const [kind, b, e, , id, title, project] of spans) {
+    if (!id || e <= day.start || b >= day.end) continue;
+    if (!runs.has(id)) runs.set(id, { id, from: Infinity, to: 0, ms: 0, waitMs: 0, snoozedMs: 0, waits: 0, longest: 0, prs: new Map() });
+    const r = runs.get(id), ms = clip(b, e);
+    if (kind === 'alive') { r.from = Math.min(r.from, Math.max(b, day.start)); r.to = Math.max(r.to, Math.min(e, day.end)); r.ms += ms; r.title ||= title; r.project ||= project; }
+    if (kind === 'waiting') { r.waitMs += ms; r.longest = Math.max(r.longest, ms); if (b >= day.start) r.waits++; }
+    if (kind === 'snoozed') r.snoozedMs += ms;
   }
-  const stars = [...runs.values()].sort((a, b) => a.from - b.from);
+  for (const [t, id, url, change, need, title] of prs) {
+    const r = t >= day.start && t < day.end && url && runs.get(id);
+    if (r) r.prs.set(url, { url, label: `#${url.split('/')[6]}`, need: need ?? change, title: title || r.prs.get(url)?.title || '' });
+  }
+  return [...runs.values()].filter(r => r.ms > 0).map(r => ({ ...r, warm: 1 - Math.min(1, r.waitMs / r.ms) })).sort((a, b) => a.from - b.from);
+}
+
+// One dot per session that day, sized by how long it ran, laid out left to right by when it started and top to bottom
+// by how warm it ran (the share of its time not waiting on me), tinted from the working moth's colour to the waiting
+// one's by the same share. Faint lines join them in order.
+function constellation(stars) {
   if (!stars.length) return '';
   const w = 600, h = 90, from = stars[0].from, to = Math.max(from + 1, stars[stars.length - 1].from);
-  const at = stars.map((s, i) => [stars.length === 1 ? w / 2 : 20 + (s.from - from) / (to - from) * (w - 40), 14 + seeded(hash(s.id))() * (h - 28),
-    Math.min(9, 1.6 + Math.sqrt(s.ms / MIN) / 2.2), s]);
+  const at = stars.map(s => [stars.length === 1 ? w / 2 : 20 + (s.from - from) / (to - from) * (w - 40), 14 + (1 - s.warm) * (h - 28),
+    Math.min(9, 1.6 + Math.sqrt(s.ms / MIN) / 2.2), mix(MOTHS.waiting, MOTHS.working, s.warm)]);
   const lines = at.slice(1).map(([x, y], i) => `<path d="M${at[i][0]} ${at[i][1]}L${x} ${y}"/>`).join('');
-  const dots = at.map(([x, y, r, s]) => `<g><title>${esc(s.title || 'a session')}: ${ago(s.ms)}</title>
-    <circle cx="${x}" cy="${y}" r="${r * 2.6}" fill="${WARM.glow}" opacity=".12"/><circle cx="${x}" cy="${y}" r="${r}" fill="${WARM.core}"/></g>`).join('');
+  const dots = at.map(([x, y, r, fill], i) => `<g class="star" data-i="${i}" tabindex="0" aria-label="${esc(stars[i].title || 'a session')}">
+    <circle cx="${x}" cy="${y}" r="${Math.max(r * 2.6, 9)}" fill="${fill}" opacity=".12"/><circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/></g>`).join('');
   return `<svg class="stars" viewBox="0 0 ${w} ${h}" role="img" aria-label="${stars.length} sessions"><g stroke="${WARM.thread}" stroke-width=".6" opacity=".35" fill="none">${lines}</g>${dots}</svg>`;
 }
+
+// A session's day, as a card like a moth's: over its dot while the pointer is on it (or on the card, for its PR links),
+// or after a tap until the next tap elsewhere. `ongoing` is today's last moment, so a session still running ends "now".
+function starCard(root, g, s, ongoing) {
+  let card = root.querySelector('.starCard');
+  if (!card) { card = document.createElement('div'); card.className = 'starCard'; card.setAttribute('role', 'tooltip'); root.append(card); }
+  const h = document.createElement('h3'), pct = n => `${Math.round(100 * n)}%`;
+  h.textContent = s.title || s.project || 'A session';
+  card.replaceChildren(h,
+    line(`${clock(s.from)} to ${s.to >= ongoing - MIN ? 'now' : clock(s.to)}, ran ${ago(s.ms)}`),
+    line(`${pct(s.warm)} warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs)} waiting, ${ago(s.snoozedMs)} snoozed`),
+    line(s.waits ? `Waited on you ${s.waits === 1 ? 'once' : `${s.waits} times`}, the longest ${ago(s.longest)}` : 'Never waited on you', 'dim'),
+    ...(s.prs.size ? prRows([...s.prs.values()]).slice(0, 7) : []), // the heading and six PRs
+    ...(s.prs.size > 6 ? [line(`and ${s.prs.size - 6} more`, 'dim')] : []),
+    // ponytail: the log keeps Claude's folder name for the project, so a dash in a real folder name reads as a slash
+    ...(s.project ? [line(String(s.project).replace(/-/g, '/').replace(/^\/Users\/[^/]+/, '~'), 'dim')] : []));
+  const r = g.querySelector('circle:last-child').getBoundingClientRect(), w = card.offsetWidth, ch = card.offsetHeight;
+  card.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+  card.style.top = `${r.top - ch - 10 >= 8 ? r.top - ch - 10 : r.bottom + 10}px`; // above the dot, or below when there's no room
+  card.classList.add('show');
+}
+let recapStars = [], recapOngoing = 0, starTimer; // the open recap's sessions, for its dots' cards
+const hideStar = () => $('recap').querySelector('.starCard')?.classList.remove('show');
+function followStars(stars, ongoing) {
+  recapStars = stars; recapOngoing = ongoing;
+  for (const g of $('recap').querySelectorAll('.stars .star')) {
+    const show = () => { clearTimeout(starTimer); starCard($('recap'), g, recapStars[+g.dataset.i], recapOngoing); };
+    g.addEventListener('pointerenter', show);
+    g.addEventListener('focus', show);
+    g.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') starTimer = setTimeout(hideStar, 300); });
+    g.addEventListener('blur', hideStar);
+  }
+}
+// the card stays while the pointer is on it (its PR links), and a tap anywhere else puts it away
+$('recap').addEventListener('pointerover', e => { if (e.target.closest?.('.starCard')) clearTimeout(starTimer); });
+$('recap').addEventListener('pointerout', e => { if (e.target.closest?.('.starCard') && !e.relatedTarget?.closest?.('.starCard')) starTimer = setTimeout(hideStar, 300); });
+$('recap').addEventListener('pointerdown', e => { if (!e.target.closest?.('.star, .starCard')) hideStar(); });
+$('recap').addEventListener('scroll', hideStar, true);
 
 function renderRecap(j, i) {
   const d = j.days[i], key = dayKey(d.start), isToday = i === j.days.length - 1, pct = v => v == null ? '–' : `${v}%`;
   const title = isToday ? 'Today’s recap' : i === j.days.length - 2 ? 'Yesterday’s recap' : new Date(d.start).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
   tally = j.tally;
-  const r = slices(d, j.spans, j.gauges, 160), earned = j.achievements.filter(a => a[1] === key);
+  const r = slices(d, j.spans, j.gauges, 160), earned = j.achievements.filter(a => a[1] === key), stars = daySessions(d, j.spans, j.prs);
   const change = d.staleChange == null ? '' : d.staleChange === 0 ? ', no change' : ` (${d.staleChange > 0 ? '+' : ''}${d.staleChange})`;
   const nums = [
     ['lantern warm', pct(d.warmLantern)],
@@ -42,11 +92,14 @@ function renderRecap(j, i) {
   $('recap').innerHTML = `<h3>${title} <button class="close" aria-label="Close">×</button></h3>
     ${d.warmMoths == null ? '<p class="dim">No moths that day. A quiet one.</p>' : `
       <div class="headline"><b>${d.warmMoths}%</b><span>of moth time was warm</span></div>
-      ${r ? `<div class="ribbon">${ribbon(r, 600, 50)}</div><div class="axis"><span>${clock(r.from)}</span><span>${isToday ? 'now' : clock(r.to)}</span></div>` : ''}
+      ${r ? dayRibbon(r, isToday ? 'now' : clock(r.to)) : ''}
       <dl>${nums.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
-      ${constellation(d, j.spans)}`}
+      ${constellation(stars)}`}
     ${earned.length ? `<div class="badges">${earned.map(([id]) => badge(id)).join('')}</div>` : ''}
     ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}`;
+  const box = $('recap').querySelector('.dayRibbon');
+  if (box) followRibbon(box, r, d);
+  followStars(stars, d.end);
   $('recap').querySelector('.close').onclick = () => $('recap').hidePopover();
   return d;
 }

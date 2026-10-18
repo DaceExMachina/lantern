@@ -457,10 +457,10 @@ function mothWings(m, { tx, ty, flap, needsMe }, dt, s) {
 }
 
 // Colour: moths near the lantern catch its light; the session that needs me turns violet with a pale outline.
-// Snoozed moths rest on the lantern in a paler indigo; agents circling a landed moth take on its colour too.
+// Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
 function mothColour(m, needsMe, upPts, sidePts, dt) {
   const host = m.parentId ? moths.get(m.parentId) : m, calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
-  m.cool += ((calling ? (host.session.snoozed ? 0.5 : 1) : 0) - m.cool) * dt * 3;
+  m.cool += ((calling ? (host.session.snoozed ? 0.5 : 1) : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3; // idle and landed: a hint of violet (MOTH_RESTING)
   const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330);
   m.tint ||= m.parentId ? moths.get(m.parentId)?.tint : tintFor(m.session); // subagents share their session's tint
   const singed = needsMe && m.session.error;
