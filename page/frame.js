@@ -28,10 +28,11 @@ function measureBeams() {
   if (!starEls[0]?.isConnected) { starEls = [...document.querySelectorAll('#cutouts polygon')].map(e => /** @type {SVGPolygonElement} */ (e)); starBoxes = starEls.map(e => e.getBBox()); }
   const core = $('fCore');
   if (!starEls.length || !core) return { o: [0, 0], beams: [] };
-  const toScene = document.querySelector('svg').getScreenCTM().inverse(), at = (el, x, y) => new DOMPoint(x, y).matrixTransform(toScene.multiply(el.getScreenCTM()));
-  const fb = core.getBBox(), f = at(core, fb.x + fb.width / 2, fb.y + fb.height / 2);
+  const toScene = document.querySelector('svg').getScreenCTM().inverse(), starM = toScene.multiply(starEls[0].getScreenCTM()); // the stars share one transform
+  const at = (m, x, y) => new DOMPoint(x, y).matrixTransform(m);
+  const fb = core.getBBox(), f = at(toScene.multiply(core.getScreenCTM()), fb.x + fb.width / 2, fb.y + fb.height / 2);
   const stars = starBoxes.map(b => {
-    const c = at(starEls[0], b.x + b.width / 2, b.y + b.height / 2), edge = at(starEls[0], b.x + b.width, b.y + b.height / 2);
+    const c = at(starM, b.x + b.width / 2, b.y + b.height / 2), edge = at(starM, b.x + b.width, b.y + b.height / 2);
     const dx = c.x - f.x, dy = c.y - f.y, h = Math.hypot(dx, dy);
     // a star on the front face shines toward the viewer; the further round the side it sits, the more its beam shows
     const side = Math.abs(b.x + b.width / 2 - 340) / style.body.half(b.y + b.height / 2), w = Math.min(1, Math.max(0, (side - 0.3) / 0.45));
@@ -42,7 +43,7 @@ function measureBeams() {
     g.replaceChildren(el('circle', { cx: f.x, cy: f.y, r: 2.5, fill: '#FFFFFF' }), ...stars.flatMap(({ c, h, w }) => [
       el('line', { x1: f.x, y1: f.y, x2: f.x + (c.x - f.x) / h * 400, y2: f.y + (c.y - f.y) / h * 400, opacity: 0.15 + 0.85 * w }), el('circle', { cx: c.x, cy: c.y, r: 1.6, stroke: 'none' })]));
   }
-  return { o: [f.x, f.y], beams: stars.map(s => s.beam) };
+  return { o: [f.x, f.y], beams: stars.filter(s => s.w > 0).map(s => s.beam) };
 }
 
 function frame(t) {
