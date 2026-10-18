@@ -31,21 +31,22 @@ function measureBands() {
   return bands;
 }
 
-// A long ribbon bookmark (style.ribbon: where it's tied, in the lantern's own units). A short chain of points under gravity
-// and a light breeze, pinned at the top and held at fixed spacing, so it trails the sway and settles. It twists along its
-// length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
-const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
-// One wind for the scene, in the sway's degrees: the ribbon feels it as it blows, the lantern swings with it a moment later.
+// Things that dangle from the lantern (the barrel's ribbon, the chōchin's tassel) are each a short chain of points under
+// gravity and the wind, pinned at the top and held at fixed spacing, so they trail the sway and settle. Simulated in the
+// scene, drawn in the lantern.
+const CHAIN = { gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds a 13-point chain within 0.3% even at maxSteps (measured)
+// One wind for the scene, in the sway's degrees: what dangles feels it as it blows, the lantern swings with it a moment later.
 const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
-// One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
-// heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
+// One step of a chain's physics, apart from drawing so it can be tested: the `n` points in `r` trail their knot at (ax, ay),
+// feeling `wind` of the scene's wind and keeping `keep` of their speed each second through the air,
+// heading for `length` long. It runs in fixed steps of CHAIN.h, carrying leftover time to the next frame: a step as
 // short as a frame can be (two timers firing together) turned the constraint fix-ups into huge speeds and flung it about.
 // A long frame runs at most maxSteps and drops the rest. When a resize moves the knot the chain is carried with it, and a
 // new length grows in instead of snapping; anything that still goes wrong (not a number, or stretched far past its length)
 // hangs it straight from the knot again.
 /** @param {{pts?: {x: number, y: number, px: number, py: number, vx: number, vy: number}[], seg?: number, acc?: number}} r */
-function stepRibbon(r, ax, ay, length, dt, s) {
-  const { n, gravity, h, maxSteps, iterations } = BOOKMARK, target = length / (n - 1);
+function stepChain(r, { n, wind, keep: air }, ax, ay, length, dt, s) {
+  const { gravity, h, maxSteps, iterations } = CHAIN, target = length / (n - 1);
   const hang = () => { r.seg = target; r.pts = Array.from({ length: n }, (_, i) => ({ x: ax, y: ay + i * target, px: 0, py: 0, vx: 0, vy: 0 })); };
   if (!r.pts || r.seg === undefined) hang();
   const pts = /** @type {NonNullable<typeof r.pts>} */ (r.pts), jx = ax - pts[0].x, jy = ay - pts[0].y;
@@ -57,12 +58,12 @@ function stepRibbon(r, ax, ay, length, dt, s) {
     for (const p of pts) { p.x += mx; p.y += my; }
   }
   const seg = r.seg = /** @type {number} */ (r.seg) + (target - /** @type {number} */ (r.seg)) * Math.min(1, steps * h);
-  const keep = Math.pow(0.5, h); // air drag
+  const keep = Math.pow(air, h);
   for (let k = 0; k < steps; k++) {
     for (const [i, p] of pts.entries()) {
       p.px = p.x; p.py = p.y;
       if (i === 0) { p.x = ax; p.y = ay; continue; }
-      p.vx += (GUST(s) * 70 + Math.sin(s * 2.3 + i * 0.7) * 12) * i / (n - 1) * h; p.vy += gravity * h; // the wind, strongest at the free end
+      p.vx += (GUST(s) * 70 + Math.sin(s * 2.3 + i * 0.7) * 12) * wind * i / (n - 1) * h; p.vy += gravity * h; // the wind, strongest at the free end
       p.x += p.vx * h; p.y += p.vy * h;
     }
     for (let it = 0; it < iterations; it++) for (let i = 1; i < n; i++) { // the pinned end never moves, so the first link pulls only the second point
@@ -75,17 +76,16 @@ function stepRibbon(r, ax, ay, length, dt, s) {
   for (let i = 1; i < n; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
   if (!(len < 1.5 * seg * (n - 1))) hang(); // also catches NaN
 }
-const bookmark = {};
-let bookmarkFor;
+// A long ribbon bookmark (style.ribbon: where it's tied, in the lantern's own units). It twists along its length, showing
+// its darker back and narrowing where it turns edge-on.
+const BOOKMARK = { n: 13, half: 4.6, wind: 1, keep: 0.5 };
+const bookmark = {}, tassel = {}; // each chain's state, dropped when the lantern changes (swingLantern)
 function drawRibbon(dt, s) {
-  const [ax, ay] = rot(...style.ribbon), { n, half } = BOOKMARK, rad = swayAngle * Math.PI / 180, top = VIEW.top;
-  if (bookmarkFor !== style) { bookmarkFor = style; delete bookmark.pts; }
+  const { n, half } = BOOKMARK;
   // long, but never past the bottom of the window: most of the room below the knot, within limits
   const floor = VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620;
-  stepRibbon(bookmark, ax, ay, Math.min(260, Math.max(60, (floor - style.ribbon[1]) * 0.85)), dt, s);
-  const pts = bookmark.pts;
-  const cos = Math.cos(rad), sin = Math.sin(rad);
-  const P = pts.map(p => [340 + (p.x - 340) * cos + (p.y - top) * sin, top - (p.x - 340) * sin + (p.y - top) * cos]); // into the lantern's units
+  stepChain(bookmark, BOOKMARK, ...rot(...style.ribbon), Math.min(260, Math.max(60, (floor - style.ribbon[1]) * 0.85)), dt, s);
+  const pts = bookmark.pts, P = pts.map(p => unrot(p.x, p.y));
   // signed half-width: the twist grows down the ribbon (flat where it's tied); past a quarter turn the back shows
   const w = pts.map((p, i) => { const c = Math.cos((2 * Math.sin(s * 0.45 - i * 0.35) + p.vx * 0.015) * i / (n - 1)); return Math.sign(c || 1) * Math.max(half * Math.abs(c), 1.875 / (VIEW.px || 1)); }); // edge-on it still shows the cloth's thickness, ~3.75px
   const L = [], R = [];
@@ -107,6 +107,19 @@ function drawRibbon(dt, s) {
   }
   put($('ribbonFront'), 'd', faces.front); put($('ribbonBack'), 'd', faces.back);
   put($('ribbonEdge'), 'd', `M${[...L, notch, ...R.reverse()].map(pt).join('L')}Z`);
+}
+
+// The chōchin's tassel (style.cord: where its cord is tied and how far down its weight hangs, in the lantern's units). It's
+// heavy, so its cord hangs taut: one stiff link from the knot to the middle of its head (bead, binding and fringe), which
+// turns with it. Being heavy it feels less of the wind than the ribbon and settles sooner.
+const TASSEL_CHAIN = { n: 2, wind: 0.2, keep: 0.2 };
+function drawTassel(dt, s) {
+  const [x, y, length] = style.cord;
+  stepChain(tassel, TASSEL_CHAIN, ...rot(x, y), length, dt, s);
+  const [ax, ay] = unrot(tassel.pts[0].x, tassel.pts[0].y), [dx, dy] = unrot(tassel.pts[1].x, tassel.pts[1].y);
+  const bead = `${(ax + (dx - ax) * 2 / 3).toFixed(1)} ${(ay + (dy - ay) * 2 / 3).toFixed(1)}`; // the bead's top, two thirds of the way down
+  put($('tasselCord'), 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)}L${bead}`);
+  put($('tasselHead'), 'transform', `translate(${bead}) rotate(${(Math.atan2(ax - dx, dy - ay) * 180 / Math.PI).toFixed(2)})`);
 }
 
 // One frame: the lantern burns brighter the more sessions work and turns violet while one needs me, then each part
@@ -148,11 +161,17 @@ const pal = k => mix(WARM[k], COOL[k], cool);
 // ---- the lantern -------------------------------------------------------------
 // The lantern's sway on its string, in degrees. Anything attached to the lantern goes through rot(), which turns a point
 // in the lantern's own units with it, about where it hangs from the top of the window.
-let swayAngle = 0;
+let swayAngle = 0, chainsFor;
 /** @returns {[number, number]} */
 function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
+}
+// and back: a point in the scene, in the lantern's own units
+/** @returns {[number, number]} */
+function unrot(x, y) {
+  const rad = swayAngle * Math.PI / 180, top = VIEW.top;
+  return [340 + (x - 340) * Math.cos(rad) + (y - top) * Math.sin(rad), top - (x - 340) * Math.sin(rad) + (y - top) * Math.cos(rad)];
 }
 // Sway on the string, pushed by the wind (GUST) a moment after it blows, with its tassel, ribbon or knot trailing. It
 // swings from the top of the window, with the angle scaled so the lantern moves sideways as much as it did hung at y=20.
@@ -161,7 +180,9 @@ function swingLantern(elapsed, s) {
   swayAngle = -GUST(sl) * 310 / (330 - top);
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
-  if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
+  if (chainsFor !== style) { chainsFor = style; delete bookmark.pts; delete tassel.pts; }
+  if (style.ribbon) drawRibbon(elapsed, s); // the real time: the chains cap their own steps, and need to know what they skipped
+  if (style.cord) drawTassel(elapsed, s);
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
 
