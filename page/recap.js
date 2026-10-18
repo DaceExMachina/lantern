@@ -58,7 +58,7 @@ async function openRecap(i, auto = false) {
   const isToday = i === j.days.length - 1;
   if (auto) {
     if (d.warmMoths == null && isToday) return false; // quiet hours on a day with no moths yet: yesterday's can still come
-    fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ recapSeen: dayKey(d.start) }) });
+    post('/settings', { recapSeen: dayKey(d.start) });
     if (d.warmMoths == null) return false; // nothing to recap: just remember it was considered
   }
   renderRecap(j, i);

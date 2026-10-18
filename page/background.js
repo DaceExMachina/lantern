@@ -18,14 +18,14 @@ function program(vert, frag) {
   return { p, u };
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
-const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions, agents and ghosts)
+const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and agents)
 // How much of the flame's light reaches a point (1 = all of it): moths' shadows, the caps' fans and a pierced lantern's bands. Shared by the
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.
 const LIGHT = `
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
 uniform vec2 uGlowC; uniform float uGlowR;
-uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
+uniform vec3 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lantern's solid bands: each one's slope from the flame, and its spread
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
@@ -41,11 +41,11 @@ float light(vec2 p) {
   // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this point. Right
   // behind a moth that's the whole light; further out the moth covers less of it. Drawn cel-shaded, in two flat tones
   // with crisp edges: a dark core while it hides most of the light, a paler band while it hides some, then nothing.
-  // Each moth is x, y, radius and how dark it can get.
+  // Each moth is x, y and radius.
   float lit = 1.0;
   for (int i = 0; i < ${SHADOWS_MAX}; i++) {
     if (i >= uMoths) break;
-    vec4 m = uMoth[i];
+    vec3 m = uMoth[i];
     vec2 dm = m.xy - p, dl = uLightC - p;
     float ll = length(dl), along = dot(dm, dl) / ll; // how far toward the light the moth is, from here
     if (along > ll) continue; // the moth is beyond the light
@@ -61,7 +61,7 @@ float light(vec2 p) {
     // a moth sitting on the paper is the far end of that, and one out at its home keeps the shadow above.
     float close = 1.0 - smoothstep(120.0, 260.0, length(m.xy - uLightC) / uLightScale), al0 = uLightR / ll;
     float spike = SPIKE * smoothstep(-0.4 * am * close, (0.1 + 0.7 * close) * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
-    lit *= 1.0 - m.w * mix(shade, spike, close);
+    lit *= 1.0 - mix(shade, spike, close);
   }
   // the solid caps of a paper lantern: no light leaves through its top or bottom, so above and below it a fan stays
   // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway
@@ -109,7 +109,7 @@ void main() {
 // dust: soft points, positions worked out in JS each frame. The near specks are lit by the lantern: bright and a little
 // bigger where its glow is strong, faint out past it, and in a shadow they fade out (far more steeply than the room dims,
 // so a moth's shadow or a cap's fan reads as a gap in the dust)
-const DUST_DEBUG = new URLSearchParams(location.search).has('dustdebug') ? 1 : 0;
+const DUST_DEBUG = Q.has('dustdebug') ? 1 : 0;
 const CATCH = 6; // how steeply: full light keeps a speck, the paler shadows (0.7 of the light) leave about a tenth
 const DUST = program(`
 attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uNear, uCatch, uDpr; varying float vA, vS, vD;
@@ -139,7 +139,7 @@ const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
 // screens' frames (global points, y up), so its light can carry on from where the lantern's light is, off this screen's edge.
 const REMOTE = (() => {
-  const q = new URLSearchParams(location.search), f = k => q.get(k)?.split(',').map(Number);
+  const f = k => Q.get(k)?.split(',').map(Number);
   const L = f('lantern'), S = f('self');
   return L?.length === 4 && S?.length === 4 && ![...L, ...S].some(isNaN) ? { L, S } : null;
 })();
@@ -160,7 +160,7 @@ function setLight(u, v) {
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uLightR, v.lightR);
   gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
   gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
-  if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
+  if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
 }
 
 function drawBackground(v) {
@@ -172,7 +172,7 @@ function drawBackground(v) {
   gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const u = BG.u;
   gl.uniform2f(u.uRes, c.width, c.height); gl.uniform4f(u.uBox, x, y, w, h); gl.uniform3fv(u.uBg, rgb('#2B2440'));
-  gl.uniform1f(u.uAmbient, document.body.classList.contains('ambient') ? 1 : 0);
+  gl.uniform1f(u.uAmbient, AMBIENT ? 1 : 0);
   gl.uniform2f(u.uRingC, ...v.ringC); gl.uniform3f(u.uRingR, ...v.ringR); gl.uniform1f(u.uRingA, v.ringA);
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));

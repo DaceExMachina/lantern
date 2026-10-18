@@ -64,7 +64,7 @@ function sync() {
       next.onclick = () => {
         const queue = sessions.filter(s => s.state === 'waiting' && !s.snoozed).sort((a, b) => a.waitingSince - b.waitingSince);
         const s = queue[nextUp++ % queue.length];
-        if (s) fetch('/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id }) });
+        if (s) post('/focus', { id: s.id });
       };
       st.append(' · ', next);
     }
@@ -110,13 +110,8 @@ let hovered = null, hideTimer;
 // A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.
 // A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
 function hoverArea(m, at) {
-  const zone = $('zones').appendChild(el('circle', { r: 48 }));
-  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = m; m.cardAt = at; renderCard(); });
   // clicking brings the session's terminal tab (or Claude app session) to the front (a subagent focuses its parent session)
-  zone.addEventListener('click', () => {
-    fetch('/focus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.key }) });
-    clearTimeout(hideTimer); hovered = null; $('card').classList.remove('show'); // you're off to the session, so the card can go
-  });
+  const zone = hoverZone($('zones').appendChild(el('circle', { r: 48 })), m, () => post('/focus', { id: m.key }), at);
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
   // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight
   // to for good. A snoozed moth rests on the lantern without turning it violet.
@@ -125,9 +120,8 @@ function hoverArea(m, at) {
     const s = m.session;
     if (!s) return;
     const next = s.forGood ? false : s.state === 'waiting' && !s.snoozed ? true : 'always';
-    fetch('/snooze', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id, snoozed: next }) });
+    post('/snooze', { id: s.id, snoozed: next });
   });
-  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
   return zone;
 }
 function hoverable(m) {

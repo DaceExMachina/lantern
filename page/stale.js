@@ -14,16 +14,14 @@ const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
 
 function makeWisp(p) {
   const rand = seeded(hash(p.url));
-  const ember = [el('circle', { r: 18 }), el('circle', { r: 8 }), el('circle', { r: 2.8 })]; // a firefly's own glow: wide, halo, core
+  const ember = fireflyGlow();
   $('stale').append(...ember);
   const zone = $('zones').appendChild(el('circle', { r: 12 }));
   const d = { p, ember, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30,
     born: staleSeeded ? 0 : 1, gone: undefined };
   // hovering shows the PR's card; clicking (or clicking the card) opens it
-  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { stale: d.p, zone }; renderCard(); });
-  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
-  zone.addEventListener('click', () => { open(d.p.url, '_blank', 'noopener'); hovered = null; $('card').classList.remove('show'); });
+  hoverZone(zone, { stale: d.p, zone }, () => open(d.p.url, '_blank', 'noopener'));
   return d;
 }
 
@@ -39,12 +37,7 @@ function makeGhost(o) {
   $('stale').prepend(g); // behind the wisps
   const zone = $('zones').appendChild(el('circle', { r: 20 }));
   const m = { o, g, side, up, zone, prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0 };
-  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { ghost: m, zone }; renderCard(); });
-  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
-  zone.addEventListener('click', () => {
-    fetch('/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.o.id }) });
-    hovered = null; $('card').classList.remove('show');
-  });
+  hoverZone(zone, { ghost: m, zone }, () => post('/resume', { id: m.o.id }));
   return m;
 }
 
@@ -130,12 +123,11 @@ function drawStale(dt, s) {
     }
     y -= (d.gone || 0) * 70;
     const fade = (1 - back * 0.5) * d.born * (1 - (d.gone || 0));
-    const pale = mix(FLY[['ready', 'failing', 'changes', 'draft'].includes(d.p.need) ? d.p.need : 'quiet'], WISP_TINT, 0.55);
+    const pale = mix(FLY[d.p.need] || FLY.quiet, WISP_TINT, 0.55);
     // a faint steady glow, and now and then a slow brightening
     const spark = Math.max(0, Math.sin(s * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
-    const fills = [pale, pale, mix(pale, '#FFFFFF', 0.5)], strength = [0.16, 0.6, 0.9]; // wide glow, halo, core
-    d.ember.forEach((c, i) => { put(c, 'cx', x.toFixed(1)); put(c, 'cy', y.toFixed(1)); put(c, 'fill', fills[i]); put(c, 'opacity', (strength[i] * lit * fade).toFixed(2)); });
+    paintGlow(d.ember, x, y, [[pale, 0.16 * lit * fade], [pale, 0.6 * lit * fade], [mix(pale, '#FFFFFF', 0.5), 0.9 * lit * fade]]); // wide glow, halo, core
     put(d.zone, 'cx', x.toFixed(1)); put(d.zone, 'cy', y.toFixed(1));
     d.zone.style.display = show && d.gone === undefined ? '' : 'none';
   }

@@ -205,7 +205,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); m.zz?.forEach(t => t.remove()); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); m.zz?.forEach(t => t.remove()); moths.delete(k); if (hovered === m) hideCard(); continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -260,7 +260,7 @@ function frame(t) {
       if (m.leaving) {} // nothing: they all drift off
       else if (gh) {
         const needs = p => ['ready', 'failing', 'changes'].includes(p.need);
-        for (const p of [...gh.filter(needs), ...gh.filter(p => !needs(p))]) want.set(p.url, needs(p) || p.need === 'draft' ? p.need : 'quiet'); // needy first, so the cap keeps them
+        for (const p of [...gh.filter(needs), ...gh.filter(p => !needs(p))]) want.set(p.url, p.need); // needy first, so the cap keeps them
       }
       else {
         const youLinks = new Set((m.session.forYou?.you || []).map(p => p.url).filter(Boolean));
@@ -351,7 +351,7 @@ function frame(t) {
     put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
     wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
-    m.shade = caster(m.x, m.y, m.tilt, m.size, [...upPts, ...sidePts], 1);
+    m.shade = caster(m.x, m.y, m.tilt, m.size, [...upPts, ...sidePts]);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
     // snoozed moths rest on the lantern in a paler indigo; agents circling a landed moth take on its colour too

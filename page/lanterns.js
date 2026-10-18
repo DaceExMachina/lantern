@@ -77,7 +77,7 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
     wires: ribs.slice(1, -1).map(y => `<path d="M${n(cx - half(y))} ${n(y)}${arc(y, 1)}"/>`).join(''),
   };
 };
-// the Odawara barrel: a straight cylinder on 19 close wires (top and bottom edges included), each bowed from the flame's
+// the Odawara barrel: a straight cylinder on 20 close wires (top and bottom edges included), each bowed from the flame's
 // height like its drums. style.drum, so whatever is drawn on the paper can follow the same curves.
 const BARREL = { cx: 340, r: 60, top: 216, bottom: 445, ribs: Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), bow: y => 120 * (y - 350) / 1350 };
 const ODAWARA = SUNKEN(BARREL.cx, _y => BARREL.r, BARREL.ribs, 1.2, BARREL.bow);
@@ -205,7 +205,7 @@ function applyStyle(key) {
 
 // Somewhere on the lantern's surface: a random height, and a random way round from near the middle to the edge.
 // The wing points straight out of the surface; seen from the front its sideways part shrinks toward the middle,
-// so moths there show a shorter wing. Returns [x, y, wing angle, wing length].
+// so moths there show a shorter wing. Returns [x, y, normal]: where it sits and the surface's outward direction there.
 // The spot sits in the slice of pie facing direction `a` (radians, from the lantern's middle), anywhere from a third
 // of the way out to the rim: straight up lands on the upper front, straight out lands toward the edge, so moths whose
 // homes sit in different directions never cross paths.
