@@ -106,7 +106,7 @@ function frame(t) {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22;
     dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
-      (0.1 + 0.12 * strength) * fadeOut(s * 0.11, p.ph)], (34 + i) * 4);
+      (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (34 + i) * 4);
   });
   const ambient = AMBIENT, remote = ambient && REMOTE ? remoteLight() : null;
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
@@ -385,7 +385,8 @@ function frame(t) {
   drawBackground({
     ringC: rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
-    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
+    // on a second display the glow centres on the lantern's light off its edge (it's only drawn there as the dust's light)
+    glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: rad,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]

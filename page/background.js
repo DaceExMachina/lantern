@@ -112,14 +112,14 @@ void main() {
 const DUST_DEBUG = new URLSearchParams(location.search).has('dustdebug') ? 1 : 0;
 const CATCH = 6; // how steeply: full light keeps a speck, the paler shadows (0.7 of the light) leave about a tenth
 const DUST = program(`
-attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uCatch, uDpr; varying float vA, vS, vD;
+attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uNear, uCatch, uDpr; varying float vA, vS, vD;
 ${LIGHT}
-const float DIM = 0.15, LIT = 6.0; // a near speck's brightness out of the glow, and how much the glow adds
+const float DIM = 0.6, LIT = 6.0; // a near speck's brightness out of the glow (about the far specks'), and how much the glow adds
 void main() {
   gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
-  float lit = uCatch > 0.0 ? glow(a.xy) : 0.0; // the far specks stay a faint, even layer
+  float lit = uNear * glow(a.xy); // the far specks stay a faint, even layer
   gl_PointSize = max(a.z * (1.0 + 2.5 * lit) * uRes.x / uBox.z + 1.0, 1.5 * uDpr); // never under 1.5 CSS px, at any size or scale
-  vS = uCatch > 0.0 ? pow(light(a.xy), uCatch) : 1.0; vA = a.w * (uCatch > 0.0 ? DIM + LIT * lit : 1.0) * mix(vS, 1.0, uDebug); vD = uDebug;
+  vS = pow(light(a.xy), uCatch); vA = a.w * mix(1.0, DIM + LIT * lit, uNear) * mix(vS, 1.0, uDebug); vD = uDebug;
 }`, `
 precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
 // ?dustdebug: a speck the shadows hold back shows red at full strength instead of fading
@@ -185,6 +185,8 @@ function drawBackground(v) {
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
   gl.uniform4f(DUST.u.uBox, x, y, w, h); gl.uniform2f(DUST.u.uRes, c.width, c.height); gl.uniform1f(DUST.u.uDpr, devicePixelRatio || 1); gl.uniform3fv(DUST.u.uCol, rgb(v.dustCol));
   setLight(DUST.u, v);
-  gl.uniform1f(DUST.u.uCatch, CATCH); gl.drawArrays(gl.POINTS, 0, dust.length);
-  gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
+  // the near specks catch the light, except on a second display: there no moths cast shadows, and a lantern's cap
+  // fan can cover the whole screen, so gating would leave it nearly empty of dust
+  gl.uniform1f(DUST.u.uNear, 1); gl.uniform1f(DUST.u.uCatch, AMBIENT ? 0 : CATCH); gl.drawArrays(gl.POINTS, 0, dust.length);
+  gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
 }
