@@ -60,10 +60,9 @@ const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="u
     ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}${LACE('skirtL', 0.5, 0.8)}${LACE('skirtR', 0.5, 0.8)}${LACE('skirtF', 1, 0.8)}${LACE('bottomSide', 0.55, 0.7)}${LACE('bottomFront', 1, 0.7)}</mask>`;
 const STYLES = {
   barrel: {
-    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 462], caps: [216, 445, 50],
+    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 453], caps: [216, 445, 50],
     body: { top: 216, bottom: 445, half: y => { const t = (y - 216) / 229; return 50 + 80 * t * (1 - t); } },
-    back: `<path d="M340 20 L340 193" stroke="#C9B49C" stroke-width="2"/>
-    <circle cx="340" cy="196" r="4" fill="none" stroke="#A8876A" stroke-width="1.6"/>
+    back: `<path d="M340 20 L340 186" stroke="#C9B49C" stroke-width="2"/>
     <path id="paperShape" d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z" fill="url(#paperShade)"/>
     <rect id="paperGlow" x="250" y="216" width="180" height="230" fill="url(#paperGrad)" clip-path="url(#bodyClip)"/>
     <path id="paperTint" d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z"/>`,
@@ -76,23 +75,19 @@ const STYLES = {
       <path d="M375 380 L405 378"/><path d="M373 395 L408 393"/><path d="M376 410 L400 408"/>
       <path d="M347 250 L355 250"/><path d="M347 262 L356 262"/>
     </g>
-    <!-- the caps: rounded terracotta blocks, cel-shaded. Flat tones (a lit side and a dark side), a dark lip on the edge
-         that meets the paper, an ink outline, and that edge catches the flame -->
-    <rect x="313" y="199" width="54" height="18" rx="4" fill="#A9603F"/><path d="M352 199H363A4 4 0 0 1 367 203V213A4 4 0 0 1 363 217H352Z" fill="#743A26"/>
-    <path d="M313 213H367A4 4 0 0 1 363 217H317A4 4 0 0 1 313 213Z" fill="#5E2E1E"/>
-    <rect x="313" y="199" width="54" height="18" rx="4" fill="none" stroke="#3E1C12" stroke-width="1.2"/>
-    <path class="paperLit" d="M317 218H363" stroke="currentColor" stroke-width="1.4"/>
-    <rect x="313" y="444" width="54" height="16" rx="4" fill="#A9603F"/><path d="M352 444H363A4 4 0 0 1 367 448V456A4 4 0 0 1 363 460H352Z" fill="#743A26"/>
-    <path d="M317 444H363A4 4 0 0 1 367 448H313A4 4 0 0 1 317 444Z" fill="#5E2E1E"/>
-    <rect x="313" y="444" width="54" height="16" rx="4" fill="none" stroke="#3E1C12" stroke-width="1.2"/>
-    <path class="paperLit" d="M317 443H363" stroke="currentColor" stroke-width="1.4"/>
+    <!-- how a book-page lantern is built: the pages' ends are bound into leather rims that sag like the ribs (cel-shaded:
+         a lit side, a dark side, a dark lip where they grip the paper, an ink outline; that edge catches the flame), it
+         hangs from a wire bail hooked into the top rim, and a ribbon bookmark hangs from the bottom -->
+    <path d="M295 208.5L340 190.5 385 208.5" fill="none" stroke="#3A2A22" stroke-width="1.6" stroke-linejoin="round"/><circle cx="340" cy="188" r="2.4" fill="none" stroke="#3A2A22" stroke-width="1.4"/>
+    <path d="M288 207Q340 212 392 207V219Q340 224 288 219Z" fill="#A9603F"/><path d="M366 208.88L372.5 208.52L379 208.09L385.5 207.59L392 207L392 219L385.5 219.59L379 220.09L372.5 220.52L366 220.88Z" fill="#743A26"/><path d="M288 216Q340 221 392 216V219Q340 224 288 219Z" fill="#5E2E1E"/>
+    <path d="M288 207Q340 212 392 207V219Q340 224 288 219Z" fill="none" stroke="#3E1C12" stroke-width="1.2" stroke-linejoin="round"/>
+    <path class="paperLit" d="M292 220.4Q340 225.2 388 220.4" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <path d="M288 441Q340 446 392 441V453Q340 458 288 453Z" fill="#A9603F"/><path d="M366 442.88L372.5 442.52L379 442.09L385.5 441.59L392 441L392 453L385.5 453.59L379 454.09L372.5 454.52L366 454.88Z" fill="#743A26"/><path d="M288 441Q340 446 392 441V444Q340 449 288 444Z" fill="#5E2E1E"/>
+    <path d="M288 441Q340 446 392 441V453Q340 458 288 453Z" fill="none" stroke="#3E1C12" stroke-width="1.2" stroke-linejoin="round"/>
+    <path class="paperLit" d="M292 439.6Q340 444.4 388 439.6" fill="none" stroke="currentColor" stroke-width="1.4"/>
     <g id="tassel">
-      <path d="M340 460 V466" stroke="#8A4A32" stroke-width="2"/>
-      <circle cx="340" cy="469" r="3.8" fill="#9C5536"/><path d="M341.97 465.76A3.8 3.8 0 0 1 340 472.8 5.07 5.07 0 0 0 341.97 465.76Z" fill="#6E3520"/><circle cx="340" cy="469" r="3.8" fill="none" stroke="#3E1C12" stroke-width="0.7"/>
-      <rect x="336" y="474" width="8" height="4" rx="1.5" fill="#B0694A" stroke="#3E1C12" stroke-width="0.7"/>
-      <g stroke-width="1.5" stroke-linecap="round">
-        <path d="M338 478 L333 500" stroke="#9C5536"/><path d="M339 478 L337 503" stroke="#9C5536"/><path d="M340 478 L340 505" stroke="#9C5536"/><path d="M341 478 L343 503" stroke="#6E3520"/><path d="M342 478 L347 500" stroke="#6E3520"/>
-      </g>
+      <path d="M336 455C335 470 338 482 335.5 499L339.8 494.5 344.2 500C346 483 343 470 344 455Z" fill="#9A3430"/><path d="M341.4 455C341.8 470 344.4 483 343.2 498.7L344.2 500C346 483 343 470 344 455Z" fill="#641E1E"/>
+      <path d="M336 455C335 470 338 482 335.5 499L339.8 494.5 344.2 500C346 483 343 470 344 455Z" fill="none" stroke="#3E1C12" stroke-width="0.9" stroke-linejoin="round"/>
     </g>`,
   },
   chochin: {
