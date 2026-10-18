@@ -69,6 +69,7 @@ function frame(t) {
 
   // the light: lit paper, a breathing halo, and the rings tinting with the flame
   document.querySelectorAll('.paperStop').forEach(n => put(n, 'stop-color', pal('paper')));
+  document.querySelectorAll('.paperBand').forEach(n => put(n, 'fill', pal('paper'))); // flat-toned light (the chōchin's)
   put($('paperGlow'), 'opacity', ((0.3 + 0.7 * size) * flick * pulse).toFixed(3));
   // the paper takes on the flame's colour, more so the brighter it burns
   put($('paperTint'), 'fill', pal('paper'));

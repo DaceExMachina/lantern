@@ -44,14 +44,19 @@ const STYLES = {
   chochin: {
     name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 177], caps: [218, 441, 46], // pivot in the drawing's own units
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
-    back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V66" stroke="#C9B49C" stroke-width="0.8"/>
-      <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/><ellipse id="paperGlow" cx="95" cy="122" rx="52" ry="48" fill="url(#pg)"/>
+    // the light through the paper in flat bands, brightest round the flame and dimmer toward the rim and the caps
+    back: MOCK(`<path d="M95 -7.5V66" stroke="#C9B49C" stroke-width="0.8"/>
+      <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/>
+      <g id="paperGlow" class="paperBand"><ellipse cx="95" cy="126" rx="47" ry="42" opacity="0.3"/><ellipse cx="95" cy="130" rx="35" ry="32" opacity="0.3"/><ellipse cx="95" cy="133" rx="22" ry="21" opacity="0.35"/></g>
       <ellipse id="paperTint" cx="95" cy="122" rx="52" ry="48"/>`, 18),
     front: MOCK(`<ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2" opacity="0.22"/>
       <g fill="none" stroke="#C9BBA8" stroke-width="0.55" opacity="0.9"><path d="M69.8 80Q95 75.2 120.2 80"/><path d="M56.2 90Q95 86.4 133.8 90"/><path d="M48.8 100Q95 97.6 141.2 100"/><path d="M44.7 110Q95 108.8 145.3 110"/><path d="M43.0 120Q95 120.0 147.0 120"/><path d="M43.7 130Q95 131.2 146.3 130"/><path d="M46.8 140Q95 142.4 143.2 140"/><path d="M52.8 150Q95 153.6 137.2 150"/><path d="M63.2 160Q95 164.8 126.8 160"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below -->
       <path d="M101.6 74L106.8 80 113.2 90 116.7 100 118.6 110 119.4 120 119.1 130 117.6 140 114.8 150 109.9 160 101.6 170" fill="none" stroke="#C9BBA8" stroke-width="0.4" stroke-linejoin="round" opacity="0.6"/><!-- the seam, a little way round the side so it curves like a meridian -->
       <rect x="76" y="66" width="38" height="9" rx="2" fill="#2A1E1E"/><rect x="76" y="68" width="38" height="1.2" fill="#4A3434"/>
       <rect x="76" y="168" width="38" height="9" rx="2" fill="#2A1E1E"/>
+      <!-- lacquered caps: a small sheen, and the flame's warmth on the edge that faces into the lantern -->
+      <g fill="#FFFFFF" opacity="0.22"><rect x="79" y="67" width="9" height="0.8" rx="0.4"/><rect x="79" y="170.2" width="9" height="0.8" rx="0.4"/></g>
+      <g class="paperBand" opacity="0.75"><rect x="77" y="73.6" width="36" height="1.3" rx="0.6"/><rect x="77" y="168.1" width="36" height="1.3" rx="0.6"/></g>
       <g id="tassel"><path d="M95 177V194" stroke="#2A1E1E" stroke-width="1"/><circle cx="95" cy="196" r="2.6" fill="#D9AE52"/>
         <path d="M93.5 198L92 210M95 198V212M96.5 198L98 210" stroke="#D9AE52" stroke-width="0.6"/></g>`, 18),
   },
