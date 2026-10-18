@@ -4,7 +4,7 @@
   "description": "A paper lantern that glows with your Claude Code sessions",
   "bin": { "claude-lantern": "install.js" },
   "files": [
-    "install.js", "server.js", "index.html", "page/", "fake.js", "icon.svg", "icon.png", "icon-indigo.svg", "icon-indigo.png",
+    "install.js", "index.html", "page/", "fake.js", "icon.svg", "icon.png", "icon-indigo.svg", "icon-indigo.png",
     "iterm/lantern.py", "app/build.sh", "app/Info.plist", "app/main.swift", "app/Server.swift", "app/Stats.swift",
     "screensaver/build.sh", "screensaver/Info.plist", "screensaver/LanternView.swift"
   ],
@@ -12,6 +12,6 @@
   "engines": { "node": ">=18" },
   "repository": "github:DaceExMachina/lantern",
   "license": "MIT",
-  "scripts": { "check": "tsc -p tsconfig.json && tsc -p tsconfig.page.json", "test": "node --test test/*.test.js" },
+  "scripts": { "preview": "node scripts/preview.js", "check": "tsc -p tsconfig.json && tsc -p tsconfig.page.json", "test": "node --test test/*.test.js" },
   "devDependencies": { "@types/node": "^20.0.0", "typescript": "^5.6.0" }
 }
