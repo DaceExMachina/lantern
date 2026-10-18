@@ -47,15 +47,15 @@ function sync() {
   }
   for (const [k, m] of moths) if (!live.has(k)) m.leaving = true;
 
-  const working = sessions.filter(s => s.state === 'working').length;
-  const onAgents = sessions.filter(s => s.state === 'paused' && !s.reported).length;
+  // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
+  const working = sessions.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length;
   const waiting = sessions.filter(s => s.state === 'waiting' && !s.snoozed);
   const snoozed = sessions.filter(s => s.state === 'waiting' && s.snoozed).length;
   const st = $('status');
   st.className = waiting.length ? 'waiting' : '';
   if (!sessions.length) st.textContent = 'quiet night, no sessions';
   else {
-    st.replaceChildren(`${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working` + (onAgents ? ` · ${onAgents} waiting on agents` : ''));
+    st.replaceChildren(`${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working`);
     if (waiting.length) {
       // "N need you" opens the session that's waited longest; each click moves on to the next one
       const next = document.createElement('button');
