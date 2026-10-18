@@ -11,30 +11,28 @@ const WING_SIDE = [[0, 0], [12, -14], [18, -4], [14, 6], [0, 0]];
 const AXIS = -54.4 * Math.PI / 180, AU = [Math.cos(AXIS), Math.sin(AXIS)], AN = [-Math.sin(AXIS), Math.cos(AXIS)];
 const EYE = 40; // viewer distance in moth units: smaller means stronger perspective
 
-// Flap a wing up toward the viewer by `lift` radians around the body axis, sweep it forward a little as it rises,
-// and project it with perspective so the tip swells as it comes closer while the joint stays put.
-// `roll` turns the whole moth around its body axis: 0 is seen from above, ±90° is fully side-on,
-// where both wings overlap and swing toward and away from the viewer.
-function flapWing(pts, lift, sweep, roll = 0) {
+// The one wing model, in 3D (scene axes: x right, y down, z toward the viewer). A wing's 2D outline (along the body
+// AU, across it AN) is placed on a frame of directions: T along the body, N the way a folded wing stands (out of the
+// surface the moth rests on, or toward the viewer in flight), and B = N x T sideways. `open` is the wing's angle from
+// N: 0 is folded upright, 90 degrees spread flat along B. `sweep` tips it along the body as it rises. Projected with
+// perspective, so a tip swells as it comes closer while the joint stays put.
+const cross = (u, v) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+const dot = (u, v) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+const unit = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; };
+const lerp3 = (u, v, t) => [u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t, u[2] + (v[2] - u[2]) * t];
+function wing3d(pts, T, N, open, sweep = 0) {
+  const B = cross(N, T), c = Math.cos(open), sn = Math.sin(open);
   return pts.map(([x, y]) => {
-    const a = x * AU[0] + y * AU[1], r = x * AN[0] + y * AN[1];
-    const z = Math.abs(r) * Math.sin(lift), r2 = r * Math.cos(lift), a2 = a + sweep * z;
-    const across = r2 * Math.cos(roll) + z * Math.sin(roll), depth = z * Math.cos(roll) - r2 * Math.sin(roll), k = EYE / (EYE - depth);
-    return [(a2 * AU[0] + across * AN[0]) * k, (a2 * AU[1] + across * AN[1]) * k];
+    const a = x * AU[0] + y * AU[1], r = x * AN[0] + y * AN[1], up = Math.abs(r) * c, out = r * sn, a2 = a + sweep * up;
+    const px = T[0] * a2 + N[0] * up + B[0] * out, py = T[1] * a2 + N[1] * up + B[1] * out, pz = T[2] * a2 + N[2] * up + B[2] * out;
+    const k = EYE / (EYE - pz);
+    return [px * k, py * k];
   });
 }
-// Landed, the wings fold together straight up, so from the side we see a single wing standing off the lantern
-// with the joint against the paper: the upper petal turned to point along `deg`.
-const UP_TIP = -96.3;
-function foldedWing(deg, scale, squash = 1) {
-  const a = -UP_TIP * Math.PI / 180, b = deg * Math.PI / 180;
-  return WING_UP.map(([x, y]) => {
-    // lay the petal along +x, shorten it (foreshortening), then turn it to point along `deg`
-    const u = (x * Math.cos(a) - y * Math.sin(a)) * squash * scale, v = (x * Math.sin(a) + y * Math.cos(a)) * scale;
-    return [u * Math.cos(b) - v * Math.sin(b), u * Math.sin(b) + v * Math.cos(b)];
-  });
-}
-const mixPts = (a, b, t) => a.map(([x, y], i) => [x + (b[i][0] - x) * t, y + (b[i][1] - y) * t]);
+// In flight the body lies along AU and the wings spread across the screen, lifting toward the viewer; `roll` turns
+// the whole moth around its body axis: 0 is seen from above, 90 degrees fully side-on.
+const flightFrame = roll => ({ T: [AU[0], AU[1], 0], N: [AN[0] * Math.sin(roll), AN[1] * Math.sin(roll), Math.cos(roll)] });
+function flapWing(pts, lift, sweep, roll = 0) { const f = flightFrame(roll); return wing3d(pts, f.T, f.N, Math.PI / 2 - lift, sweep); }
 const pathOf = p => { const f = ([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`; return `M${f(p[0])}Q${f(p[1])} ${f(p[2])}Q${f(p[3])} ${f(p[4])}Z`; };
 // big moths for sessions, medium for supervisor agents, small for plain subagents
 const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
