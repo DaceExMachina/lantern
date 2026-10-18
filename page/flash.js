@@ -13,7 +13,7 @@ const FLY_SPEED = +Q.get('flySpeed') || 0.4, SWARM_SPEED = +Q.get('swarmSpeed') 
 const JOSTLE = Q.has('jostle') ? +Q.get('jostle') || 0 : 1;
 // how many fireflies fill the pill, as a share of the densest packing; fewer are spaced wider and stay the scene's
 // size, so the pill gets lighter and lacier (?count=1 is the densest)
-const BACKING = Q.get('backing') === '1'; // ?backing=1: a soft glow behind the words, so the text keeps its contrast over gaps
+const BACKING = Q.get('backing') !== '0'; // a soft glow behind the words, so the text keeps its contrast over gaps (?backing=0 turns it off)
 const COUNT = Q.has('count') ? Math.min(1, +Q.get('count') || 1) : 0.5;
 // The colours PR fireflies come in: half the yellow of a draft, two fifths the orange of one with changes asked for,
 // and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
