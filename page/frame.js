@@ -165,16 +165,35 @@ function swingLantern(elapsed, s) {
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
 
+// The halo is a wide flame tongue, blurred. An SVG blur would re-run on every frame as the lantern sways, so the tongue
+// is blurred once, at start, into the picture #halo shows it through (2px a unit; a canvas shadow's blur is twice its
+// sigma, and only the shadow lands: the shape itself is drawn a canvas-width off to the left).
+function blurHalo() {
+  const img = $('haloBlur'), [x, y, w, h] = ['x', 'y', 'width', 'height'].map(a => Number(img.getAttribute(a))), k = 2;
+  const canvas = Object.assign(document.createElement('canvas'), { width: w * k, height: h * k });
+  const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+  ctx.setTransform(k, 0, 0, k, -k * x - canvas.width, -k * y);
+  Object.assign(ctx, { shadowColor: '#fff', shadowBlur: 2 * 7 * k, shadowOffsetX: canvas.width });
+  ctx.fill(new Path2D(flamePath(46, 118, 0)));
+  img.setAttribute('href', canvas.toDataURL());
+}
+
 // flame: layered tongues that lean and stretch independently, ember-small when idle
 function drawFlame(s, { size, pulse }) {
-  const layers = [['fHalo', 46, 118, 6, 1], ['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
+  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
   for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
     const n = $(id);
     put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
     put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
   put($('fBase'), 'fill', pal('base'));
-  put($('flame'), 'transform', `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
+  const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
+  put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
+  // the halo's blurred tongue (46 by 118) grows with the flame, and stretches and leans like a tongue, its tip pushed
+  // sideways about its base
+  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-wobble(s, 1) * 6 / (118 * hh)) * 180 / Math.PI;
+  put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
+  put($('fHalo'), 'fill', pal('halo'));
   put($('flame'), 'opacity', pulse.toFixed(3));
 }
 
