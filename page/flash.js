@@ -120,10 +120,16 @@ function playFlash(id) {
     return [off[0] + v2[0] * dt, off[1] + v2[1] * dt];
   };
   // One frame of the hold: the swirl carries the firefly on, then its place, wander and offset make where it is.
+  // Now and then one on the rim strays a spacing or two past the outline (a few, three to five) and comes back, so the
+  // edge looks like a living swarm, not a drawn pill: each about once in 25 to 45 seconds, so only a few are out at once.
   const flow = (f, t) => {
     const b = holdAt(f, t);
     f.off = carry(b, f.off, f.flowT - gather, Math.min(50, t - f.flowT)); f.flowT = t;
-    return keepIn([b[0] + f.off[0], b[1] + f.off[1]]);
+    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), n = t - f.land - 800 - f.strayAt;
+    const away = 600 + f.strayBy / step * 300; // the further it strays, the longer out and back
+    if (!f.strayBy || n < 0 || n % f.strayEvery >= away) return p;
+    const q = Math.max(-half, Math.min(half, p[0] - cx)), d = Math.hypot(p[0] - cx - q, p[1] - cy) || 1, out = Math.sin(Math.PI * (n % f.strayEvery) / away) * f.strayBy;
+    return [p[0] + (p[0] - cx - q) / d * out, p[1] + (p[1] - cy) / d * out];
   };
   const heading = (f, t) => { const a = holdAt(f, t - 1), b = holdAt(f, t + 1); return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]; }; // px per ms
   // rings from the rim in to the innermost, evenly spaced and no further apart than a hexagonal packing's rows
@@ -138,7 +144,8 @@ function playFlash(id) {
       const wander = () => (0.0006 + rand() * 0.0012) * (rand() < 0.5 ? -1 : 1); // radians per ms, each its own
       flies.push({ rr, s0: at + i * loop / n, v: way * swarm, col, ph: rand() * 6.28,
         ax: wander(), bx: wander(), ay: wander(), by: wander(), every: 2000 + rand() * 3000, dartAt: rand() * 5000, dir: rand() * 6.28,
-        land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2 });
+        land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2,
+        strayBy: ring || !jostle ? 0 : (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: 25000 + rand() * 20000, strayAt: rand() * 25000 });
     }
   }
   // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
