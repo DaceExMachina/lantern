@@ -22,15 +22,15 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 // A server of its own: HOME, the Claude folder and the data folder all live in a fresh temp folder, and PATH is empty,
 // so it can't see real sessions (ps, lsof) or drive a terminal (osascript). `files` are written there first, and
-// `prep(home)` runs after them, for anything a file's text can't say (its mode, its age).
-async function serve(t, files = {}, prep = () => {}) {
+// `prep(home)` runs after them, for anything a file's text can't say (its mode, its age). `env` adds to the server's.
+async function serve(t, files = {}, prep = () => {}, extra = {}) {
   const home = fs.mkdtempSync(path.join(tmp, 'home-')), port = await freePort();
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(home, file)), { recursive: true });
     fs.writeFileSync(path.join(home, file), text);
   }
   prep(home);
-  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin') };
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'), ...extra };
   const child = spawn(BIN, [], { env, stdio: 'ignore' });
   t.after(() => child.kill());
   const base = `http://127.0.0.1:${port}`;
@@ -143,6 +143,32 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
   let s;
   for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
   assert.ok(s, 'the live session was not seeded');
+  assert.deepStrictEqual({ pid: s.pid, unconfirmed: s.unconfirmed, state: s.state }, { pid: proc.pid, unconfirmed: false, state: 'waiting' });
+});
+
+// A `claude` the hooks never told the lantern about (iTerm restarted, a hook failed) shows up after startup: the next
+// adoption pass finds it through ps and its sessions/<pid>.json and seeds it with its process, as startup would have.
+test('a running session the lantern missed is adopted with its process on the next pass', async t => {
+  const id = UUID(6), file = `.claude/projects/-work/${id}.jsonl`;
+  let home;
+  const base = await serve(t, { 'no-bin/ps': '#!/bin/sh\n[ -f "$HOME/pids" ] && read -r line < "$HOME/pids" && echo "$line"\n' }, h => {
+    home = h;
+    fs.chmodSync(path.join(h, 'no-bin/ps'), 0o755);
+  }, { LANTERN_ADOPT_SECONDS: '0.2' });
+  await wait(300); // past a pass that found nothing
+  assert.deepStrictEqual((await snapshot(base)).sessions, []);
+  const proc = spawn('sleep', ['60']);
+  t.after(() => proc.kill());
+  fs.mkdirSync(path.join(home, '.claude/projects/-work'), { recursive: true });
+  fs.writeFileSync(path.join(home, file), jsonl([user('Fix it'), answer('Fixed. **You:** try it'), turnEnd]));
+  const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+  fs.utimesSync(path.join(home, file), dayAgo, dayAgo);
+  fs.mkdirSync(path.join(home, '.claude/sessions'), { recursive: true });
+  fs.writeFileSync(path.join(home, `.claude/sessions/${proc.pid}.json`), JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/work' }));
+  fs.writeFileSync(path.join(home, 'pids'), `  ${proc.pid} claude\n`);
+  let s;
+  for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
+  assert.ok(s, 'the running session was not adopted');
   assert.deepStrictEqual({ pid: s.pid, unconfirmed: s.unconfirmed, state: s.state }, { pid: proc.pid, unconfirmed: false, state: 'waiting' });
 });
 

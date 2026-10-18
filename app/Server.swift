@@ -5,6 +5,7 @@
 // queues and hops back.
 import Foundation
 import Network
+import CoreGraphics
 
 let EXPIRE_MS = 20.0 * 60 * 1000 // a session silent this long is assumed dead (killed terminal, no SessionEnd)
 let WAITING_EXPIRE_MS = 3.0 * 60 * 60 * 1000 // ...unless it's waiting on me, which can quietly take a while
@@ -331,17 +332,20 @@ func claudePids() -> [String] {
         .map { $0.trim.split(whereSeparator: \.isWhitespace).map(String.init) }.filter { $0.count > 1 && $0[1] == "claude" }.map { $0[0] }
 }
 
+/// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet.
+func sessionFile(_ pid: String) -> String? {
+    guard let d = FileManager.default.contents(atPath: "\(CLAUDE_DIR)/sessions/\(pid).json"), let j = parse(d) as? JSON,
+          let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String else { return nil }
+    let f = "\(PROJECTS)/\(cwd.projectName)/\(id).jsonl"
+    return FileManager.default.fileExists(atPath: f) ? f : nil
+}
+
 // The transcripts of running terminal `claude`s, however long they've been quiet, each with its process when known.
 // Claude Code names a process's session in sessions/<pid>.json. Without that (older versions), each process writes into
 // the project folder named after its working folder, so the newest transcripts there (one per process) stand in.
 func liveTranscripts() -> [(file: String, pid: Int?)] {
     var live: [(file: String, pid: Int?)] = [], rest: [String] = []
-    for pid in claudePids() {
-        if let d = FileManager.default.contents(atPath: "\(CLAUDE_DIR)/sessions/\(pid).json"), let j = parse(d) as? JSON,
-           let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String,
-           case let f = "\(PROJECTS)/\(cwd.projectName)/\(id).jsonl", FileManager.default.fileExists(atPath: f) { live.append((f, Int(pid))) }
-        else { rest.append(pid) }
-    }
+    for pid in claudePids() { if let f = sessionFile(pid) { live.append((f, Int(pid))) } else { rest.append(pid) } }
     if rest.isEmpty { return live }
     var count = Ordered<Int>()
     for line in run("lsof", ["-a", "-d", "cwd", "-p", rest.joined(separator: ","), "-Fn"]).out.components(separatedBy: "\n") where line.hasPrefix("n") {
@@ -662,6 +666,7 @@ final class LanternServer {
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
+        Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_ADOPT_SECONDS"] ?? "") ?? 60, repeats: true) { _ in self.adopt() }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in self.observe() } // quiet hours end with nothing else happening
         Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in self.gauge() }
         // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
@@ -933,14 +938,7 @@ final class LanternServer {
             } else { print("seeding failed: no \(PROJECTS)") }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
-                for (s, a) in seeded {
-                    let id = str(s["id"])
-                    if self.sessions[id] != nil { continue }
-                    self.sessions[id] = s
-                    self.agents[id] = a
-                    self.seeded.insert(id)
-                    self.loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
-                }
+                self.add(seeded)
                 print("Seeded \(self.sessions.count) session(s) from disk")
                 self.linkSpawned()
                 // last known PR status, until the first refresh replaces it
@@ -956,6 +954,44 @@ final class LanternServer {
                         self.broadcast()
                         self.refreshGitHub()
                     }
+                }
+            }
+        }
+    }
+
+    /// Sessions rebuilt from disk join the live ones, unless hooks brought them back first.
+    func add(_ seeded: [(JSON, Ordered<JSON>)]) {
+        for (s, a) in seeded {
+            let id = str(s["id"])
+            if sessions[id] != nil { continue }
+            sessions[id] = s
+            agents[id] = a
+            self.seeded.insert(id)
+            loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
+        }
+    }
+
+    // Hooks can miss a session (iTerm restarting, a hook failing), so now and then any running `claude` the lantern
+    // doesn't know is brought back from its transcript, as at startup. One ps; the session files only for unknown pids.
+    // Not while the screen's locked: nobody's looking, and the first sweep after unlocking catches up.
+    func adopt() {
+        if (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true { return }
+        let known = Set(sessions.items.compactMap { truthy($0.1["pid"]) ? str($0.1["pid"]) : nil }), words = wordsOn
+        DispatchQueue.global().async {
+            let found = claudePids().filter { !known.contains($0) }.compactMap { pid in
+                sessionFile(pid).flatMap { seedSession($0, live: true, words: words) }.map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pid"] = Int(pid); return s }
+            }
+            if found.isEmpty { return }
+            DispatchQueue.main.async {
+                let before = self.sessions.count
+                self.add(found)
+                if self.sessions.count == before { return }
+                print("Adopted \(self.sessions.count - before) running session(s) the hooks missed")
+                self.broadcast()
+                // then, as at startup, its iTerm tab so it's clickable, and its PRs
+                self.findItermTabs(found.map { str($0.0["id"]) }.filter { self.sessions[$0] != nil && !truthy(self.sessions[$0]!["iterm"]) }) {
+                    self.broadcast()
+                    self.refreshGitHub()
                 }
             }
         }
