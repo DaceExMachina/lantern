@@ -388,6 +388,7 @@ func prQuery(_ fields: String) -> String {
     query {
       reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { \(fields) } } }
       mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 100) { nodes { ... on PullRequest { \(fields) } } }
+      closed: search(query: "is:pr is:closed archived:false author:@me sort:updated-desc", type: ISSUE, first: 30) { nodes { ... on PullRequest { url state } } }
     }
     """
 }
@@ -455,6 +456,15 @@ final class LanternServer {
     var listener: NWListener?
     var started = false
     var pageMtime = 0.0
+    // The event log (Stats.swift), and what it last saw, so it only records changes.
+    let stats: Stats
+    struct Seen { var waiting = false, snoozed: String?, title: String? }
+    var seen: [String: Seen] = [:]
+    var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
+    var violet = false, quiet = false
+    var ownedPRs: [String: (need: String, session: String)] = [:]
+    var strays: Int? // open PRs of mine that no session owns, as of the last refresh
+    var buried = Set<String>() // the graveyard the log last saw, by url
 
     init(port: UInt16, data: String, web: String) {
         self.port = port
@@ -463,6 +473,7 @@ final class LanternServer {
         settingsFile = data + "/settings.json"
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
+        stats = Stats(data + "/stats.sqlite")
     }
 
     // Takes the port, or, while something else holds it (server.js from a checkout, say), keeps trying every few seconds.
@@ -487,10 +498,16 @@ final class LanternServer {
     func retry() { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.start() } }
 
     func begin() {
+        stats.open()
+        stats.begin("server")
+        ownedPRs = stats.ownedPRs()
+        buried = stats.buried()
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep() }
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in self.observe() } // quiet hours end with nothing else happening
+        Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in self.gauge() }
         // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
         pageMtime = pageVersion()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
@@ -513,7 +530,7 @@ final class LanternServer {
         })
     }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
-    func broadcast() { send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
+    func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
     func broadcastGitHub() { send("event: github\ndata: \(jsonText(githubState()))\n\n") }
     func saveSettings() {
@@ -599,10 +616,12 @@ final class LanternServer {
             s["state"] = "waiting"
             s["note"] = "Turn ended with an API error"
             s["error"] = true // the moth lands singed
+            stats.event("api_error", id)
         // A /compact you run yourself ends back at the prompt with no Stop after it, so put the session back to idle.
         // An automatic compact carries on with whatever the session was doing (working mid-turn, or waiting), so leave that.
         case "PreCompact":
             s["activity"] = "Compacting the conversation"
+            stats.event("compact", id, ["trigger": e["trigger"] ?? NSNull()])
             if str(e["trigger"]) == "manual" { s["state"] = "working" }
         case "PostCompact":
             s["activity"] = ""
@@ -729,6 +748,7 @@ final class LanternServer {
                     if self.sessions[id] != nil { continue }
                     self.sessions[id] = s
                     self.agents[id] = a
+                    self.seeded.insert(id)
                     self.loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
                 }
                 print("Seeded \(self.sessions.count) session(s) from disk")
@@ -794,8 +814,9 @@ final class LanternServer {
                 } }
             var results = [JSON?](repeating: nil, count: queries.count)
             DispatchQueue.concurrentPerform(iterations: queries.count) { i in let r = queries[i](); DispatchQueue.main.sync { results[i] = r } }
-            var all = Ordered<JSON>(), wanted = Ordered<JSON>()
+            var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:]
             for data in results {
+                for p in (data?["closed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { closed[str(p["url"])] = str(p["state"]) }
                 for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
                     wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))"]
                 }
@@ -831,6 +852,8 @@ final class LanternServer {
                 self.reviews = wanted.items.map(\.1)
                 self.graveyard = dead
                 for (id, g) in github { self.sessions[id]?["github"] = g }
+                // a failed query would make every PR look gone, so only a complete answer goes in the log
+                if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
                 self.saveGitHubCache()
                 self.refreshing = false
@@ -851,6 +874,74 @@ final class LanternServer {
         let text = jsonText(["reviews": reviews, "graveyard": graveyard, "owners": owners, "bySession": bySession]) + "\n"
         DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
     }
+
+    // MARK: the event log: what changed since it last looked, called on every broadcast so it sees what the page sees
+
+    func observe() {
+        for (id, s) in sessions.items {
+            var was = seen[id] ?? Seen()
+            let title = truthy(s["title"]) ? str(s["title"]) : nil, project = s["project"] ?? NSNull()
+            if seen[id] == nil { stats.begin("alive", id, ["title": title ?? NSNull(), "project": project, "seeded": seeded.contains(id)]) }
+            else if title != was.title, let title { stats.note("alive", id, ["title": title]); if was.waiting { stats.note("waiting", id, ["title": title]) } }
+            was.title = title
+            let waiting = str(s["state"]) == "waiting"
+            if waiting != was.waiting {
+                if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project]) } else { stats.end("waiting", id, ["how": "answered"]) }
+                was.waiting = waiting
+                was.snoozed = nil
+            }
+            // snoozed during the wait: for a while (until it does something new) or for good
+            let snoozed = forGood(id) ? "forGood" : truthy(s["snoozed"]) ? "temporary" : nil
+            if waiting, let snoozed, snoozed != was.snoozed { stats.note("waiting", id, ["snoozed": snoozed]); was.snoozed = snoozed }
+            seen[id] = was
+        }
+        for (id, was) in seen where sessions[id] == nil {
+            if was.waiting { stats.end("waiting", id, ["how": "ended"]) }
+            stats.end("alive", id, ["how": "ended"])
+            seen[id] = nil
+        }
+        // the lantern's colour, worked out the way the page does it
+        let quietNow = ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now()
+        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !truthy($0.1["snoozed"]) && !forGood($0.0) }
+        if quietNow != quiet { if quietNow { stats.begin("quiet") } else { stats.end("quiet") }; quiet = quietNow }
+        if violetNow != violet { if violetNow { stats.begin("violet") } else { stats.end("violet") }; violet = violetNow }
+    }
+
+    // PR changes, from what the sessions own after a refresh. One no session owns any more was merged or closed, or is
+    // still open with no session (a stray), or fell out of the closed search (gone). Graveyard changes go in too.
+    func logPRs(open: Set<String>, closed: [String: String]) {
+        var owned: [String: (need: String, session: String, title: Any)] = [:]
+        for (id, s) in sessions.items {
+            for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
+        }
+        for (url, p) in owned where ownedPRs[url]?.need != p.need {
+            let was = ownedPRs[url]
+            stats.event("pr", p.session, ["url": url, "change": was == nil ? "appeared" : "need", "need": p.need, "from": was?.need ?? NSNull(), "title": p.title])
+        }
+        for (url, was) in ownedPRs where owned[url] == nil {
+            let change = open.contains(url) ? "stray" : closed[url].map { $0 == "MERGED" ? "merged" : "closed" } ?? "gone"
+            stats.event("pr", was.session, ["url": url, "change": change, "from": was.need])
+        }
+        ownedPRs = owned.mapValues { ($0.need, $0.session) }
+        strays = open.subtracting(owned.keys).count
+        // PRs entering the graveyard, and leaving it: merged, closed, or revived (a session took it, or someone touched it)
+        let dead = Set(graveyard.map { str($0["url"]) })
+        for url in dead.subtracting(buried) { stats.event("graveyard", nil, ["url": url, "change": "entered"]) }
+        for url in buried.subtracting(dead) {
+            let how = open.contains(url) ? "revived" : closed[url].map { $0 == "MERGED" ? "merged" : "closed" } ?? "gone"
+            stats.event("graveyard", nil, ["url": url, "change": "left", "how": how])
+        }
+        buried = dead
+    }
+
+    func gauge() {
+        let waiting = sessions.items.filter { str($0.1["state"]) == "waiting" }
+        let fireflies = Set(sessions.items.flatMap { ($0.1["github"] as? [JSON] ?? []).filter { !["merged", "closed"].contains(str($0["need"])) }.map { str($0["url"]) } })
+        stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { str($0.1["state"]) == "working" }.count),
+                     ("waiting", waiting.count), ("snoozed", waiting.filter { truthy($0.1["snoozed"]) || forGood($0.0) }.count),
+                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("graveyard", graveyard.count)])
+    }
+
     func clearGitHub() { reviews = []; graveyard = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
 
     // Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain.
@@ -1058,6 +1149,7 @@ final class LanternServer {
             }
             if !ok { return respond(c, 400) }
             saveSettings()
+            observe()
             send("event: settings\ndata: \(jsonText(settings))\n\n")
             return respond(c, 204)
         }
