@@ -1,6 +1,5 @@
 // Reading what sessions are doing from hook payloads and transcripts, and rebuilding sessions from them (seeding, adopting).
 import Foundation
-import CoreGraphics
 
 // MARK: - Reading what a session is doing, from hook payloads and transcripts
 
@@ -407,7 +406,7 @@ extension LanternServer {
     // doesn't know is brought back from its transcript, as at startup. One ps; the session files only for unknown pids.
     // Not while the screen's locked: nobody's looking, and the first sweep after unlocking catches up.
     func adopt() {
-        if (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true { return }
+        if screenLocked() { return }
         let known = Set(sessions.items.compactMap { truthy($0.1["pid"]) ? str($0.1["pid"]) : nil }), words = wordsOn
         DispatchQueue.global().async {
             let found = claudePids().filter { !known.contains($0) }.compactMap { pid in

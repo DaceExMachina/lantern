@@ -4,6 +4,7 @@
 // queues and hops back.
 import Foundation
 import Network
+import CoreGraphics
 
 let EXPIRE_MS = 20.0 * 60 * 1000 // a session silent this long is assumed dead (killed terminal, no SessionEnd)
 let WAITING_EXPIRE_MS = 3.0 * 60 * 60 * 1000 // ...unless it's waiting on me, which can quietly take a while
@@ -145,6 +146,8 @@ final class LanternServer {
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var refreshing = false
+    // the test server replaces it, since the machine running the tests may well be locked
+    var screenLocked = { (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true }
     var broadcastDue = false, sentReviews = "[]", sentGraveyard = "[]" // see broadcast()
     var listener: NWListener?
     var started = false
@@ -184,7 +187,7 @@ final class LanternServer {
             guard let self else { return }
             switch state {
             case .ready:
-                print("Lantern lit at http://127.0.0.1:\(self.port)")
+                print("Lantern lit at http://127.0.0.1:\(l.port?.rawValue ?? self.port)") // port 0 takes any free one, which the tests use
                 if !self.started { self.started = true; self.begin() }
             case .failed: l.cancel(); self.retry()
             default: break

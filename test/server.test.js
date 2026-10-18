@@ -7,7 +7,6 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const net = require('net');
 const http = require('http');
 const { execFileSync, spawn } = require('child_process');
 
@@ -17,7 +16,6 @@ const BIN = path.join(tmp, 'lantern-server');
 test.before(() => execFileSync('swiftc', ['-Onone', '-o', BIN, ...fs.readdirSync(path.join(ROOT, 'app')).filter(f => f.endsWith('.swift') && f !== 'main.swift').map(f => 'app/' + f), 'test/server/main.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] }));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const freePort = () => new Promise(done => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => done(port)); }); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 // Polls `fn` until it returns something truthy and returns that, or throws `what` after `timeout` ms. Tests wait on the
 // condition they mean, never on a fixed sleep, so a slow or loaded machine only makes them slower, not red.
@@ -39,21 +37,15 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
     fs.writeFileSync(path.join(home, file), text);
   }
   prep(home);
-  // The port is free when picked but not held, so another process can take it first (the ephemeral range is shared with
-  // every client socket on the machine). The server then keeps retrying that port every 5 seconds, so a start that takes
-  // over 3 seconds (it normally takes ~30ms) is abandoned for a fresh port.
-  for (let attempt = 1; ; attempt++) {
-    const port = await freePort();
-    const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
-      TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
-    const child = spawn(BIN, [], { env, stdio: 'ignore' });
-    t.after(() => child.kill());
-    const base = `http://127.0.0.1:${port}`;
-    try { await until(() => fetch(base + '/icon.svg').then(() => true, () => false), 'the server to start', 3000); return base; } catch (e) {
-      child.kill();
-      if (attempt === 5) throw e;
-    }
-  }
+  // Port 0: the server takes whichever port is free and says which once it's listening, so no other process can take
+  // it first and a slow start only takes longer.
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
+    TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
+  const child = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+  t.after(() => child.kill());
+  let out = '';
+  child.stdout.on('data', chunk => out += chunk);
+  return until(() => out.match(/^Lantern lit at (\S+)$/m)?.[1], 'the server to start');
 }
 
 const post = (base, url, body) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -127,10 +119,13 @@ async function streamed(base, during) {
   req.destroy();
   return Object.assign(blocks, { opening }); // `opening` is the first load's burst
 }
-const snapshots = blocks => blocks.filter(b => b.startsWith('data:'));
+// The server also sends snapshots of its own (its startup pass sends one about 1.5s after seeding, which a slow machine
+// reaches mid-test), so these tests follow one session's tool-call count through the snapshots rather than counting them.
+const ticksSeen = (blocks, id) => blocks.filter(b => b.startsWith('data:')).map(b => JSON.parse(b.slice(5)).find(s => s.id === id)?.ticks).filter(Boolean);
 const toolCall = id => ({ session_id: id, hook_event_name: 'PreToolUse', cwd: '/work', tool_name: 'Read', tool_input: { file_path: '/work/a' } });
-// The server sends one snapshot 150ms after the first event of a burst. How many events land inside that window depends on
-// how fast the machine posts them, so the guarantee is one snapshot per 150ms the burst took, and one when it was quick.
+// The server sends one snapshot 150ms after the first change of a burst, and changes inside that window join it. So a burst
+// shows up in one snapshot per 150ms it took, plus one if a window someone else opened was already running when it began.
+// Snapshots from outside the burst repeat a count already seen, so the distinct counts are the burst's own snapshots.
 test('a burst of hook events reaches the page as one snapshot per coalescing window, not one per event', async t => {
   const base = await serve(t);
   let took;
@@ -138,19 +133,19 @@ test('a burst of hook events reaches the page as one snapshot per coalescing win
     const began = Date.now();
     await Promise.all(Array.from({ length: 10 }, () => post(base, '/event', toolCall(UUID(1)))));
     took = Date.now() - began;
-    await until(() => snapshots(blocks).length, 'the burst\'s snapshot');
+    await until(() => ticksSeen(blocks, UUID(1)).includes(10), 'a snapshot with all 10 tool calls');
   });
-  assert.ok(snapshots(blocks).length <= 1 + Math.floor(took / 150), `${snapshots(blocks).length} snapshots for a burst of 10 events that took ${took}ms`);
+  const counts = [...new Set(ticksSeen(blocks, UUID(1)))];
+  assert.ok(counts.length <= 2 + Math.floor(took / 150), `the burst of 10 events that took ${took}ms reached the page in ${counts.length} snapshots: ${counts}`);
 });
 test('the PR lists are sent when they change, not with every snapshot', async t => {
   const base = await serve(t);
   const blocks = await streamed(base, async blocks => {
     await post(base, '/event', toolCall(UUID(1)));
-    await until(() => snapshots(blocks).length === 1, 'the first snapshot'); // a second event inside its window would join it
+    await until(() => ticksSeen(blocks, UUID(1)).includes(1), 'the first event\'s snapshot');
     await post(base, '/event', toolCall(UUID(1)));
-    await until(() => snapshots(blocks).length === 2, 'the second snapshot');
+    await until(() => ticksSeen(blocks, UUID(1)).includes(2), 'the second event\'s snapshot');
   });
-  assert.strictEqual(snapshots(blocks).length, 2, 'both events produced a snapshot');
   assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|graveyard)/.test(b)), []);
 });
 
