@@ -1,6 +1,6 @@
 // The graveyard: my open PRs that no session owns and nobody has touched for a week drift low in the scene as wisps,
 // pale ghost fireflies in a washed-out shade of their PR colour, wandering slowly. The longer dead, the lower and
-// dimmer. Now and then one brightens: half pulse slowly like an ember, half flicker like a dying bulb. Up to 30; the
+// dimmer. Now and then one slowly brightens and fades again. Up to 30; the
 // oldest beyond that gather into a faint cloud with a count. A new one fades in; one that comes back to life (touched
 // again, or picked up by a session) rises and fades. There's no ground: the lantern floats in the dark and its light
 // carries onto other displays, so the dead drift instead of lying anywhere. Shown unless turned off in the settings
@@ -10,7 +10,6 @@ let graveyard = [], graveyardOn = true;
 const GRAVE_MAX = 30;
 const dead = new Map(); // url -> wisp
 let graveSeeded = false; // the first list is simply there; later arrivals fade in
-const flickerNoise = x => { const v = Math.sin(x * 12.9898) * 43758.5453; return v - Math.floor(v); };
 const WISP_TINT = '#C9C0DC'; // what a dead firefly's colour washes out toward
 
 function makeWisp(p) {
@@ -19,7 +18,7 @@ function makeWisp(p) {
   $('graveyard').append(...ember);
   const zone = $('zones').appendChild(el('circle', { r: 12 }));
   const d = { p, ember, zone, u: 0.05 + rand() * 0.9, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
-    period: 30 + rand() * 30, flicker: rand() < 0.5,
+    period: 30 + rand() * 30,
     born: graveSeeded ? 0 : 1, gone: undefined };
   // hovering shows the PR's card; clicking (or clicking the card) opens it
   zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { dead: d.p, zone }; renderCard(); });
@@ -97,9 +96,8 @@ function drawGraveyard(dt, s) {
     y -= (d.gone || 0) * 70;
     const fade = (1 - back * 0.5) * d.born * (1 - (d.gone || 0));
     const pale = mix(FLY[['ready', 'failing', 'changes', 'draft'].includes(d.p.need) ? d.p.need : 'quiet'], WISP_TINT, 0.55);
-    // a faint steady glow, and now and then a brightening: half pulse slowly, half flicker like a dying bulb
-    const wave = Math.sin(s * 6.283 / d.period + d.ph), n = flickerNoise(Math.floor(s * 14) + d.ph * 100);
-    const spark = d.flicker ? (wave > 0.94 && n > 0.4 ? 0.35 + 0.65 * n : 0) : Math.max(0, wave) ** 8;
+    // a faint steady glow, and now and then a slow brightening
+    const spark = Math.max(0, Math.sin(s * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
     const fills = [pale, pale, mix(pale, '#FFFFFF', 0.5)], strength = [0.16, 0.6, 0.9]; // wide glow, halo, core
     d.ember.forEach((c, i) => { put(c, 'cx', x.toFixed(1)); put(c, 'cy', y.toFixed(1)); put(c, 'fill', fills[i]); put(c, 'opacity', (strength[i] * lit * fade).toFixed(2)); });
