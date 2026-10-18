@@ -97,7 +97,7 @@ The daily recap opens by itself when quiet hours start. If you miss that, it sho
 
 ## Quiet hours
 
-"quiet" in the footer snoozes everything on every display until 8am, or your `quietEnd` (see [settings](setup.md#settings)). Click it again to end quiet early.
+"quiet" in the footer snoozes everything on every display until 8am, or your `quietEnd` (see [settings](setup.md#settings)). Click it again to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
 
 ## The app
 

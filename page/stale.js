@@ -4,7 +4,7 @@
 // oldest beyond that gather into a faint cloud with a count. A new one fades in; one that comes back to life (touched
 // again, or picked up by a session) rises and fades. There's no ground: the lantern floats in the dark and its light
 // carries onto other displays, so they drift instead of lying anywhere. Shown unless turned off in the settings
-// menu, and hidden in quiet hours.
+// menu (quiet hours leave them be).
 
 let stalePRs = [], staleOn = true;
 const STALE_MAX = 30;
@@ -83,8 +83,8 @@ function driftTo(o, dt, s, sway) {
 }
 
 function drawStale(dt, s) {
-  const show = staleOn && !quiet(), list = stalePRs;
-  $('stale').style.display = show ? '' : 'none'; // turning it off (or quiet hours) just hides it
+  const show = staleOn, list = stalePRs;
+  $('stale').style.display = show ? '' : 'none'; // turning it off just hides it
   const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 30 drift, the oldest cloud up
   const want = new Map(drifting.map((p, i) => [p.url, [p, i]]));
   for (const [url, [p]] of want) if (!wisps.has(url)) wisps.set(url, makeWisp(p));
