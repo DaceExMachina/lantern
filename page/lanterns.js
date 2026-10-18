@@ -58,52 +58,69 @@ const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="u
     <path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/>
     ${LACE('shoulderL', 0.5, 0.8)}${LACE('shoulderR', 0.5, 0.8)}${LACE('shoulderF', 1, 0.8)}
     ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}${LACE('skirtL', 0.5, 0.8)}${LACE('skirtR', 0.5, 0.8)}${LACE('skirtF', 1, 0.8)}${LACE('bottomSide', 0.55, 0.7)}${LACE('bottomFront', 1, 0.7)}</mask>`;
+// Paper stretched over rib wires sinks in a little between them: its outline scallops in by `dip` between wires, and a flat
+// darker band runs through the middle of each gap. `half(y)` is the paper's half-width at height y, `ribs` the wire heights
+// from its top edge to its bottom edge, and `bow(y)` how far a wire's front arc bends there (its curve's control offset).
+const SUNKEN = (cx, half, ribs, dip, bow) => {
+  const n = v => +v.toFixed(2), gaps = ribs.slice(1).map((b, i) => [ribs[i], b]);
+  const arc = (y, d) => `Q${cx} ${n(y + bow(y))} ${n(cx + d * half(y))} ${n(y)}`; // a wire's front arc, ending on side d
+  const side = (a, b, d) => { // down the left (d -1) or up the right (d 1), through the sunken midpoint of the gap
+    const [y0, y1] = d < 0 ? [a, b] : [b, a], m = (a + b) / 2, mx = cx + d * (half(m) - dip);
+    return `Q${n(2 * mx - cx - d * (half(y0) + half(y1)) / 2)} ${n(m)} ${n(cx + d * half(y1))} ${n(y1)}`;
+  };
+  const top = ribs[0], bottom = ribs[ribs.length - 1];
+  const band = (y0, y1) => `<path d="M${n(cx - half(y0))} ${n(y0)}${arc(y0, 1)}L${n(cx + half(y1))} ${n(y1)}${arc(y1, -1)}Z"/>`;
+  return {
+    outline: `M${n(cx - half(top))} ${n(top)}${gaps.map(([a, b]) => side(a, b, -1)).join('')}${arc(bottom, 1)}`
+      + `${gaps.reverse().map(([a, b]) => side(a, b, 1)).join('')}${arc(top, -1)}Z`,
+    bands: gaps.map(([a, b]) => band(a + 0.32 * (b - a), b - 0.32 * (b - a))).join(''),
+    wires: ribs.slice(1, -1).map(y => `<path d="M${n(cx - half(y))} ${n(y)}${arc(y, 1)}"/>`).join(''),
+  };
+};
+// the Odawara barrel: a straight cylinder on 19 close wires (top and bottom edges included), each bowed from the flame's
+// height like its drums. style.drum, so whatever is drawn on the paper can follow the same curves.
+const BARREL = { cx: 340, r: 60, top: 216, bottom: 445, ribs: Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), bow: y => 120 * (y - 350) / 1350 };
+const ODAWARA = SUNKEN(BARREL.cx, _y => BARREL.r, BARREL.ribs, 1.2, BARREL.bow);
+// the chōchin, in its mockup units: round, its wires wider apart and bowing away from the middle, so it sinks in less
+const CHOCHIN = SUNKEN(95, y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)), [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], 0.35, y => 0.115 * (y - 122));
 const STYLES = {
   barrel: {
-    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 462], caps: [216, 445, 50],
-    body: { top: 216, bottom: 445, half: y => { const t = (y - 216) / 229; return 50 + 80 * t * (1 - t); } },
-    back: `<path d="M340 20 L340 193" stroke="#C9B49C" stroke-width="2"/>
-    <circle cx="340" cy="196" r="4" fill="none" stroke="#A8876A" stroke-width="1.6"/>
-    <path id="paperShape" d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z" fill="url(#paperShade)"/>
-    <rect id="paperGlow" x="250" y="216" width="180" height="230" fill="url(#paperGrad)" clip-path="url(#bodyClip)"/>
-    <path id="paperTint" d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z"/>`,
-    front: `<path d="M290 216 Q250 330 290 445 L390 445 Q430 330 390 216 Z" fill="#F2DCC0" opacity="0.2"/>
-    <g fill="none" stroke="#C9A684" stroke-width="0.9" opacity="0.5"><path d="M284.1 234.3Q340 239.3 395.9 234.3"/><path d="M276.3 266.4Q340 271.4 403.7 266.4"/><path d="M271.6 298.4Q340 303.4 408.4 298.4"/><path d="M270.0 330.5Q340 335.5 410.0 330.5"/><path d="M271.6 362.6Q340 367.6 408.4 362.6"/><path d="M276.3 394.6Q340 399.6 403.7 394.6"/><path d="M284.1 426.7Q340 431.7 395.9 426.7"/></g>
-    <g fill="none" stroke="#C8A07A" stroke-width="1.6" opacity="0.85"><path d="M302 216 Q274 330 302 445"/><path d="M321 216 Q309 330 321 445"/><path d="M340 216 L340 445"/><path d="M359 216 Q371 330 359 445"/><path d="M378 216 Q406 330 378 445"/></g>
-    <g fill="none" stroke="#FFF4E4" stroke-width="0.8" opacity="0.55" transform="translate(1.6 0)"><path d="M302 216 Q274 330 302 445"/><path d="M321 216 Q309 330 321 445"/><path d="M340 216 L340 445"/><path d="M359 216 Q371 330 359 445"/><path d="M378 216 Q406 330 378 445"/></g>
-    <g stroke="#B99572" stroke-width="1.3" opacity="0.8">
-      <path d="M275 260 L305 262"/><path d="M272 275 L307 277"/><path d="M270 290 L300 291"/>
-      <path d="M375 380 L405 378"/><path d="M373 395 L408 393"/><path d="M376 410 L400 408"/>
-      <path d="M347 250 L355 250"/><path d="M347 262 L356 262"/>
-    </g>
-    <rect x="313" y="199" width="54" height="18" rx="4" fill="url(#capGrad)"/>
-    <path d="M317 203.5 H363" stroke="#C47A55" stroke-width="1" opacity="0.7"/>
-    <path d="M313 213 H367" stroke="#5E2E1E" stroke-width="1" opacity="0.5"/>
-    <rect x="313" y="444" width="54" height="16" rx="4" fill="url(#capGrad)"/>
-    <path d="M317 448 H363" stroke="#C47A55" stroke-width="1" opacity="0.7"/>
-    <g id="tassel">
-      <path d="M340 460 V466" stroke="#8A4A32" stroke-width="2"/>
-      <circle cx="340" cy="469" r="3.8" fill="#9C5536"/>
-      <rect x="336" y="474" width="8" height="4" rx="1.5" fill="#B0694A"/>
-      <g stroke="#8A4A32" stroke-width="1.3" stroke-linecap="round">
-        <path d="M338 478 L333 500"/><path d="M339 478 L337 503"/><path d="M340 478 L340 505"/><path d="M341 478 L343 503"/><path d="M342 478 L347 500"/>
-      </g>
-    </g>`,
+    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [216, 445, 63],
+    drum: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: _y => BARREL.r }, // a straight cylinder
+    back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
+    <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
+    <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
+    <rect id="paperGlow" x="270" y="200" width="140" height="260" fill="url(#paperGrad)" clip-path="url(#bodyClip)"/>
+    <path id="paperTint" d="${ODAWARA.outline}"/>`,
+    // built like an Odawara lantern, seen from the flame's height: every horizontal edge (wires, drums) bows up above the
+    // flame and down below it. The paper sinks in a little between wires (scalloped edge, a darker band mid-gap).
+    front: `<path d="${ODAWARA.outline}" fill="#F2DCC0" opacity="0.2"/>
+    <g fill="#A27C58" opacity="0.13" clip-path="url(#bodyClip)">${ODAWARA.bands}</g>
+    <g fill="none" stroke="#B48C66" stroke-width="1" opacity="0.75">${ODAWARA.wires}</g>
+    <!-- the drums: black lacquer, cel-shaded (a lit side, a dark side, a dark lip where they grip the paper, an ink
+         outline), with a narrower step on the outer end; the faces toward the paper catch the flame -->
+    <path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="#3B2A24"/><path d="M362 187.28L369 188.12L376 189.18L383 190.48L390 192L390 199L383 197.54L376 196.31L369 195.29L362 194.49Z" fill="#1F1512"/><path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M277 198Q340 183.81 403 198V218Q340 205.68 277 218Z" fill="#3B2A24"/><path d="M367.72 192.28L376.54 193.29L385.36 194.58L394.18 196.15L403 198L403 218L394.18 216.4L385.36 215.03L376.54 213.91L367.72 213.03Z" fill="#1F1512"/><path d="M277 214.8Q340 202.18 403 214.8V218Q340 205.68 277 218Z" fill="#140D0B"/><path d="M277 198Q340 183.81 403 198V218Q340 205.68 277 218Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 219.3Q340 207.68 400 219.3" fill="none" stroke="currentColor" stroke-width="1.4"/>
+    <!-- the bail: a stiff wire arch pinned to the drum on each side, with a crook bent into its top so it sits on a hook without sliding --><path d="M279.5 208C279.5 167 302 147.5 333.5 147.5C334.5 140.5 345.5 140.5 346.5 147.5C378 147.5 400.5 167 400.5 208" fill="none" stroke="#1A1410" stroke-width="4.6" stroke-linecap="round"/><path d="M279.5 208C279.5 167 302 147.5 333.5 147.5C334 144 337 142.25 340 142.25" fill="none" stroke="#8A847C" stroke-width="2.6"/><path d="M340 142.25C343 142.25 346 144 346.5 147.5C378 147.5 400.5 167 400.5 208" fill="none" stroke="#5A544E" stroke-width="2.6"/><path d="M281 196C283 170 304 151.6 330 148.6" fill="none" stroke="#D8D2C8" stroke-width="0.9" stroke-linecap="round"/><!-- the string is tied on: one wrap round the crook, a knot, and a loose tail --><ellipse cx="340" cy="142.4" rx="2" ry="3.6" fill="none" stroke="#C9B49C" stroke-width="1.5"/><g id="knotTail"><path d="M341 139Q345.2 143 344 150.5" fill="none" stroke="#C9B49C" stroke-width="1.4" stroke-linecap="round"/></g><circle cx="340" cy="138.4" r="1.9" fill="#C9B49C" stroke="#7E6C56" stroke-width="0.6"/><circle cx="279.5" cy="208" r="2.6" fill="#8A847C" stroke="#1A1410" stroke-width="1"/><circle cx="400.5" cy="208" r="2.6" fill="#5A544E" stroke="#1A1410" stroke-width="1"/>
+    <path id="ribbonBack" fill="#29567A"/><path id="ribbonFront" fill="#4385B1"/><path id="ribbonEdge" fill="none" stroke="#0D2A44" stroke-width="0.8" stroke-linejoin="round"/><!-- the bookmark (see drawRibbon), tied inside the bottom step -->
+    <path d="M290 466Q340 474.59 390 466V473Q340 482.11 290 473Z" fill="#3B2A24"/><path d="M362 469.46L369 468.85L376 468.07L383 467.12L390 466L390 473L383 474.19L376 475.19L369 476.02L362 476.67Z" fill="#1F1512"/><path d="M290 466Q340 474.59 390 466V473Q340 482.11 290 473Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="#3B2A24"/><path d="M367.72 446.5L376.54 445.88L385.36 445.09L394.18 444.13L403 443L403 467L394.18 468.42L385.36 469.63L376.54 470.62L367.72 471.4Z" fill="#1F1512"/><path d="M277 443Q340 451.68 403 443V446.2Q340 455.18 277 446.2Z" fill="#140D0B"/><path d="M277 443Q340 451.68 403 443V467Q340 477.92 277 467Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/><path class="paperLit" d="M280 441.7Q340 449.85 400 441.7" fill="none" stroke="currentColor" stroke-width="1.4"/>`,
   },
   chochin: {
-    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], caps: [218, 441, 46], // pivot in the drawing's own units
+    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], knot: [95.4, 56.5], caps: [218, 441, 46], // pivot in the drawing's own units
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
     // the caps' faces that turn toward the paper catch the flame (class paperLit, coloured each frame), drawn behind it
-    back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V57.6" stroke="#C9B49C" stroke-width="0.8"/>
+    back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V55.6" stroke="#C9B49C" stroke-width="0.8"/>
       <ellipse class="paperLit" cx="95" cy="74" rx="18.6" ry="2" fill="currentColor"/><ellipse class="paperLit" cx="95" cy="168" rx="18.6" ry="2" fill="currentColor"/>
-      <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/><ellipse id="paperGlow" cx="95" cy="122" rx="52" ry="48" fill="url(#pg)"/>
-      <ellipse id="paperTint" cx="95" cy="122" rx="52" ry="48"/>`, 18),
-    front: MOCK(`<ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2" opacity="0.22"/>
+      <defs><clipPath id="bodyClip"><path d="${CHOCHIN.outline}"/></clipPath></defs><path d="${CHOCHIN.outline}" fill="#F3ECE2"/><path id="paperGlow" d="${CHOCHIN.outline}" fill="url(#pg)"/>
+      <path id="paperTint" d="${CHOCHIN.outline}"/>`, 18),
+    front: MOCK(`<path d="${CHOCHIN.outline}" fill="#F3ECE2" opacity="0.22"/>
+      <g fill="#A8967E" opacity="0.08" clip-path="url(#bodyClip)">${CHOCHIN.bands}</g><!-- the paper sinks in a little between wires -->
       <g fill="none" stroke="#C9BBA8" opacity="0.9"><path d="M70.1 79.9Q95 75.3 119.9 79.8" stroke-width="0.45"/><path d="M56.5 90.2Q95 86.5 133.5 89.8" stroke-width="0.6"/><path d="M49.1 99.8Q95 97.5 140.9 99.8" stroke-width="0.45"/><path d="M45.0 109.8Q95 109.1 145.0 110.0" stroke-width="0.45"/><path d="M43.3 120.3Q95 120.1 146.7 120.1" stroke-width="0.45"/><path d="M44.0 130.0Q95 131.6 146.0 129.9" stroke-width="0.45"/><path d="M47.1 140.0Q95 142.3 142.9 139.8" stroke-width="0.6"/><path d="M53.1 149.8Q95 153.9 136.9 149.9" stroke-width="0.45"/><path d="M63.5 159.8Q95 164.6 126.5 160.0" stroke-width="0.45"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below, each a little uneven -->
       <path d="M101.6 74L106.8 80 113.2 90 116.7 100 118.6 110 119.4 120 119.1 130 117.6 140 114.8 150 109.9 160 101.6 170" fill="none" stroke="#C9BBA8" stroke-width="0.4" stroke-linejoin="round" opacity="0.6"/><!-- the seam, a little way round the side so it curves like a meridian -->
       <!-- the caps: lacquered drums, cel-shaded. Their edges bow like the ribs; flat tones (lit lacquer and a dark side), a
            dark lip for their thickness, and an ink outline -->
-      <path d="M95 63.3V64.6" stroke="#2A1E1E" stroke-width="1.4"/><ellipse cx="95" cy="60.4" rx="2.4" ry="2.9" fill="none" stroke="#B8935A" stroke-width="0.8"/><path d="M93.3 59.2Q93.6 58 94.6 57.6" fill="none" stroke="#F0D9A6" stroke-width="0.4" stroke-linecap="round"/>
+      <path d="M95 63.3V64.6" stroke="#2A1E1E" stroke-width="1.4"/><ellipse cx="95" cy="60.4" rx="2.4" ry="2.9" fill="none" stroke="#B8935A" stroke-width="0.8"/><path d="M93.3 59.2Q93.6 58 94.6 57.6" fill="none" stroke="#F0D9A6" stroke-width="0.4" stroke-linecap="round"/><ellipse cx="95" cy="57.7" rx="1.1" ry="0.65" fill="none" stroke="#C9B49C" stroke-width="0.5"/><g id="knotTail"><path d="M95.4 56.5Q97.1 58.2 96.7 61.4" fill="none" stroke="#C9B49C" stroke-width="0.5" stroke-linecap="round"/></g><circle cx="95" cy="56.3" r="0.75" fill="#C9B49C" stroke="#7E6C56" stroke-width="0.25"/><!-- the string tied round the ring -->
       <path d="M76 66.5Q95 62.5 114 66.5V74Q95 70 76 74Z" fill="#46302F"/><path d="M103.0 64.85L105.8 65.14L108.5 65.51L111.2 65.96L114.0 66.50L114.0 74.00L111.2 73.46L108.5 73.01L105.8 72.64L103.0 72.35Z" fill="#22171A"/><path d="M76 72.6Q95 68.6 114 72.6V74Q95 70 76 74Z" fill="#1A1012"/>
       <path d="M76 66.5Q95 62.5 114 66.5V74Q95 70 76 74Z" fill="none" stroke="#140C0E" stroke-width="0.55" stroke-linejoin="round"/>
       <path class="paperLit" d="M77.5 74.4Q95 70.5 112.5 74.4" fill="none" stroke="currentColor" stroke-width="0.6"/>
