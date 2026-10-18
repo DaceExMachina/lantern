@@ -361,8 +361,10 @@ function mothFireflies(m, dt, s) {
 // The hover area sits on the moth's home, or on its landing spot with the lantern at rest, not on the moth, so it
 // holds still while the moth wanders or the lantern swings.
 function mothZones(m, needsMe) {
-  [m.zx, m.zy] = needsMe ? [m.perch[0] + 2 * m.size, m.perch[1] + 6 * m.size] : stretch(m.home);
-  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 40 : 48); // a landed moth's area covers the whole swing and a hop
+  // a landed moth rides the lantern exactly, so its area follows it and is only moth-sized: neighbours on the paper
+  // no longer overlap and steal each other's card
+  [m.zx, m.zy] = needsMe ? [m.x, m.y] : stretch(m.home);
+  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 22 : 48);
   // once it has landed, its fireflies back home get a hover area of their own with the same card
   if (m.flies) {
     m.flyZone ??= hoverArea(m, 'flies');
