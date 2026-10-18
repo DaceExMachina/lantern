@@ -182,7 +182,7 @@ final class LanternServer {
             guard let self else { return }
             switch state {
             case .ready:
-                print("Lantern lit at http://127.0.0.1:\(self.port)")
+                print("Lantern lit at http://127.0.0.1:\(l.port?.rawValue ?? self.port)") // port 0 takes any free one, which the tests use
                 if !self.started { self.started = true; self.begin() }
             case .failed: l.cancel(); self.retry()
             default: break

@@ -7,7 +7,6 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const net = require('net');
 const http = require('http');
 const { execFileSync, spawn } = require('child_process');
 
@@ -17,7 +16,6 @@ const BIN = path.join(tmp, 'lantern-server');
 test.before(() => execFileSync('swiftc', ['-Onone', '-o', BIN, ...fs.readdirSync(path.join(ROOT, 'app')).filter(f => f.endsWith('.swift') && f !== 'main.swift').map(f => 'app/' + f), 'test/server/main.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] }));
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
-const freePort = () => new Promise(done => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => done(port)); }); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
 // Polls `fn` until it returns something truthy and returns that, or throws `what` after `timeout` ms. Tests wait on the
 // condition they mean, never on a fixed sleep, so a slow or loaded machine only makes them slower, not red.
@@ -39,21 +37,15 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
     fs.writeFileSync(path.join(home, file), text);
   }
   prep(home);
-  // The port is free when picked but not held, so another process can take it first (the ephemeral range is shared with
-  // every client socket on the machine). The server then keeps retrying that port every 5 seconds, so a start that takes
-  // over 3 seconds (it normally takes ~30ms) is abandoned for a fresh port.
-  for (let attempt = 1; ; attempt++) {
-    const port = await freePort();
-    const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
-      TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
-    const child = spawn(BIN, [], { env, stdio: 'ignore' });
-    t.after(() => child.kill());
-    const base = `http://127.0.0.1:${port}`;
-    try { await until(() => fetch(base + '/icon.svg').then(() => true, () => false), 'the server to start', 3000); return base; } catch (e) {
-      child.kill();
-      if (attempt === 5) throw e;
-    }
-  }
+  // Port 0: the server takes whichever port is free and says which once it's listening, so no other process can take
+  // it first and a slow start only takes longer.
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
+    TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
+  const child = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+  t.after(() => child.kill());
+  let out = '';
+  child.stdout.on('data', chunk => out += chunk);
+  return until(() => out.match(/^Lantern lit at (\S+)$/m)?.[1], 'the server to start');
 }
 
 const post = (base, url, body) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
