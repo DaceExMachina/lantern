@@ -45,14 +45,14 @@ function playFlash(id) {
   const { width: w, height: h, left, top } = pill.getBoundingClientRect(), cx = left + w / 2, cy = top + h / 2;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const rand = seeded(hash(id + Date.now()));
-  const leaveAt = FLASH.gather + 700 + FLASH.hold; // everyone has landed by gather + 700
+  const leaveAt = FLASH.gather + 700 + FLASH.hold; // everyone has landed by gather + 700 (`settle`, below)
   const end = leaveAt + 500 + FLASH.leave;
 
-  // Spots on a jittered grid inside the pill (a stadium), close enough that the halos overlap into one solid light,
-  // and kept in from its edge by most of a halo so the halos draw the edge.
-  const step = radii[1] * 1.25, r = h / 2 - radii[1] * 0.6, half = w / 2 - h / 2, flies = [];
-  for (let y = cy - r; y <= cy + r; y += step) for (let x = cx - half - r; x <= cx + half + r; x += step) {
-    const spot = [x + (rand() - 0.5) * step * 0.6, y + (rand() - 0.5) * step * 0.6];
+  // Spots packed in rows (hexagonally, each row shifted half a step) 0.8 halo radii apart, out to the pill's edge, so the
+  // halos cover it solidly end to end.
+  const step = radii[1] * 0.8, r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, flies = [];
+  for (let row = 0, y = cy - r; y <= cy + r; row++, y += step * 0.866) for (let x = cx - half - r + (row % 2) * step / 2; x <= cx + half + r; x += step) {
+    const spot = [x + (rand() - 0.5) * step * 0.3, y + (rand() - 0.5) * step * 0.3];
     if (Math.hypot(Math.max(0, Math.abs(spot[0] - cx) - half), spot[1] - cy) > r) continue;
     // in from the nearer side mostly, from anywhere along its height, and back out to a side when they go
     const side = (spot[0] < cx) !== (rand() < 0.2) ? -radii[0] : W + radii[0], out = rand() < 0.5 ? -radii[0] : W + radii[0];
@@ -61,6 +61,11 @@ function playFlash(id) {
       lift: leaveAt + rand() * 500, go: FLASH.leave * (0.75 + rand() * 0.25), ph: rand() * 6.28 });
   }
 
+  // Once everyone has landed they brighten together: each halo eases up to its core's colour and opacity, so the pill
+  // glows as one light, then settles back a little through the hold, and dims to normal as each firefly leaves.
+  const settle = FLASH.gather + 700, ease = u => (1 - Math.cos(Math.PI * Math.max(0, Math.min(1, u)))) / 2;
+  const surgeAt = t => t < settle ? 0 : ease((t - settle) / 500) - 0.25 * ease((t - settle - 500) / 1500);
+  const surgeFill = new Map(); // halo colour by surge, in twentieths
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
@@ -73,19 +78,25 @@ function playFlash(id) {
       const t = performance.now() - t0;
       if (t >= end) { layer.remove(); return done(); }
       g.clearRect(0, 0, W, H);
+      const surge = surgeAt(t);
       for (const f of flies) {
-        let p, fade;
+        let p, fade, lit = surge;
         if (t < f.delay) continue;
         if (t < f.delay + f.arrive) { const u = (t - f.delay) / f.arrive; p = curve(f.from, f.c1, f.spot, (1 - Math.cos(Math.PI * u)) / 2); fade = Math.min(1, u * 3); }
         else if (t < f.lift) { p = [f.spot[0] + Math.sin(t * 0.0011 + f.ph) * 1.2, f.spot[1] + Math.cos(t * 0.0013 + f.ph) * 1.2]; fade = 1; } // a little hover
-        else { const u = Math.min(1, (t - f.lift) / f.go); p = curve(f.spot, f.c2, f.away, 1 - Math.cos(Math.PI * u / 2)); fade = 1 - u; }
-        fireflyLook(FLASH_COLOUR, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade).forEach(([fill, opacity], i) => {
+        else { const u = Math.min(1, (t - f.lift) / f.go); p = curve(f.spot, f.c2, f.away, 1 - Math.cos(Math.PI * u / 2)); fade = 1 - u; lit *= 1 - ease(u * 2); }
+        const look = fireflyLook(FLASH_COLOUR, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade), q = Math.round(lit * 20);
+        if (q) {
+          if (!surgeFill.has(q)) surgeFill.set(q, mix(look[1][0], look[2][0], q / 20));
+          look[1] = [surgeFill.get(q), look[1][1] + (look[2][1] - look[1][1]) * lit];
+        }
+        look.forEach(([fill, opacity], i) => {
           g.globalAlpha = opacity; g.fillStyle = fill;
           g.beginPath(); g.arc(p[0], p[1], radii[i], 0, 6.2832); g.fill();
         });
       }
-      // the name comes up once the pill has formed and goes as the swarm leaves
-      const text = String(Math.max(0, Math.min(1, (t - FLASH.gather - 300) / 700, 1 - (t - leaveAt) / 500)).toFixed(2));
+      // the name comes up on the brightened pill and goes as the swarm leaves
+      const text = String(Math.max(0, Math.min(1, (t - settle - 300) / 600, 1 - (t - leaveAt) / 500)).toFixed(2));
       if (text !== shown) pill.style.opacity = shown = text;
       requestAnimationFrame(draw);
     };
