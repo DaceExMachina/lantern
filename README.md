@@ -2,7 +2,7 @@
 
 A paper lantern that glows with your Claude Code sessions. Each session is a moth, and when one needs you, it lands on the lantern and the light turns violet.
 
-<p align="center"><img src="docs/lantern.png" width="420" alt="The book-page barrel lantern fully lit, with five session moths and their subagents circling it, a blue bookmark ribbon trailing below, and specks of dust in its glow"></p>
+<p align="center"><img src="docs/lantern.webp" width="420" alt="The book-page barrel lantern glowing warm with session moths and their PR fireflies around it. One moth lands on the paper and the light turns violet until it is answered and flies back to work."></p>
 
 Unofficial, not affiliated with Anthropic.
 
