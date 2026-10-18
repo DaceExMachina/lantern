@@ -82,10 +82,11 @@ function renderStats(j) {
     ['in flight', today.open ?? '–', 'open PRs your sessions own'],
     ['stale PRs', grave, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
   ];
-  const week = days.slice(0, -1).map(d => {
+  const week = days.slice(0, -1).map((d, i) => {
     const mini = slices(d, j.spans, j.gauges, 48), name = DAY_NAMES[new Date(d.start).getDay()];
-    return `<div class="day" title="${mini ? `${clock(mini.from)} to ${clock(mini.to)}` : 'nothing recorded'}"><span>${name}</span>
-      ${mini ? ribbon(mini, 120, 26) : '<i class="none"></i>'}<b>${pct(d.warmMoths)}</b></div>`;
+    return mini ? `<button class="day" data-day="${i}" title="${clock(mini.from)} to ${clock(mini.to)}: open the recap"><span>${name}</span>
+      ${ribbon(mini, 120, 26)}<b>${pct(d.warmMoths)}</b></button>`
+      : `<div class="day" title="nothing recorded"><span>${name}</span><i class="none"></i><b>–</b></div>`;
   }).join('');
   $('statsBody').innerHTML = `
     <div class="headline">${today.warmMoths == null ? '<span>No moths yet today. Your first session starts the day.</span>'
