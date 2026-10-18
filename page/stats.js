@@ -7,7 +7,8 @@ const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'S
 const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: '#3E3752' };
 const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', mark: '#D8CCE6' };
 
-const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// the day a time falls on (yyyy-MM-dd): a day starts at dayStart and is named for the date it starts on
+const dayKey = t => { const d = new Date(t), [h, m] = dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 // The ribbon's slices for one day: from the first session that day to `end` (now, or the last session's end).

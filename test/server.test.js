@@ -243,34 +243,72 @@ test('a running session the lantern missed is adopted with its process on the ne
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
-// The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
-// eight hours of sessions with two hours of waits (three answered: 10, 30 and 50 minutes; one that ended unanswered).
-test('stats: warm moths, warm lantern and response times', async t => {
-  const day = new Date(); day.setHours(0, 0, 0, 0); day.setDate(day.getDate() - 1);
-  const at = (h, m = 0) => new Date(day).setHours(h, m);
-  const min = 60 * 1000;
-  const db = path.join(tmp, `stats-${process.pid}.sqlite`);
-  const sql = `
+// A stats log (stats.sqlite) at the schema of version 2, holding the given spans: [kind, session, began, ended, data].
+function statsLog(spans) {
+  const db = path.join(tmp, `stats-${process.pid}-${Math.random()}.sqlite`);
+  const rows = spans.map(([kind, session, began, ended, data = {}]) => `('${kind}', ${session ? `'${session}'` : 'NULL'}, ${began}, ${ended}, '${JSON.stringify(data)}')`);
+  execFileSync('sqlite3', [db], { input: `
     CREATE TABLE spans (kind TEXT NOT NULL, session TEXT, began INTEGER NOT NULL, ended INTEGER, data TEXT NOT NULL DEFAULT '{}');
     CREATE TABLE events (time INTEGER NOT NULL, kind TEXT NOT NULL, session TEXT, data TEXT NOT NULL DEFAULT '{}');
     CREATE TABLE gauges (time INTEGER NOT NULL, alive INTEGER, working INTEGER, waiting INTEGER, snoozed INTEGER, fireflies INTEGER, agents INTEGER, strays INTEGER, graveyard INTEGER);
     CREATE TABLE achievements (id TEXT NOT NULL, day TEXT NOT NULL, time INTEGER NOT NULL, data TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (id, day));
     PRAGMA user_version = 2;
-    INSERT INTO spans (kind, session, began, ended, data) VALUES
-      ('server', NULL, ${at(10)}, ${at(20)}, '{}'),
-      ('violet', NULL, ${at(12)}, ${at(13)}, '{}'), ('violet', NULL, ${at(15)}, ${at(16)}, '{}'),
-      ('alive', 'a', ${at(10)}, ${at(14)}, '{}'), ('alive', 'b', ${at(14)}, ${at(18)}, '{}'),
-      ('waiting', 'a', ${at(11)}, ${at(11) + 10 * min}, '{"how":"answered"}'),
-      ('waiting', 'a', ${at(12)}, ${at(12) + 30 * min}, '{"how":"answered"}'),
-      ('waiting', 'b', ${at(15)}, ${at(15) + 50 * min}, '{"how":"answered"}'),
-      ('waiting', 'b', ${at(17, 30)}, ${at(18)}, '{"how":"ended"}');`;
-  execFileSync('sqlite3', [db], { input: sql });
-  const base = await serve(t, { 'data/stats.sqlite': fs.readFileSync(db) });
+    INSERT INTO spans (kind, session, began, ended, data) VALUES ${rows.join(', ')};` });
+  return fs.readFileSync(db);
+}
+// The start of the day before the current one, for days starting at `hour`.
+function yesterdayFrom(hour) {
+  const day = new Date(); day.setHours(hour, 0, 0, 0);
+  if (day > new Date()) day.setDate(day.getDate() - 1); // today's day hasn't started yet: it's still yesterday's
+  day.setDate(day.getDate() - 1);
+  return day;
+}
+
+// The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
+// eight hours of sessions with two hours of waits (three answered: 10, 30 and 50 minutes; one that ended unanswered).
+test('stats: warm moths, warm lantern and response times', async t => {
+  const day = yesterdayFrom(8); // days start at 8am unless settings say otherwise
+  const at = (h, m = 0) => new Date(day).setHours(h, m);
+  const min = 60 * 1000, answered = { how: 'answered' };
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([
+    ['server', null, at(10), at(20)],
+    ['violet', null, at(12), at(13)], ['violet', null, at(15), at(16)],
+    ['alive', 'a', at(10), at(14)], ['alive', 'b', at(14), at(18)],
+    ['waiting', 'a', at(11), at(11) + 10 * min, answered],
+    ['waiting', 'a', at(12), at(12) + 30 * min, answered],
+    ['waiting', 'b', at(15), at(15) + 50 * min, answered],
+    ['waiting', 'b', at(17, 30), at(18), { how: 'ended' }],
+  ]) });
   const stats = await (await fetch(base + '/stats')).json();
   const y = stats.days.at(-2); // yesterday: days run oldest first and end with today
   assert.deepStrictEqual(
     { warmMoths: y.warmMoths, warmLantern: y.warmLantern, medianWait: y.medianWait, slowWait: y.slowWait, waits: y.waits, answered: y.answered },
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });
+});
+
+// A day runs from settings.dayStart to the next, so an hour of work just before it lands on the day before.
+test('stats: days start at dayStart', async t => {
+  const start = +yesterdayFrom(6), hour = 3600000;
+  const base = await serve(t, { 'data/settings.json': '{"dayStart": "06:00"}', 'data/stats.sqlite': statsLog([
+    ['alive', 'late', start - 2 * hour, start - hour], // 4am to 5am: still the day before's
+    ['alive', 'early', start + hour, start + 2 * hour], // 7am to 8am
+  ]) });
+  const { days } = await (await fetch(base + '/stats')).json();
+  assert.deepStrictEqual(days.slice(-3, -1).map(d => [d.start, d.mothMs]), [[start - 24 * hour, hour], [start, hour]]);
+});
+
+// Quiet from turns quiet hours on by itself, until quietEnd, as if the moon were pressed; turned off by hand that night,
+// they stay off.
+test('quiet from turns quiet hours on, and leaves them off once ended by hand', async t => {
+  const base = await serve(t);
+  const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const hour = 3600000, from = new Date(Date.now() - hour), end = new Date(Date.now() + hour);
+  const until = new Date(end); until.setSeconds(0, 0);
+  await post(base, '/settings', { quietFrom: hhmm(from), quietEnd: hhmm(end) });
+  assert.strictEqual((await snapshot(base)).settings.quietUntil, +until);
+  await post(base, '/settings', { quietUntil: 0 }); // the moon, pressed to end it
+  await post(base, '/settings', { quietFrom: hhmm(from) });
+  assert.ok((await snapshot(base)).settings.quietUntil <= Date.now(), 'quiet hours came back on after being turned off');
 });
 
 // A snooze logs a 'snoozed' span for the part of the wait it covered: from the snooze to the end of the wait. The server

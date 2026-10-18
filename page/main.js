@@ -17,7 +17,13 @@ es.addEventListener('settings', e => {
   if (STYLES[key] && STYLES[key] !== style) applyStyle(key);
   const quietStarted = recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   quietUntil = st.quietUntil || 0;
-  if (/^\d{1,2}:\d{2}$/.test(st.quietEnd || '')) quietEnd = st.quietEnd;
+  const isTime = /^\d{1,2}:\d{2}$/, hhmm = s => s.padStart(5, '0');
+  if (isTime.test(st.quietEnd || '')) quietEnd = st.quietEnd;
+  if (isTime.test(st.dayStart || '')) dayStart = st.dayStart;
+  $('quietEnd').value = hhmm(quietEnd); $('dayStart').value = hhmm(dayStart);
+  $('quietFromOn').checked = isTime.test(st.quietFrom || '');
+  if ($('quietFromOn').checked) $('quietFrom').value = hhmm(st.quietFrom);
+  paintRibbon(st.ribbon);
   const until = quietEndLabel();
   $('quiet').title = `Treat everything as snoozed until ${until}`;
   $('quietUntil').textContent = until;
@@ -51,6 +57,17 @@ $('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
   post('/settings', { lanternText });
 };
+// times of day: quiet from (off unless ticked; picking a time ticks it), quiet until, and when a stats day starts
+for (const id of ['dayStart', 'quietEnd']) $(id).onchange = e => e.target.value && post('/settings', { [id]: e.target.value });
+$('quietFrom').onchange = e => { if (e.target.value) { $('quietFromOn').checked = true; post('/settings', { quietFrom: e.target.value }); } };
+$('quietFromOn').onchange = e => post('/settings', { quietFrom: e.target.checked ? $('quietFrom').value || '22:00' : null });
+for (const name of Object.keys(RIBBONS)) {
+  const b = document.createElement('button');
+  b.dataset.name = name; b.title = name; b.setAttribute('aria-label', `${name} ribbon`); b.style.setProperty('--c', RIBBONS[name][0]);
+  b.onclick = () => { paintRibbon(name); post('/settings', { ribbon: name }); };
+  $('ribbons').append(b);
+}
+paintRibbon('cerulean'); // until the server says which
 $('staleToggle').onchange = e => {
   staleOn = e.target.checked;
   post('/settings', { stale: staleOn });

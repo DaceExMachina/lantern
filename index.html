@@ -31,7 +31,22 @@
   #help b { color: #F0E8FF; font-weight: 600; }
   #help .key { white-space: nowrap; }
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
-  #menu select { align-self: stretch; }
+  /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
+  #menu { padding-top: 7px; }
+  #menu:popover-open { gap: 0; }
+  #menu > label { display: flex; padding: 5px 0; }
+  #menu .time { justify-content: space-between; }
+  #menu label:has(#quietFromOn:not(:checked)) #quietFrom { opacity: .45; }
+  #menu select { align-self: stretch; margin: 5px 0; }
+  #menu #gh, #menu #help { margin-top: 5px; }
+  #menu .ribbon { display: flex; align-items: center; gap: 6px; }
+  #menu .ribbon.unavailable { opacity: .4; }
+  #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
+  #ribbons button { all: unset; flex: 1; display: flex; justify-content: center; padding: 5px 0; cursor: pointer; }
+  #ribbons button::before { content: ''; width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
+  #ribbons button[aria-pressed=true]::before { box-shadow: 0 0 0 1.5px #1E1930, 0 0 0 2.6px #F0E8FF; }
+  #ribbons button:focus-visible::before { outline: 1px solid #B9A8FF; outline-offset: 4px; }
+  #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
   #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
@@ -153,7 +168,7 @@
   #card a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
   #card a:hover { color: #F0E8FF; border-color: #B9A8FF; }
   #card .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
-  select { font: inherit; color: inherit; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
+  select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
   #card { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
@@ -206,6 +221,10 @@
     <label class="notify"><input type="checkbox" id="notify"> notify me when a session needs me</label>
     <label><input type="checkbox" id="staleToggle"> show stale PRs</label>
     <label><input type="checkbox" id="textToggle"> show session text</label>
+    <div class="ribbon"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour"></span></div>
+    <label class="time"><span><input type="checkbox" id="quietFromOn"> quiet from</span><input type="time" id="quietFrom" value="22:00"></label>
+    <label class="time">quiet until <input type="time" id="quietEnd" value="08:00"></label>
+    <label class="time">day starts at <input type="time" id="dayStart" value="08:00"></label>
     <select id="style" aria-label="Lantern style"></select>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
@@ -214,7 +233,8 @@
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
       <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>right-click</b> to snooze it.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
-      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything until <span id="quietUntil">8am</span>.</p>
+      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything until <span id="quietUntil">8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
+      <p>A day in your stats starts at <b>day starts at</b>, so late nights count toward the day before.</p>
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
     </details>
   </div>

@@ -7,8 +7,10 @@
 //          stale (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
 //          singed moth) or compact.
 //   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays, stale): counts every five minutes.
-//   achievements (id, day, time, data): badges, good and cheeky, at most one of each per local day (day is yyyy-MM-dd).
+//   achievements (id, day, time, data): badges, good and cheeky, at most one of each per day (day is yyyy-MM-dd).
 //          Their names and blurbs live in page/stats.js; this side only decides when one is earned.
+// A day runs from dayStart (settings.dayStart, 8am unless changed) to the next, and is named for the date it starts on,
+// so late-night work stays with the day it belongs to.
 // PRAGMA user_version is the schema version, for later migrations. Writes run on their own queue and give up quietly,
 // so a missing or broken database never slows or stops the lantern.
 import Foundation
@@ -22,6 +24,7 @@ final class Stats {
     private let file: String
     private var earned = Set<String>() // "id day" already in the table, so live checks don't write on every broadcast
     var onEarn: (String) -> Void = { _ in } // a badge just earned (its id), on the main queue: the server tells open pages
+    var dayStart = 8 * 60 // when a day starts, in minutes after midnight (settings.dayStart)
 
     init(_ file: String) { self.file = file }
 
@@ -166,7 +169,7 @@ final class Stats {
                         "merged": merged[d], "open": value(end, 3) ?? NSNull(), "stale": value(end, 4) ?? NSNull(),
                         "staleChange": value(end, 4).flatMap { e in value(start, 4).map { e - $0 } } ?? NSNull()]
             }
-            let achievements = self.run("SELECT id, day, time FROM achievements WHERE time >= ?1 OR day >= ?2 ORDER BY time", [from, dayKey(from)])
+            let achievements = self.run("SELECT id, day, time FROM achievements WHERE time >= ?1 OR day >= ?2 ORDER BY time", [from, self.dayKey(from)])
                 .map { [$0[0] ?? "", $0[1] ?? "", num($0[2]) ?? 0] as [Any] }
             // every badge ever earned: how many times, and the last day
             let tally = self.run("SELECT id, count(*), max(day) FROM achievements GROUP BY id").reduce(into: JSON()) { $0[$1[0] ?? ""] = [Int($1[1] ?? "") ?? 0, $1[2] ?? ""] }
@@ -196,7 +199,7 @@ final class Stats {
             let t = now(), week = 7 * 86400000.0
             let streaks = Dictionary(self.streaks(warmGoal).map { ($0.day, $0.streak) }) { $1 }
             for (i, (f, e)) in days.enumerated() {
-                let day = dayKey(f), over = i < days.count - 1 // a finished day can be judged as a whole
+                let day = self.dayKey(f), over = i < days.count - 1 // a finished day can be judged as a whole
                 let yes = { (sql: String) in (self.run(sql, [f, e, t]).first?[0] ?? "0") != "0" } // ?1 day start, ?2 day end, ?3 now
                 var got: [String] = []
                 // Purple Rain: the lantern violet for a whole hour. Ghosted: a wait of three hours or more (not one snoozed for good).
@@ -270,13 +273,13 @@ final class Stats {
 
     /// Each day with sessions, oldest first, and the run of warm days (warm moths at or over the goal) ending on it. Days
     /// without sessions (a weekend off) don't break a streak. ponytail: a span counts toward the day it began, so a session
-    /// running past midnight lands on the day before; per-day clipping if that ever matters.
+    /// running past the day's start lands on the day before; per-day clipping if that ever matters.
     private func streaks(_ goal: Double) -> [(day: String, streak: Int)] {
         var streak = 0
         return run("""
-            SELECT date(began / 1000, 'unixepoch', 'localtime') AS d, sum(iif(kind = 'alive', coalesce(ended, ?1) - began, 0)),
+            SELECT date(began / 1000, 'unixepoch', 'localtime', ?2) AS d, sum(iif(kind = 'alive', coalesce(ended, ?1) - began, 0)),
               sum(iif(kind = 'waiting', coalesce(ended, ?1) - began, 0)) FROM spans WHERE kind IN ('alive', 'waiting') GROUP BY d ORDER BY d
-            """, [now()]).compactMap { r in
+            """, [now(), "-\(dayStart) minutes"]).compactMap { r in
             guard let day = r[0], let alive = Double(r[1] ?? ""), alive > 0 else { return nil }
             streak = 100 * (1 - (Double(r[2] ?? "") ?? 0) / alive) >= goal ? streak + 1 : 0
             return (day, streak)
@@ -291,6 +294,15 @@ final class Stats {
             sqlite3_close(db)
             db = nil
         }
+    }
+
+    /// The day a time falls on, as yyyy-MM-dd.
+    func dayKey(_ ms: Double) -> String { dayFormat.string(from: lastAt(dayStart, Date(timeIntervalSince1970: ms / 1000))) }
+    /// Today and the `back` days before it as [start, end) in ms, oldest first; today ends now.
+    func localDays(_ back: Int) -> [(Double, Double)] {
+        let today = lastAt(dayStart, Date()), ms = { (d: Date) in (d.timeIntervalSince1970 * 1000).rounded() }
+        let day = { (i: Int) in Calendar.current.date(byAdding: .day, value: -i, to: today)! } // the same clock time, across clock changes
+        return (0...back).reversed().map { i in (ms(day(i)), i == 0 ? now() : ms(day(i - 1))) }
     }
 
     private func write(_ sql: String, _ args: [Any?]) { queue.async { self.run(sql, args) } }
@@ -325,13 +337,14 @@ final class Stats {
 }
 
 private let dayFormat: DateFormatter = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX"); return f }()
-/// The local day a time falls on, as yyyy-MM-dd.
-func dayKey(_ ms: Double) -> String { dayFormat.string(from: Date(timeIntervalSince1970: ms / 1000)) }
-/// Today and the `back` local days before it as [start, end) in ms, oldest first; today ends now.
-func localDays(_ back: Int) -> [(Double, Double)] {
-    let cal = Calendar.current, today = cal.startOfDay(for: Date()), ms = { (d: Date) in (d.timeIntervalSince1970 * 1000).rounded() }
-    return (0...back).reversed().map { i in
-        let day = cal.date(byAdding: .day, value: -i, to: today)!
-        return (ms(day), i == 0 ? now() : ms(cal.date(byAdding: .day, value: 1, to: day)!))
-    }
+/// A time of day from settings ("HH:MM", local) as minutes after midnight, or nil if it isn't one.
+func clockMinutes(_ v: Any?) -> Int? {
+    guard let s = v as? String, Re("^([01]?[0-9]|2[0-3]):[0-5][0-9]$").test(s) else { return nil }
+    let p = s.split(separator: ":").compactMap { Int($0) }
+    return p[0] * 60 + p[1]
+}
+/// The last moment at or before `t` when the clock read `minutes` after midnight.
+func lastAt(_ minutes: Int, _ t: Date) -> Date {
+    let cal = Calendar.current, d = cal.date(bySettingHour: minutes / 60, minute: minutes % 60, second: 0, of: t)!
+    return d <= t ? d : cal.date(byAdding: .day, value: -1, to: d)!
 }

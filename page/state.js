@@ -5,8 +5,9 @@ const moths = new Map(); // key -> moth
 let seenWaiting = new Set(), nextUp = 0;
 // ---- state from server -------------------------------------------------------
 let raw = [], quietUntil = 0, reviews = [];
-// from settings.json: when quiet hours end ("HH:MM"), and which agent types count as supervisors (medium moths)
-let quietEnd = '08:00', supervisor = /supervisor|orchestrat/i;
+// from settings.json: when quiet hours end and when a stats day starts ("HH:MM"), and which agent types count as
+// supervisors (medium moths)
+let quietEnd = '08:00', dayStart = '08:00', supervisor = /supervisor|orchestrat/i;
 const quietEndLabel = () => { const [h, m] = quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.

@@ -79,11 +79,13 @@ Only plain sentences make it onto the paper. Lantern drops anything with code, a
 
 ## Picking a lantern
 
-The settings menu (the sliders icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, and GitHub.
+The settings menu (the sliders icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), the quiet hours and day start times, and GitHub.
 
 ## Stats, badges and the recap
 
 The chart button beside the settings button opens your stats, read from the app's event log.
+
+A day in the stats starts at 8am, or whatever "day starts at" in the settings menu says, so work past midnight still counts toward the day it belongs to. A day running from 8am Saturday to 8am Sunday is Saturday. Everything that counts days goes by it: the panel's today and week, badges, warm streaks, and the recap's today and yesterday.
 
 The headline is warm moths: the share of your sessions' time not spent waiting on you. A snoozed wait still counts as waiting. Below it you'll find how long the lantern stayed warm, how quickly you answered, how much waiting you snoozed, PRs merged and in flight, and stale PRs.
 
@@ -97,7 +99,9 @@ The daily recap opens by itself when quiet hours start. If you miss that, it sho
 
 ## Quiet hours
 
-"quiet" in the footer snoozes everything on every display until 8am, or your `quietEnd` (see [settings](setup.md#settings)). Click it again to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
+The moon in the footer snoozes everything on every display until 8am, or the time in "quiet until" in the settings menu. Click it again to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
+
+To have quiet come on by itself every night, tick "quiet from" in the settings menu and pick a time. It works with no window open, since the app does it. If quiet is already on by then, it stays as it is, and if you end it early, it stays off until the next night.
 
 ## The app
 
