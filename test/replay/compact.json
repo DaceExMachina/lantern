@@ -1,0 +1,178 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Done."
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "PreCompact",
+      "cwd": "/work/s1",
+      "trigger": "manual"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Compacting the conversation",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Done."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "working",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "PostCompact",
+      "cwd": "/work/s1",
+      "trigger": "manual"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Done."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "idle",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s2"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s2",
+      "last_assistant_message": "Done."
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "PreCompact",
+      "cwd": "/work/s2",
+      "trigger": "auto"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "PostCompact",
+      "cwd": "/work/s2",
+      "trigger": "auto"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Done."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "idle",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": 0
+        },
+        {
+          "activity": "",
+          "cwd": "/work/s2",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Done."
+            ]
+          },
+          "id": "s2",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

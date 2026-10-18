@@ -1,0 +1,122 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "I compared both options.\n\n**Blocker:** Postgres or SQLite?\n\n**You:** pick a database"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s2"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s2",
+      "last_assistant_message": "The tests pass. Want me to open the PR?"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s3",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s3"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s3",
+      "hook_event_name": "PermissionRequest",
+      "cwd": "/work/s3",
+      "tool_name": "Bash"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [
+              "Postgres or SQLite?"
+            ],
+            "you": [
+              "pick a database"
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Asks: Postgres or SQLite?",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        },
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s2",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [
+              "Want me to open the PR?"
+            ],
+            "you": [
+              "The tests pass. Want me to open the PR?"
+            ]
+          },
+          "id": "s2",
+          "last": "<time>",
+          "note": "Asks: Want me to open the PR?",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        },
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s3",
+          "error": false,
+          "id": "s3",
+          "last": "<time>",
+          "note": "Wants permission to use Bash",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

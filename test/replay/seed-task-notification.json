@@ -1,0 +1,40 @@
+[
+  {
+    "expect": {
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "try it"
+            ]
+          },
+          "id": "00000001-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-1",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "id": "00000002-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "",
+          "project": "-work-2",
+          "started": "<time>",
+          "state": "working",
+          "subagents": [],
+          "unconfirmed": true
+        }
+      ]
+    }
+  }
+]

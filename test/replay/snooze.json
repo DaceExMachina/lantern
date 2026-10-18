@@ -1,0 +1,187 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Done."
+    }
+  },
+  {
+    "post": "/snooze",
+    "body": {
+      "id": "s1",
+      "snoozed": true
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Done."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": true,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Done again."
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Done again."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "post": "/snooze",
+    "body": {
+      "id": "s1",
+      "snoozed": "always"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Still done."
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forGood": true,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Still done."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": true,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  },
+  {
+    "post": "/snooze",
+    "body": {
+      "id": "s1",
+      "snoozed": false
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Still done."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

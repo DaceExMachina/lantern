@@ -1,0 +1,23 @@
+[
+  {
+    "post": "/settings",
+    "body": {
+      "style": "chochin"
+    }
+  },
+  {
+    "post": "/settings",
+    "body": {
+      "quietUntil": 4102444800000
+    }
+  },
+  {
+    "expect": {
+      "sessions": [],
+      "settings": {
+        "quietUntil": "<time>",
+        "style": "chochin"
+      }
+    }
+  }
+]

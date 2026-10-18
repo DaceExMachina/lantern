@@ -1,0 +1,128 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "SessionStart",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "cwd": "/work/s1",
+          "id": "s1",
+          "last": "<time>",
+          "started": "<time>",
+          "state": "idle",
+          "subagents": [],
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1",
+      "prompt": "Fix the login bug"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "PreToolUse",
+      "cwd": "/work/s1",
+      "tool_name": "Bash",
+      "tool_input": {
+        "description": "Run the tests",
+        "command": "npm test"
+      }
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Run the tests",
+          "cwd": "/work/s1",
+          "error": false,
+          "id": "s1",
+          "last": "<time>",
+          "note": "",
+          "prompt": "Fix the login bug",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "working",
+          "subagents": [],
+          "tasks": [],
+          "ticks": 1,
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "PostToolUse",
+      "cwd": "/work/s1",
+      "tool_name": "Bash"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Fixed it in [lantern#7](https://github.com/me/lantern/pull/7).\n\n**You:** review [lantern#7](https://github.com/me/lantern/pull/7)"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Run the tests",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [
+              {
+                "label": "lantern#7",
+                "url": "https://github.com/me/lantern/pull/7"
+              }
+            ],
+            "questions": [],
+            "you": [
+              "review ",
+              {
+                "label": "lantern#7",
+                "url": "https://github.com/me/lantern/pull/7"
+              }
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Finished its turn",
+          "prompt": "Fix the login bug",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "ticks": 1,
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

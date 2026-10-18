@@ -1,0 +1,56 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s2",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s2"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "SubagentStart",
+      "cwd": "/work/s1",
+      "agent_id": "a1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "SessionEnd",
+      "cwd": "/work/s1"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s2",
+          "error": false,
+          "id": "s2",
+          "last": "<time>",
+          "note": "",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "working",
+          "subagents": [],
+          "tasks": [],
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  }
+]

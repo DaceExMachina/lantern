@@ -1,0 +1,49 @@
+[
+  {
+    "expect": {
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Started a side session."
+            ]
+          },
+          "id": "00000003-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-3",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "nothing"
+            ]
+          },
+          "id": "00000004-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "parent": "00000003-0000-4000-8000-000000000000",
+          "project": "-work-4",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]
