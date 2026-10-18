@@ -360,6 +360,7 @@ function mothFireflies(m, dt, s) {
   m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);
   const end = [...m.flies.values()].find(f => f.gone === undefined && f.x !== undefined); // the line ends on one firefly, the oldest
   const tied = m.wasLanded && !!end;
+  for (const f of m.flies.values()) f.near = tied && f === end;
   if (tied) {
     const hx = end.x, hy = end.y;
     if (m.flyGrad) { put(m.flyGrad, 'x1', hx.toFixed(1)); put(m.flyGrad, 'y1', hy.toFixed(1)); put(m.flyGrad, 'x2', m.x.toFixed(1)); put(m.flyGrad, 'y2', m.y.toFixed(1)); }
