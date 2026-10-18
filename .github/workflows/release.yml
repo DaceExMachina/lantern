@@ -1,12 +1,14 @@
-# Every night, if anything the app ships has changed on main since the latest release, cut the next patch release
-# with GitHub's generated notes and attach Lantern.zip. Run it by hand from the Actions tab to release right away.
-# A dry run, or a run on any branch but main, builds the zip and publishes nothing.
+# One-click release: Actions > release > Run workflow bumps the version, creates the release with GitHub's
+# generated notes, and attaches Lantern.zip. A dry run, or a run on any branch but main, builds the zip and publishes nothing.
 name: release
 on:
-  schedule:
-    - cron: '0 9 * * *'
   workflow_dispatch:
     inputs:
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       dry_run:
         description: Build the zip but don't publish a release
         type: boolean
@@ -26,17 +28,17 @@ jobs:
       - id: next
         run: |
           last=$(git tag -l 'v*' --sort=-v:refname | head -1)
-          # what app/build.sh puts in the app; docs, tests and tooling don't need a release
-          if git diff --quiet "$last" HEAD -- app page index.html 'icon*'; then
-            echo "Nothing the app ships has changed since $last"
-            exit 0
-          fi
-          tag=${last%.*}.$((${last##*.} + 1))
+          IFS=. read -r major minor patch <<< "${last#v}"
+          case $BUMP in
+            major) tag=v$((major + 1)).0.0 ;;
+            minor) tag=v$major.$((minor + 1)).0 ;;
+            *) tag=v$major.$minor.$((patch + 1)) ;;
+          esac
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "publish=$PUBLISH" >> "$GITHUB_OUTPUT"
-          echo "Changes since $last, so the next release is $tag (publish: $PUBLISH)"
-          git diff --stat "$last" HEAD -- app page index.html 'icon*'
+          echo "$last to $tag (publish: $PUBLISH)"
         env:
+          BUMP: ${{ inputs.bump }}
           PUBLISH: ${{ github.ref == 'refs/heads/main' && inputs.dry_run != true }}
       - if: steps.next.outputs.publish == 'true'
         run: gh release create "$TAG" --target "$GITHUB_SHA" --title "Lantern ${TAG#v}" --generate-notes
@@ -46,7 +48,6 @@ jobs:
   # a release made with GITHUB_TOKEN doesn't fire app.yml's release event, so call it directly
   app:
     needs: release
-    if: needs.release.outputs.tag
     uses: ./.github/workflows/app.yml
     with:
       tag: ${{ needs.release.outputs.publish == 'true' && needs.release.outputs.tag || '' }}

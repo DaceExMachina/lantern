@@ -1,4 +1,4 @@
-# Publishing a GitHub release builds Lantern.app and attaches it as Lantern.zip (release.yml calls it for nightly releases).
+# Publishing a GitHub release builds Lantern.app and attaches it as Lantern.zip (release.yml calls it for one-click releases).
 # It's signed ad hoc, with no Developer ID or notarization, so the first launch needs System Settings > Privacy & Security >
 # Open Anyway.
 name: Lantern.app
