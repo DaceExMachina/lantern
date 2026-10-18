@@ -34,19 +34,23 @@ function measureBands() {
 // A long ribbon bookmark (style.ribbon: where it's tied, in the lantern's own units). A short chain of points under gravity
 // and a light breeze, pinned at the top and held at fixed spacing, so it trails the sway and settles. It twists along its
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
-const BOOKMARK = { n: 11, seg: 9.5, half: 4.6, gravity: 700 };
+const BOOKMARK = { n: 13, half: 4.6, gravity: 700 };
+// One wind for the scene, in the sway's degrees: the ribbon feels it as it blows, the lantern swings with it a moment later.
+const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
 /** @type {{x: number, y: number, px: number, py: number, vx: number, vy: number}[]} */
 let ribbonPts = [];
 let ribbonFor;
 function drawRibbon(dt, s, rot, rad, top) {
-  const [ax, ay] = rot(...style.ribbon), { n, seg, half, gravity } = BOOKMARK;
+  const [ax, ay] = rot(...style.ribbon), { n, half, gravity } = BOOKMARK;
+  // long, but never past the bottom of the window: most of the room below the knot, within limits
+  const floor = VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620, seg = Math.min(260, Math.max(60, (floor - style.ribbon[1]) * 0.85)) / (n - 1);
   if (ribbonFor !== style) { ribbonFor = style; ribbonPts = Array.from({ length: n }, (_, i) => ({ x: ax, y: ay + i * seg, px: 0, py: 0, vx: 0, vy: 0 })); }
   const pts = ribbonPts, steps = Math.ceil(dt * 120), h = dt / steps, keep = Math.pow(0.5, h); // keep: air drag
   for (let k = 0; k < steps; k++) {
     for (const [i, p] of pts.entries()) {
       p.px = p.x; p.py = p.y;
       if (i === 0) { p.x = ax; p.y = ay; continue; }
-      p.vx += Math.sin(s * 0.5 + i * 0.3) * 18 * h; p.vy += gravity * h;
+      p.vx += (GUST(s) * 70 + Math.sin(s * 2.3 + i * 0.7) * 12) * i / (n - 1) * h; p.vy += gravity * h; // the wind, strongest at the free end
       p.x += p.vx * h; p.y += p.vy * h;
     }
     for (let it = 0; it < 4; it++) for (let i = 1; i < n; i++) { // the pinned end never moves, so the first link pulls only the second point
@@ -91,14 +95,14 @@ function frame(t) {
   const pulse = 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4));
   const flick = 1 + wobble(s * 1.6, 3) * 0.06;
 
-  // sway on the string; anything attached to the lantern goes through rot()
+  // sway on the string, pushed by the wind (GUST) a moment after it blows; anything attached to the lantern goes through rot()
   // swing from the top of the window, with the angle scaled so the lantern moves sideways as much as it did hung at y=20
-  const top = VIEW.top, sway = (Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4) * 310 / (330 - top), rad = sway * Math.PI / 180;
+  const top = VIEW.top, sl = s - LAG, sway = -GUST(sl) * 310 / (330 - top), rad = sway * Math.PI / 180;
   const rot = (px, py) => [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
   put($('lantern'), 'transform', `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
-  if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
+  if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(dt, s, rot, rad, top);
-  if (style.knot) put($('knotTail'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.5) * 5 + Math.sin(s * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
+  if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
   const size = 0.3 + 0.7 * Math.max(level, cool * 0.45);
