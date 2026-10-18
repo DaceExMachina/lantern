@@ -76,13 +76,6 @@
   #recap dl { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   #recap dd { font-size: 15px; }
   #recap .stars { display: block; width: 100%; height: auto; }
-  #goals { display: flex; flex-direction: column; gap: 4px; }
-  #goals h4 { margin-bottom: 0; }
-  #goals label { cursor: default; flex-wrap: wrap; gap: 4px 6px; }
-  #goals input { width: 4.2em; font: inherit; color: #F5E9FF; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 1px 5px; }
-  #goals input::placeholder { color: #6B5C88; }
-  #goals span { color: #8F7FA6; }
-  #goals span.met { color: #FFC266; }
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
   #status .warm { color: #8F7FA6; }
@@ -203,11 +196,6 @@
     </details>
   </div>
   <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today <button id="todayRecap" class="link">recap</button></h3><div id="statsBody"><p class="dim">Reading the log…</p></div>
-    <section id="goals" aria-label="Goals"><h4>Goals</h4>
-      <label>Fireflies in flight at most <input id="goal-fireflies" type="number" min="0" placeholder="off"> <span id="goalNow-fireflies"></span></label>
-      <label>Answer within <input id="goal-answer" type="number" min="0" placeholder="off"> min (median) <span id="goalNow-answer"></span></label>
-      <label>Warm moths at least <input id="goal-warm" type="number" min="0" max="100" placeholder="off"> % <span id="goalNow-warm"></span></label>
-    </section>
     <div id="statsWeek"></div></div>
   <div id="recap" class="flyup" popover aria-label="Recap"></div>
 </footer>

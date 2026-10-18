@@ -24,7 +24,6 @@ es.addEventListener('settings', e => {
   recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();
   staleOn = st.graveyard !== false; $('staleToggle').checked = staleOn;
-  goals = st.goals || {}; renderGoals();
   sync();
 });
 setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
@@ -84,7 +83,6 @@ box.onchange = () => {
 
 // the stats panel reads the log when it opens, and again every minute while it stays open
 let statsTimer;
-for (const key of Object.keys(GOALS)) $('goal-' + key).onchange = e => setGoal(key, e.target.value);
 $('stats').addEventListener('toggle', e => {
   clearInterval(statsTimer);
   if (e.newState === 'open') { loadStats(); statsTimer = setInterval(loadStats, MIN); }
