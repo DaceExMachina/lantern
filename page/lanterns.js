@@ -88,7 +88,7 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
 const BARREL = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350, half: _y => BARREL.r,
   light: { cx: 340, cy: 340, rx: 88, ry: 165 } };
 BARREL.ribs = Array.from({ length: 20 }, (_, i) => BARREL.top + (BARREL.bottom - BARREL.top) * i / 19);
-BARREL.gap = BARREL.ribs[1] - BARREL.ribs[0]; BARREL.lines = 2; BARREL.shown = 6;
+BARREL.gap = BARREL.ribs[1] - BARREL.ribs[0]; BARREL.lines = 2; BARREL.shown = 8;
 const ODAWARA = SUNKEN(BARREL.cx, BARREL.half, BARREL.ribs, 1.2, BARREL.bow);
 // the chōchin, in its mockup units: round (a little wider than tall), its wires wider apart and bowing away from the
 // middle, so it sinks in less
