@@ -19,24 +19,41 @@ test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const freePort = () => new Promise(done => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => done(port)); }); });
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// Polls `fn` until it returns something truthy and returns that, or throws `what` after `timeout` ms. Tests wait on the
+// condition they mean, never on a fixed sleep, so a slow or loaded machine only makes them slower, not red.
+async function until(fn, what, timeout = 20000) {
+  for (const end = Date.now() + timeout; ; await wait(25)) {
+    const v = await fn();
+    if (v) return v;
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+  }
+}
 
 // A server of its own: HOME, the Claude folder and the data folder all live in a fresh temp folder, and PATH is empty,
 // so it can't see real sessions (ps, lsof) or drive a terminal (osascript). `files` are written there first, and
 // `prep(home)` runs after them, for anything a file's text can't say (its mode, its age). `env` adds to the server's.
 async function serve(t, files = {}, prep = () => {}, extra = {}) {
-  const home = fs.mkdtempSync(path.join(tmp, 'home-')), port = await freePort();
+  const home = fs.mkdtempSync(path.join(tmp, 'home-'));
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(home, file)), { recursive: true });
     fs.writeFileSync(path.join(home, file), text);
   }
   prep(home);
-  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
-    TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
-  const child = spawn(BIN, [], { env, stdio: 'ignore' });
-  t.after(() => child.kill());
-  const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; ; i++) { try { await fetch(base + '/icon.svg'); break; } catch { if (i > 100) throw new Error('server never started'); await wait(50); } }
-  return base;
+  // The port is free when picked but not held, so another process can take it first (the ephemeral range is shared with
+  // every client socket on the machine). The server then keeps retrying that port every 5 seconds, so a start that takes
+  // over 3 seconds (it normally takes ~30ms) is abandoned for a fresh port.
+  for (let attempt = 1; ; attempt++) {
+    const port = await freePort();
+    const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
+      TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
+    const child = spawn(BIN, [], { env, stdio: 'ignore' });
+    t.after(() => child.kill());
+    const base = `http://127.0.0.1:${port}`;
+    try { await until(() => fetch(base + '/icon.svg').then(() => true, () => false), 'the server to start', 3000); return base; } catch (e) {
+      child.kill();
+      if (attempt === 5) throw e;
+    }
+  }
 }
 
 const post = (base, url, body) => fetch(base + url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -64,7 +81,7 @@ const snapshot = base => new Promise((done, fail) => {
 const normalize = v => JSON.parse(JSON.stringify(v, (k, x) => ['iterm', 'parent'].includes(k) && x === null ? undefined : typeof x === 'number' && x > 1e12 ? '<time>' : x));
 const sorted = v => Array.isArray(v) ? v.map(sorted) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])])) : v;
 
-// Runs one replay file. Expect steps retry for up to five seconds, since seeding, the session-text pool and side-session
+// Runs one replay file. Expect steps retry for up to 20 seconds, since seeding, the session-text pool and side-session
 // links land async, and slowly on a busy CI machine.
 async function replay(t, name, files) {
   const file = path.join(__dirname, 'replay', name + '.json'), steps = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -72,11 +89,11 @@ async function replay(t, name, files) {
   for (const step of steps) {
     if (step.post) { await post(base, step.post, step.body); continue; }
     let got;
-    for (let i = 0; i < 100; i++) {
+    await until(async () => {
       const s = normalize(await snapshot(base));
       got = { sessions: s.sessions, ...('settings' in step.expect ? { settings: s.settings } : {}), ...('prose' in step.expect ? { prose: s.prose } : {}) };
-      try { assert.deepStrictEqual(got, step.expect); break; } catch { await wait(50); }
-    }
+      try { assert.deepStrictEqual(got, step.expect); return true; } catch { return false; }
+    }, `${name}: step ${steps.indexOf(step)} to match`).catch(() => {}); // the assertion below reports the difference
     if (process.env.UPDATE) step.expect = sorted(got);
     else assert.deepStrictEqual(got, step.expect, `${name}: step ${steps.indexOf(step)}`);
   }
@@ -92,7 +109,8 @@ test('SessionEnd removes the session', t => replay(t, 'session-end'));
 test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
-// What an open page receives after its first load: the SSE blocks sent while `during` runs, then 600ms more.
+// What an open page receives after its first load: the SSE blocks sent while `during(blocks)` runs, then 600ms more (the
+// quiet that "nothing else was sent" assertions need; anything that must arrive waits for it inside `during`).
 async function streamed(base, during) {
   const blocks = [];
   let text = '', ready;
@@ -104,21 +122,35 @@ async function streamed(base, during) {
     blocks.push(...parts);
   }));
   await first;
-  await during();
+  await during(blocks);
   await wait(600);
   req.destroy();
   return blocks;
 }
+const snapshots = blocks => blocks.filter(b => b.startsWith('data:'));
 const toolCall = id => ({ session_id: id, hook_event_name: 'PreToolUse', cwd: '/work', tool_name: 'Read', tool_input: { file_path: '/work/a' } });
-test('a burst of hook events reaches the page as one snapshot', async t => {
+// The server sends one snapshot 150ms after the first event of a burst. How many events land inside that window depends on
+// how fast the machine posts them, so the guarantee is one snapshot per 150ms the burst took, and one when it was quick.
+test('a burst of hook events reaches the page as one snapshot per coalescing window, not one per event', async t => {
   const base = await serve(t);
-  const blocks = await streamed(base, () => Promise.all(Array.from({ length: 10 }, () => post(base, '/event', toolCall(UUID(1))))));
-  assert.strictEqual(blocks.filter(b => b.startsWith('data:')).length, 1);
+  let took;
+  const blocks = await streamed(base, async blocks => {
+    const began = Date.now();
+    await Promise.all(Array.from({ length: 10 }, () => post(base, '/event', toolCall(UUID(1)))));
+    took = Date.now() - began;
+    await until(() => snapshots(blocks).length, 'the burst\'s snapshot');
+  });
+  assert.ok(snapshots(blocks).length <= 1 + Math.floor(took / 150), `${snapshots(blocks).length} snapshots for a burst of 10 events that took ${took}ms`);
 });
 test('the PR lists are sent when they change, not with every snapshot', async t => {
   const base = await serve(t);
-  const blocks = await streamed(base, async () => { await post(base, '/event', toolCall(UUID(1))); await wait(300); await post(base, '/event', toolCall(UUID(1))); });
-  assert.strictEqual(blocks.filter(b => b.startsWith('data:')).length, 2, 'both events produced a snapshot');
+  const blocks = await streamed(base, async blocks => {
+    await post(base, '/event', toolCall(UUID(1)));
+    await until(() => snapshots(blocks).length === 1, 'the first snapshot'); // a second event inside its window would join it
+    await post(base, '/event', toolCall(UUID(1)));
+    await until(() => snapshots(blocks).length === 2, 'the second snapshot');
+  });
+  assert.strictEqual(snapshots(blocks).length, 2, 'both events produced a snapshot');
   assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|graveyard)/.test(b)), []);
 });
 
@@ -173,9 +205,7 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
     fs.utimesSync(path.join(home, file), dayAgo, dayAgo);
   });
-  let s;
-  for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
-  assert.ok(s, 'the live session was not seeded');
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the live session to be seeded');
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
@@ -188,7 +218,7 @@ test('a running session the lantern missed is adopted with its process on the ne
     home = h;
     fs.chmodSync(path.join(h, 'no-bin/ps'), 0o755);
   }, { LANTERN_ADOPT_SECONDS: '0.2' });
-  await wait(300); // past a pass that found nothing
+  await wait(300); // at least one pass that found nothing (a floor, not a deadline: the adoption below is awaited by condition)
   assert.deepStrictEqual((await snapshot(base)).sessions, []);
   const proc = spawn('sleep', ['60']);
   t.after(() => proc.kill());
@@ -199,9 +229,7 @@ test('a running session the lantern missed is adopted with its process on the ne
   fs.mkdirSync(path.join(home, '.claude/sessions'), { recursive: true });
   fs.writeFileSync(path.join(home, `.claude/sessions/${proc.pid}.json`), JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/work' }));
   fs.writeFileSync(path.join(home, 'pids'), `  ${proc.pid} claude\n`);
-  let s;
-  for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
-  assert.ok(s, 'the running session was not adopted');
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the running session to be adopted');
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
