@@ -2,8 +2,9 @@
 // densely their halos merge into one light, with the badge's name on it in dark ink. It holds a few seconds, then
 // they scatter back out to the sides. Clicking the pill opens the stats panel on that badge. Badges earned together play
 // one after another.
-// They're the scene's own fireflies (FIREFLY_R, fireflyBlink and fireflyLook in fireflies.js, at the scene's scale),
-// drawn on one canvas that only exists while a flash plays; nothing goes near the per-frame-rotated #lantern.
+// They're the scene's own fireflies (bloomSprite and fireflySwell in fireflies.js, at the scene's scale), their light
+// added up on one canvas that only exists while a flash plays, above everything (the lantern's string included);
+// nothing goes near the per-frame-rotated #lantern.
 
 const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as the farthest flight needs
 // Two speeds, in screen px per ms as they look in a 1024x768 window (the scene's scale there is about 1.2), scaling with
@@ -66,9 +67,15 @@ function playFlash(id) {
   canvas.width = Math.round(W * k); canvas.height = Math.round(H * k);
   const g = canvas.getContext('2d');
   g.scale(k, k);
-  const px = VIEW.px || 1, radii = FIREFLY_R.map(r => r * px); // the scene's firefly size on screen
-  // far enough down that the top rim's glows clear the window's edge, instead of being cut off flat along it
-  pill.style.top = `${Math.max(parseFloat(getComputedStyle(pill).top), radii[0] + 6)}px`;
+  // On screen, at the scene's scale: a firefly's bright glow (how far off screen they start, and the top band below),
+  // the halo the packing is measured in, and the whole bloom, its colour's picture, swelling the way the scene's do.
+  const px = VIEW.px || 1, glowR = 20 * px, haloR = 6.5 * px, bloomR = FIREFLY_BLOOM * px;
+  const sprites = new Map(), sprite = col => sprites.get(col) ?? sprites.set(col, bloomSprite(col, Math.ceil(2 * bloomR * k))).get(col);
+  // The light fades out over a band along the window's top, to nothing at the edge, so no glow is ever cut off flat
+  // there (a lit bar across the top) and strays and arrivals can go up into it freely. The pill sits just below it.
+  const band = glowR, edge = g.createLinearGradient(0, 0, 0, band);
+  edge.addColorStop(0, '#000'); edge.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  pill.style.top = `${Math.max(parseFloat(getComputedStyle(pill).top), band + 6)}px`;
   const { width: w, height: h, left, top } = pill.getBoundingClientRect(), cx = left + w / 2, cy = top + h / 2;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const rand = seeded(hash(id + Date.now()));
@@ -80,7 +87,7 @@ function playFlash(id) {
   // On top of that a swirl carries them about and each wanders on its own, so it reads as a loose swarm, not lanes.
   // They fly in fast and slow down steadily as they land, reaching their place at its own gentle pace and carrying on
   // with it, never stopping; when they leave they speed up again from that pace.
-  const step = radii[1] * 0.8 / Math.sqrt(COUNT), r = h / 2 - radii[1] * 0.25, half = w / 2 - h / 2, flies = /** @type {any[]} */ ([]);
+  const step = haloR * 0.8 / Math.sqrt(COUNT), r = h / 2 - haloR * 0.25, half = w / 2 - h / 2, flies = /** @type {any[]} */ ([]);
   const inner = step * 0.6; // the tightest loop: round, not a flat line that would turn its fireflies back in an instant
   const jostle = still ? 0 : JOSTLE;
   const fly = FLY_SPEED * px / 1.2, swarm = still ? 0 : SWARM_SPEED * px / 1.2; // px per ms
@@ -131,32 +138,31 @@ function playFlash(id) {
     const at = [b[0] + off[0], b[1] + off[1]], v1 = swirl(at, t), v2 = swirl([at[0] + v1[0] * dt / 2, at[1] + v1[1] * dt / 2], t + dt / 2);
     return [off[0] + v2[0] * dt, off[1] + v2[1] * dt];
   };
-  // Now and then one of the outer three rings strays a spacing or two past the outline (a few, three to five) and
+  // Again and again every ring strays five to ten spacings past the outline (a few, fifteen to twenty-five) and
   // comes back, so the edge looks like a living swarm, not a drawn pill. It's part of the swarm from the start: each
-  // one's first stray comes at a random moment after it lands, and some land in the middle of one, arriving past the
-  // rim and drifting back in. Shared between three rings so the rim doesn't thin.
+  // one's first stray comes just after it lands, and some land in the middle of one, arriving past the rim and
+  // drifting back in.
   const strayFor = f => 600 + f.strayBy / step * 300; // the further it strays, the longer out and back
-  const strayOff = (f, t, p) => {
+  const strayOff = (f, t) => {
     const n = t - f.land + f.lead, away = strayFor(f);
     if (!f.strayBy || n < 0 || n % f.strayEvery >= away) return [0, 0];
     // outward from its own place on its loop, which never crosses the pill's middle line (the swirl can carry the
     // firefly itself across it, and outward from there would flip it to the other side in a frame)
     const o = aroundPill(f.s0 + f.v * (t - gather), half, f.rr, cx, cy);
-    const q = Math.max(-half, Math.min(half, o[0] - cx)), d = Math.hypot(o[0] - cx - q, o[1] - cy) || 1, up = (cy - o[1]) / d;
-    // upward, only as far as keeps its glow inside the window (the pill sits near the top)
-    const out = Math.sin(Math.PI * (n % f.strayEvery) / away) * (up > 0 ? Math.min(f.strayBy, Math.max(0, p[1] - radii[0] - 2) / up) : f.strayBy);
+    const q = Math.max(-half, Math.min(half, o[0] - cx)), d = Math.hypot(o[0] - cx - q, o[1] - cy) || 1;
+    const out = Math.sin(Math.PI * (n % f.strayEvery) / away) * f.strayBy; // up into the top band too, where they fade out
     return [(o[0] - cx - q) / d * out, (o[1] - cy) / d * out];
   };
   // One frame of the hold: the swirl carries the firefly on, then its place, wander, offset and any stray make where it is.
   const flow = (f, t) => {
     const b = holdAt(f, t);
     f.off = carry(b, f.off, f.flowT - gather, Math.min(50, t - f.flowT)); f.flowT = t;
-    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, t, p);
+    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, t);
     return [p[0] + o[0], p[1] + o[1]];
   };
   const heading = (f, t) => { const a = holdAt(f, t - 1), b = holdAt(f, t + 1); return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]; }; // px per ms
   // rings from the rim in to the innermost, evenly spaced and no further apart than a hexagonal packing's rows
-  const rings = Math.ceil((r - inner) / (step * 0.866)) + 1, strayRings = Math.max(1, Math.min(Math.round(3 * Math.sqrt(COUNT)), rings - 2)); // fewer stray when they're spaced wider (each more often), always leaving two at home; as many out at once as at count 1
+  const rings = Math.ceil((r - inner) / (step * 0.866)) + 1;
   for (let ring = 0; ring < rings; ring++) {
     const rr = r - (r - inner) * ring / (rings - 1);
     const loop = 4 * half + 2 * Math.PI * rr, n = Math.max(1, Math.round(loop / step)), at = rand() * step;
@@ -169,7 +175,7 @@ function playFlash(id) {
       flies.push({ rr, s0: at + i * loop / n, v: way * (ring || still ? swarm : Math.max(swarm, 0.008 * px / 1.2)), col, ph: rand() * 6.28,
         ax: wander(), bx: wander(), ay: wander(), by: wander(), every: 2000 + rand() * 3000, dartAt: rand() * 5000, dir: rand() * 6.28,
         land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2,
-        strayBy: ring >= strayRings || !jostle ? 0 : (r - rr) + (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: (4300 + rand() * 3500) * strayRings / 3 * (COUNT < 1 ? 0.88 : 1), overshoot: rand() < 0.3 });
+        strayBy: !jostle ? 0 : (r - rr) + 5 * (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, rest: 0.45 + rand() * 0.45, overshoot: rand() < 0.3 });
     }
   }
   // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
@@ -181,17 +187,17 @@ function playFlash(id) {
     f.off = [0, 0];
     for (let at = 0; at < f.land; at += 16) f.off = carry(holdAt(f, at), f.off, at, Math.min(16, f.land - at));
     // its first stray: some are mid-stray as they land (they arrive past the rim and drift back in), the rest stray
-    // at a random moment after landing
-    // a stray's cycle is never shorter than the stray itself (plus a rest), or it would restart mid-stray and the
-    // firefly would snap back to the rim in a frame
-    f.strayEvery = Math.max(f.strayEvery, strayFor(f) + 800);
-    f.lead = f.overshoot ? strayFor(f) * (0.3 + rand() * 0.3) : -rand() * f.strayEvery;
+    // a moment after landing
+    // a stray's cycle is the stray itself plus a rest at home about two thirds as long, so about six in ten are out at
+    // once (never shorter than the stray, or it would restart mid-stray and the firefly would snap back to the rim)
+    f.strayEvery = strayFor(f) * (1 + f.rest);
+    f.lead = f.overshoot ? strayFor(f) * (0.3 + rand() * 0.3) : -rand() * f.rest * strayFor(f);
     const b = holdAt(f, f.land), carried = swirl([b[0] + f.off[0], b[1] + f.off[1]], f.land), own = heading(f, f.land);
-    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, f.land, p), o2 = strayOff(f, f.land + 1, p);
+    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, f.land), o2 = strayOff(f, f.land + 1);
     f.spot = [p[0] + o[0], p[1] + o[1]];
     f.vel = [own[0] + carried[0] + o2[0] - o[0], own[1] + carried[1] + o2[1] - o[1]];
     const behind = Math.abs(f.vel[0]) > 0.3 * Math.abs(f.vel[1]) ? f.vel[0] > 0 : f.spot[0] < cx;
-    f.from = still ? f.spot : [behind ? -radii[0] : W + radii[0], radii[0] + rand() * (H - radii[0])];
+    f.from = still ? f.spot : [behind ? -glowR : W + glowR, glowR + rand() * (H - glowR)];
     f.len = Math.hypot(f.spot[0] - f.from[0], f.spot[1] - f.from[1]) * 1.15;
     f.arrive = still ? 800 : f.len / fly;
   }
@@ -205,7 +211,7 @@ function playFlash(id) {
     // The bend goes to whichever side keeps the path in the window: the pill sits near the top, and a path bowing up
     // past it would skim along above the window with only the edges of its glows showing, a line stuck to the top.
     let via = bend(f.from, f.spot, rand);
-    if (via[1] < radii[0]) via = [f.from[0] + f.spot[0] - via[0], f.from[1] + f.spot[1] - via[1]];
+    if (via[1] < glowR) via = [f.from[0] + f.spot[0] - via[0], f.from[1] + f.spot[1] - via[1]];
     f.c1 = still ? f.spot : toward(f.from, via, f.len / 3);
     f.c2 = [f.spot[0] - f.vel[0] * f.arrive / 3, f.spot[1] - f.vel[1] * f.arrive / 3];
   }
@@ -244,7 +250,9 @@ function playFlash(id) {
       if (t >= end) { layer.remove(); return done(); }
       g.clearRect(0, 0, W, H);
       const text = Math.max(0, Math.min(1, (t - settle - 300) / 600, 1 - (t - leaveAt) / 500));
+      g.globalCompositeOperation = 'source-over';
       if (text && BACKING) { g.globalAlpha = text; g.drawImage(backing, bx, by, bw, bh); }
+      g.globalCompositeOperation = 'lighter'; // light adds up
       for (const f of flies) {
         let p, fade;
         if (t < f.delay) continue;
@@ -256,7 +264,7 @@ function playFlash(id) {
           if (!f.p0) {
             // from where the swarm had it, going the way it was going (its last frame's step)
             f.p0 = f.at ?? holdAt(f, f.lift);
-            const len = fly * f.go, side = f.tilt > 0 ? W + radii[0] : -radii[0];
+            const len = fly * f.go, side = f.tilt > 0 ? W + glowR : -glowR;
             const vel = f.was ? [(f.p0[0] - f.was[0][0]) / 16, (f.p0[1] - f.was[0][1]) / 16] : heading(f, f.lift);
             f.away = still ? f.p0 : toward(f.p0, [side, f.p0[1] - H * 0.15 + f.tilt * H * 0.4], len);
             const along = toward(f.away, f.p0, len / 3), curl = f.tilt * len * 0.3;
@@ -265,11 +273,10 @@ function playFlash(id) {
           }
           const u = Math.min(1, (t - f.lift) / f.go); p = cubic(f.p0, f.c3, f.c4, f.away, u); fade = 1 - u;
         }
-        fireflyLook(f.col, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade).forEach(([fill, opacity], i) => {
-          g.globalAlpha = opacity; g.fillStyle = fill;
-          g.beginPath(); g.arc(p[0], p[1], radii[i], 0, 6.2832); g.fill();
-        });
+        const swell = fireflySwell(t / 1000, f.ph), br = bloomR * (0.75 + 0.45 * swell);
+        g.globalAlpha = (0.6 + 0.4 * swell) * fade; g.drawImage(sprite(f.col), p[0] - br, p[1] - br, 2 * br, 2 * br);
       }
+      g.globalCompositeOperation = 'destination-out'; g.globalAlpha = 1; g.fillStyle = edge; g.fillRect(0, 0, W, band);
       // the name comes up once the pill has formed and goes as the swarm leaves
       if (text.toFixed(2) !== shown) pill.style.opacity = shown = text.toFixed(2);
       requestAnimationFrame(draw);

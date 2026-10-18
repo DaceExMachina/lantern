@@ -1,8 +1,8 @@
-// The background drawn on the GPU: rings, glow, the light in the air with moths' shadows in it, and dust (WebGL), plus
+// The background drawn on the GPU: rings, glow, the light in the air with moths' shadows in it, dust and the fireflies' light (WebGL), plus
 // the light carried across onto other displays.
 
 // ---- background on the GPU ------------------------------------------------------------------------------
-// The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust) is drawn by a WebGL shader on a canvas
+// The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust, the fireflies' light) is drawn by a WebGL shader on a canvas
 // behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
 const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
 function program(vert, frag) {
@@ -124,6 +124,40 @@ void main() {
 precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
 // ?dustdebug: a speck the shadows hold back shows red at full strength instead of fading
 void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(mix(uCol, vec3(1.0, 0.15, 0.1), vD * (1.0 - vS)), vA * smoothstep(1.0, 0.6, d)); }`);
+// The fireflies and stale wisps (fireflies.js, stale.js): points of light added onto the scene, a white-hot core in a
+// bloom of the PR's colour, fading into a wide, more saturated haze that lights the air around it. bloomSprite in
+// fireflies.js draws the same falloff for the badge flash, so change the two together.
+const FLIES = program(`
+attribute vec4 a; attribute vec3 c; uniform vec4 uBox; uniform vec2 uRes; varying float vA; varying vec3 vC;
+void main() {
+  gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
+  gl_PointSize = 2.0 * a.z * uRes.x / uBox.z; vA = a.w; vC = c;
+}`, `
+precision mediump float; varying float vA; varying vec3 vC;
+void main() {
+  float d = length(gl_PointCoord - 0.5) * 2.0, m = max(max(vC.r, vC.g), vC.b), edge = max(0.0, 1.0 - d);
+  vec3 deep = clamp(m - (m - vC) * 1.8, 0.0, 1.0);
+  // bloom: a hot pinpoint, a tight glow and a wider one, then a long inverse-square tail that fades out by the edge
+  float peak = exp(-d * d * 400.0), inner = exp(-d * d * 60.0), wide = exp(-d * d * 10.0), tail = edge * edge / (1.0 + d * d * 150.0);
+  // a near-white core, a centre that goes whiter as it swells, the PR's colour further out, then a deeper haze
+  float core = exp(-d * d * 1500.0);
+  vec3 light = mix(vC, vec3(1.0), 0.85) * 1.6 * core + mix(vC, vec3(1.0), clamp(peak * vA * 1.5, 0.0, 1.0)) * (1.2 * peak + 0.7 * inner) + vC * 0.5 * wide + deep * 0.6 * tail;
+  gl_FragColor = vec4(light * vA, 1.0);
+}`);
+const fliesBuf = gl.createBuffer();
+// the fireflies' light over the background and dust (a point bigger than the GPU allows, 511px on a Mac, is drawn at
+// that size, so in a window over about 2400px wide the widest swells stop growing)
+function drawFlies(w, h, box) {
+  gl.blendFunc(gl.ONE, gl.ONE); // light adds up
+  gl.useProgram(FLIES.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, fliesBuf); gl.bufferData(gl.ARRAY_BUFFER, flyLights, gl.DYNAMIC_DRAW);
+  const aa = gl.getAttribLocation(FLIES.p, 'a'), ac = gl.getAttribLocation(FLIES.p, 'c');
+  gl.enableVertexAttribArray(aa); gl.vertexAttribPointer(aa, 4, gl.FLOAT, false, 28, 0);
+  gl.enableVertexAttribArray(ac); gl.vertexAttribPointer(ac, 3, gl.FLOAT, false, 28, 16);
+  gl.uniform4f(FLIES.u.uBox, ...box); gl.uniform2f(FLIES.u.uRes, w, h);
+  gl.drawArrays(gl.POINTS, 0, flyLightN);
+  gl.disableVertexAttribArray(ac); gl.enableVertexAttribArray(0);
+}
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 const dustBuf = gl.createBuffer();
@@ -190,4 +224,6 @@ function drawBackground(v) {
   // fan can cover the whole screen, so gating would leave it nearly empty of dust
   gl.uniform1f(DUST.u.uNear, 1); gl.uniform1f(DUST.u.uCatch, AMBIENT ? 0 : CATCH); gl.drawArrays(gl.POINTS, 0, dust.length);
   gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
+  if (flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
+  flyLightN = 0;
 }

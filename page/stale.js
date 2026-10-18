@@ -14,10 +14,8 @@ const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
 
 function makeWisp(p) {
   const rand = seeded(hash(p.url));
-  const ember = fireflyGlow();
-  $('stale').append(...ember);
   const zone = $('zones').appendChild(el('circle', { r: 12 }));
-  const d = { p, ember, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
+  const d = { p, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30,
     born: staleSeeded ? 0 : 1, gone: undefined };
   // hovering shows the PR's card; clicking (or clicking the card) opens it
@@ -121,7 +119,7 @@ function drawStale(dt, s) {
     if (entry) { d.p = entry[0]; d.gone = undefined; } else d.gone ??= 0;
     if (d.gone !== undefined) { // back to life: it lifts away and fades
       d.gone += dt / 2;
-      if (d.gone >= 1) { d.ember.forEach(c => c.remove()); d.zone.remove(); wisps.delete(url); continue; }
+      if (d.gone >= 1) { d.zone.remove(); wisps.delete(url); continue; }
     }
     d.born = Math.min(1, d.born + dt / 2);
     const back = drifting.length > 1 && entry ? 1 - entry[1] / (drifting.length - 1) : 0.5; // older: fainter
@@ -139,7 +137,7 @@ function drawStale(dt, s) {
     // a faint steady glow, and now and then a slow brightening
     const spark = Math.max(0, Math.sin(s * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
-    paintGlow(d.ember, x, y, [[pale, 0.16 * lit * fade], [pale, 0.6 * lit * fade], [mix(pale, '#FFFFFF', 0.5), 0.9 * lit * fade]]); // wide glow, halo, core
+    if (show) addFlyLight(x, y, 40, lit * fade, pale); // drawn as light by the background shader, like the fireflies
     put(d.zone, 'cx', x.toFixed(1)); put(d.zone, 'cy', y.toFixed(1));
     d.zone.style.display = show && d.gone === undefined ? '' : 'none';
   }
