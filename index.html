@@ -11,11 +11,13 @@
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 76px; flex-wrap: wrap; position: relative; }
+  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 106px; flex-wrap: wrap; position: relative; }
   /* the settings button in the corner, and the menu that flies up from it */
   .corner { all: unset; cursor: pointer; color: #C3B2FF; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); display: flex; padding: 4px; border-radius: 6px; }
   .corner:hover { color: #F0E8FF; }
-  #statsButton { right: 46px; } /* the stats button sits just left of the settings one */
+  #statsButton { right: 46px; } /* stats sits just left of settings, and the quiet moon left of that */
+  #quiet { right: 76px; }
+  #quiet.on svg path:first-child { fill: currentColor; } /* a full moon... well, a filled one, while quiet is on */
   .corner:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
     padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
@@ -81,9 +83,6 @@
   #status.waiting { color: #B9A8FF; }
   #status .warm { color: #8F7FA6; }
   #status.offline { color: #8A7A99; font-style: italic; }
-  .quiet { all: unset; cursor: pointer; color: #8F7FA6; }
-  .quiet:hover, .quiet.on { color: #C3B2FF; }
-  .quiet:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   #gh h3 { margin: 0 0 4px; font-size: 13px; color: #F5E9FF; display: flex; align-items: center; gap: 6px; }
   #gh h3 svg { color: #C3B2FF; }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
@@ -97,9 +96,10 @@
   #status .next:hover { color: #E4DAFF; }
   #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
-  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 56px; } /* room for the stats and menu buttons */
+  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 80px; } /* room for the quiet, stats and menu buttons */
   .panel .corner { right: 6px; }
   .panel #statsButton { right: 30px; }
+  .panel #quiet { right: 54px; }
   .panel .flyup { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
   .panel #card { max-width: 210px; font-size: 11.5px; }
   .panel .notify { display: none; }
@@ -184,9 +184,9 @@
 <div id="card" role="tooltip"></div>
 <footer>
   <span id="status" class="offline">connecting…</span>
-  <button id="quiet" class="quiet" title="Treat everything as snoozed until 8am">quiet</button>
-  <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 14h12M4 11V8M8 11V3M12 11V6"/></svg></button>
-  <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="#1E182E"/><circle cx="11" cy="8" r="1.6" fill="#1E182E"/><circle cx="7" cy="12" r="1.6" fill="#1E182E"/></svg></button>
+  <button id="quiet" class="corner" aria-label="Quiet" title="Treat everything as snoozed until 8am"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M10.5 2.6a5.6 5.6 0 1 0 3 9.8 4.6 4.6 0 0 1-3-9.8z"/><path d="M13 2.5v2.4M11.8 3.7h2.4"/></svg></button>
+  <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M1.6 14.3h12.8v.8H1.6z"/><path d="M3.7 14.3V9.6c0-.5-.4-.7-.9-.8V8.4h3v.4c-.5.1-.9.3-.9.8v4.7zM7.4 14.3V4.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v9.9zM11.1 14.3V7.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v6.9z"/></svg></button>
+  <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><circle cx="8" cy="8" r="1.3"/><path d="M8 1.2l.9 4.9L8 6.6l-.9-.5zM8 14.8l-.9-4.9.9-.5.9.5zM1.2 8l4.9-.9.5.9-.5.9zM14.8 8l-4.9.9-.5-.9.5-.9z"/><path d="M3.2 3.2l3.4 2.6-.3.5-.5.3zM12.8 12.8l-3.4-2.6.3-.5.5-.3zM3.2 12.8l2.6-3.4.5.3.3.5zM12.8 3.2l-2.6 3.4-.5-.3-.3-.5z" opacity=".7"/></svg></button>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
     <label class="notify"><input type="checkbox" id="notify"> notify me</label>
@@ -200,7 +200,7 @@
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
       <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>right-click</b> to snooze it.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
-      <p>The <b>chart button</b> opens your stats, and <b>quiet</b> snoozes everything until <span id="quietUntil">8am</span>.</p>
+      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything until <span id="quietUntil">8am</span>.</p>
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
     </details>
   </div>
