@@ -18,6 +18,20 @@ function findPerch(m, rand, from) {
   return best;
 }
 
+// ?brass: the pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
+const BRASS_SHADOWS = new URLSearchParams(location.search).has('brass');
+/** @type {Element | undefined} */
+let firstBand;
+let bands = [];
+function measureBands() {
+  if (!firstBand?.isConnected) {
+    const els = [...document.querySelectorAll('#lantern .band')];
+    firstBand = els[0];
+    bands = els.map(e => { const b = /** @type {SVGGraphicsElement} */ (e).getBBox(); return [b.y + b.height / 2, b.height / 2, b.width / 2]; });
+  }
+  return bands;
+}
+
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   const s = t / 1000;
@@ -374,6 +388,9 @@ function frame(t) {
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: rad,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
+    // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
+    bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
+    bands: BRASS_SHADOWS && !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
   placeCard();
 }

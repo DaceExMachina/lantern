@@ -26,8 +26,10 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
+uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // ?brass: each solid band's slope from the flame, and its spread
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
+const float BAND = 0.06; // how deep a band's shadow gets at its middle: a gentle dip in the glow, never a line
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
@@ -62,6 +64,14 @@ void main() {
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
   float open = 1.0 - CAPS * step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope); // no cap, no fan
+  // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers
+  vec2 bq = p - uBandO;
+  float tb = (-bq.x * sin(uSway) + bq.y * cos(uSway)) / max(abs(bq.x * cos(uSway) + bq.y * sin(uSway)), 0.001);
+  for (int i = 0; i < 8; i++) {
+    if (i >= uBands) break;
+    float k = (tb - uBand[i].x) / uBand[i].y;
+    open *= 1.0 - BAND * exp(-k * k);
+  }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
     // glow rings: three nested discs, shown together at one opacity
@@ -134,6 +144,7 @@ function drawBackground(v) {
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uAirA, v.airA);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
+  gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
