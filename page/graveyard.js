@@ -60,12 +60,16 @@ const MOTHS_MAX = 8;
 const deadMoths = new Map(); // session id -> moth
 function makeDeadMoth(o) {
   const rand = seeded(hash(o.id));
-  const g = el('g'), side = el('path', { d: pathOf(WING_SIDE) }), up = el('path', { d: pathOf(WING_UP) });
-  const wings = el('g', { transform: 'translate(-2 -6)' });
-  wings.append(side, up); g.append(wings);
+  // It lies on its side: one wing always flat along the ground; the other, by its own seed, lies flat the other way
+  // (spread out), props up partway, or sticks up into the air. Both are the moth's petal turned to lie along x.
+  const dir = rand() < 0.5 ? -1 : 1, pose = rand(), raise = pose < 0.3 ? 0 : pose < 0.65 ? 25 + rand() * 25 : 70 + rand() * 25;
+  const flat = `scale(${dir} 0.3) rotate(96)`;
+  const other = raise ? `scale(${-dir} 1) rotate(${-raise}) scale(1 ${raise > 60 ? 0.75 : 0.55}) rotate(96)` : `scale(${-dir} 0.3) rotate(96)`;
+  const g = el('g'), side = el('path', { d: pathOf(WING_UP), transform: other }), up = el('path', { d: pathOf(WING_UP), transform: flat });
+  g.append(side, up);
   $('graveyard').append(g);
   const zone = $('zones').appendChild(el('circle', { r: 14 }));
-  const m = { o, g, side, up, zone, prs: [], u: 0.08 + rand() * 0.84, wob: rand(), turn: -70 + rand() * 140, back: 0, x: undefined, y: 0 };
+  const m = { o, g, side, up, zone, prs: [], u: 0.08 + rand() * 0.84, wob: rand(), back: 0, x: undefined, y: 0 };
   zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { deadMoth: m, zone }; renderCard(); });
   zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
   zone.addEventListener('click', () => {
@@ -96,7 +100,7 @@ function drawGraveyard(dt, s, rim) {
     m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3; // the longer since it was active, the further back
     m.x = x0 + w * m.u; m.y = ground - 18 - m.back * 30 - m.wob * 4;
     const k = 1.5 - m.back * 0.6, fade = 1 - m.back * 0.5, ash = mix('#9A92A8', '#4A4260', m.back);
-    put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.turn.toFixed(1)}) scale(${(k * 0.9).toFixed(2)} ${(k * 0.5).toFixed(2)})`); // flat on the ground
+    put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) scale(${(k * 0.9).toFixed(2)})`);
     for (const wing of [m.side, m.up]) { put(wing, 'fill', ash); put(wing, 'opacity', fade.toFixed(2)); }
     m.zone.style.display = show ? '' : 'none';
     put(m.zone, 'cx', m.x.toFixed(1)); put(m.zone, 'cy', m.y.toFixed(1));
