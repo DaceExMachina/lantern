@@ -96,7 +96,8 @@ function showBadge(el) {
 // back to the pinned badge's tip, or none
 function restoreBadge(root) {
   const el = pinnedBadge && root.querySelector(`.badge[data-id="${pinnedBadge}"]`);
-  if (el) showBadge(el); else root.querySelector('.badgeTip')?.classList.remove('show');
+  if (el) { const shelf = el.closest('details'); if (shelf) shelf.open = true; showBadge(el); } // only on the shelf: open it to show the badge
+  else root.querySelector('.badgeTip')?.classList.remove('show');
 }
 for (const root of [$('stats'), $('recap')]) {
   root.addEventListener('pointerover', e => { const el = e.target.closest('.badge'); if (el) showBadge(el); });

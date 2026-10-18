@@ -5,6 +5,8 @@ const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
 es.addEventListener('graveyard', e => { stalePRs = JSON.parse(e.data); }); // the server calls them the graveyard
+// a badge just earned (sent once, never on reconnect): the fireflies' flash, except in quiet hours and on the screensavers
+es.addEventListener('badge', e => { if (!quiet() && !document.body.matches('.screensaver, .ambient')) flashBadge(JSON.parse(e.data).id); });
 const PINNED = Q.get('style'); // ?style= previews one lantern, whatever the settings say
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });

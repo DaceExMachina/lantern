@@ -107,6 +107,19 @@
   .screensaver footer, .screensaver #card { display: none; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
   .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
+  /* a badge just earned (page/flash.js): fireflies outline a pill near the top */
+  #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+  #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 9px 26px 10px;
+    border-radius: 99px; background: rgba(60, 41, 35, .96); text-align: center; opacity: 0; }
+  #flash .pill b { color: #FFF1DE; font-size: 14px; font-weight: 600; }
+  #flash .pill span { color: #E8C9A6; font-size: 12px; }
+  #flash .pill:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 4px; }
+  #flash .fly { position: absolute; left: -18px; top: -18px; width: 36px; height: 36px; }
+  #flash .fly i { display: block; width: 100%; height: 100%; border-radius: 50%;
+    background: radial-gradient(circle, #FFF6E2 0 2.6px, rgba(255, 210, 122, .6) 3.6px, rgba(255, 210, 122, .16) 8px, rgba(255, 210, 122, 0) 18px); }
+  .panel #flash .pill { top: 12px; padding: 6px 18px; max-width: calc(100vw - 24px); }
+  .panel #flash .pill b { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
   label.unavailable { opacity: .4; cursor: default; }
   label.unavailable input { cursor: default; }
@@ -212,6 +225,7 @@
 <script defer src="page/notify.js"></script>
 <script defer src="page/stats.js"></script>
 <script defer src="page/recap.js"></script>
+<script defer src="page/flash.js"></script>
 <script defer src="page/main.js"></script>
 </body>
 </html>

@@ -169,6 +169,8 @@ final class LanternServer {
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_DIR = (dir as NSString).expandingTildeInPath }
         stats = Stats(data + "/stats.sqlite")
+        // a badge just earned flashes on the open pages; only live, never in a new page's opening burst
+        stats.onEarn = { [unowned self] id in self.send("event: badge\ndata: \(jsonText(["id": id]))\n\n") }
     }
 
     // Takes the port, or, while something else holds it (a lantern run from a checkout, say), keeps trying every few seconds.

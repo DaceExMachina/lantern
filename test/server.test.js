@@ -94,20 +94,20 @@ test('posting quietUntil without a style keeps the lantern style', t => replay(t
 
 // What an open page receives after its first load: the SSE blocks sent while `during` runs, then 600ms more.
 async function streamed(base, during) {
-  const blocks = [];
+  const blocks = [], opening = [];
   let text = '', ready;
   const first = new Promise(r => ready = r);
   const req = http.get(base + '/events', res => res.on('data', chunk => {
     text += chunk;
     const parts = text.split('\n\n'); text = parts.pop();
-    if (!ready.done) { if (parts.some(b => !b.includes('event:') && b.startsWith('data:'))) { ready.done = true; ready(); } return; }
+    if (!ready.done) { opening.push(...parts); if (parts.some(b => !b.includes('event:') && b.startsWith('data:'))) { ready.done = true; ready(); } return; }
     blocks.push(...parts);
   }));
   await first;
   await during();
   await wait(600);
   req.destroy();
-  return blocks;
+  return Object.assign(blocks, { opening }); // `opening` is the first load's burst
 }
 const toolCall = id => ({ session_id: id, hook_event_name: 'PreToolUse', cwd: '/work', tool_name: 'Read', tool_input: { file_path: '/work/a' } });
 test('a burst of hook events reaches the page as one snapshot', async t => {
@@ -120,6 +120,21 @@ test('the PR lists are sent when they change, not with every snapshot', async t 
   const blocks = await streamed(base, async () => { await post(base, '/event', toolCall(UUID(1))); await wait(300); await post(base, '/event', toolCall(UUID(1))); });
   assert.strictEqual(blocks.filter(b => b.startsWith('data:')).length, 2, 'both events produced a snapshot');
   assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|graveyard)/.test(b)), []);
+});
+
+// A badge earned live goes out once as `event: badge`, for the page's flash: not again when it's earned again that day,
+// and never in a page's opening burst (a reload or reconnect). Ten agents in one session earn Hive Mind.
+test('a badge earned live reaches open pages once, and never on reconnect', async t => {
+  const base = await serve(t), agent = n => ({ ...toolCall(UUID(1)), agent_id: `agent-${n}` });
+  const badges = blocks => blocks.filter(b => b.startsWith('event: badge'));
+  const first = await streamed(base, async () => {
+    await Promise.all(Array.from({ length: 10 }, (_, n) => post(base, '/event', agent(n))));
+    await wait(300);
+    await post(base, '/event', agent(10)); // still ten or more: earned again, today already has it
+  });
+  assert.deepStrictEqual(badges(first), ['event: badge\ndata: {"id":"hive_mind"}']);
+  const again = await streamed(base, () => post(base, '/event', agent(11)));
+  assert.deepStrictEqual([...badges(again.opening), ...badges(again)], []);
 });
 
 // Transcripts on disk, for the seeding cases: one JSON object per line.
