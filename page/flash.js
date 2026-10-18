@@ -58,7 +58,8 @@ function playFlash(id) {
     const side = (spot[0] < cx) !== (rand() < 0.2) ? -radii[0] : W + radii[0], out = rand() < 0.5 ? -radii[0] : W + radii[0];
     const from = still ? spot : [side, rand() * H], away = still ? spot : [out, spot[1] + (rand() - 0.2) * H * 0.6];
     flies.push({ spot, from, away, c1: bend(from, spot, rand), c2: bend(spot, away, rand), delay: rand() * 700, arrive: FLASH.gather * (0.75 + rand() * 0.25),
-      lift: leaveAt + rand() * 500, go: FLASH.leave * (0.75 + rand() * 0.25), ph: rand() * 6.28 });
+      lift: leaveAt + rand() * 500, go: FLASH.leave * (0.75 + rand() * 0.25), ph: rand() * 6.28,
+      fx: 0.0004 + rand() * 0.0005, fy: 0.0004 + rand() * 0.0005, every: 3000 + rand() * 4000, at: rand() * 7000, dir: rand() * 6.28 });
   }
 
   // Once everyone has landed they brighten together: each halo eases up to its core's colour and opacity, so the pill
@@ -66,6 +67,12 @@ function playFlash(id) {
   const settle = FLASH.gather + 700, ease = u => (1 - Math.cos(Math.PI * Math.max(0, Math.min(1, u)))) / 2;
   const surgeAt = t => t < settle ? 0 : ease((t - settle) / 500) - 0.25 * ease((t - settle - 500) / 1500);
   const surgeFill = new Map(); // halo colour by surge, in twentieths
+  // While they hold the shape they keep moving like a living swarm: a slow wander of a couple of scene units, each on
+  // its own phase, and now and then a brief nudge a few units aside. Small next to the halos' overlap, so no holes open.
+  const jostle = (f, t) => {
+    const n = (t + f.at) % f.every, bump = n < 700 ? Math.sin(Math.PI * n / 700) * 3 * px : 0, a = f.dir + Math.floor((t + f.at) / f.every) * 2.4;
+    return [Math.sin(t * f.fx + f.ph) * 2.2 * px + Math.cos(a) * bump, Math.cos(t * f.fy + f.ph * 1.7) * 1.6 * px + Math.sin(a) * bump];
+  };
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
@@ -83,8 +90,11 @@ function playFlash(id) {
         let p, fade, lit = surge;
         if (t < f.delay) continue;
         if (t < f.delay + f.arrive) { const u = (t - f.delay) / f.arrive; p = curve(f.from, f.c1, f.spot, (1 - Math.cos(Math.PI * u)) / 2); fade = Math.min(1, u * 3); }
-        else if (t < f.lift) { p = [f.spot[0] + Math.sin(t * 0.0011 + f.ph) * 1.2, f.spot[1] + Math.cos(t * 0.0013 + f.ph) * 1.2]; fade = 1; } // a little hover
-        else { const u = Math.min(1, (t - f.lift) / f.go); p = curve(f.spot, f.c2, f.away, 1 - Math.cos(Math.PI * u / 2)); fade = 1 - u; lit *= 1 - ease(u * 2); }
+        else if (t < f.lift) { const j = jostle(f, t), k = ease((t - f.delay - f.arrive) / 800); p = [f.spot[0] + j[0] * k, f.spot[1] + j[1] * k]; fade = 1; } // eased in from landing
+        else {
+          const u = Math.min(1, (t - f.lift) / f.go), j = jostle(f, t); p = curve(f.spot, f.c2, f.away, 1 - Math.cos(Math.PI * u / 2));
+          p = [p[0] + j[0] * (1 - u), p[1] + j[1] * (1 - u)]; fade = 1 - u; lit *= 1 - ease(u * 2);
+        }
         const look = fireflyLook(FLASH_COLOUR, fireflyBlink(t / 1000, f.ph) * fade, 1 - fade), q = Math.round(lit * 20);
         if (q) {
           if (!surgeFill.has(q)) surgeFill.set(q, mix(look[1][0], look[2][0], q / 20));
