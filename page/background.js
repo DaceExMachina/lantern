@@ -27,7 +27,7 @@ uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC; uniform float uLightScale, uAirA, uLightR;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
-const float OUTER = 0.3, CORE = 0.6;
+const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
@@ -48,7 +48,12 @@ void main() {
     float am = min(m.z / lm, 2.0), al = uLightR * (1.0 + 1.5 * near) / ll, sep = abs(dm.x * dl.y - dm.y * dl.x) / (lm * ll);
     float cover = min(1.0, am * am / (al * al)) * smoothstep(am + al, abs(am - al), sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
     float edge = 0.03 + 0.05 * near; // softer still up close
-    lit *= 1.0 - m.w * (1.0 - 0.75 * near) * (OUTER * smoothstep(0.2 - edge, 0.2 + edge, cover) + (CORE - OUTER) * smoothstep(0.6 - edge, 0.6 + edge, cover));
+    float shade = (1.0 - 0.75 * near) * (OUTER * smoothstep(0.2 - edge, 0.2 + edge, cover) + (CORE - OUTER) * smoothstep(0.6 - edge, 0.6 + edge, cover));
+    // A moth sitting on the paper has the whole lit paper behind it, a light bigger than itself, so its full shadow
+    // narrows to a point a little way out (where the moth and the light look the same size) and only that faint spike shows.
+    float onLamp = 1.0 - smoothstep(110.0, 150.0, length(m.xy - uLightC) / uLightScale), al0 = uLightR / ll;
+    float spike = SPIKE * smoothstep(0.0, 0.3 * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
+    lit *= 1.0 - m.w * mix(shade, spike, onLamp);
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
