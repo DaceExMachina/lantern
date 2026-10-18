@@ -26,8 +26,8 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC; uniform float uLightScale, uAirA, uLightR;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
-// how much light the shadow's outer band and its core take away, and how much they darken the dark air beyond the glow
-const float OUTER = 0.3, CORE = 0.8, DUSK = 0.35;
+// how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
+const float OUTER = 0.3, CORE = 0.6;
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
@@ -43,12 +43,12 @@ void main() {
     float ll = length(dl), along = dot(dm, dl) / ll; // how far toward the light the moth is, from here
     if (along > ll) continue; // the moth is beyond the light
     float lm = max(length(dm), 0.001);
-    // close to the lantern more of its light gets round a moth: there the light acts bigger and the shadow is fainter
+    // close to the lantern even more of its light gets round a moth: there the light acts bigger and the shadow is fainter still
     float near = 1.0 - smoothstep(70.0, 210.0, length(m.xy - uLightC) / uLightScale);
     float am = min(m.z / lm, 2.0), al = uLightR * (1.0 + 1.5 * near) / ll, sep = abs(dm.x * dl.y - dm.y * dl.x) / (lm * ll);
     float cover = min(1.0, am * am / (al * al)) * smoothstep(am + al, abs(am - al), sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
-    float edge = 0.004 + 0.06 * near; // crisp steps out in the open, softer up close
-    lit *= 1.0 - m.w * (1.0 - 0.6 * near) * (OUTER * smoothstep(0.2 - edge, 0.2 + edge, cover) + (CORE - OUTER) * smoothstep(0.6 - edge, 0.6 + edge, cover));
+    float edge = 0.03 + 0.05 * near; // softer still up close
+    lit *= 1.0 - m.w * (1.0 - 0.75 * near) * (OUTER * smoothstep(0.2 - edge, 0.2 + edge, cover) + (CORE - OUTER) * smoothstep(0.6 - edge, 0.6 + edge, cover));
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
@@ -67,7 +67,6 @@ void main() {
     float x = clamp(length(p - uLightC) / uLightScale / 700.0, 0.0, 1.0);
     col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit);
   }
-  col *= 1.0 - DUSK * (1.0 - lit); // drawn like a cartoon, the shadow shows even out in the dark
   gl_FragColor = vec4(col, 1.0);
 }`);
 // dust: soft points, positions worked out in JS each frame
