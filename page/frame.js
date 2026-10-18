@@ -116,7 +116,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); m.zz?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); m.zz?.forEach(t => t.remove()); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -256,15 +256,35 @@ function frame(t) {
     st.setProperty('--wing', wing);
     st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(246,240,255,${(m.cool * 0.9).toFixed(2)})`);
 
-    // a fresh snooze: the moth settles (a brief dim) and a quiet "zz" drifts up off it and fades; for good gets a longer "zzz"
-    const pf = m.puff, z = pf ? (s - pf.at) / (pf.kind === 'always' ? 1.8 : 1.4) : 1;
-    if (z >= 1) { if (pf) { m.puff = null; m.zz?.remove(); m.zz = null; m.g.style.opacity = ''; } }
-    else if (z >= 0) {
-      if (!m.zz) { m.zz = $('moths').appendChild(el('text', { 'font-size': 15, 'font-style': 'italic', 'text-anchor': 'middle', fill: '#C9BDF5', 'pointer-events': 'none' })); m.zz.textContent = pf.kind === 'always' ? 'zzz' : 'zz'; }
-      put(m.zz, 'x', (m.x + 14 * m.size + Math.sin(z * 5) * 3).toFixed(1)); put(m.zz, 'y', (m.y - 10 * m.size - 26 * z).toFixed(1));
-      put(m.zz, 'opacity', (0.8 * Math.sin(Math.PI * Math.min(1, z * 1.2)) ** 0.7).toFixed(2));
-      m.g.style.opacity = (1 - 0.3 * Math.sin(Math.PI * z)).toFixed(2);
-    }
+    // A sleeping moth (landed and snoozed) breathes out z's: one at a time, each fading in as it floats up, growing a
+    // little, and fading out, 0.6s apart, so three or four show at once. They come in spells, about half the time, on
+    // the moth's own rhythm. A fresh snooze starts a spell right away, with a brief settling dim; for good, a longer one.
+    const asleep = !m.leaving && m.wasLanded && m.session?.snoozed && !quiet(), pf = m.puff;
+    if (asleep || pf) {
+      const gap = 0.6, life = 1.8, cycle = 9;
+      if (pf && m.zStart !== pf.at) { m.zStart = pf.at; m.zOff = 0; } // a fresh snooze: a spell starts now
+      if (m.zStart === undefined) { m.zStart = s; m.zOff = seeded(hash(m.key))() * cycle; } // already asleep: its own rhythm
+      const since = s - m.zStart, spell = pf?.kind === 'always' ? 0.6 : 0.5; // share of each cycle spent breathing z's
+      m.zz ??= Array.from({ length: 4 }, () => {
+        const t = $('moths').appendChild(el('text', { 'font-style': 'italic', 'text-anchor': 'middle', fill: '#C9BDF5', 'pointer-events': 'none' }));
+        t.textContent = 'z';
+        return t;
+      });
+      m.zz.forEach((t, i) => {
+        const n = i + 4 * Math.floor((since / gap - i) / 4); // the latest z this node carries
+        const born = n * gap, u = (since - born) / life;
+        const on = n >= 0 && u <= 1 && (born + m.zOff) % cycle < cycle * spell && (asleep || born < 2);
+        if (!on) { put(t, 'opacity', 0); return; }
+        put(t, 'x', (m.x + (12 + (n % 3) * 4) * m.size + Math.sin(u * 4 + n) * 3).toFixed(1));
+        put(t, 'y', (m.y - 8 * m.size - 32 * u).toFixed(1));
+        put(t, 'font-size', (9 + 5 * u + (n % 3) * 1.5).toFixed(1));
+        put(t, 'opacity', (0.85 * Math.sin(Math.PI * u) ** 0.8).toFixed(2));
+      });
+      if (pf) {
+        const settle = (s - pf.at) / 1.6;
+        if (settle >= 1) { m.puff = null; m.g.style.opacity = ''; } else m.g.style.opacity = (1 - 0.3 * Math.sin(Math.PI * Math.max(0, settle))).toFixed(2);
+      }
+    } else if (m.zz) { m.zz.forEach(t => t.remove()); m.zz = null; m.zStart = undefined; }
 
     // one thread from the light to each session moth, bowing gently
     if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : ''; // satellites fly untethered
@@ -314,6 +334,6 @@ function frame(t) {
       });
     }
   }
-  drawGraveyard(dt, s);
+  drawStale(dt, s);
   placeCard();
 }

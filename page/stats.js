@@ -80,7 +80,7 @@ function renderStats(j) {
     ['waits', today.waits, 'times a moth landed on the lantern for you'],
     ['merged', today.merged, 'fireflies that flew home (merged PRs)'],
     ['in flight', today.open ?? '–', 'open PRs your sessions own'],
-    ['graveyard', grave, 'stale PRs no session owns, and the change since this morning'],
+    ['stale PRs', grave, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
   ];
   const week = days.slice(0, -1).map(d => {
     const mini = slices(d, j.spans, j.gauges, 48), name = DAY_NAMES[new Date(d.start).getDay()];

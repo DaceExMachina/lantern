@@ -306,20 +306,81 @@ func findOwners(_ urls: [String]) -> [String: Any] {
     return found
 }
 
-// Sessions the Claude app starts from another session (its side sessions) name their parent in the app's own
-// per-session files, alongside their Claude Code session id. Returns child id -> parent id, in Claude Code ids.
+// The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session
+// id, and for its side sessions the session that started them. Only those three fields are read.
 let APP_SESSIONS = HOME + "/Library/Application Support/Claude/claude-code-sessions"
-func spawnLinks() -> [String: String] {
-    var cliOf: [String: String] = [:], parentOf: [String: String] = [:]
+func appSessions() -> [(cli: String, local: String, from: String?)] {
+    var found: [(cli: String, local: String, from: String?)] = []
     let walk = FileManager.default.enumerator(atPath: APP_SESSIONS)
     while let f = walk?.nextObject() as? String {
         guard (f as NSString).lastPathComponent.hasPrefix("local_"), f.hasSuffix(".json"),
               let data = FileManager.default.contents(atPath: APP_SESSIONS + "/" + f), let j = parse(data) as? JSON,
               let cli = j["cliSessionId"] as? String, let local = j["sessionId"] as? String else { continue }
-        cliOf[local] = cli
-        if let from = (j["spawnedFrom"] as? JSON)?["sessionId"] as? String { parentOf[cli] = from }
+        found.append((cli, local, (j["spawnedFrom"] as? JSON)?["sessionId"] as? String))
     }
-    return parentOf.compactMapValues { cliOf[$0] }
+    return found
+}
+/// child id -> parent id, in Claude Code ids, for the side sessions the Claude app started from another session
+func spawnLinks() -> [String: String] {
+    let all = appSessions(), cliOf = Dictionary(all.map { ($0.local, $0.cli) }, uniquingKeysWith: { a, _ in a })
+    return Dictionary(all.compactMap { a in a.from.flatMap { cliOf[$0] }.map { (a.cli, $0) } }, uniquingKeysWith: { a, _ in a })
+}
+
+// MARK: bringing a session's window to the front, in whichever terminal (or the Claude app) runs it
+
+/// The app executable among a process's ancestors: its terminal, e.g. /Applications/iTerm.app/Contents/MacOS/iTerm2
+func terminalBinary(_ pid: String) -> String? {
+    var p = pid
+    for _ in 0..<20 where Re("^[0-9]+$").test(p) && p != "1" {
+        let line = run("ps", ["-o", "ppid=,comm=", "-p", p]).out.trim
+        guard let gap = line.firstIndex(where: \.isWhitespace) else { return nil }
+        let comm = String(line[gap...]).trim
+        if comm.contains(".app/Contents/MacOS/") && !comm.contains("/claude-code/") { return comm } // not Claude Code's own bundled binary
+        p = String(line[..<gap])
+    }
+    return nil
+}
+
+/// Brings a session's terminal tab, or its session in the Claude app, to the front. iTerm2 is handled by the caller,
+/// which can look its tabs up. Falls back to just bringing the terminal app forward. Every value used here was checked
+/// against a pattern when it arrived, and none of them goes through a shell.
+func focusElsewhere(_ s: JSON) -> Bool {
+    let term = s["term"] as? String ?? "", app = s["app"] as? String ?? "", pid = truthy(s["pid"]) ? str(s["pid"]) : ""
+    let open = { (args: [String]) in run("open", args).ok }
+    // The Claude app opens one of its sessions from its own link (it ignores the link when its entry points are switched off,
+    // and opening it still brings the app forward). Sessions seeded at startup don't say where they run, so check those too.
+    if app == "com.anthropic.claudefordesktop" || app.isEmpty && term.isEmpty,
+       let local = appSessions().first(where: { $0.cli == str(s["id"]) })?.local, Re("^local_[A-Za-z0-9-]{1,64}$").test(local) {
+        return open(["claude://code/continue?session=" + local])
+    }
+    let binary = terminalBinary(pid), bundle = binary.map { $0.components(separatedBy: "/Contents/MacOS/")[0] }
+    let activate = { !app.isEmpty ? open(["-b", app]) : bundle.map { open(["-a", $0]) } ?? false }
+    switch term {
+    case "Apple_Terminal": // Terminal.app finds the tab by its tty
+        let tty = run("ps", ["-o", "tty=", "-p", pid]).out.trim
+        if Re("^ttys[0-9]+$").test(tty), run("osascript", ["-e", """
+            tell application "Terminal"
+              repeat with w in windows
+                repeat with t in tabs of w
+                  if tty of t is "/dev/\(tty)" then
+                    set selected tab of w to t
+                    set index of w to 1
+                    activate
+                    return
+                  end if
+                end repeat
+              end repeat
+            end tell
+            """], timeout: 30).ok { return true }
+    case "WezTerm": // its CLI sits next to the app's binary
+        if truthy(s["pane"]), let bundle, run(bundle + "/Contents/MacOS/wezterm", ["cli", "activate-pane", "--pane-id", str(s["pane"])]).ok { return activate() }
+    case "vscode": // VS Code and its forks bring the window that has this folder open forward (or open one)
+        if !app.isEmpty && truthy(s["cwd"]) { return open(["-b", app, str(s["cwd"])]) }
+    default: // kitty only takes remote commands when its kitty.conf allows them (allow_remote_control, listen_on)
+        if truthy(s["kitty"]) && truthy(s["pane"]), let bundle,
+           run(bundle + "/Contents/MacOS/kitten", ["@", "--to", str(s["kitty"]), "focus-window", "--match", "id:" + str(s["pane"])]).ok { return activate() }
+    }
+    return activate()
 }
 
 func createdPRs(_ file: String, _ dir: String) -> [String] {
@@ -587,6 +648,10 @@ final class LanternServer {
         if let pid = e["pid"] as? String, Re("^[0-9]+$").test(pid) { s["pid"] = Int(pid) ?? Double(pid)! } // the Claude Code process the hook ran under ($PPID)
         let iterm = ((e["iterm"] as? String) ?? "").components(separatedBy: ":").last! // ITERM_SESSION_ID looks like w0t1p0:<uuid>
         if UUID_RE.test(iterm) { s["iterm"] = iterm }
+        // which terminal (or app) runs it, so a click can bring the right window to the front; see focusTerminal
+        for (key, pattern) in [("term", "^[A-Za-z0-9._ -]{1,40}$"), ("app", "^[A-Za-z0-9.-]{1,100}$"), ("pane", "^[0-9]{1,9}$"), ("kitty", "^(unix|tcp):[^\\s'\"]{1,200}$")] {
+            if let v = e[key] as? String, Re(pattern).test(v) { s[key] = v }
+        }
         let dir = sessionDir(e["transcript_path"])
         if let dir { s["project"] = ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent }
         if let dir, now() - ((s["titleRead"] as? Double) ?? 0) > TITLE_EVERY_MS {
@@ -696,15 +761,17 @@ final class LanternServer {
             let tabs = run("osascript", ["-e", """
                 set out to ""
                 set sep to character id 9
-                tell application "iTerm2"
-                  repeat with w in windows
-                    repeat with t in tabs of w
-                      repeat with ss in sessions of t
-                        set out to out & (unique id of ss) & sep & (name of ss) & linefeed
+                if application "iTerm2" is running then
+                  tell application "iTerm2"
+                    repeat with w in windows
+                      repeat with t in tabs of w
+                        repeat with ss in sessions of t
+                          set out to out & (unique id of ss) & sep & (name of ss) & linefeed
+                        end repeat
                       end repeat
                     end repeat
-                  end repeat
-                end tell
+                  end tell
+                end if
                 return out
                 """]).out.components(separatedBy: "\n").map { $0.components(separatedBy: "\t") }.filter { UUID_RE.test($0[0]) }
             let pids = claudePids()
@@ -1097,11 +1164,12 @@ final class LanternServer {
         if post && req.url == "/event" {
             if var e = body {
                 e["iterm"] = req.headers["x-iterm-session"]; e["pid"] = req.headers["x-claude-pid"]
+                e["term"] = req.headers["x-term-program"]; e["app"] = req.headers["x-term-app"]
+                e["pane"] = req.headers["x-term-pane"]; e["kitty"] = req.headers["x-kitty-socket"]
                 handle(e); broadcast()
             }
             return respond(c, 200)
         }
-        // Bring a session's iTerm tab to the front. Only an id we stored ourselves ever reaches AppleScript.
         // Resume the old session behind a dead moth: a new iTerm tab in its folder running `claude --resume <id>`.
         // Only sessions that own something in the graveyard can be resumed this way.
         if json && req.url == "/resume" {
@@ -1125,33 +1193,38 @@ final class LanternServer {
             }
             return
         }
+        // Bring a session's window to the front: its iTerm2 tab, else whatever focusElsewhere can do for its terminal.
         if json && req.url == "/focus" {
-            guard let id = body?["id"] as? String, sessions[id] != nil else { return respond(c, 404) }
+            guard let id = body?["id"] as? String, let s = sessions[id] else { return respond(c, 404) }
             let focus = { (tab: Any?) in
-                guard let tab = tab as? String, UUID_RE.test(tab) else { return self.respond(c, 404) }
                 DispatchQueue.global().async {
-                    let r = run("osascript", ["-e", """
-                        tell application "iTerm2"
-                          repeat with w in windows
-                            repeat with t in tabs of w
-                              repeat with s in sessions of t
-                                if unique id of s is "\(tab)" then
-                                  select w
-                                  tell t to select
-                                  tell s to select
-                                  activate
-                                  return
-                                end if
+                    var ok = false
+                    if let tab = tab as? String, UUID_RE.test(tab) {
+                        ok = run("osascript", ["-e", """
+                            tell application "iTerm2"
+                              repeat with w in windows
+                                repeat with t in tabs of w
+                                  repeat with s in sessions of t
+                                    if unique id of s is "\(tab)" then
+                                      select w
+                                      tell t to select
+                                      tell s to select
+                                      activate
+                                      return
+                                    end if
+                                  end repeat
+                                end repeat
                               end repeat
-                            end repeat
-                          end repeat
-                        end tell
-                        """], timeout: 60)
-                    if !r.ok { print("focus failed") }
-                    DispatchQueue.main.async { self.respond(c, r.ok ? 204 : 500) }
+                            end tell
+                            """], timeout: 60).ok
+                    }
+                    if !ok { ok = focusElsewhere(s) }
+                    if !ok { print("focus failed") }
+                    DispatchQueue.main.async { self.respond(c, ok ? 204 : 404) }
                 }
             }
-            if truthy(sessions[id]!["iterm"]) { return focus(sessions[id]!["iterm"]) }
+            // iTerm2 tabs can be looked up when the hooks haven't said which one (a seeded session says nothing)
+            if truthy(s["iterm"]) || truthy(s["term"]) || truthy(s["app"]) { return focus(s["iterm"]) }
             return findIterm(id) { tab in
                 if self.sessions[id] != nil { self.sessions[id]!["iterm"] = tab ?? NSNull() }
                 focus(tab)

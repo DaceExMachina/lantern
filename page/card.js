@@ -50,8 +50,8 @@ function prRows(prs) {
 
 function renderCard() {
   const m = hovered, s = m?.session;
-  if (m?.dead) return renderDeadCard(m.dead);
-  if (m?.deadMoth) return renderDeadMothCard(m.deadMoth);
+  if (m?.stale) return renderStaleCard(m.stale);
+  if (m?.ghost) return renderGhostCard(m.ghost);
   if (!s) return;
   const now = Date.now(), h = document.createElement('h3'), chip = document.createElement('span');
   /** @type {HTMLElement[]} */
