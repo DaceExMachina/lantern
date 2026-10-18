@@ -49,12 +49,12 @@ void main() {
     float cover = min(1.0, am * am / (al * al)) * smoothstep(am + al, abs(am - al), sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
     float edge = 0.03 + 0.05 * near; // softer still up close
     float shade = (1.0 - 0.75 * near) * (OUTER * smoothstep(0.2 - edge, 0.2 + edge, cover) + (CORE - OUTER) * smoothstep(0.6 - edge, 0.6 + edge, cover));
-    // A moth sitting on the paper has the whole lit paper behind it, a light bigger than itself, so its full shadow
-    // narrows to a point a little way out (where the moth and the light look the same size) and only that faint spike
-    // shows, soft at its sides and tip.
-    float onLamp = 1.0 - smoothstep(110.0, 150.0, length(m.xy - uLightC) / uLightScale), al0 = uLightR / ll;
-    float spike = SPIKE * smoothstep(-0.4 * am, 0.8 * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
-    lit *= 1.0 - m.w * mix(shade, spike, onLamp);
+    // The closer a moth is to the lantern, the bigger the lit paper behind it looks next to the moth, so its full
+    // shadow narrows to a point sooner (where the moth and the light look the same size) and only a soft spike shows:
+    // a moth sitting on the paper is the far end of that, and one out at its home keeps the shadow above.
+    float close = 1.0 - smoothstep(120.0, 260.0, length(m.xy - uLightC) / uLightScale), al0 = uLightR / ll;
+    float spike = SPIKE * smoothstep(-0.4 * am * close, (0.1 + 0.7 * close) * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
+    lit *= 1.0 - m.w * mix(shade, spike, close);
   }
   vec3 col = uBg;
   if (uAmbient < 0.5) {
