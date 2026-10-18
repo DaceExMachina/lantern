@@ -18,12 +18,11 @@ function findPerch(m, rand, from) {
   return best;
 }
 
-// A pierced lantern's solid bands (class band in its drawing), measured once per lantern in its own units: top, bottom, and
-// the half-width at each (data-r2 for a sloping one's bottom).
+// A pierced lantern's solid bands (class band in its drawing), measured once per lantern in its own units: top, bottom, half-width.
 /** @type {Element[]} */
 let bandEls = [], bandBoxes = [];
 function measureBands() {
-  if (!bandEls[0]?.isConnected) { bandEls = [...document.querySelectorAll('#lantern .band')]; bandBoxes = bandEls.map(e => { const b = /** @type {SVGGraphicsElement} */ (e).getBBox(); return [b.y, b.y + b.height, b.width / 2, Number(e.getAttribute('data-r2')) || b.width / 2]; }); }
+  if (!bandEls[0]?.isConnected) { bandEls = [...document.querySelectorAll('#lantern .band')]; bandBoxes = bandEls.map(e => { const b = /** @type {SVGGraphicsElement} */ (e).getBBox(); return [b.y, b.y + b.height, b.width / 2]; }); }
   return bandBoxes;
 }
 
@@ -387,7 +386,7 @@ function frame(t) {
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameAt[1])] : [0, 0],
     bandO: rot(...flameAt),
-    bands: remote ? [] : measureBands().map(([top, bottom, r, r2]) => [(top - flameAt[1]) / r, (bottom - flameAt[1]) / r2, flameR / Math.min(r, r2)]),
+    bands: remote ? [] : measureBands().map(([top, bottom, r]) => [(top - flameAt[1]) / r, (bottom - flameAt[1]) / r, flameR / r]),
   });
   placeCard();
 }
