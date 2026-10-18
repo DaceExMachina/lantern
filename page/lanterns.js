@@ -89,7 +89,7 @@ function applyStyle(key) {
   const [fx, fy, fk] = style.flame, art = lantern3dOn() ? CHOCHIN_3D : style; // the 3D chōchin draws its own paper and caps
   const [hc, hw, dash] = style.hang || ['#C9B49C', 2, ''];
   $('lantern').innerHTML = `<path id="hang" d="M340 ${VIEW.top - 2}V22" stroke="${hc}" stroke-width="${hw}" ${dash ? `stroke-dasharray="${dash}" stroke-linecap="round"` : ''}/>` + art.back
-    + `<g id="plane"><g ${lantern3dOn() ? 'filter="url(#throughPaper)" opacity="0.28"' : style.paper ? 'filter="url(#behindPaper)"' : ''} transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME}</g></g>`
+    + `<g id="plane"><g ${lantern3dOn() ? 'filter="url(#throughPaper)" opacity="0.33"' : style.paper ? 'filter="url(#behindPaper)"' : ''} transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME}</g></g>`
     + art.front;
   showLantern3d();
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern

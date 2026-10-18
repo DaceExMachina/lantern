@@ -7,12 +7,12 @@
 // it on its string, pitch tips its bottom toward the viewer, roll is the sideways sway. Seen with perspective from
 // EYE_Z in front of the lantern's middle, so a point on the surface's centre plane (z 0) never moves with it.
 const EYE_Z = 700;
-const POSE = { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], top: 20 }; // m: rotation, row-major
+const POSE = { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], top: 20, yaw: 0 }; // m: rotation, row-major
 const mul3 = (a, b) => a.map((_, i) => { const r = Math.floor(i / 3), c = i % 3; return a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c]; });
 function setPose(yaw, pitch, roll, top) {
   const [cy, sy, cp, sp, cr, sr] = [Math.cos(yaw), Math.sin(yaw), Math.cos(pitch), Math.sin(pitch), Math.cos(roll), Math.sin(roll)];
   POSE.m = mul3(mul3([cr, -sr, 0, sr, cr, 0, 0, 0, 1], [1, 0, 0, 0, cp, -sp, 0, sp, cp]), [cy, 0, sy, 0, 1, 0, -sy, 0, cy]);
-  POSE.top = top;
+  POSE.top = top; POSE.yaw = yaw;
 }
 /** @type {(v: number[]) => number[]} */
 const turn = v => { const m = POSE.m; return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]]; };
@@ -32,25 +32,23 @@ function planeMatrix() {
 // ---- the 3D chōchin ---------------------------------------------------------------------------------------------
 const L3D = new URLSearchParams(location.search).has('lantern3d');
 const lantern3dOn = () => L3D && style === STYLES.chochin;
-// What stays SVG: the string (#hang, run straight from where the lantern hangs to the top cap), the flame (carried by
-// the pose), and the tassel, drawn hanging from 0,0 in scene units so it can swing on its own.
-const CHOCHIN_3D = {
-  paper: true, back: '',
-  front: `<g id="tassel"><g transform="scale(2.4) translate(-95 -177)"><path d="M95 177V194" stroke="#2A1E1E" stroke-width="1"/><circle cx="95" cy="196" r="2.6" fill="#D9AE52"/>
-    <path d="M93.5 198L92 210M95 198V212M96.5 198L98 210" stroke="#D9AE52" stroke-width="0.6"/></g></g>`,
-};
+// Only the flame stays SVG (carried by the pose, seen as a faint glow through the paper); the string and tassel are
+// part of the 3D scene, so the paper and caps hide whatever part of them is behind.
+const CHOCHIN_3D = { paper: true, back: '', front: '' };
 // The paper is STYLES.chochin's body (so moths land on what's drawn); the black caps are short cylinders. Scene units.
 const CAP = { r: 45.6, top: [196.4, 218], bottom: [441.2, 462.8], bevel: 3 };
-const BOX = [190, 178, 300, 300]; // the part of the scene the canvas covers: the lantern and its swing, scene units
+const BOX = [190, 0, 300, 535]; // the part of the scene the canvas covers: x, top (set to the window's top), width, height
+const BOX_BOTTOM = 535; // below the tassel's strands, however far it swings
 const RIBS = 14, SEAM = 0.07, PERCHES = 16; // bamboo hoops between the caps; the paper's seam, a little way round to the right
 
 const gl3 = L3D ? $('lantern3d').getContext('webgl2', { antialias: true, premultipliedAlpha: true }) : null;
 let L3 = null; // the program and meshes, built on first use
 
-// A surface of revolution from a profile of [r, y, v] points, top to bottom (v runs along it, for the ribs). Smooth
-// profiles share one normal per point; flat ones keep a hard edge at every point. `grow` is the direction the outline
-// shell pushes each vertex out, mitred so the shell sits the same distance off every face.
-function lathe(profile, smooth, around = 96) {
+// ---- geometry: each part is { data, idx }, 11 floats a vertex: position, normal, grow, u, v ------------------------
+// `grow` is the direction the outline shell pushes each vertex out, mitred so the shell sits the same distance off
+// every face. A surface of revolution about x = cx, z = 0 from a profile of [r, y, v] points, top to bottom (v runs
+// along it, for the ribs). Smooth profiles share one normal per point; flat ones keep a hard edge at every point.
+function lathe(profile, smooth, around = 96, cx = 340) {
   const segN = profile.slice(1).map(([r1, y1], i) => { const [r0, y0] = profile[i], l = Math.hypot(r1 - r0, y1 - y0); return [(y1 - y0) / l, -(r1 - r0) / l]; });
   const grow = profile.map((_, i) => {
     const a = segN[Math.max(0, i - 1)], b = segN[Math.min(segN.length - 1, i)], k = 1 + a[0] * b[0] + a[1] * b[1];
@@ -59,41 +57,74 @@ function lathe(profile, smooth, around = 96) {
   const rings = smooth ? profile.map((p, i) => { const l = Math.hypot(...grow[i]); return [p, [grow[i][0] / l, grow[i][1] / l], grow[i]]; })
     : segN.flatMap((n, i) => [[profile[i], n, grow[i]], [profile[i + 1], n, grow[i + 1]]]);
   const data = [], idx = [], row = around + 1;
-  for (const [[r, y, v], [nr, ny], [gr, gy]] of rings) for (let j = 0; j <= around; j++) {
+  for (const [[r, y, v = 0], [nr, ny], [gr, gy]] of rings) for (let j = 0; j <= around; j++) {
     const a = 2 * Math.PI * j / around, s = Math.sin(a), c = Math.cos(a); // j 0 faces the viewer
-    data.push(340 + r * s, y, r * c, nr * s, ny, nr * c, gr * s, gy, gr * c, j / around, v);
+    data.push(cx + r * s, y, r * c, nr * s, ny, nr * c, gr * s, gy, gr * c, j / around, v);
   }
   for (let i = 0; i + 1 < rings.length; i += smooth ? 1 : 2) for (let j = 0; j < around; j++) {
     const a = i * row + j, b = a + row;
     idx.push(a, b, a + 1, a + 1, b, b + 1);
   }
+  return { data, idx };
+}
+// A ball (or a squashed one, `squash` < 1) of radius r centred on (340, y).
+const ball = (y, r, squash = 1) => lathe(Array.from({ length: 13 }, (_, i) => { const a = Math.PI * i / 12; return [r * Math.sin(a), y - r * squash * Math.cos(a)]; }), true, 24);
+// An open tube of radius r from point a to point b, for the tassel's strands.
+function tube(a, b, r, sides = 6) {
+  const ax = unit([b[0] - a[0], b[1] - a[1], b[2] - a[2]]), u = unit(cross(ax, Math.abs(ax[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0])), v = cross(ax, u);
+  const data = [], idx = [];
+  for (const p of [a, b]) for (let j = 0; j <= sides; j++) {
+    const t = 2 * Math.PI * j / sides, n = [0, 1, 2].map(k => u[k] * Math.cos(t) + v[k] * Math.sin(t));
+    data.push(p[0] + n[0] * r, p[1] + n[1] * r, p[2] + n[2] * r, ...n, ...n, j / sides, 0);
+  }
+  for (let j = 0; j < sides; j++) idx.push(j, j + sides + 1, j + 1, j + 1, j + sides + 1, j + sides + 2);
+  return { data, idx };
+}
+const merge = (...parts) => parts.reduce((m, p) => { const base = m.data.length / 11; m.data.push(...p.data); m.idx.push(...p.idx.map(i => i + base)); return m; }, { data: [], idx: [] });
+function upload({ data, idx }) {
   const vao = gl3.createVertexArray(); gl3.bindVertexArray(vao);
-  gl3.bindBuffer(gl3.ARRAY_BUFFER, gl3.createBuffer()); gl3.bufferData(gl3.ARRAY_BUFFER, new Float32Array(data), gl3.STATIC_DRAW);
+  const vb = gl3.createBuffer(), ib = gl3.createBuffer();
+  gl3.bindBuffer(gl3.ARRAY_BUFFER, vb); gl3.bufferData(gl3.ARRAY_BUFFER, new Float32Array(data), gl3.STATIC_DRAW);
   [3, 3, 3, 2].reduce((at, n, loc) => { gl3.enableVertexAttribArray(loc); gl3.vertexAttribPointer(loc, n, gl3.FLOAT, false, 44, at * 4); return at + n; }, 0);
-  gl3.bindBuffer(gl3.ELEMENT_ARRAY_BUFFER, gl3.createBuffer()); gl3.bufferData(gl3.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl3.STATIC_DRAW);
-  return { vao, count: idx.length };
+  gl3.bindBuffer(gl3.ELEMENT_ARRAY_BUFFER, ib); gl3.bufferData(gl3.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl3.STATIC_DRAW);
+  return { vao, count: idx.length, free: () => { gl3.deleteVertexArray(vao); gl3.deleteBuffer(vb); gl3.deleteBuffer(ib); } };
+}
+
+// The tassel, hanging from the bottom cap at (340, CAP.bottom[1]): a dark cord, a gold bead, a gold binding, and a
+// bundle of gold strands spreading into a cone. Drawing units are STYLES.chochin's, scaled by 2.4.
+function tasselParts() {
+  const y0 = CAP.bottom[1], cord = lathe([[1.0, y0 - 4], [1.0, y0 + 42]], false, 10);
+  const gold = [ball(y0 + 45.6, 6.2), lathe([[0, y0 + 50], [3.6, y0 + 50], [3.6, y0 + 56], [0, y0 + 56]], false, 16)];
+  const strands = [];
+  for (const [n, r0, r1, len] of [[9, 2.6, 8.5, 34], [5, 1.0, 4.0, 37]]) for (let i = 0; i < n; i++) {
+    const a = 2 * Math.PI * (i + 0.5 * (r0 < 2 ? 1 : 0)) / n, s = Math.sin(a), c = Math.cos(a), l = len - 3 * Math.sin(i * 2.7);
+    strands.push(tube([340 + r0 * s, y0 + 55, r0 * c], [340 + r1 * s, y0 + 55 + l, r1 * c], 0.6));
+  }
+  return { cord: upload(cord), gold: upload(merge(...gold, ...strands)) };
 }
 
 function build3d() {
+  // Every part goes through one transform: w = uTo + uM (p - uFrom). The lantern turns about where it hangs (uFrom =
+  // uTo = that point); the tassel hangs from the bottom cap's point in the scene with its own swing.
   const vs = `#version 300 es
 layout(location = 0) in vec3 aPos; layout(location = 1) in vec3 aNrm; layout(location = 2) in vec3 aGrow; layout(location = 3) in vec2 aUV;
-uniform mat3 uM; uniform float uTop, uGrow; uniform vec4 uBox;
-out vec3 vLocal, vN, vView; out vec2 vUV;
+uniform mat3 uM; uniform vec3 uFrom, uTo; uniform float uGrow; uniform vec4 uBox;
+out vec3 vLocal, vN, vView, vWorld; out vec2 vUV;
 void main() {
-  vec3 pivot = vec3(340.0, uTop, 0.0), w = pivot + uM * (aPos + aGrow * uGrow - pivot);
+  vec3 w = uTo + uM * (aPos + aGrow * uGrow - uFrom);
   float iw = (${EYE_Z.toFixed(1)} - w.z) / ${EYE_Z.toFixed(1)}; // 1 / perspective scale, so the GPU divides it in
   vec2 p = vec2(340.0, 330.0) + (w.xy - vec2(340.0, 330.0)) / iw, ndc = (p - uBox.xy) / uBox.zw * 2.0 - 1.0;
   gl_Position = vec4(ndc.x, -ndc.y, -w.z / 400.0, 1.0) * iw;
-  vLocal = aPos; vN = aNrm; vUV = aUV;
-  vView = transpose(uM) * (vec3(340.0, 330.0, ${EYE_Z.toFixed(1)}) - w); // toward the viewer, in the lantern's own axes
+  vLocal = aPos; vN = aNrm; vUV = aUV; vWorld = w;
+  vView = transpose(uM) * (vec3(340.0, 330.0, ${EYE_Z.toFixed(1)}) - w); // toward the viewer, in the part's own axes
 }`;
   // The paper's light is how much of the flame shines through it toward you: brighter close to the flame and where
   // the paper faces you, dimmer where you look across it near the edges. It ramps smoothly from the dusky edge tone
   // through the paper's colour to the flame's core, with the ribs and the seam as thin darker lines on top.
   const fs = `#version 300 es
 precision highp float;
-in vec3 vLocal, vN, vView; in vec2 vUV;
-uniform int uMat; uniform mat3 uM; uniform vec3 uFlame; uniform float uBright, uLine;
+in vec3 vLocal, vN, vView, vWorld; in vec2 vUV;
+uniform int uMat; uniform mat3 uM; uniform vec3 uFlame, uGlowW, uColor; uniform float uBright, uLine;
 uniform vec3 uHot, uMid, uShade, uRib, uInk, uCapDark, uCapLit, uCapShine, uBounce;
 uniform vec4 uPerch[${PERCHES}]; uniform int uPerches; // landed moths: where each sits on the paper, and its size
 out vec4 o;
@@ -116,12 +147,21 @@ void main() {
     }
     c = mix(c, uShade * 0.75, 0.4 * touch);
     o = vec4(c, 1.0);
-  } else {
+    return;
+  }
+  vec3 Nw = uM * N, L = normalize(vec3(-0.45, -0.6, 0.66)), H = normalize(L + normalize(uM * V));
+  if (uMat == 1) {
     // black lacquer caps, cel-shaded: lit and shadowed sides, a hard shine, and the faces turned to the paper catch its glow
-    vec3 Nw = uM * N, L = normalize(vec3(-0.45, -0.6, 0.66)), H = normalize(L + normalize(uM * V));
     vec3 c = mix(uCapDark, uCapLit, band(dot(Nw, L), 0.3));
     c = mix(c, uCapShine, band(dot(Nw, H), 0.985));
     c = mix(c, uBounce, band(dot(N, normalize(vec3(340.0, 330.0, 0.0) - vLocal)), 0.6));
+    o = vec4(c, 1.0);
+  } else {
+    // string and tassel, cel-shaded the same way in their own colour: a shadowed and a lit side, a small hard shine,
+    // and the side facing the lantern warmed by its glow
+    vec3 c = mix(uColor * 0.55, uColor, band(dot(Nw, L), 0.1));
+    c = mix(c, mix(uColor, vec3(1.0), 0.6), 0.6 * band(dot(Nw, H), 0.97));
+    c = mix(c, c * 0.6 + uBounce * 0.9, 0.5 * band(dot(Nw, normalize(uGlowW - vWorld)), 0.55));
     o = vec4(c, 1.0);
   }
 }`;
@@ -142,12 +182,18 @@ void main() {
   const cap = ([y0, y1]) => { const { r, bevel: b } = CAP; return [[0, y0, 0], [r - b, y0, 0], [r, y0 + b, 0], [r, y1 - b, 0], [r - b, y1, 0], [0, y1, 0]]; };
   // the silhouette, for hiding threads and ghosts behind the lantern: down the right side and back up the left
   const side = [...cap(CAP.top).slice(1, 5), ...paper.filter((_, i) => i % 4 === 0), ...cap(CAP.bottom).slice(1, 5)].map(([r, y]) => [r, y]);
-  return { p, u, paper: lathe(paper, true), caps: [lathe(cap(CAP.top), false), lathe(cap(CAP.bottom), false)],
+  return { p, u, paper: upload(lathe(paper, true)), caps: upload(merge(lathe(cap(CAP.top), false), lathe(cap(CAP.bottom), false))),
+    knot: upload(ball(CAP.top[0], 4.2, 0.7)), // where the string goes into the top cap
+    ...tasselParts(), string: null, stringTop: NaN,
     outline: [...side.map(([r, y]) => [340 + r, y]), ...side.reverse().map(([r, y]) => [340 - r, y])] };
 }
 
 // Where a moth's landing spot sits on the round paper: its spot as seen head on (x, y), pushed out to the surface.
+/** @type {(p: number[]) => [number, number, number]} */
 const perchPoint = ([x, y]) => [x, y, Math.sqrt(Math.max(0, STYLES.chochin.body.half(y) ** 2 - (x - 340) ** 2))];
+// Where it shows with the lantern at rest: for hover areas, which hold still while the lantern swings.
+/** @type {(p: number[]) => [number, number]} */
+const atRest = ([x, y, z]) => { const k = EYE_Z / (EYE_Z - z); return [340 + (x - 340) * k, 330 + (y - 330) * k]; };
 
 // The caps' dark fans in the background (background.js) are set by the lantern's axis and how wide each cap looks
 // from the light. Here both come from the caps' real projected edges, so the fans stay on them as it tips and twists.
@@ -158,14 +204,11 @@ function capFans3d() {
   return { sway: Math.atan2(ax - bx, by - ay), caps: [fan(CAP.top[1]), fan(CAP.bottom[0])] };
 }
 
-// The string runs straight down to the top cap's real attachment point, wherever the pose puts it. The tassel is a
-// pendulum of its own on the bottom cap: gravity keeps it hanging down while the lantern tips, and the cap's sideways
-// acceleration makes it lag behind and swing a little; a faint breeze keeps it from ever settling dead still.
+// The tassel is a pendulum of its own on the bottom cap: gravity keeps it hanging down while the lantern tips, and
+// the cap's sideways acceleration makes it lag behind and swing a little; a faint breeze keeps it from ever settling.
 const TASSEL = { a: 0, w: 0, x: null, vx: 0, ax: 0 }; // angle (radians, bottom toward +x), its speed, the cap's x motion
-function hangParts3d(dt, s) {
-  const [tx, ty] = place([340, CAP.top[0]]), [bx, by] = place([340, CAP.bottom[1]]);
-  put($('hang'), 'd', `M340 ${(POSE.top - 2).toFixed(1)}L${tx.toFixed(2)} ${ty.toFixed(2)}`);
-  const t = TASSEL, L = 40, g = 9 * L; // about 3 rad/s natural swing, a short cord
+function swingTassel(dt, s) {
+  const [bx] = place([340, CAP.bottom[1]]), t = TASSEL, L = 40, g = 9 * L; // about 3 rad/s natural swing, a short cord
   if (t.x !== null && dt > 0) {
     const vx = (bx - t.x) / dt;
     t.ax += ((vx - t.vx) / dt - t.ax) * Math.min(1, dt * 8); // smoothed, so frame-time jitter doesn't kick it
@@ -175,21 +218,25 @@ function hangParts3d(dt, s) {
     t.a += t.w * dt;
   }
   t.x = bx;
-  put($('tassel'), 'transform', `translate(${bx.toFixed(2)} ${by.toFixed(2)}) rotate(${(-t.a * 180 / Math.PI).toFixed(2)})`);
 }
 
 // Show or hide the canvas with the lantern style; behind it, threads and ghosts are clipped to the lantern's outline.
+// The canvas never takes the pointer, so hover areas over the lantern still work.
 function showLantern3d() {
   if (!L3D) return;
   const on = lantern3dOn();
   $('lantern3d').style.visibility = on ? '' : 'hidden';
+  $('lantern3d').style.pointerEvents = 'none';
+  $('hang').style.display = on ? 'none' : ''; // the 3D string replaces it
   for (const id of ['threads', 'stale']) on ? $(id).setAttribute('clip-path', 'url(#offLantern)') : $(id).removeAttribute('clip-path');
 }
-// Keep the canvas over BOX, at the screen's pixel density (fitView calls this; the SVG scales scene units uniformly).
+// Keep the canvas over BOX, from the window's top down past the tassel, at the screen's pixel density (fitView calls
+// this; the SVG scales scene units uniformly).
 function fitLantern3d(width) {
   if (!L3D) return;
   const [x, y, w] = VIEW.box, k = width / w, c = $('lantern3d'), dpr = devicePixelRatio || 1;
-  Object.assign(c.style, { inset: 'auto', left: `${(BOX[0] - x) * k}px`, top: `${(BOX[1] - y) * k}px`, width: `${BOX[2] * k}px`, height: `${BOX[3] * k}px` });
+  BOX[1] = y; BOX[3] = BOX_BOTTOM - y;
+  Object.assign(c.style, { inset: 'auto', left: `${(BOX[0] - x) * k}px`, top: '0px', width: `${BOX[2] * k}px`, height: `${BOX[3] * k}px` });
   c.width = Math.round(BOX[2] * k * dpr); c.height = Math.round(BOX[3] * k * dpr);
   L3D_PX = BOX[2] / c.width; // scene units per device pixel, for the outline's width
 }
@@ -199,14 +246,16 @@ let L3D_PX = 0.5;
 // to 1), `bright` the paper's light with flicker and pulse, `cool` how far toward violet everything has turned.
 function drawLantern3d({ paper, core, size, bright, cool }) {
   L3 ??= build3d();
-  const g = gl3, { u } = L3, rgb = c => hex(c).map(v => v / 255);
+  const g = gl3, { u } = L3, rgb = c => hex(c).map(v => v / 255), top = POSE.top, px = L3D_PX * (devicePixelRatio || 1);
+  if (L3.stringTop !== top) { // the string runs from the top of the window into the top cap
+    L3.string?.free();
+    L3.string = upload(lathe([[1.1, top - 12], [1.1, CAP.top[0] + 3]], false, 10)); L3.stringTop = top;
+  }
   g.viewport(0, 0, g.drawingBufferWidth, g.drawingBufferHeight);
   g.clearColor(0, 0, 0, 0); g.clear(g.COLOR_BUFFER_BIT | g.DEPTH_BUFFER_BIT);
   g.enable(g.DEPTH_TEST); g.enable(g.CULL_FACE);
   g.useProgram(L3.p);
-  const m = POSE.m;
-  g.uniformMatrix3fv(u.uM, false, [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]); // GL wants columns
-  g.uniform1f(u.uTop, POSE.top); g.uniform4fv(u.uBox, BOX);
+  g.uniform4fv(u.uBox, BOX);
   g.uniform3f(u.uFlame, 340, 379, 0); g.uniform1f(u.uBright, bright);
   g.uniform1f(u.uLine, 1.1 * (devicePixelRatio || 1)); // ribs and seam about a CSS pixel wide, in device pixels
   // tones: the paper's cream takes on the flame's colour the brighter it burns, deepening toward dusk at the edges
@@ -217,12 +266,29 @@ function drawLantern3d({ paper, core, size, bright, cool }) {
   const landed = [...moths.values()].filter(m => m.wasLanded && m.perch && !m.leaving).slice(0, PERCHES);
   g.uniform4fv(u['uPerch[0]'], new Float32Array(PERCHES * 4).map((_, i) => { const m = landed[i >> 2]; return !m ? 0 : i % 4 < 3 ? perchPoint(m.perch)[i % 4] : (m.fold || 0) * m.size; }));
   g.uniform1i(u.uPerches, landed.length);
-  const draw = (mat, grow, cull) => {
-    g.uniform1i(u.uMat, mat); g.uniform1f(u.uGrow, grow); g.cullFace(cull);
-    for (const mesh of mat === 0 ? [L3.paper] : mat === 1 ? L3.caps : [L3.paper, ...L3.caps]) { g.bindVertexArray(mesh.vao); g.drawElements(g.TRIANGLES, mesh.count, g.UNSIGNED_SHORT, 0); }
+  // where things sit in the scene before perspective: the lantern turns about where it hangs, the tassel hangs from
+  // the bottom cap's point there, turned with the lantern's twist and swung by its own pendulum
+  const pivot = [340, top, 0], world = p => turn([p[0] - 340, p[1] - top, p[2] || 0]).map((v, i) => v + pivot[i]);
+  g.uniform3fv(u.uGlowW, world([340, 336, 0]));
+  const cols = m => [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]; // GL wants columns
+  const ca = Math.cos(-TASSEL.a), sa = Math.sin(-TASSEL.a), cy = Math.cos(POSE.yaw), sy = Math.sin(POSE.yaw);
+  const frames = {
+    lantern: [cols(POSE.m), pivot, pivot],
+    tassel: [cols(mul3([ca, -sa, 0, sa, ca, 0, 0, 0, 1], [cy, 0, sy, 0, 1, 0, -sy, 0, cy])), [340, CAP.bottom[1], 0], world([340, CAP.bottom[1], 0])],
   };
-  draw(0, 0, g.BACK); draw(1, 0, g.BACK);
-  draw(2, 1.6 * L3D_PX * (devicePixelRatio || 1), g.FRONT); // the outline: the back faces of a slightly bigger shell, in ink
+  // [mesh, material, frame, outline width in CSS px, colour]: paper 0, caps 1, the rest 3 in their own colour
+  const parts = [[L3.paper, 0, 'lantern', 1.6], [L3.caps, 1, 'lantern', 1.6], [L3.knot, 3, 'lantern', 0.9, '#2A1E1E'],
+    [L3.string, 3, 'lantern', 0.6, '#C9B49C'], [L3.cord, 3, 'tassel', 0.6, '#3A2626'], [L3.gold, 3, 'tassel', 0.6, '#D9AE52']];
+  for (const ink of [false, true]) { // the surfaces, then the outline: the back faces of a slightly bigger shell, in ink
+    g.cullFace(ink ? g.FRONT : g.BACK);
+    for (const [mesh, mat, f, w, col] of parts) {
+      const [m, from, to] = frames[f];
+      g.uniformMatrix3fv(u.uM, false, m); g.uniform3fv(u.uFrom, from); g.uniform3fv(u.uTo, to);
+      g.uniform1i(u.uMat, ink ? 2 : mat); g.uniform1f(u.uGrow, ink ? w * px : 0);
+      if (col) g.uniform3fv(u.uColor, rgb(col));
+      g.bindVertexArray(mesh.vao); g.drawElements(g.TRIANGLES, mesh.count, g.UNSIGNED_SHORT, 0);
+    }
+  }
   // the clip that hides threads and ghosts behind the lantern follows its outline as it swings
   put($('offLanternPath'), 'd', 'M-9999 -9999H9999V9999H-9999Z M' + L3.outline.map(p => place(p).map(v => v.toFixed(1)).join(' ')).join('L') + 'Z');
 }

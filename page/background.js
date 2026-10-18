@@ -28,7 +28,7 @@ uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
-const float CAPS = 0.5; // how much light the caps' fans hold back
+const float CAPS = 0.42; // how much light the caps' fans hold back
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
@@ -58,16 +58,17 @@ void main() {
     lit *= 1.0 - m.w * mix(shade, spike, close);
   }
   // the solid caps of a paper lantern: no light leaves through its top or bottom, so above and below it a fan stays
-  // darker, in two flat steps (the flame has some size, so the fan's edge is half lit); turned with the lantern's sway
+  // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
-  float open = 1.0 - CAPS * (0.5 * smoothstep(capR * 1.15 + 0.04, capR * 1.15 - 0.04, slope) + 0.5 * smoothstep(capR * 0.85 + 0.04, capR * 0.85 - 0.04, slope));
+  float open = 1.0 - CAPS * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope);
   vec3 col = uBg;
   if (uAmbient < 0.5) {
-    // glow rings: three nested discs, shown together at one opacity
-    float d = length(p - uRingC);
-    vec3 ring = mix(mix(uRing0, uRing1, smoothstep(px, -px, d - uRingR.y)), uRing2, smoothstep(px, -px, d - uRingR.z));
-    col = mix(col, ring, smoothstep(px, -px, d - uRingR.x) * uRingA * lit * open);
+    // glow rings: three nested discs, shown together at one opacity; in a cap's fan their edges melt into one smooth
+    // gradient, so the fan reads as a single shadow rather than stacked layers
+    float d = length(p - uRingC), soft = px + 60.0 * (1.0 - open) / CAPS;
+    vec3 ring = mix(mix(uRing0, uRing1, smoothstep(soft, -soft, d - uRingR.y)), uRing2, smoothstep(soft, -soft, d - uRingR.z));
+    col = mix(col, ring, smoothstep(soft, -soft, d - uRingR.x) * uRingA * lit * open);
     // soft glow: radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
     float g = length(p - uGlowC) / uGlowR;
     float ga = g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));

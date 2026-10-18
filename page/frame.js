@@ -38,9 +38,9 @@ function frame(t) {
   setPose(in3d ? 4 * Math.sin(s * 0.13) * deg : 0, in3d ? (Math.cos(s * 0.7) * 1.6 + Math.cos(s * 1.9) * 0.4) * 1.2 * reach * deg : 0, rad, top);
   /** @type {(...p: number[]) => [number, number]} */
   const rot = (...p) => place(p); // x, y and, for a point off the centre plane, z
-  // the 3D chōchin's string and tassel hang on their own, so only its flame takes the pose
+  // the 3D chōchin draws its own string and tassel, so only its flame takes the pose
   put($('lantern'), 'transform', in3d ? '' : `rotate(${sway.toFixed(3)} 340 ${top.toFixed(1)})`);
-  if (in3d) { put($('plane'), 'transform', planeMatrix()); hangParts3d(dt, s); }
+  if (in3d) { put($('plane'), 'transform', planeMatrix()); swingTassel(dt, s); }
   else if (style.tassel) put($('tassel'), 'transform', `rotate(${(Math.sin(s * 0.7 - 0.9) * 2.6 + Math.sin(s * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
 
   // flame: layered tongues that lean and stretch independently, ember-small when idle
@@ -193,7 +193,9 @@ function frame(t) {
     if (m.zone) {
       // the hover area sits on the moth's home, or on its landing spot with the lantern at rest, not on the moth, so it
       // holds still while the moth wanders or the lantern swings
-      [m.zx, m.zy] = needsMe ? [m.perch[0] + 2 * m.size, m.perch[1] + 6 * m.size] : stretch(m.home);
+      // (on the 3D lantern that's the spot on its round surface, seen with the lantern at rest)
+      const spot = needsMe && (in3d ? atRest(perchPoint(m.perch)) : m.perch);
+      [m.zx, m.zy] = needsMe ? [spot[0] + 2 * m.size, spot[1] + 6 * m.size] : stretch(m.home);
       put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 40 : 48); // a landed moth's area covers the whole swing and a hop
       // once it has landed, its fireflies back home get a hover area of their own with the same card
       if (m.flies) {
