@@ -1,4 +1,5 @@
 // Wiring, run last once everything is defined: the live connection to the server, controls, and the animation clock.
+const PINNED = [new URLSearchParams(location.search).get('style')].find(k => k && STYLES[k]); // ?style=moroccan shows that lantern whatever the settings say (for previews)
 
 addEventListener('resize', fitView);
 const es = new EventSource('/events');
@@ -9,7 +10,7 @@ es.addEventListener('version', e => { if (version && e.data !== version) locatio
 es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
-  if (STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
+  if (!PINNED && STYLES[st.style] && STYLES[st.style] !== style) applyStyle(st.style);
   const quietStarted = recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   quietUntil = st.quietUntil || 0;
   if (/^\d{1,2}:\d{2}$/.test(st.quietEnd || '')) quietEnd = st.quietEnd;
@@ -49,7 +50,7 @@ $('style').onchange = e => {
   applyStyle(e.target.value);
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style: e.target.value }) });
 };
-applyStyle('barrel'); // until the server says which lantern is chosen
+applyStyle(PINNED || 'barrel'); // until the server says which lantern is chosen (unless ?style= pins one, for previews)
 
 // The macOS screensaver's web view never fires requestAnimationFrame, so when it goes quiet a timer takes over,
 // and the screensaver also calls lanternTick() on its own animation clock. In a normal window rAF runs and these idle.
