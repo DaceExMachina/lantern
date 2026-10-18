@@ -38,10 +38,11 @@ function makeHusk(p) {
   const segments = el('path', { d: 'M0.2 -0.9V0.9M1.1 -0.85V0.85', stroke: '#0E0B13', 'stroke-width': 0.14 });
   const tail = el('path', { d: 'M1.6 -0.72Q2.4 -0.5 2.6 0Q2.4 0.5 1.6 0.72Z' }); // the light organ, the last two segments
   const rim = el('path', { d: 'M-0.9 -0.75Q1.2 -1.15 2.4 -0.5', fill: 'none', 'stroke-width': 0.2, 'stroke-linecap': 'round' });
-  const ember = el('circle', { cx: 2.1, cy: 0, r: 3 });
+  // its glow is a firefly's own three circles at full size (wide glow, halo, bright core), just dimmer
+  const ember = [el('circle', { r: 18 }), el('circle', { r: 8 }), el('circle', { r: 2.8 })];
   const back = false;
-  g.append(ember, feelers, head, legs, wings, body, segments, tail, rim);
-  $('graveyard').append(g);
+  g.append(feelers, head, legs, wings, body, segments, tail, rim);
+  $('graveyard').append(g, ...ember);
   const zone = $('zones').appendChild(el('circle', { r: 10 }));
   const h = { p, g, body, wings, legs, rim, ember, tail, zone, back, u: 0.05 + rand() * 0.9, wob: rand(), turn: (rand() - 0.5) * 40,
     period: 30 + rand() * 30, ph: rand() * 6.28, flicker: rand() < 0.5, fall: graveSeeded ? 0 : 1, gone: undefined };
@@ -105,17 +106,19 @@ function drawGraveyard(dt, s, rim) {
     if (entry) { d.p = entry[0]; d.gone = undefined; } else d.gone ??= 0;
     if (d.gone !== undefined) { // back to life: it lifts off and fades
       d.gone += dt / 2;
-      if (d.gone >= 1) { d.g.remove(); d.zone.remove(); dead.delete(url); continue; }
+      if (d.gone >= 1) { d.g.remove(); d.ember.forEach(c => c.remove()); d.zone.remove(); dead.delete(url); continue; }
     }
     d.fall = Math.min(1, d.fall + dt / 2.5);
     // older ones lie further back: higher up the band, smaller and dimmer
     const back = lying.length > 1 && entry ? 1 - entry[1] / (lying.length - 1) : 0.5;
-    let x = x0 + w * d.u, rest = ground - 12 - back * 34 - d.wob * 4, k = 0.8 - back * 0.3; // tiny: the flying ones are barely more than their light
+    let x = x0 + w * d.u, rest = ground - 12 - back * 34 - d.wob * 4, k = 1.6 - back * 0.6;
     const moth = deadMoths.get(d.p.owner?.id);
-    if (moth) { x = moth.x + (d.u - 0.5) * 50; rest = moth.y + 3 + (d.wob - 0.5) * 8; k = 0.75 - moth.back * 0.25; } // gather around the session that made it
+    if (moth) { x = moth.x + (d.u - 0.5) * 50; rest = moth.y + 3 + (d.wob - 0.5) * 8; k = 1.5 - moth.back * 0.5; } // gather around the session that made it
     const drop = (1 - d.fall) ** 2, y = rest - drop * (rest - y0 - 40) - (d.gone || 0) * 80;
     const sway = drop * Math.sin(s * 3 + d.ph) * 14;
-    put(d.g, 'transform', `translate(${(x + sway).toFixed(1)} ${y.toFixed(1)}) rotate(${(d.back ? 180 : 0) + d.turn * (1 - drop) + sway}) scale(${k.toFixed(2)})`);
+    const turn = (d.back ? 180 : 0) + d.turn * (1 - drop) + sway, rad = turn * Math.PI / 180;
+    put(d.g, 'transform', `translate(${(x + sway).toFixed(1)} ${y.toFixed(1)}) rotate(${turn.toFixed(1)}) scale(${k.toFixed(2)})`);
+    const tx = x + sway + 2.1 * k * Math.cos(rad), ty = y + 2.1 * k * Math.sin(rad); // where its tail is
     const fade = (1 - back * 0.55) * (1 - (d.gone || 0));
     const col = FLY[['ready', 'failing', 'changes', 'draft'].includes(d.p.need) ? d.p.need : 'quiet'];
     // Now and then its tail lights up, out of step with the others. Half of them pulse slowly like an ember; the other
@@ -127,7 +130,9 @@ function drawGraveyard(dt, s, rim) {
     put(d.g, 'opacity', fade.toFixed(2)); // older ones further back fade, and so does a revived one rising
     put(d.rim, 'stroke', rim); put(d.rim, 'opacity', 0.12);
     put(d.tail, 'fill', mix('#15111C', col, Math.min(1, glow * 3))); // the same black as the rest until it glows
-    put(d.ember, 'fill', col); put(d.ember, 'opacity', (0.5 * glow).toFixed(2));
+    const lit = glow / 0.3 * 0.35; // as bright as a flying firefly's glow at about a third
+    const look = [[col, 0.16 * lit], [col, 0.6 * lit], [mix(col, '#FFFFFF', 0.6), 0.9 * lit]];
+    d.ember.forEach((c, i) => { put(c, 'cx', tx.toFixed(1)); put(c, 'cy', ty.toFixed(1)); put(c, 'fill', look[i][0]); put(c, 'opacity', (look[i][1] * fade).toFixed(2)); });
     put(d.zone, 'cx', (x + sway).toFixed(1)); put(d.zone, 'cy', y.toFixed(1));
     d.zone.style.display = show && d.gone === undefined ? '' : 'none';
   }
