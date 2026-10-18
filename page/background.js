@@ -118,7 +118,7 @@ const float DIM = 0.15, LIT = 6.0; // a near speck's brightness out of the glow,
 void main() {
   gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
   float lit = uCatch > 0.0 ? glow(a.xy) : 0.0; // the far specks stay a faint, even layer
-  gl_PointSize = a.z * (1.0 + 2.5 * lit) * 2.0 * uRes.x / uBox.z + 1.0;
+  gl_PointSize = a.z * (1.0 + 2.5 * lit) * uRes.x / uBox.z + 1.0;
   vS = uCatch > 0.0 ? pow(light(a.xy), uCatch) : 1.0; vA = a.w * (uCatch > 0.0 ? DIM + LIT * lit : 1.0) * mix(vS, 1.0, uDebug); vD = uDebug;
 }`, `
 precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
