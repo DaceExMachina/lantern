@@ -80,5 +80,5 @@ function fitView() {
   const canvas = $('bg'), dpr = devicePixelRatio || 1;
   canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   VIEW.top = y;
-  $('hang')?.setAttribute('d', `M340 ${y - 2}V22`); // the string runs from the top of the window to where each lantern's own string starts
+  drawHang(); // the string or chain runs from the top of the window down to the lantern
 }
