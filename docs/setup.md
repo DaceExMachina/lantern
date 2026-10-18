@@ -1,6 +1,6 @@
 # Setting up Lantern
 
-The [README](../README.md#install) has the one-line install. This page covers the details and the other ways to run it.
+The [README](../README.md#install) has the one-line install. This page has the details, plus the other ways to run Lantern.
 
 - [What the installer does](#what-the-installer-does)
 - [Download the app instead](#download-the-app-instead)
@@ -17,12 +17,15 @@ The [README](../README.md#install) has the one-line install. This page covers th
 git clone https://github.com/DaceExMachina/lantern && node lantern/install.js
 ```
 
-- **Hooks.** It backs up `~/.claude/settings.json` (or the one in `CLAUDE_CONFIG_DIR`) and adds one async `curl` hook per Claude Code event, each tagged `#lantern`. If Lantern isn't running, a hook gives up after a second and stays quiet, so Claude Code never waits on it.
-- **The app and the screensaver.** It builds both from source with Xcode's command line tools, signs them for your Mac alone (no Apple developer account needed), and installs them in `~/Applications` and `~/Library/Screen Savers`. The app opens at login.
-- **The iTerm2 panel.** If you have iTerm2, it copies the panel script into iTerm2's AutoLaunch folder. See [the iTerm2 toolbelt](#the-iterm2-toolbelt) to switch it on.
-- **Your checkout.** The app serves the page (`index.html` and `page/`) from the folder you cloned, so keep it, and a `git pull` brings new looks without a rebuild.
+First it backs up `~/.claude/settings.json` (or the one in `CLAUDE_CONFIG_DIR`) and adds an async `curl` hook, tagged `#lantern`, for every Claude Code event. If Lantern isn't running, a hook gives up after a second without a peep, so Claude Code never waits on it.
 
-Running it again is safe: it replaces what it installed last time. To undo all of it (your Claude Code settings get backed up first):
+Then it builds the app and the screensaver from source with Xcode's command line tools. It signs them for your Mac alone, so you don't need an Apple developer account, installs them in `~/Applications` and `~/Library/Screen Savers`, and sets the app to open at login.
+
+If you have iTerm2, it also copies the panel script into iTerm2's AutoLaunch folder. [The iTerm2 toolbelt](#the-iterm2-toolbelt) covers switching it on.
+
+The app serves the page (`index.html` and `page/`) straight from the folder you cloned, so keep that folder. A `git pull` brings in new looks without a rebuild.
+
+Running the installer again is safe, since it replaces whatever it installed last time. To undo all of it (your Claude Code settings get backed up first):
 
 ```bash
 node lantern/install.js uninstall
@@ -30,19 +33,21 @@ node lantern/install.js uninstall
 
 ## Download the app instead
 
-Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. On an Intel Mac, use the installer, which builds it for you. Unzip it and move `Lantern.app` to `~/Applications`. The app runs the server, but Claude Code still needs the hooks that send it your sessions, and those come from the installer. Without Xcode's command line tools, the installer keeps the app you downloaded and adds just the hooks and the iTerm2 panel.
+Each [GitHub release](https://github.com/DaceExMachina/lantern/releases) has a prebuilt `Lantern.zip` for Apple silicon Macs on macOS 13 or later. Unzip it and move `Lantern.app` to `~/Applications`. On an Intel Mac, use the installer, which builds the app for you.
 
-The download isn't signed with a paid Apple developer ID, so macOS blocks it the first time:
+The app runs the server, but Claude Code still needs hooks to tell it about your sessions, and only the installer adds those. Run it after you've moved the app in. Without Xcode's command line tools, it keeps the app you downloaded and adds just the hooks and the iTerm2 panel.
+
+The download isn't signed with a paid Apple developer ID, so macOS blocks it the first time you open it:
 
 1. Open `Lantern.app`. macOS says it can't check it for malicious software. Click Done.
 2. Open System Settings > Privacy & Security, scroll down to Security, and click Open Anyway next to the Lantern message.
 3. Confirm with your password or Touch ID. After that it opens normally.
 
-Building it yourself with the installer skips all of this, because an app built on your own Mac isn't quarantined.
+The installer skips all of this, because macOS doesn't quarantine an app built on your own Mac.
 
 ## Terminals and click to focus
 
-Clicking a moth brings its session to the front:
+Clicking a moth brings its session to the front. How it does that depends on where the session runs:
 
 | Where the session runs | What a click does |
 |---|---|
@@ -54,9 +59,9 @@ Clicking a moth brings its session to the front:
 | kitty | Focuses its window with `kitten @`, if `allow_remote_control` and `listen_on` are set in kitty.conf. Otherwise it brings kitty forward. |
 | Ghostty and anything else | Brings the terminal app forward. |
 
-The first click in iTerm2 or Terminal makes macOS ask whether Lantern can control it. Allow it. Sessions started before you installed or updated Lantern send less detail, so a click may only bring their app forward until they're restarted.
+The first click in iTerm2 or Terminal makes macOS ask whether Lantern may control it. Say yes. Sessions started before you installed or updated Lantern send less detail, so until you restart them, a click may only bring their app forward.
 
-Using a terminal Lantern doesn't know yet? [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-terminal) explains where to add it.
+Using a terminal Lantern doesn't know yet? [CONTRIBUTING.md](../CONTRIBUTING.md#adding-a-terminal) shows where to add it.
 
 ## The iTerm2 toolbelt
 
@@ -67,19 +72,21 @@ Using a terminal Lantern doesn't know yet? [CONTRIBUTING.md](../CONTRIBUTING.md#
 
 ## The screensaver
 
-Choose Lantern in System Settings > Wallpaper > Screen Saver (it's listed under Other). It shows the live page full screen, so the app needs to be running.
+Choose Lantern in System Settings > Wallpaper > Screen Saver, under Other. It shows the live page full screen, so the app has to be running.
 
-With more than one display, the biggest one gets the lantern and the others get just the background and drifting specks. The lantern's light carries on across onto the other displays, lined up with where they really sit. To pick which lantern it shows, choose one in any other Lantern window.
+With more than one display, the biggest gets the lantern and the rest get the background and drifting specks. The light spills across onto the other displays, lined up with where they actually sit. The screensaver shows whichever lantern you picked in any other Lantern window.
 
 ## GitHub status
 
-GitHub status is optional. It colours fireflies by what each PR needs and brings in [stale PRs](guide.md#fireflies-and-stale-prs).
+GitHub status is optional. Turn it on and fireflies take on the colour of what each PR needs, and [stale PRs](guide.md#fireflies-and-stale-prs) show up.
 
-Open the settings menu (the sliders icon at the bottom right), then **Connect an account** under GitHub. Lantern shows a code: enter it at github.com/login/device and approve the Claude Lantern GitHub App. The app can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed (the panel links to installing it, and an org admin may need to approve). The token is kept in your macOS Keychain, and you can connect more than one account. Disconnecting removes it from the Keychain. To cut it off completely, revoke the app in your GitHub settings.
+Open the settings menu (the sliders icon at the bottom right) and click **Connect an account** under GitHub. Lantern shows a code. Enter it at github.com/login/device and approve the Claude Lantern GitHub App.
+
+The app can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed. The panel links to installing it, and an org admin may need to approve. Lantern keeps the token in your macOS Keychain, and you can connect more than one account. Disconnecting deletes the token from the Keychain. To cut Lantern off completely, revoke the app in your GitHub settings.
 
 Every two minutes Lantern asks GitHub, once per account, for your open PRs and the reviews requested from you. Merged and closed PRs drop out.
 
-If you'd rather use your own `gh`, with no account connected, turn that on with:
+Rather use your own `gh`? With no account connected, turn it on with:
 
 ```bash
 curl -H 'Content-Type: application/json' -d '{"github":true}' http://127.0.0.1:7717/settings
@@ -89,7 +96,7 @@ It runs read-only `gh api graphql` queries from each session's folder, and only 
 
 ## Settings
 
-Lantern keeps its settings in `settings.json` in `~/Library/Application Support/Lantern`. The settings menu manages most of them. A few are only set by hand, and the app reads them when it starts, so quit and reopen it after an edit:
+Lantern keeps its settings in `settings.json` in `~/Library/Application Support/Lantern`, and the settings menu handles most of them. You set the few below by hand. The app reads them at startup, so quit and reopen it after an edit.
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -98,11 +105,11 @@ Lantern keeps its settings in `settings.json` in `~/Library/Application Support/
 | `quietEnd` | `"08:00"` | When "quiet" ends, as `"HH:MM"` in your local time. |
 | `supervisorPattern` | `"supervisor\|orchestrat"` | A regular expression, ignoring case, for agent types that fly as supervisors (a size up). |
 
-`LANTERN_PORT` in the environment still wins, for example `open --env LANTERN_PORT=7718 ~/Applications/Lantern.app`.
+`LANTERN_PORT` in the environment beats the file, as in `open --env LANTERN_PORT=7718 ~/Applications/Lantern.app`.
 
 ## Known limits
 
-- **Lantern is macOS only.** The app, the server inside it, the screensaver and click to focus all need a Mac, and the installer refuses to run anywhere else.
+- **Lantern is macOS only.** The app, its server, the screensaver and click to focus all need a Mac, and the installer won't run anywhere else.
 - **Claude Code versions.** Tested with 2.1.302. The installer registers hooks for newer events such as `PermissionRequest` and `PostCompact`, which a much older Claude Code may not know (see [troubleshooting](troubleshooting.md#claude-code-complains-about-the-hooks)).
 - **The prebuilt app is Apple silicon only.** On an Intel Mac, the installer builds it from source.
 - **The screensaver leans on WebKit settings Apple doesn't document.** It's tested on macOS 26.

@@ -1,10 +1,10 @@
 # Contributing to Lantern
 
-Thanks for helping. Small, focused pull requests are easiest to review. CI type-checks and tests every one.
+Thanks for pitching in. Small, focused pull requests are the easiest to review, and CI type-checks and tests each one.
 
 ## How it fits together
 
-Claude Code hooks send every session event to a small server inside Lantern.app. The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page animates an inline SVG over a WebGL background.
+Claude Code's hooks send every session event to a small server inside Lantern.app. The server tracks sessions and subagents and streams them to the page over Server-Sent Events, and the page animates an inline SVG over a WebGL background.
 
 | Where | What |
 |---|---|
@@ -19,11 +19,11 @@ Claude Code hooks send every session event to a small server inside Lantern.app.
 | `fake.js` | Plays every lantern state without real sessions, on a throwaway lantern (see below). |
 | `test/` | The tests (see below). |
 
-When the server starts, it rebuilds the sessions you already have open from their transcripts in `~/.claude/projects` (or under `CLAUDE_CONFIG_DIR`), so a restart doesn't lose them.
+On startup, the server rebuilds your open sessions from their transcripts in `~/.claude/projects` (or under `CLAUDE_CONFIG_DIR`), so a restart doesn't lose them.
 
 ## Work in a worktree
 
-Lantern.app serves the page straight from the checkout you installed from, and every open window reloads when `index.html` or a script in `page/` changes. Editing that checkout changes your live lantern mid-edit, so always work in a separate worktree:
+Lantern.app serves the page straight from the checkout you installed from, and every open window reloads whenever `index.html` or a script in `page/` changes. Edit that checkout and your live lantern changes under you mid-edit. Work in a separate worktree instead:
 
 ```bash
 git worktree add ../lantern-my-change -b my-change
@@ -31,15 +31,17 @@ git worktree add ../lantern-my-change -b my-change
 
 ## Previewing a change
 
-To see a branch with your real sessions, PRs and session text, run this in its worktree:
+To try a branch with your real sessions, PRs and session text, run this in its worktree:
 
 ```bash
 npm run preview
 ```
 
-It builds the branch's server without the app's window, gives it a copy of your settings, PR cache and stats from `~/Library/Application Support/Lantern`, and prints a URL on a spare port. Add page options after `--`, for example `npm run preview -- style=chochin`. Edits to `index.html` or `page/` reload the page; after changing `app/`, stop it with Ctrl-C and run it again. It reads `~/.claude` but never writes there, and snoozes or settings changed in the preview stay in its copy, which is deleted when it stops. Two things are real, though: it polls GitHub on its own while it runs, and clicking a moth brings that session's terminal to the front. Claude Code's hooks only reach the app, so the preview finds sessions from their processes and transcripts, and their states can differ from what the app shows.
+It builds the branch's server without the app's window, hands it a copy of your settings, PR cache and stats from `~/Library/Application Support/Lantern`, and prints a URL on a spare port. Page options go after `--`, as in `npm run preview -- style=chochin`. Edits to `index.html` or `page/` reload the page by themselves. After changing `app/`, stop it with Ctrl-C and run it again.
 
-To see every lantern state without real sessions, start a throwaway copy of the app on a spare port with its own empty data folder, then point `fake.js` at it:
+The preview reads `~/.claude` and never writes there. Snoozes and settings you change in it stay in its copy, which is deleted when it stops. Two things do reach the outside world: it polls GitHub on its own while it runs, and clicking a moth really does bring that session's terminal to the front. Claude Code's hooks only talk to the app, so the preview finds sessions from their processes and transcripts, and a session's state can differ from what the app shows.
+
+To see every lantern state without real sessions, start a throwaway copy of the app on a spare port with an empty data folder of its own, then point `fake.js` at it:
 
 ```bash
 open -n -a Lantern --env LANTERN_PORT=7718 --env LANTERN_DATA="$(mktemp -d)"
@@ -49,17 +51,17 @@ open -n -a Lantern --env LANTERN_PORT=7718 --env LANTERN_DATA="$(mktemp -d)"
 LANTERN_PORT=7718 node fake.js
 ```
 
-`fake.js` refuses to run against your real lantern on 7717, since fake sessions would stay in its stats for good.
+`fake.js` won't run against your real lantern on 7717, because fake sessions would haunt its stats forever.
 
 ## Changing the server or the app
 
-After changing anything in `app/`, rebuild and reinstall the app, then quit Lantern and open it again:
+After changing anything in `app/`, rebuild and reinstall the app, then quit Lantern and reopen it:
 
 ```bash
 sh app/build.sh
 ```
 
-Rebuilding makes macOS ask again whether Lantern can control iTerm2 or Terminal, because an app signed on your own Mac counts as a new app each time it's built. The screensaver has its own `sh screensaver/build.sh`.
+macOS treats every rebuild of an app signed on your own Mac as a new app, so it will ask again whether Lantern may control iTerm2 or Terminal. The screensaver has its own `sh screensaver/build.sh`.
 
 ## Checks and tests
 
@@ -67,17 +69,18 @@ Rebuilding makes macOS ask again whether Lantern can control iTerm2 or Terminal,
 npm install && npm run check && npm test
 ```
 
-- `npm run check` type-checks the JavaScript (the Node scripts and the page) with TypeScript. There's no build step.
-- `npm test` uses Node's built-in test runner and needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with its own temporary home folder, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, with `expect` steps holding the sessions the page should have by then.
-- After changing what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps from what it does now. Read the diff before committing it.
-- If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
+`npm run check` type-checks the JavaScript, both the Node scripts and the page, with TypeScript. There's no build step.
+
+`npm test` uses Node's built-in test runner. It needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with a temporary home folder of its own, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, plus `expect` steps holding the sessions the page should have by that point.
+
+When you change what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps to match. Read the diff before you commit it. If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
 
 CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the type check and the tests on every pull request and push to main, and makes sure the app and the screensaver compile.
 
 ## Adding a terminal
 
-Click to focus works per terminal. The hook already sends `TERM_PROGRAM`, the terminal app's bundle id and a few terminal-specific ids with every event (see `COMMAND` in `install.js`). `focusElsewhere` in `app/Server.swift` is where each terminal gets its own way of bringing a session forward: add a case there next to the others, and a row to the table in [docs/setup.md](docs/setup.md#terminals-and-click-to-focus).
+Each terminal needs its own way of bringing a session forward. The hook already sends `TERM_PROGRAM`, the terminal app's bundle id and a few terminal-specific ids with every event (see `COMMAND` in `install.js`). Add a case for your terminal next to the others in `focusElsewhere` in `app/Server.swift`, and a row to the table in [docs/setup.md](docs/setup.md#terminals-and-click-to-focus).
 
 ## Writing docs and UI text
 
-Keep it plain and friendly, and skip em dashes in docs and UI copy. The [README](README.md) stays short: new detail goes in [docs/guide.md](docs/guide.md) or [docs/setup.md](docs/setup.md).
+Keep it plain and friendly, and leave em dashes out of docs and UI copy. The [README](README.md) stays short, so new detail goes in [docs/guide.md](docs/guide.md) or [docs/setup.md](docs/setup.md).
