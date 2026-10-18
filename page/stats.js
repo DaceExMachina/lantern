@@ -185,9 +185,9 @@ function renderStats(j) {
       : `<b>${today.warmMoths}%</b><span>of moth time today was warm: flying, not waiting on you</span>`}</div>
     ${r ? `<div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
       <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${today.end >= Date.now() - MIN ? 'now' : clock(r.to)}</span></div>
-      <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}</div>
-      <div class="legend"><span><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
-        <span><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div>` : ''}
+      <div class="legend">${['working', 'waiting', 'snoozed'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
+        <span><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
+        <span><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span><span><i style="background:${MOTHS.idle}"></i>idle <b data-v="idle"></b></span></div>` : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   if (r) followRibbon($('statsBody').querySelector('.ribbon'), r, today);
   tally = j.tally;
