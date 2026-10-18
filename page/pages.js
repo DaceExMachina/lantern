@@ -156,14 +156,14 @@ function strip(d, a0, a1) {
 }
 
 // The shown canvas's box on the paper, in paper units: the drum's width, and its height plus room for the bow.
-const box = d => {
+const paperBox = d => {
   const m = Math.max(Math.abs(d.bow(d.top)), Math.abs(d.bow(d.bottom))) / 2 + 1;
   return { x: d.cx - d.r, y: d.top - m, w: 2 * d.r, h: d.bottom - d.top + 2 * m };
 };
 
 // Typesets every block flat, warps the page onto the drum, and lights it, `s` device pixels to a paper unit.
 function render(s) {
-  const d = style.drum, out = warped ??= document.createElement('canvas'), B = box(d), U = d.r * Math.PI / 2;
+  const d = style.drum, out = warped ??= document.createElement('canvas'), B = paperBox(d), U = d.r * Math.PI / 2;
   const W = Math.ceil(B.w * s), H = Math.ceil(B.h * s);
   if (out.width !== W || out.height !== H) { out.width = W; out.height = H; }
   flat ??= document.createElement('canvas');
@@ -219,7 +219,7 @@ const legible = () => toScreen() * (STYLES.barrel.drum.bottom - STYLES.barrel.dr
 
 // The picture on the paper, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
 function drawPages(root) {
-  const B = box(style.drum);
+  const B = paperBox(style.drum);
   root.innerHTML = `<image id="pagesInk" x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" preserveAspectRatio="none" href="${showing}"/>`;
   drawn = { scale: 0, cool: -1 };
 }
