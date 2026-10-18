@@ -73,6 +73,8 @@ function frame(t) {
   // the paper takes on the flame's colour, more so the brighter it burns
   put($('paperTint'), 'fill', pal('paper'));
   put($('paperTint'), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
+  // where a lantern's caps face the paper, they catch the flame's light
+  document.querySelectorAll('.paperLit').forEach(n => { put(n, 'color', pal('paper')); put(n, 'opacity', ((0.35 + 0.55 * size) * flick * pulse).toFixed(3)); });
   const [gx, gy] = rot(...style.light);
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs

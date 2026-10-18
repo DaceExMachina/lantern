@@ -42,18 +42,30 @@ const STYLES = {
     </g>`,
   },
   chochin: {
-    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 177], caps: [218, 441, 46], // pivot in the drawing's own units
+    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], caps: [218, 441, 46], // pivot in the drawing's own units
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
-    back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V66" stroke="#C9B49C" stroke-width="0.8"/>
+    // the caps' faces that turn toward the paper catch the flame (class paperLit, coloured each frame), drawn behind it
+    back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V57.6" stroke="#C9B49C" stroke-width="0.8"/>
+      <ellipse class="paperLit" cx="95" cy="74" rx="18.6" ry="2" fill="currentColor"/><ellipse class="paperLit" cx="95" cy="168" rx="18.6" ry="2" fill="currentColor"/>
       <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/><ellipse id="paperGlow" cx="95" cy="122" rx="52" ry="48" fill="url(#pg)"/>
       <ellipse id="paperTint" cx="95" cy="122" rx="52" ry="48"/>`, 18),
     front: MOCK(`<ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2" opacity="0.22"/>
-      <g fill="none" stroke="#C9BBA8" stroke-width="0.55" opacity="0.9"><path d="M69.8 80Q95 75.2 120.2 80"/><path d="M56.2 90Q95 86.4 133.8 90"/><path d="M48.8 100Q95 97.6 141.2 100"/><path d="M44.7 110Q95 108.8 145.3 110"/><path d="M43.0 120Q95 120.0 147.0 120"/><path d="M43.7 130Q95 131.2 146.3 130"/><path d="M46.8 140Q95 142.4 143.2 140"/><path d="M52.8 150Q95 153.6 137.2 150"/><path d="M63.2 160Q95 164.8 126.8 160"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below -->
+      <g fill="none" stroke="#C9BBA8" opacity="0.9"><path d="M70.1 79.9Q95 75.3 119.9 79.8" stroke-width="0.45"/><path d="M56.5 90.2Q95 86.5 133.5 89.8" stroke-width="0.6"/><path d="M49.1 99.8Q95 97.5 140.9 99.8" stroke-width="0.45"/><path d="M45.0 109.8Q95 109.1 145.0 110.0" stroke-width="0.45"/><path d="M43.3 120.3Q95 120.1 146.7 120.1" stroke-width="0.45"/><path d="M44.0 130.0Q95 131.6 146.0 129.9" stroke-width="0.45"/><path d="M47.1 140.0Q95 142.3 142.9 139.8" stroke-width="0.6"/><path d="M53.1 149.8Q95 153.9 136.9 149.9" stroke-width="0.45"/><path d="M63.5 159.8Q95 164.6 126.5 160.0" stroke-width="0.45"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below, each a little uneven -->
       <path d="M101.6 74L106.8 80 113.2 90 116.7 100 118.6 110 119.4 120 119.1 130 117.6 140 114.8 150 109.9 160 101.6 170" fill="none" stroke="#C9BBA8" stroke-width="0.4" stroke-linejoin="round" opacity="0.6"/><!-- the seam, a little way round the side so it curves like a meridian -->
-      <rect x="76" y="66" width="38" height="9" rx="2" fill="#2A1E1E"/><rect x="76" y="68" width="38" height="1.2" fill="#4A3434"/>
-      <rect x="76" y="168" width="38" height="9" rx="2" fill="#2A1E1E"/>
-      <g id="tassel"><path d="M95 177V194" stroke="#2A1E1E" stroke-width="1"/><circle cx="95" cy="196" r="2.6" fill="#D9AE52"/>
-        <path d="M93.5 198L92 210M95 198V212M96.5 198L98 210" stroke="#D9AE52" stroke-width="0.6"/></g>`, 18),
+      <!-- the caps: lacquered drums, cel-shaded. Their edges bow like the ribs; flat tones (lit lacquer and a dark side), a
+           dark lip for their thickness, and an ink outline -->
+      <path d="M95 63.3V64.6" stroke="#2A1E1E" stroke-width="1.4"/><ellipse cx="95" cy="60.4" rx="2.4" ry="2.9" fill="none" stroke="#B8935A" stroke-width="0.8"/><path d="M93.3 59.2Q93.6 58 94.6 57.6" fill="none" stroke="#F0D9A6" stroke-width="0.4" stroke-linecap="round"/>
+      <path d="M76 66.5Q95 62.5 114 66.5V74Q95 70 76 74Z" fill="#46302F"/><path d="M103.0 64.85L105.8 65.14L108.5 65.51L111.2 65.96L114.0 66.50L114.0 74.00L111.2 73.46L108.5 73.01L105.8 72.64L103.0 72.35Z" fill="#22171A"/><path d="M76 72.6Q95 68.6 114 72.6V74Q95 70 76 74Z" fill="#1A1012"/>
+      <path d="M76 66.5Q95 62.5 114 66.5V74Q95 70 76 74Z" fill="none" stroke="#140C0E" stroke-width="0.55" stroke-linejoin="round"/>
+      <path class="paperLit" d="M77.5 74.4Q95 70.5 112.5 74.4" fill="none" stroke="currentColor" stroke-width="0.6"/>
+      <path d="M76 168Q95 172 114 168V176.5Q95 180.5 76 176.5Z" fill="#46302F"/><path d="M103.0 169.65L105.8 169.36L108.5 168.99L111.2 168.54L114.0 168.00L114.0 176.50L111.2 177.04L108.5 177.49L105.8 177.86L103.0 178.15Z" fill="#22171A"/><path d="M76 168Q95 172 114 168V169.4Q95 173.4 76 169.4Z" fill="#1A1012"/>
+      <path d="M76 168Q95 172 114 168V176.5Q95 180.5 76 176.5Z" fill="none" stroke="#140C0E" stroke-width="0.55" stroke-linejoin="round"/>
+      <path class="paperLit" d="M77.5 167.6Q95 171.5 112.5 167.6" fill="none" stroke="currentColor" stroke-width="0.6"/>
+      <g id="tassel"><path d="M95 178.5V193" stroke="#3A2626" stroke-width="1.1"/>
+        <circle cx="95" cy="195.4" r="2.7" fill="#D9AE52"/><path d="M96.4 193.1A2.7 2.7 0 0 1 95 198.1 3.6 3.6 0 0 0 96.4 193.1Z" fill="#A87A2E"/><circle cx="95" cy="195.4" r="2.7" fill="none" stroke="#6E4A1C" stroke-width="0.35"/>
+        <rect x="93" y="197.6" width="4" height="1.8" rx="0.5" fill="#C29440" stroke="#6E4A1C" stroke-width="0.3"/>
+        <path d="M93.3 199.4L91.4 210.8Q95 212.6 98.6 210.8L96.7 199.4Z" fill="#D9AE52"/><path d="M95.9 199.4L97.2 211.4Q98 211.2 98.6 210.8L96.7 199.4Z" fill="#A87A2E"/>
+        <path d="M93.3 199.4L91.4 210.8Q95 212.6 98.6 210.8L96.7 199.4Z" fill="none" stroke="#6E4A1C" stroke-width="0.35" stroke-linejoin="round"/></g>`, 18),
   },
   moroccan: {
     hang: ['#B8873A', 2.6, '5 4'], // carries the chain on up to the top
