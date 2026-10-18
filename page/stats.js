@@ -50,14 +50,14 @@ function ribbon(r, w, h) {
 // shame badges sit right beside them. [name, how it's earned, shame?]
 const ACHIEVEMENTS = {
   warm_all_day: ['Warm all day', 'The lantern stayed warm nine tenths of a day with sessions running'],
-  clean_floor: ['Clean floor', 'An empty graveyard for a whole week'],
+  clean_floor: ['Clean floor', 'No stale PRs for a whole week'],
   small_batches: ['Small batches', 'Never more than 3 fireflies in flight for a week'],
-  revived: ['Revived', 'Brought a dead PR back and merged it'],
+  revived: ['Revived', 'Brought a stale PR back and merged it'],
   streak_3: ['Warm streak: 3 days', 'Three days in a row at or over your warm moths goal'],
   streak_7: ['Warm streak: a week', 'Seven days in a row at or over your warm moths goal'],
   streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over your warm moths goal'],
   streak_30: ['Warm streak: a month', 'Thirty days in a row at or over your warm moths goal'],
-  mass_grave: ['Mass Grave', 'The graveyard went over its 30', true],
+  mass_grave: ['Mass Grave', 'More than 30 stale PRs', true],
   light_pollution: ['Light Pollution', '20 or more fireflies in flight', true],
   swarm_season: ['Swarm Season', 'One session owned 10 open PRs', true],
   hive_mind: ['Hive Mind', 'One session ran 10 agents at once', true],
@@ -65,7 +65,7 @@ const ACHIEVEMENTS = {
   ghosted: ['Ghosted', 'A moth waited 3 hours or more', true],
   snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day', true],
   lights_out: ['Lights Out', 'Two hours with nothing running between sessions', true],
-  necromancer: ['Necromancer', 'Revived 5 dead PRs in a week', true],
+  necromancer: ['Necromancer', 'Revived 5 stale PRs in a week', true],
 };
 const badge = (id, extra = '') => { const [name, how, shame] = ACHIEVEMENTS[id] || [id, '']; return `<span class="badge${shame ? ' shame' : ''}" title="${how}">${name}${extra}</span>`; };
 
