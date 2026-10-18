@@ -58,19 +58,43 @@ const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="u
     <path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/>
     ${LACE('shoulderL', 0.5, 0.8)}${LACE('shoulderR', 0.5, 0.8)}${LACE('shoulderF', 1, 0.8)}
     ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}${LACE('skirtL', 0.5, 0.8)}${LACE('skirtR', 0.5, 0.8)}${LACE('skirtF', 1, 0.8)}${LACE('bottomSide', 0.55, 0.7)}${LACE('bottomFront', 1, 0.7)}</mask>`;
+// Paper stretched over rib wires sinks in a little between them: its outline scallops in by `dip` between wires, and a flat
+// darker band runs through the middle of each gap. `half(y)` is the paper's half-width at height y, `ribs` the wire heights
+// from its top edge to its bottom edge, and `bow(y)` how far a wire's front arc bends there (its curve's control offset).
+const SUNKEN = (cx, half, ribs, dip, bow) => {
+  const n = v => +v.toFixed(2), gaps = ribs.slice(1).map((b, i) => [ribs[i], b]);
+  const arc = (y, d) => `Q${cx} ${n(y + bow(y))} ${n(cx + d * half(y))} ${n(y)}`; // a wire's front arc, ending on side d
+  const side = (a, b, d) => { // down the left (d -1) or up the right (d 1), through the sunken midpoint of the gap
+    const [y0, y1] = d < 0 ? [a, b] : [b, a], m = (a + b) / 2, mx = cx + d * (half(m) - dip);
+    return `Q${n(2 * mx - cx - d * (half(y0) + half(y1)) / 2)} ${n(m)} ${n(cx + d * half(y1))} ${n(y1)}`;
+  };
+  const top = ribs[0], bottom = ribs[ribs.length - 1];
+  const band = (y0, y1) => `<path d="M${n(cx - half(y0))} ${n(y0)}${arc(y0, 1)}L${n(cx + half(y1))} ${n(y1)}${arc(y1, -1)}Z"/>`;
+  return {
+    outline: `M${n(cx - half(top))} ${n(top)}${gaps.map(([a, b]) => side(a, b, -1)).join('')}${arc(bottom, 1)}`
+      + `${gaps.reverse().map(([a, b]) => side(a, b, 1)).join('')}${arc(top, -1)}Z`,
+    bands: gaps.map(([a, b]) => band(a + 0.32 * (b - a), b - 0.32 * (b - a))).join(''),
+    wires: ribs.slice(1, -1).map(y => `<path d="M${n(cx - half(y))} ${n(y)}${arc(y, 1)}"/>`).join(''),
+  };
+};
+// the Odawara barrel: a straight cylinder on 19 close wires, bowed from the flame's height like its drums
+const ODAWARA = SUNKEN(340, () => 60, Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), 1.2, y => 120 * (y - 350) / 1350);
+// the chōchin, in its mockup units: round, its wires wider apart and bowing away from the middle, so it sinks in less
+const CHOCHIN = SUNKEN(95, y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)), [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], 0.35, y => 0.115 * (y - 122));
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, tassel: [340, 477.56], caps: [216, 445, 63],
     body: { top: 216, bottom: 445, half: () => 60 }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
-    <path id="paperShape" d="M280 216Q282.4 222.03 280 228.05Q282.4 234.08 280 240.11Q282.4 246.13 280 252.16Q282.4 258.18 280 264.21Q282.4 270.24 280 276.26Q282.4 282.29 280 288.32Q282.4 294.34 280 300.37Q282.4 306.39 280 312.42Q282.4 318.45 280 324.47Q282.4 330.5 280 336.53Q282.4 342.55 280 348.58Q282.4 354.61 280 360.63Q282.4 366.66 280 372.68Q282.4 378.71 280 384.74Q282.4 390.76 280 396.79Q282.4 402.82 280 408.84Q282.4 414.87 280 420.89Q282.4 426.92 280 432.95Q282.4 438.97 280 445Q340 453.44 400 445Q397.6 438.97 400 432.95Q397.6 426.92 400 420.89Q397.6 414.87 400 408.84Q397.6 402.82 400 396.79Q397.6 390.76 400 384.74Q397.6 378.71 400 372.68Q397.6 366.66 400 360.63Q397.6 354.61 400 348.58Q397.6 342.55 400 336.53Q397.6 330.5 400 324.47Q397.6 318.45 400 312.42Q397.6 306.39 400 300.37Q397.6 294.34 400 288.32Q397.6 282.29 400 276.26Q397.6 270.24 400 264.21Q397.6 258.18 400 252.16Q397.6 246.13 400 240.11Q397.6 234.08 400 228.05Q397.6 222.03 400 216Q340 204.09 280 216Z" fill="url(#paperShade)"/>
+    <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
+    <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
     <rect id="paperGlow" x="270" y="200" width="140" height="260" fill="url(#paperGrad)" clip-path="url(#bodyClip)"/>
-    <path id="paperTint" d="M280 216Q282.4 222.03 280 228.05Q282.4 234.08 280 240.11Q282.4 246.13 280 252.16Q282.4 258.18 280 264.21Q282.4 270.24 280 276.26Q282.4 282.29 280 288.32Q282.4 294.34 280 300.37Q282.4 306.39 280 312.42Q282.4 318.45 280 324.47Q282.4 330.5 280 336.53Q282.4 342.55 280 348.58Q282.4 354.61 280 360.63Q282.4 366.66 280 372.68Q282.4 378.71 280 384.74Q282.4 390.76 280 396.79Q282.4 402.82 280 408.84Q282.4 414.87 280 420.89Q282.4 426.92 280 432.95Q282.4 438.97 280 445Q340 453.44 400 445Q397.6 438.97 400 432.95Q397.6 426.92 400 420.89Q397.6 414.87 400 408.84Q397.6 402.82 400 396.79Q397.6 390.76 400 384.74Q397.6 378.71 400 372.68Q397.6 366.66 400 360.63Q397.6 354.61 400 348.58Q397.6 342.55 400 336.53Q397.6 330.5 400 324.47Q397.6 318.45 400 312.42Q397.6 306.39 400 300.37Q397.6 294.34 400 288.32Q397.6 282.29 400 276.26Q397.6 270.24 400 264.21Q397.6 258.18 400 252.16Q397.6 246.13 400 240.11Q397.6 234.08 400 228.05Q397.6 222.03 400 216Q340 204.09 280 216Z"/>`,
+    <path id="paperTint" d="${ODAWARA.outline}"/>`,
     // built like an Odawara lantern, seen from the flame's height: every horizontal edge (wires, drums) bows up above the
     // flame and down below it. The paper sinks in a little between wires (scalloped edge, a darker band mid-gap).
-    front: `<path d="M280 216Q282.4 222.03 280 228.05Q282.4 234.08 280 240.11Q282.4 246.13 280 252.16Q282.4 258.18 280 264.21Q282.4 270.24 280 276.26Q282.4 282.29 280 288.32Q282.4 294.34 280 300.37Q282.4 306.39 280 312.42Q282.4 318.45 280 324.47Q282.4 330.5 280 336.53Q282.4 342.55 280 348.58Q282.4 354.61 280 360.63Q282.4 366.66 280 372.68Q282.4 378.71 280 384.74Q282.4 390.76 280 396.79Q282.4 402.82 280 408.84Q282.4 414.87 280 420.89Q282.4 426.92 280 432.95Q282.4 438.97 280 445Q340 453.44 400 445Q397.6 438.97 400 432.95Q397.6 426.92 400 420.89Q397.6 414.87 400 408.84Q397.6 402.82 400 396.79Q397.6 390.76 400 384.74Q397.6 378.71 400 372.68Q397.6 366.66 400 360.63Q397.6 354.61 400 348.58Q397.6 342.55 400 336.53Q397.6 330.5 400 324.47Q397.6 318.45 400 312.42Q397.6 306.39 400 300.37Q397.6 294.34 400 288.32Q397.6 282.29 400 276.26Q397.6 270.24 400 264.21Q397.6 258.18 400 252.16Q397.6 246.13 400 240.11Q397.6 234.08 400 228.05Q397.6 222.03 400 216Q340 204.09 280 216Z" fill="#F2DCC0" opacity="0.2"/>
-    <g fill="#A27C58" opacity="0.13" clip-path="url(#bodyClip)"><path d="M280 219.86Q340 208.29 400 219.86V224.2Q340 213.01 280 224.2Z"/><path d="M280 231.91Q340 221.41 400 231.91V236.25Q340 226.14 280 236.25Z"/><path d="M280 243.96Q340 234.54 400 243.96V248.3Q340 239.26 280 248.3Z"/><path d="M280 256.01Q340 247.66 400 256.01V260.35Q340 252.39 280 260.35Z"/><path d="M280 268.07Q340 260.78 400 268.07V272.41Q340 265.51 280 272.41Z"/><path d="M280 280.12Q340 273.91 400 280.12V284.46Q340 278.63 280 284.46Z"/><path d="M280 292.17Q340 287.03 400 292.17V296.51Q340 291.76 280 296.51Z"/><path d="M280 304.23Q340 300.16 400 304.23V308.56Q340 304.88 280 308.56Z"/><path d="M280 316.28Q340 313.28 400 316.28V320.62Q340 318.01 280 320.62Z"/><path d="M280 328.33Q340 326.4 400 328.33V332.67Q340 331.13 280 332.67Z"/><path d="M280 340.38Q340 339.53 400 340.38V344.72Q340 344.25 280 344.72Z"/><path d="M280 352.44Q340 352.65 400 352.44V356.77Q340 357.38 280 356.77Z"/><path d="M280 364.49Q340 365.78 400 364.49V368.83Q340 370.5 280 368.83Z"/><path d="M280 376.54Q340 378.9 400 376.54V380.88Q340 383.62 280 380.88Z"/><path d="M280 388.59Q340 392.02 400 388.59V392.93Q340 396.75 280 392.93Z"/><path d="M280 400.65Q340 405.15 400 400.65V404.99Q340 409.87 280 404.99Z"/><path d="M280 412.7Q340 418.27 400 412.7V417.04Q340 423 280 417.04Z"/><path d="M280 424.75Q340 431.4 400 424.75V429.09Q340 436.12 280 429.09Z"/><path d="M280 436.8Q340 444.52 400 436.8V441.14Q340 449.24 280 441.14Z"/></g>
-    <g fill="none" stroke="#B48C66" stroke-width="1" opacity="0.75"><path d="M280 228.05Q340 217.21 400 228.05"/><path d="M280 240.11Q340 230.34 400 240.11"/><path d="M280 252.16Q340 243.46 400 252.16"/><path d="M280 264.21Q340 256.58 400 264.21"/><path d="M280 276.26Q340 269.71 400 276.26"/><path d="M280 288.32Q340 282.83 400 288.32"/><path d="M280 300.37Q340 295.96 400 300.37"/><path d="M280 312.42Q340 309.08 400 312.42"/><path d="M280 324.47Q340 322.2 400 324.47"/><path d="M280 336.53Q340 335.33 400 336.53"/><path d="M280 348.58Q340 348.45 400 348.58"/><path d="M280 360.63Q340 361.58 400 360.63"/><path d="M280 372.68Q340 374.7 400 372.68"/><path d="M280 384.74Q340 387.82 400 384.74"/><path d="M280 396.79Q340 400.95 400 396.79"/><path d="M280 408.84Q340 414.07 400 408.84"/><path d="M280 420.89Q340 427.2 400 420.89"/><path d="M280 432.95Q340 440.32 400 432.95"/></g>
+    front: `<path d="${ODAWARA.outline}" fill="#F2DCC0" opacity="0.2"/>
+    <g fill="#A27C58" opacity="0.13" clip-path="url(#bodyClip)">${ODAWARA.bands}</g>
+    <g fill="none" stroke="#B48C66" stroke-width="1" opacity="0.75">${ODAWARA.wires}</g>
     <!-- the drums: black lacquer, cel-shaded (a lit side, a dark side, a dark lip where they grip the paper, an ink
          outline), with a narrower step on the outer end; the faces toward the paper catch the flame -->
     <path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="#3B2A24"/><path d="M362 187.28L369 188.12L376 189.18L383 190.48L390 192L390 199L383 197.54L376 196.31L369 195.29L362 194.49Z" fill="#1F1512"/><path d="M290 192Q340 180.3 390 192V199Q340 187.81 290 199Z" fill="none" stroke="#0E0907" stroke-width="1.2" stroke-linejoin="round"/>
@@ -89,9 +113,10 @@ const STYLES = {
     // the caps' faces that turn toward the paper catch the flame (class paperLit, coloured each frame), drawn behind it
     back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V57.6" stroke="#C9B49C" stroke-width="0.8"/>
       <ellipse class="paperLit" cx="95" cy="74" rx="18.6" ry="2" fill="currentColor"/><ellipse class="paperLit" cx="95" cy="168" rx="18.6" ry="2" fill="currentColor"/>
-      <ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2"/><ellipse id="paperGlow" cx="95" cy="122" rx="52" ry="48" fill="url(#pg)"/>
-      <ellipse id="paperTint" cx="95" cy="122" rx="52" ry="48"/>`, 18),
-    front: MOCK(`<ellipse cx="95" cy="122" rx="52" ry="48" fill="#F3ECE2" opacity="0.22"/>
+      <defs><clipPath id="bodyClip"><path d="${CHOCHIN.outline}"/></clipPath></defs><path d="${CHOCHIN.outline}" fill="#F3ECE2"/><path id="paperGlow" d="${CHOCHIN.outline}" fill="url(#pg)"/>
+      <path id="paperTint" d="${CHOCHIN.outline}"/>`, 18),
+    front: MOCK(`<path d="${CHOCHIN.outline}" fill="#F3ECE2" opacity="0.22"/>
+      <g fill="#A8967E" opacity="0.08" clip-path="url(#bodyClip)">${CHOCHIN.bands}</g><!-- the paper sinks in a little between wires -->
       <g fill="none" stroke="#C9BBA8" opacity="0.9"><path d="M70.1 79.9Q95 75.3 119.9 79.8" stroke-width="0.45"/><path d="M56.5 90.2Q95 86.5 133.5 89.8" stroke-width="0.6"/><path d="M49.1 99.8Q95 97.5 140.9 99.8" stroke-width="0.45"/><path d="M45.0 109.8Q95 109.1 145.0 110.0" stroke-width="0.45"/><path d="M43.3 120.3Q95 120.1 146.7 120.1" stroke-width="0.45"/><path d="M44.0 130.0Q95 131.6 146.0 129.9" stroke-width="0.45"/><path d="M47.1 140.0Q95 142.3 142.9 139.8" stroke-width="0.6"/><path d="M53.1 149.8Q95 153.9 136.9 149.9" stroke-width="0.45"/><path d="M63.5 159.8Q95 164.6 126.5 160.0" stroke-width="0.45"/></g><!-- ribs seen head on: straight through the middle, bowing away above and below, each a little uneven -->
       <path d="M101.6 74L106.8 80 113.2 90 116.7 100 118.6 110 119.4 120 119.1 130 117.6 140 114.8 150 109.9 160 101.6 170" fill="none" stroke="#C9BBA8" stroke-width="0.4" stroke-linejoin="round" opacity="0.6"/><!-- the seam, a little way round the side so it curves like a meridian -->
       <!-- the caps: lacquered drums, cel-shaded. Their edges bow like the ribs; flat tones (lit lacquer and a dark side), a
