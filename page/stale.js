@@ -68,10 +68,11 @@ function drawStale(dt, s) {
     m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3;
     m.x = x0 + w * m.u + Math.sin(s * 0.06 + m.ph) * 30;
     m.y = low + (floor - low) * (0.15 + m.back * 0.6) + Math.sin(s * 0.1 + m.ph * 2) * 10;
-    m.beat += dt * 2.2; // a slow, tired wingbeat
-    const lift = (0.55 + 0.45 * Math.sin(m.beat)) * 0.9;
-    put(m.up, 'd', pathOf(flapWing(WING_UP, lift, 0)));
-    put(m.side, 'd', pathOf(flapWing(WING_SIDE, lift * 0.92, 0)));
+    m.beat += dt * 3.4; // a tired wingbeat, about half a living moth's
+    const lift = (0.5 + 0.5 * Math.sin(m.beat)) * 1.25, sweep = 0.3 * Math.cos(m.beat);
+    const roll = 0.7 * Math.sin(s * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
+    put(m.up, 'd', pathOf(flapWing(WING_UP, lift, sweep, roll)));
+    put(m.side, 'd', pathOf(flapWing(WING_SIDE, lift * 0.92, sweep, roll)));
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) scale(${(1 - m.back * 0.3).toFixed(2)})`);
     for (const wing of [m.side, m.up]) { put(wing, 'fill', WISP_TINT); put(wing, 'opacity', (0.14 * (1 - m.back * 0.5)).toFixed(2)); }
     m.zone.style.display = show ? '' : 'none';
