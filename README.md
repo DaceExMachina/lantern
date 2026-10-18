@@ -2,7 +2,7 @@
 
 A paper lantern that glows with your Claude Code sessions. Moths are your sessions, the flame is how busy they are, and when one of them needs you, its moth lands on the lantern and the light turns violet.
 
-<p align="center"><img src="docs/lantern.png" width="420" alt="The book-page barrel lantern fully lit, with five session moths and their subagents circling it, a blue bookmark ribbon trailing below, and specks of dust in its glow"></p>
+![The lantern icon](icon.svg)
 
 ## What you see
 

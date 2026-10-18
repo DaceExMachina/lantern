@@ -76,11 +76,9 @@ function addBlock(now, age = 0) {
 
 // One glyph at a time, laid out on the paper unrolled (tilted with the block), then placed where its middle falls on
 // the drum: squeezed sideways as the paper turns away and riding the wire's bow. Mirrored blocks run the other way
-// round with their glyphs flipped, like print seen through.
-function blockMarkup(b) {
-  const esc = c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] || c;
-  const d = style.drum, gap = d.ribs[1] - d.ribs[0], tilt = Math.atan(b.slope) * 180 / Math.PI, k = b.mirror ? -1 : 1;
-  let out = '';
+// round with their glyphs flipped, like print seen through. Each is [glyph, x, y, sideways squeeze].
+function blockGlyphs(b) {
+  const d = style.drum, gap = d.ribs[1] - d.ribs[0], k = b.mirror ? -1 : 1, out = [];
   b.lines.forEach((line, i) => {
     const row = b.row + i, g = Math.floor(row / 2);
     if (g < 0 || g >= d.ribs.length - 1) return; // above or below the paper
@@ -90,20 +88,85 @@ function blockMarkup(b) {
       const w = widthOf(c, b.size), mid = s + w / 2, a = mid / d.r;
       s += w;
       if (c === ' ' || Math.abs(a) >= Math.PI / 2 - 0.05) continue; // round the back
-      const x = d.cx + k * d.r * Math.sin(a), y = base + mid * b.slope + bow * Math.cos(a) ** 2 / 2;
-      out += `<text transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(k * Math.cos(a)).toFixed(3)} 1) rotate(${tilt.toFixed(1)})">${esc(c)}</text>`;
+      out.push([c, d.cx + k * d.r * Math.sin(a), base + mid * b.slope + bow * Math.cos(a) ** 2 / 2, k * Math.cos(a)]);
     }
   });
-  return `<g font-size="${b.size.toFixed(2)}" text-anchor="middle">${out}</g>`;
+  return out;
 }
 
-// The light the words are read by, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
+// The words are printed onto a canvas, redrawn each tick (a few times a second, as they fade), and the paper shows it as
+// one image, so a frame only moves one picture with the sway. As thousands of SVG glyphs under a mask, WebKit repainted
+// them all every frame, which took Lantern.app down to about 1fps. PAPER is the canvas's box in the lantern's units.
+const PAPER = { x: 270, y: 210, w: 140, h: 240 };
+const canvas = document.createElement('canvas'), ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
+let shownUrl = '', encoding = false; // the picture on the paper, and whether a new one is being made
 function drawPages(root) {
-  root.innerHTML = `<radialGradient id="pagesLight" gradientUnits="userSpaceOnUse" cx="340" cy="340" r="110" gradientTransform="translate(340 340) scale(.8 1.5) translate(-340 -340)">
-      <stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#bbb"/><stop offset="1" stop-color="#555"/></radialGradient>
-    <mask id="pagesMask" maskUnits="userSpaceOnUse" x="270" y="210" width="140" height="240"><rect x="270" y="210" width="140" height="240" fill="url(#pagesLight)"/></mask>
-    <g id="pagesInk" mask="url(#pagesMask)" font-family="${FONT}"></g>`;
-  for (const b of blocks) b.node = null;
+  root.innerHTML = `<image id="pagesInk" x="${PAPER.x}" y="${PAPER.y}" width="${PAPER.w}" height="${PAPER.h}" preserveAspectRatio="none"/>`;
+  if (shownUrl) URL.revokeObjectURL(shownUrl);
+  shownUrl = '';
+}
+
+// A block's glyphs printed once, solid, on a sheet the size of the canvas; reprinted only if the window's scale changes.
+function printBlock(b, px) {
+  const sheet = document.createElement('canvas'), pen = /** @type {CanvasRenderingContext2D} */ (sheet.getContext('2d'));
+  sheet.width = canvas.width; sheet.height = canvas.height;
+  const t = Math.atan(b.slope), sin = px * Math.sin(t), cos = px * Math.cos(t);
+  pen.font = `${b.size}px ${FONT}`;
+  pen.textAlign = 'center';
+  for (const [c, x, y, k] of blockGlyphs(b)) { // translate(x y) scale(k 1) rotate(t), in canvas pixels
+    pen.setTransform(k * cos, sin, -k * sin, cos, (x - PAPER.x) * px, (y - PAPER.y) * px);
+    pen.fillText(c, 0, 0);
+  }
+  return sheet;
+}
+
+// Lays every block's sheet down at its fade, colours it all the ink's colour, then dims it by the light the words are
+// read by: brightest round the flame, an upright ellipse falling off to a third.
+function paintPages(ink, now) {
+  if (encoding) return; // the last picture is still being made
+  if (!blocks.length) { ink.removeAttribute('href'); return; } // blank paper: nothing to make
+  const m = ink.getScreenCTM();
+  const px = Math.ceil(Math.hypot(m?.a ?? 1, m?.b ?? 0) * devicePixelRatio * 2) / 2; // canvas pixels per unit, crisp at any window size
+  if (canvas.width !== Math.round(PAPER.w * px)) { canvas.width = Math.round(PAPER.w * px); canvas.height = Math.round(PAPER.h * px); }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (const b of blocks) {
+    const fadeIn = Math.min(1, (now - b.born) / FADE), fadeOut = b.leaving ? 1 - (now - b.leaving) / FADE : 1;
+    if (b.sheet?.width !== canvas.width) b.sheet = printBlock(b, px);
+    ctx.globalAlpha = b.peak * Math.min(fadeIn, fadeOut);
+    ctx.drawImage(b.sheet, 0, 0);
+  }
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-in';
+  ctx.fillStyle = mix(INK.warm, INK.cool, cool);
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.setTransform(0.8 * px, 0, 0, 1.5 * px, (340 * 0.2 - PAPER.x) * px, (340 * -0.5 - PAPER.y) * px); // centred on (340, 340)
+  const light = ctx.createRadialGradient(340, 340, 0, 340, 340, 110);
+  light.addColorStop(0, '#000'); light.addColorStop(0.55, 'rgba(0, 0, 0, 0.733)'); light.addColorStop(1, 'rgba(0, 0, 0, 0.333)');
+  ctx.fillStyle = light;
+  ctx.fillRect(200, 200, 400, 300);
+  encoding = true;
+  encoder ??= startEncoder();
+  createImageBitmap(canvas).then(picture => encoder.postMessage(picture, [picture]));
+}
+// Making the PNG takes about 8ms, which on the page's own thread made a frame late every tick, so a worker makes it.
+let encoder;
+function startEncoder() {
+  const worker = new Worker(URL.createObjectURL(new Blob([`onmessage = async e => {
+    const c = new OffscreenCanvas(e.data.width, e.data.height);
+    c.getContext('2d').drawImage(e.data, 0, 0);
+    postMessage(await c.convertToBlob());
+  }`])));
+  worker.onmessage = e => {
+    encoding = false;
+    const ink = $('pagesInk'), old = shownUrl;
+    if (!ink) return;
+    ink.setAttribute('href', shownUrl = URL.createObjectURL(e.data));
+    if (old) setTimeout(() => URL.revokeObjectURL(old), 1000); // once the new one has loaded
+  };
+  return worker;
 }
 
 function tickPages() {
@@ -120,17 +183,12 @@ function tickPages() {
   }
   if (!root.firstChild) drawPages(root);
   if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
-  const ink = $('pagesInk');
-  ink.setAttribute('fill', mix(INK.warm, INK.cool, cool));
-  inkOpacity();
   blocks = blocks.filter(b => {
     if (!b.leaving && now - b.born > FADE + b.hold) b.leaving = now;
-    const fadeIn = Math.min(1, (now - b.born) / FADE), fadeOut = b.leaving ? 1 - (now - b.leaving) / FADE : 1;
-    if (fadeOut <= 0) { b.node?.remove(); return false; }
-    if (!b.node) { ink.insertAdjacentHTML('beforeend', blockMarkup(b)); b.node = ink.lastElementChild; }
-    b.node.setAttribute('opacity', (b.peak * Math.min(fadeIn, fadeOut)).toFixed(3));
-    return true;
+    return !b.leaving || now - b.leaving < FADE;
   });
+  inkOpacity();
+  paintPages($('pagesInk'), now);
 }
 // Brighter flame, clearer words, times the first set's quick fade in.
 function inkOpacity() {
