@@ -71,15 +71,15 @@ final class Stats {
         }
     }
 
-    func begin(_ kind: String, _ session: String? = nil, _ data: JSON = [:]) {
-        write("INSERT INTO spans (kind, session, began, data) VALUES (?, ?, ?, ?)", [kind, session, now(), jsonText(data)])
+    func begin(_ kind: String, _ session: String? = nil, _ data: JSON = [:], at: Double = now()) {
+        write("INSERT INTO spans (kind, session, began, data) VALUES (?, ?, ?, ?)", [kind, session, at, jsonText(data)])
     }
     /// Merges `data` into the open span's.
     func note(_ kind: String, _ session: String? = nil, _ data: JSON) {
         write("UPDATE spans SET data = json_patch(data, ?) WHERE kind = ? AND session IS ? AND ended IS NULL", [jsonText(data), kind, session])
     }
-    func end(_ kind: String, _ session: String? = nil, _ data: JSON = [:]) {
-        write("UPDATE spans SET ended = ?, data = json_patch(data, ?) WHERE kind = ? AND session IS ? AND ended IS NULL", [now(), jsonText(data), kind, session])
+    func end(_ kind: String, _ session: String? = nil, _ data: JSON = [:], at: Double = now()) {
+        write("UPDATE spans SET ended = ?, data = json_patch(data, ?) WHERE kind = ? AND session IS ? AND ended IS NULL", [at, jsonText(data), kind, session])
     }
     func event(_ kind: String, _ session: String? = nil, _ data: JSON = [:]) {
         write("INSERT INTO events (time, kind, session, data) VALUES (?, ?, ?, ?)", [now(), kind, session, jsonText(data)])
