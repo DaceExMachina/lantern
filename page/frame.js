@@ -130,8 +130,7 @@ function frame(t) {
         m.hops = 0;
       }
       // on the 3D lantern the spot is a point on its round surface, so it tips and turns with it
-      const [px, py] = m.perch, pz = in3d ? Math.sqrt(Math.max(0, style.body.half(py) ** 2 - (px - 340) ** 2)) : 0;
-      [tx, ty] = rot(px, py, pz); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
+      [tx, ty] = rot(...(in3d ? perchPoint(m.perch) : m.perch.slice(0, 2))); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
       // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
       // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
       // Snoozed ones stay still.
@@ -205,6 +204,10 @@ function frame(t) {
       }
       if (m.leaving) m.zone.style.pointerEvents = 'none';
     }
+    // on the 3D lantern a landed moth is carried along with its spot as the lantern swings and twists, so easing in
+    // never leaves it trailing off the paper (a hop to a new spot eases over as usual)
+    if (in3d && needsMe && m.carry?.perch === m.perch) { m.x += tx - m.carry.x; m.y += ty - m.carry.y; }
+    m.carry = needsMe ? { perch: m.perch, x: tx, y: ty } : null;
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
     // lean gently into the direction of travel, eased so position jitter doesn't shake it
     // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
@@ -257,6 +260,8 @@ function frame(t) {
     put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
     wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
+    // twisted round to the far side of the 3D lantern, a landed moth goes behind it
+    if (in3d) put(m.g, 'opacity', needsMe && m.perch ? Math.min(1, Math.max(0, (turn(m.perch[2])[2] + 0.04) / 0.1)).toFixed(2) : 1);
     m.shade = caster(m.x, m.y, m.tilt, m.size, [...upPts, ...sidePts], 1);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
@@ -371,6 +376,7 @@ function frame(t) {
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse, dustCol: pal('core'), shadows: casters, sway: rad,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
+    ...(in3d ? capFans3d() : {}), // the 3D caps' fans follow their real projected edges
   });
   placeCard();
 }

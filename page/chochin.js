@@ -42,7 +42,7 @@ const CHOCHIN_3D = {
 // The paper is STYLES.chochin's body (so moths land on what's drawn); the black caps are short cylinders. Scene units.
 const CAP = { r: 45.6, top: [196.4, 218], bottom: [441.2, 462.8], bevel: 3 };
 const BOX = [190, 178, 300, 300]; // the part of the scene the canvas covers: the lantern and its swing, scene units
-const RIBS = 14, SEAM = 0.07; // bamboo hoops between the caps; the paper's seam, a little way round to the right
+const RIBS = 14, SEAM = 0.07, PERCHES = 16; // bamboo hoops between the caps; the paper's seam, a little way round to the right
 
 const gl3 = L3D ? $('lantern3d').getContext('webgl2', { antialias: true, premultipliedAlpha: true }) : null;
 let L3 = null; // the program and meshes, built on first use
@@ -95,24 +95,33 @@ precision highp float;
 in vec3 vLocal, vN, vView; in vec2 vUV;
 uniform int uMat; uniform mat3 uM; uniform vec3 uFlame; uniform float uBright, uLine;
 uniform vec3 uHot, uMid, uShade, uRib, uInk, uCapDark, uCapLit, uCapShine, uBounce;
+uniform vec4 uPerch[${PERCHES}]; uniform int uPerches; // landed moths: where each sits on the paper, and its size
 out vec4 o;
-
+float band(float x, float t) { float a = fwidth(x) * 0.7; return smoothstep(t - a, t + a, x); }
 float line(float x) { float d = abs(fract(x + 0.5) - 0.5) / max(fwidth(x), 1e-5); return 1.0 - smoothstep(uLine * 0.5, uLine * 0.5 + 1.0, d); }
 void main() {
   if (uMat == 2) { o = vec4(uInk, 1.0); return; }
   vec3 N = normalize(vN), V = normalize(vView);
   if (uMat == 0) {
     float d = length(vLocal - uFlame) / 110.0, through = uBright * pow(d, -2.5) * (0.35 + 0.65 * max(dot(N, V), 0.0));
-    vec3 c = mix(mix(uShade, uMid, smoothstep(0.1, 0.95, through)), uHot, smoothstep(0.8, 2.2, through));
+    vec3 c = mix(mix(uShade, uMid, smoothstep(0.1, 0.95, through)), uHot, smoothstep(0.6, 1.7, through));
     c = mix(c, uRib, 0.55 * line(vUV.y * ${RIBS.toFixed(1)}));
     c = mix(c, uRib, 0.4 * line(vUV.x - ${SEAM}));
+    // a faint soft shadow where each landed moth touches the paper, so it rests on it rather than hovering
+    float touch = 0.0;
+    for (int i = 0; i < ${PERCHES}; i++) {
+      if (i >= uPerches) break;
+      vec4 q = uPerch[i];
+      touch = max(touch, (1.0 - smoothstep(0.0, 8.0 * q.w, length(vLocal - q.xyz))) * min(1.0, q.w));
+    }
+    c = mix(c, uShade * 0.75, 0.4 * touch);
     o = vec4(c, 1.0);
   } else {
-    // black lacquer caps: a soft key light, a broad gentle shine, and the faces turned to the paper catch its glow
+    // black lacquer caps, cel-shaded: lit and shadowed sides, a hard shine, and the faces turned to the paper catch its glow
     vec3 Nw = uM * N, L = normalize(vec3(-0.45, -0.6, 0.66)), H = normalize(L + normalize(uM * V));
-    vec3 c = mix(uCapDark, uCapLit, smoothstep(-0.2, 0.8, dot(Nw, L)));
-    c = mix(c, uCapShine, 0.8 * pow(max(dot(Nw, H), 0.0), 24.0));
-    c = mix(c, uBounce, smoothstep(0.3, 0.9, dot(N, normalize(vec3(340.0, 330.0, 0.0) - vLocal))));
+    vec3 c = mix(uCapDark, uCapLit, band(dot(Nw, L), 0.3));
+    c = mix(c, uCapShine, band(dot(Nw, H), 0.985));
+    c = mix(c, uBounce, band(dot(N, normalize(vec3(340.0, 330.0, 0.0) - vLocal)), 0.6));
     o = vec4(c, 1.0);
   }
 }`;
@@ -135,6 +144,18 @@ void main() {
   const side = [...cap(CAP.top).slice(1, 5), ...paper.filter((_, i) => i % 4 === 0), ...cap(CAP.bottom).slice(1, 5)].map(([r, y]) => [r, y]);
   return { p, u, paper: lathe(paper, true), caps: [lathe(cap(CAP.top), false), lathe(cap(CAP.bottom), false)],
     outline: [...side.map(([r, y]) => [340 + r, y]), ...side.reverse().map(([r, y]) => [340 - r, y])] };
+}
+
+// Where a moth's landing spot sits on the round paper: its spot as seen head on (x, y), pushed out to the surface.
+const perchPoint = ([x, y]) => [x, y, Math.sqrt(Math.max(0, STYLES.chochin.body.half(y) ** 2 - (x - 340) ** 2))];
+
+// The caps' dark fans in the background (background.js) are set by the lantern's axis and how wide each cap looks
+// from the light. Here both come from the caps' real projected edges, so the fans stay on them as it tips and twists.
+function capFans3d() {
+  const light = place(STYLES.chochin.light), [ax, ay] = place([340, CAP.top[1]]), [bx, by] = place([340, CAP.bottom[0]]);
+  const fan = y => { const a = place([340 - CAP.r, y]), b = place([340 + CAP.r, y]), c = place([340, y]);
+    return Math.hypot(b[0] - a[0], b[1] - a[1]) / 2 / Math.hypot(c[0] - light[0], c[1] - light[1]); };
+  return { sway: Math.atan2(ax - bx, by - ay), caps: [fan(CAP.top[1]), fan(CAP.bottom[0])] };
 }
 
 // The string runs straight down to the top cap's real attachment point, wherever the pose puts it. The tassel is a
@@ -193,6 +214,9 @@ function drawLantern3d({ paper, core, size, bright, cool }) {
   const tones = { uHot: mix(core, paper, 0.12), uMid: mid, uShade: shade, uRib: mix(shade, '#3A1E2C', 0.4),
     uInk: mix('#2A1A1C', '#1C1A34', cool), uCapDark: '#22171A', uCapLit: '#44302F', uCapShine: mix('#A07A62', core, 0.25), uBounce: mix('#22171A', paper, 0.5 * size) };
   for (const [k, c] of Object.entries(tones)) g.uniform3fv(u[k], rgb(c));
+  const landed = [...moths.values()].filter(m => m.wasLanded && m.perch && !m.leaving).slice(0, PERCHES);
+  g.uniform4fv(u['uPerch[0]'], new Float32Array(PERCHES * 4).map((_, i) => { const m = landed[i >> 2]; return !m ? 0 : i % 4 < 3 ? perchPoint(m.perch)[i % 4] : (m.fold || 0) * m.size; }));
+  g.uniform1i(u.uPerches, landed.length);
   const draw = (mat, grow, cull) => {
     g.uniform1i(u.uMat, mat); g.uniform1f(u.uGrow, grow); g.cullFace(cull);
     for (const mesh of mat === 0 ? [L3.paper] : mat === 1 ? L3.caps : [L3.paper, ...L3.caps]) { g.bindVertexArray(mesh.vao); g.drawElements(g.TRIANGLES, mesh.count, g.UNSIGNED_SHORT, 0); }
