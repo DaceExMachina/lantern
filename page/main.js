@@ -5,7 +5,7 @@ const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
 es.addEventListener('graveyard', e => { stalePRs = JSON.parse(e.data); }); // the server calls them the graveyard
-const PINNED = new URLSearchParams(location.search).get('style'); // ?style= previews one lantern, whatever the settings say
+const PINNED = Q.get('style'); // ?style= previews one lantern, whatever the settings say
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
 es.onmessage = e => { raw = JSON.parse(e.data); pagesData = true; sync(); };
@@ -31,31 +31,31 @@ setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm c
 es.onerror = () => { $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline'; };
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
-for (const mode of ['panel', 'screensaver', 'ambient']) if (new URLSearchParams(location.search).has(mode)) document.body.classList.add(mode);
+for (const mode of ['panel', 'screensaver', 'ambient']) if (Q.has(mode)) document.body.classList.add(mode);
 fitView();
 
 $('quiet').onclick = () => {
   const [h, m] = quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);
   if (morning <= new Date()) morning.setDate(morning.getDate() + 1);
-  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quietUntil: quiet() ? 0 : morning.getTime() }) });
+  post('/settings', { quietUntil: quiet() ? 0 : morning.getTime() });
 };
 
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
 
 $('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
-  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lanternText: lanternText }) });
+  post('/settings', { lanternText });
 };
 $('staleToggle').onchange = e => {
   staleOn = e.target.checked;
-  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ graveyard: staleOn }) });
+  post('/settings', { graveyard: staleOn });
 };
 
 // lantern picker
 for (const [key, st] of Object.entries(STYLES)) $('style').append(new Option(st.name, key, false, st === style));
 $('style').onchange = e => {
   applyStyle(e.target.value);
-  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ style: e.target.value }) });
+  post('/settings', { style: e.target.value });
 };
 applyStyle(STYLES[PINNED] ? PINNED : 'barrel'); // until the server says which lantern is chosen
 
@@ -70,7 +70,7 @@ setInterval(lanternTick, 16);
 setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
 $('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) hovered.zone.dispatchEvent(new MouseEvent('click')); });
-$('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 400); });
+$('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 400); });
 
 try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
 box.onchange = () => {

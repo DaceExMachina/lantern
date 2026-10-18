@@ -29,28 +29,28 @@
   #menu select { align-self: stretch; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
-  #stats { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
-  #stats:popover-open { gap: 8px; }
+  #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
+  #stats:popover-open, #recap:popover-open { gap: 8px; }
   #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
   #stats h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
   #statsBody { display: flex; flex-direction: column; gap: 8px; }
-  #stats .headline { display: flex; align-items: baseline; gap: 10px; }
-  #stats .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) .headline { display: flex; align-items: baseline; gap: 10px; }
+  :is(#stats, #recap) .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
   #stats .headline span { color: #C9B8DA; }
-  #stats .ribbon svg { display: block; width: 100%; height: 50px; }
-  #stats .axis, #stats .legend { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
+  :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
+  :is(#stats, #recap) .axis, #stats .legend { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
   #stats .legend { justify-content: flex-start; flex-wrap: wrap; gap: 2px 14px; margin-top: 0; }
   #stats .legend span { white-space: nowrap; }
   #stats .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
-  #stats dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
-  #stats dt { color: #8F7FA6; font-size: 11px; }
-  #stats dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
+  :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }
+  :is(#stats, #recap) dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
   #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
   #stats .day b { color: #D8CCE6; font-weight: 500; }
-  #stats .dim { color: #8F7FA6; margin: 0; }
-  #stats .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  :is(#stats, #recap) .dim { color: #8F7FA6; margin: 0; }
+  :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: 5px; }
   #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; }
   #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   .badgeTip { position: fixed; z-index: 10; pointer-events: none; max-width: 240px; padding: 8px 10px; border: 1px solid #4A3B68;
@@ -70,21 +70,12 @@
   #stats h3 .link { all: unset; cursor: pointer; float: right; text-transform: none; letter-spacing: 0; color: #C3B2FF; font-size: 12px; }
   #stats h3 .link:hover { color: #F0E8FF; }
   /* the daily recap: the stats panel's look */
-  #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
-  #recap:popover-open { gap: 8px; }
   #recap h3 { margin: 0; font-size: 15px; font-weight: 500; color: #F5E9FF; display: flex; justify-content: space-between; }
   #recap .close { all: unset; cursor: pointer; color: #8F7FA6; font-size: 18px; line-height: 1; }
   #recap .close:hover { color: #F0E8FF; }
-  #recap .headline { display: flex; align-items: baseline; gap: 10px; }
-  #recap .headline b { font-size: 40px; line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
-  #recap .ribbon svg { display: block; width: 100%; height: 50px; }
-  #recap .axis { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
-  #recap dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
-  #recap dt { color: #8F7FA6; font-size: 11px; }
-  #recap dd { margin: 0; color: #F5E9FF; font-size: 15px; font-variant-numeric: tabular-nums; }
+  #recap dl { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+  #recap dd { font-size: 15px; }
   #recap .stars { display: block; width: 100%; height: auto; }
-  #recap .dim { color: #8F7FA6; margin: 0; }
-  #recap .badges { display: flex; flex-wrap: wrap; gap: 5px; }
   #goals { display: flex; flex-direction: column; gap: 4px; }
   #goals h4 { margin-bottom: 0; }
   #goals label { cursor: default; flex-wrap: wrap; gap: 4px 6px; }
@@ -97,6 +88,8 @@
   #status .warm { color: #8F7FA6; }
   #status.offline { color: #8A7A99; font-style: italic; }
   .quiet { all: unset; cursor: pointer; color: #8F7FA6; }
+  .quiet:hover, .quiet.on { color: #C3B2FF; }
+  .quiet:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   #gh h3 { margin: 0 0 4px; font-size: 13px; color: #F5E9FF; display: flex; align-items: center; gap: 6px; }
   #gh h3 svg { color: #C3B2FF; }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
@@ -106,8 +99,6 @@
   #gh a, #help a { color: #C3B2FF; }
   #gh .dim { color: #8F7FA6; font-size: 11.5px; }
   #gh .warn { color: #E8C8A8; }
-  .quiet:hover, .quiet.on { color: #C3B2FF; }
-  .quiet:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   #status .next { all: unset; cursor: pointer; border-bottom: 1px dotted currentColor; }
   #status .next:hover { color: #E4DAFF; }
   #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
@@ -140,7 +131,6 @@
   #card .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
   #card .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
   #card .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #B8AACB; }
-  #card.show { pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
   #card ul { margin: 6px 0 2px; padding-left: 16px; }
   #card li { margin: 2px 0; }
   #card a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
@@ -150,9 +140,8 @@
   #card { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
-  #card.show { opacity: 1; }
-  #card h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: center; }
-  #card h3 { align-items: flex-start; }
+  #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
+  #card h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: flex-start; }
   #card .chip { white-space: nowrap; flex-shrink: 0; margin-top: 2px; font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 99px; background: #4A3B58; color: #F2DCC0; }
   #card .chip.waiting { background: #5B44C9; color: #F0ECFF; }
   #card .chip.idle { background: #3A3050; color: #B9A8C8; }

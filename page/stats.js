@@ -178,7 +178,7 @@ function renderGoals() {
 function setGoal(key, text) {
   const n = text.trim() === '' ? null : Math.max(0, Number(text));
   if (n !== null && !Number.isFinite(n)) return;
-  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ goals: { [key]: n } }) });
+  post('/settings', { goals: { [key]: n } });
 }
 
 async function loadStats() {

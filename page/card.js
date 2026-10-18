@@ -41,12 +41,22 @@ function prRows(prs) {
   return [line(`PRs (${prs.length})`, 'agents'), ...prs.map(p => {
     const row = line('', 'pr'), a = document.createElement('a'), dot = document.createElement('i'), title = document.createElement('span');
     a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = p.label;
-    dot.style.background = FLY[['ready', 'failing', 'changes', 'draft'].includes(p.need) ? p.need : 'quiet'];
+    dot.style.background = FLY[p.need] || FLY.quiet;
     title.textContent = p.title; title.title = p.title;
     row.append(dot, a, ` ${NEED[p.need] || p.need} · `, title);
     return row;
   })];
 }
+
+// Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a
+// click run `onClick` and hide it. `target` is what `hovered` becomes; `cardAt` says which of its areas the card sits beside.
+function hoverZone(zone, target, onClick, cardAt) {
+  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = target; if (cardAt) target.cardAt = cardAt; renderCard(); });
+  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 700); });
+  zone.addEventListener('click', () => { onClick(); clearTimeout(hideTimer); hideCard(); });
+  return zone;
+}
+function hideCard() { hovered = null; $('card').classList.remove('show'); }
 
 function renderCard() {
   const m = hovered, s = m?.session;

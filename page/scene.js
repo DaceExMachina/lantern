@@ -5,7 +5,10 @@ const NS = 'http://www.w3.org/2000/svg';
 const $ = id => document.getElementById(id);
 // A second display's screensaver (?ambient): the lantern's light and the drifting dust, with no lantern, moths, fireflies
 // or wisps made there at all.
-const AMBIENT = new URLSearchParams(location.search).has('ambient');
+const Q = new URLSearchParams(location.search);
+const AMBIENT = Q.has('ambient');
+// POST a JSON body to the server (settings, focus, snooze, and the rest)
+const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 const CX = 340, CY = 330, FLAME_BASE = 388;
 // the original two-petal moth, split into its wings as absolute quadratic curves from the joint at 0,0
 const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
@@ -51,12 +54,12 @@ function wingsInDepthOrder(a, aPts, b, bPts) {
 const flightFrame = roll => ({ T: [AU[0], AU[1], 0], N: [AN[0] * Math.sin(roll), AN[1] * Math.sin(roll), Math.cos(roll)] });
 function flapWing(pts, lift, sweep, roll = 0) { const f = flightFrame(roll); return wing3d(pts, f.T, f.N, Math.PI / 2 - lift, sweep); }
 // What a moth's shadow needs: the middle of its wings in the scene and how far they reach, so the shadow narrows and
-// widens with each wingbeat, plus how dark it can get. x, y, tilt (degrees) and scale are the moth's own transform.
-function caster(x, y, tilt, scale, pts, dark) {
+// widens with each wingbeat. x, y, tilt (degrees) and scale are the moth's own transform.
+function caster(x, y, tilt, scale, pts) {
   const xs = pts.map(p => p[0] - 2), ys = pts.map(p => p[1] - 6); // the wings' offset from the moth's position
   const lx = (Math.min(...xs) + Math.max(...xs)) / 2, ly = (Math.min(...ys) + Math.max(...ys)) / 2, a = tilt * Math.PI / 180;
   const r = (Math.max(...xs) - Math.min(...xs) + Math.max(...ys) - Math.min(...ys)) / 4;
-  return [x + (lx * Math.cos(a) - ly * Math.sin(a)) * scale, y + (lx * Math.sin(a) + ly * Math.cos(a)) * scale, r * scale, dark];
+  return [x + (lx * Math.cos(a) - ly * Math.sin(a)) * scale, y + (lx * Math.sin(a) + ly * Math.cos(a)) * scale, r * scale];
 }
 const pathOf = p => { const f = ([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`; return `M${f(p[0])}Q${f(p[1])} ${f(p[2])}Q${f(p[3])} ${f(p[4])}Z`; };
 // big moths for sessions, medium for supervisor agents, small for plain subagents
