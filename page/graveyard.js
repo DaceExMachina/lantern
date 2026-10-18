@@ -68,7 +68,7 @@ function makeDeadMoth(o) {
   const g = el('g'), side = el('path', { d: pathOf(WING_UP), transform: other }), up = el('path', { d: pathOf(WING_UP), transform: flat });
   g.append(side, up);
   $('graveyard').append(g);
-  const zone = $('zones').appendChild(el('circle', { r: 14 }));
+  const zone = $('zones').appendChild(el('circle', { r: 22 })); // wide enough to take in its little cluster
   const m = { o, g, side, up, zone, prs: [], u: 0.08 + rand() * 0.84, wob: rand(), back: 0, x: undefined, y: 0 };
   zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = { deadMoth: m, zone }; renderCard(); });
   zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(() => { hovered = null; $('card').classList.remove('show'); }, 700); });
@@ -162,6 +162,7 @@ function renderDeadCard(p) {
   const h = document.createElement('h3'), chip = document.createElement('span');
   h.textContent = p.label; chip.className = 'chip idle'; chip.textContent = 'dead'; h.append(chip);
   const days = Math.max(7, Math.round((Date.now() - Date.parse(p.updatedAt)) / 864e5));
-  $('card').replaceChildren(h, line(p.title || ''), line(`${NEED[p.need] || p.need} · untouched for ${days} days`, 'dim'));
+  const made = p.owner ? [line(`Made by ${p.owner.title || 'an old session'}`, 'dim')] : [];
+  $('card').replaceChildren(h, line(p.title || ''), line(`${NEED[p.need] || p.need} · untouched for ${days} days`, 'dim'), ...made);
   $('card').classList.add('show');
 }
