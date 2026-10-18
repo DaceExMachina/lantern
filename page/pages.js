@@ -1,20 +1,13 @@
 // Book pages on the barrel's paper: three pages pasted on at slight angles, filling slowly with fragments of what the
 // sessions wrote (each session's `prose`, already filtered by the server). A fragment fades in over about 18s, lingers
 // for about a minute, and fades out; some are printed on the inside (mirrored), some run off a page's edge. The words
-// read best where the flame's light is strongest. settings.json `lanternText`: "sessions" (the default), "sample"
-// (public-domain text only) or "off". With no session words yet, the sample stands in.
+// read best where the flame's light is strongest. Besides live sessions' words, the server sends a pool from the newest
+// few transcripts (recentProse), ended sessions too. With no words at all the pages stay empty. settings.json
+// `lanternText`: "sessions" (the default) or "off".
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
 
 let lanternText = 'sessions';
-const SAMPLE = [
-  'Call me Ishmael.', 'Some years ago, never mind how long precisely, having little or no money in my purse,',
-  'and nothing particular to interest me on shore, I thought I would sail about a little and see the watery part of the world.',
-  'It is a way I have of driving off the spleen and regulating the circulation.',
-  'Whenever it is a damp, drizzly November in my soul, then, I account it high time to get to sea as soon as I can.',
-  'It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.',
-  'However little known the feelings or views of such a man may be on his first entering a neighbourhood,',
-  'this truth is so well fixed in the minds of the surrounding families.',
-];
+let recentProse = []; // from the server's `prose` event
 // on the barrel's paper (x 280 to 400, y 216 to 445), tilted about their middles
 const PAGES = [{ x: 286, y: 238, w: 90, h: 140, rot: -6 }, { x: 310, y: 305, w: 86, h: 125, rot: 5 }, { x: 298, y: 270, w: 72, h: 95, rot: 1.5 }];
 const INK = { warm: '#5A3420', cool: '#2E2350' };
@@ -27,22 +20,23 @@ const wrapWords = (text, width) => text.split(' ').reduce((lines, w) => {
   return lines;
 }, /** @type {string[]} */ ([]));
 
-// Session words first, skipping any shown lately; the sample when there are none.
+// Any session's words, live or recent, skipping those shown lately; nothing when there are none.
 function pickText() {
-  const said = lanternText === 'sessions' ? raw.flatMap(s => s.prose || []) : [];
-  const fresh = said.filter(t => !shownLately.includes(t));
-  const pool = fresh.length ? fresh : said.length ? said : SAMPLE.filter(t => !shownLately.includes(t));
-  const text = pool[Math.floor(Math.random() * pool.length)] || SAMPLE[0];
-  shownLately = [...shownLately, text].slice(-12);
+  const said = [...new Set([...raw.flatMap(s => s.prose || []), ...recentProse])];
+  const fresh = said.filter(t => !shownLately.includes(t)), pool = fresh.length ? fresh : said;
+  const text = pool[Math.floor(Math.random() * pool.length)];
+  if (text) shownLately = [...shownLately, text].slice(-12);
   return text;
 }
 
 function addFragment(now) {
+  const text = pickText();
+  if (!text) return;
   const r = Math.random, page = Math.floor(r() * PAGES.length), pg = PAGES[page];
   const size = 4.4 + r() * 1.6;
   fragments.push({
     page, born: now, hold: HOLD * (0.6 + r() * 0.8), peak: 0.35 + r() * 0.35, mirror: r() < 0.4, size,
-    lines: wrapWords(pickText(), Math.round(26 + r() * 10)).slice(0, 1 + Math.floor(r() * 3)),
+    lines: wrapWords(text, Math.round(26 + r() * 10)).slice(0, 1 + Math.floor(r() * 3)),
     x: pg.x - 10 + r() * pg.w * 0.55, y: pg.y + 8 + r() * (pg.h - 10), // can start off the page's left edge and get cut off
   });
   // the oldest leaves early when too many are showing

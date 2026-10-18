@@ -1,0 +1,49 @@
+[
+  {
+    "expect": {
+      "prose": [],
+      "sessions": [
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "The glow sits a little higher on the paper than before."
+            ]
+          },
+          "id": "00000004-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-4",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        },
+        {
+          "created": [],
+          "cwd": "/work",
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Every moth now lands where the light is warmest on the paper."
+            ]
+          },
+          "id": "00000005-0000-4000-8000-000000000000",
+          "last": "<time>",
+          "note": "Finished its turn, waiting for you",
+          "project": "-work-5",
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "unconfirmed": true,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]
