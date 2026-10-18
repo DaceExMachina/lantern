@@ -76,17 +76,22 @@ const STYLES = {
       <path d="M375 380 L405 378"/><path d="M373 395 L408 393"/><path d="M376 410 L400 408"/>
       <path d="M347 250 L355 250"/><path d="M347 262 L356 262"/>
     </g>
-    <rect x="313" y="199" width="54" height="18" rx="4" fill="url(#capGrad)"/>
-    <path d="M317 203.5 H363" stroke="#C47A55" stroke-width="1" opacity="0.7"/>
-    <path d="M313 213 H367" stroke="#5E2E1E" stroke-width="1" opacity="0.5"/>
-    <rect x="313" y="444" width="54" height="16" rx="4" fill="url(#capGrad)"/>
-    <path d="M317 448 H363" stroke="#C47A55" stroke-width="1" opacity="0.7"/>
+    <!-- the caps: rounded terracotta blocks, cel-shaded. Flat tones (a lit side and a dark side), a dark lip on the edge
+         that meets the paper, an ink outline, and that edge catches the flame -->
+    <rect x="313" y="199" width="54" height="18" rx="4" fill="#A9603F"/><path d="M352 199H363A4 4 0 0 1 367 203V213A4 4 0 0 1 363 217H352Z" fill="#743A26"/>
+    <path d="M313 213H367A4 4 0 0 1 363 217H317A4 4 0 0 1 313 213Z" fill="#5E2E1E"/>
+    <rect x="313" y="199" width="54" height="18" rx="4" fill="none" stroke="#3E1C12" stroke-width="1.2"/>
+    <path class="paperLit" d="M317 218H363" stroke="currentColor" stroke-width="1.4"/>
+    <rect x="313" y="444" width="54" height="16" rx="4" fill="#A9603F"/><path d="M352 444H363A4 4 0 0 1 367 448V456A4 4 0 0 1 363 460H352Z" fill="#743A26"/>
+    <path d="M317 444H363A4 4 0 0 1 367 448H313A4 4 0 0 1 317 444Z" fill="#5E2E1E"/>
+    <rect x="313" y="444" width="54" height="16" rx="4" fill="none" stroke="#3E1C12" stroke-width="1.2"/>
+    <path class="paperLit" d="M317 443H363" stroke="currentColor" stroke-width="1.4"/>
     <g id="tassel">
       <path d="M340 460 V466" stroke="#8A4A32" stroke-width="2"/>
-      <circle cx="340" cy="469" r="3.8" fill="#9C5536"/>
-      <rect x="336" y="474" width="8" height="4" rx="1.5" fill="#B0694A"/>
-      <g stroke="#8A4A32" stroke-width="1.3" stroke-linecap="round">
-        <path d="M338 478 L333 500"/><path d="M339 478 L337 503"/><path d="M340 478 L340 505"/><path d="M341 478 L343 503"/><path d="M342 478 L347 500"/>
+      <circle cx="340" cy="469" r="3.8" fill="#9C5536"/><path d="M341.97 465.76A3.8 3.8 0 0 1 340 472.8 5.07 5.07 0 0 0 341.97 465.76Z" fill="#6E3520"/><circle cx="340" cy="469" r="3.8" fill="none" stroke="#3E1C12" stroke-width="0.7"/>
+      <rect x="336" y="474" width="8" height="4" rx="1.5" fill="#B0694A" stroke="#3E1C12" stroke-width="0.7"/>
+      <g stroke-width="1.5" stroke-linecap="round">
+        <path d="M338 478 L333 500" stroke="#9C5536"/><path d="M339 478 L337 503" stroke="#9C5536"/><path d="M340 478 L340 505" stroke="#9C5536"/><path d="M341 478 L343 503" stroke="#6E3520"/><path d="M342 478 L347 500" stroke="#6E3520"/>
       </g>
     </g>`,
   },
