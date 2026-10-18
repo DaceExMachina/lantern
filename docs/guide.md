@@ -45,7 +45,7 @@ Forgot what something means? "What's what?" at the bottom of the settings menu h
 
 ## Fireflies and stale PRs
 
-Fireflies hang around a session's moth, one for each open PR it owns, up to ten. Hover the cluster and you get the session's card, PRs and all.
+Fireflies hang around a session's moth, one for each open PR it owns, up to ten. Hover the cluster and you get the session's card, PRs and all. They're always lit, each one slowly brightening and dimming on its own rhythm, and their glow lights the air behind the lantern and moths.
 
 A session owns a PR when it, or one of its agents in any worktree, created it with `gh pr create`. It also owns its branch's PR when it's the only session in that folder. Merely mentioning a PR doesn't count. Without GitHub status, a firefly appears when the "You:" line points at one of those PRs.
 
@@ -56,7 +56,7 @@ With [GitHub status](setup.md#github-status) on, fireflies show what each PR nee
 | Colour | PR |
 |---|---|
 | Green | Ready to merge |
-| Red, blinking faster | Failing checks |
+| Red, pulsing faster | Failing checks |
 | Orange | Changes requested |
 | Amber | Draft |
 | Blue | Waiting on review |
@@ -97,7 +97,7 @@ The daily recap opens by itself when quiet hours start. If you miss that, it sho
 
 ## Quiet hours
 
-"quiet" in the footer snoozes everything on every display until 8am, or your `quietEnd` (see [settings](setup.md#settings)). Click it again to end quiet early.
+"quiet" in the footer snoozes everything on every display until 8am, or your `quietEnd` (see [settings](setup.md#settings)). Click it again to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
 
 ## The app
 

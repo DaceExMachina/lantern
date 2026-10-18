@@ -335,7 +335,7 @@ function mothTarget(k, m, dt, s) {
 
 function dropMoth(k, m) {
   m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove();
-  m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
+  m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
   moths.delete(k);
   if (hovered === m) hideCard();
 }
