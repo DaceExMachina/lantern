@@ -5,7 +5,7 @@
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
-// for a lantern that holds some back (pierced brass), and `shimmer` is how strongly its openings texture that light.
+// for a lantern that holds some back (pierced brass), and `holder` is the burner cup under its flame.
 const FLAME = `<g id="flame"><path id="fHalo" filter="url(#soft)" opacity="0.8"/><path id="fOuter"/><path id="fMid"/><path id="fCore"/>
   <ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g><g id="sparks"></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
@@ -27,18 +27,16 @@ const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="${BOTTOM}"/><path d="M295 24
 const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="420"/>
   <rect x="0" y="0" width="680" height="800" fill="url(#lace)" transform="translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
 // a rope-twist rim at height y, `half` wide either side, its front face `front` wide either side
-// Solid bands (class band) and the bars between the body's faces (class bar) hold the light back: frame.js measures them off the
-// drawing and shades the room where they block the flame.
 // The twist's stripes are spaced along the true way round the hexagon, so they carry on across each corner and crowd to half
 // spacing on the side faces, which turn away (half their width shows).
-const ROPE = (y, band = true, half = 63, front = half / 2) => {
+const ROPE = (y, half = 63, front = half / 2) => {
   const at = u => Math.abs(u) <= front ? u : Math.sign(u) * (front + (Math.abs(u) - front) / 2), end = 3 * front; // true distance → x
   let twist = '';
   for (let u = -end; u <= end + 2.5; u += 3) {
     const lo = Math.max(-end, u - 2.5), hi = Math.min(end, u); // each stripe leans 2.5 over the rim's 5
     twist += `M${(340 + at(lo)).toFixed(2)} ${y + 5 - (lo - u + 2.5) * 2}L${(340 + at(hi)).toFixed(2)} ${y + (u - hi) * 2}`;
   }
-  return `<path ${band ? 'class="band"' : ''} d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
+  return `<path d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
   <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="${twist}" stroke="#5A3A12" stroke-width="1"/>`;
 };
 const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="#fff" stroke-width="1.3">
@@ -119,10 +117,8 @@ const STYLES = {
   },
   moroccan: {
     chain: 123, // its chain of links runs from here up past the top of the window (see drawHang)
-    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, shimmer: 0.4, tassel: [340, 486],
-    holder: [404, 6],
-    // light falls on a wall this far behind the lantern, where it shows brighter (×through) except in the bars' spokes
-    wall: 200, through: 1.25, // the burner cup under the flame: its bottom and half-width; it throws a fan of shadow straight down
+    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, tassel: [340, 486],
+    holder: [404, 6], // the burner cup under the flame: its bottom and half-width; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
@@ -146,13 +142,13 @@ const STYLES = {
         <path d="M317.5 260L308.5 285M362.5 260L371.5 285M295 260L277 285M385 260L403 285" stroke="${BRASS.lit}" stroke-width="1.6"/>
         <path d="M312.5 293.5h55v111h-55ZM280.5 293.5h25v111h-25ZM374.5 293.5h25v111h-25Z" stroke="${BRASS.rim}" stroke-width="1.2"/>
       </g>
-      <path class="bar" d="M306.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path class="bar" d="M369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
-      ${ROPE(285)}${ROPE(408, false)}
+      <path d="M306.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
+      ${ROPE(285)}${ROPE(408)}
       <g mask="url(#cutouts)"><path d="${SKIRT}" fill="${BRASS.side}"/><path d="${SKIRT_F}" fill="${BRASS.front}"/></g>
       <path d="M308.5 413L320 428M371.5 413L360 428" stroke="${BRASS.lit}" stroke-width="1.4"/>
       <path d="M300 428h80v6h-80Z" fill="${BRASS.side}"/><path d="M320 428h40v6h-40Z" fill="${BRASS.front}"/>
       <path d="M300 428.6h80M300 433.4h80" stroke="${BRASS.lit}" stroke-width="1.2"/>
-      <path class="band" d="M295 243.2h90v2.6h-90Z" fill="${BRASS.lit}"/><path class="band" d="M295 258.2h90v2.6h-90Z" fill="${BRASS.lit}"/>
+      <path d="M295 243.2h90v2.6h-90Z" fill="${BRASS.lit}"/><path d="M295 258.2h90v2.6h-90Z" fill="${BRASS.lit}"/>
       <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
