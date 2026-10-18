@@ -14,11 +14,9 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 // arabesque lace. Its lace and openings are one mask (#cutouts): each panel is cut out whole, then a tile of scrolling
 // brass lace is laid back over it, squeezed sideways on the faces that turn away.
 const BRASS = { front: '#B8893A', side: '#86612A', lit: '#E0BC6A', rim: '#A47C38' };
-// a tall six-sided dome: near-vertical sides rounding in to a small cap under the finial
-const DOME = 'M332 146Q340 142 348 146C368 153 381 170 381 196V244H299V196C299 170 312 153 332 146Z';
-const ARCH = 'M325 238V192C325 181 335 176 340 165C345 176 355 181 355 192V238Z'; // each dome segment's pierced ogee arch
+// a six-sided onion dome rising to the finial, sitting just proud of the frieze
+const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
 const HALF_X = 'translate(340 0) scale(.5 1) translate(-340 0)'; // the front segment of a six-sided shape spans half its width
-const SIDE_ARCH = x => `translate(${x} 0) scale(.42 1) translate(-340 0)`;
 const SHOULDER = 'M295 260H385L403 285H277Z', SHOULDER_F = 'M317.5 260H362.5L371.5 285H308.5Z';
 const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="M295 244h90v16h-90Z${SHOULDER}M277 285h126v131h-126Z"/>`;
 const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="360"/>
@@ -31,13 +29,13 @@ const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="u
     <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>
   <pattern id="rope" width="3" height="5" patternUnits="userSpaceOnUse"><path d="M-1.5 5L1 0M1.5 5L4 0" stroke="#5A3A12" stroke-width="1"/></pattern>
   <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
-  <clipPath id="domeF"><path d="${ARCH}"/></clipPath><clipPath id="domeL"><path d="${ARCH}" transform="${SIDE_ARCH(310)}"/></clipPath>
-  <clipPath id="domeR"><path d="${ARCH}" transform="${SIDE_ARCH(370)}"/></clipPath>
+  <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
+  <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 244) scale(.4 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="shoulderL"><path d="M298 263L315 263L308 282L282 282Z"/></clipPath><clipPath id="shoulderR"><path d="M382 263L365 263L372 282L398 282Z"/></clipPath>
   <clipPath id="shoulderF"><path d="M320 263L360 263L367 282L313 282Z"/></clipPath>
   <clipPath id="faceL"><path d="M281 294h24v110h-24Z"/></clipPath><clipPath id="faceR"><path d="M375 294h24v110h-24Z"/></clipPath><clipPath id="faceF"><path d="M313 294h54v110h-54Z"/></clipPath>
   <mask id="cutouts" maskUnits="userSpaceOnUse" x="260" y="120" width="160" height="320"><rect x="260" y="120" width="160" height="320" fill="#fff"/>
-    ${LACE('domeL', 0.5, 0.8)}${LACE('domeR', 0.5, 0.8)}${LACE('domeF', 1, 0.8)}
+    ${LACE('domeSide', 0.55, 0.7)}${LACE('domeFront', 1, 0.7)}
     <path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/>
     ${LACE('shoulderL', 0.5, 0.8)}${LACE('shoulderR', 0.5, 0.8)}${LACE('shoulderF', 1, 0.8)}
     ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}</mask>`;
@@ -100,16 +98,15 @@ const STYLES = {
         <path d="M93.3 199.4L91.4 210.8Q95 212.6 98.6 210.8L96.7 199.4Z" fill="none" stroke="#6E4A1C" stroke-width="0.35" stroke-linejoin="round"/></g>`, 18),
   },
   moroccan: {
-    chain: 104, // its chain of links runs from here up past the top of the window (see drawHang)
+    chain: 123, // its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, shimmer: 0.4,
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 413, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : 63 },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
       <g fill="#24160A">${MOROCCAN_SHAPE}</g><g fill="url(#mg)">${MOROCCAN_SHAPE}</g>
       <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
-    front: `<circle cx="340" cy="113" r="4" fill="none" stroke="#D9B464" stroke-width="1.8"/>
-      <path d="M338.6 117h2.8v8h-2.8Z" fill="#B8893A"/><ellipse cx="340" cy="127" rx="3.4" ry="3" fill="#D9B464"/><path d="M337 130h6l3 9h-12Z" fill="#B8893A"/>
-      <ellipse cx="340" cy="141" rx="8" ry="2.4" fill="#D9B464"/>
+    front: `<circle cx="340" cy="132" r="4" fill="none" stroke="#D9B464" stroke-width="1.8"/>
+      <path d="M338.6 136h2.8v20h-2.8Z" fill="#B8893A"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="#D9B464"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="#B8893A"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="#D9B464"/>
       <g mask="url(#cutouts)">
         <path d="${DOME}" fill="${BRASS.side}"/><path d="${DOME}" fill="${BRASS.front}" transform="${HALF_X}"/>
         <path d="M295 244h90v16h-90Z" fill="${BRASS.side}"/><path d="M317.5 244h45v16h-45Z" fill="${BRASS.front}"/>
@@ -117,8 +114,6 @@ const STYLES = {
         <path d="M277 290h126v118h-126Z" fill="${BRASS.side}"/><path d="M308.5 290h63v118h-63Z" fill="${BRASS.front}"/>
       </g>
       <g fill="none" stroke-linejoin="round">
-        <path d="${ARCH}" stroke="${BRASS.lit}" stroke-width="1.2"/><path d="${ARCH}" stroke="${BRASS.rim}" stroke-width="1.2" transform="${SIDE_ARCH(310)}"/>
-        <path d="${ARCH}" stroke="${BRASS.rim}" stroke-width="1.2" transform="${SIDE_ARCH(370)}"/>
         <path d="${DOME}" stroke="${BRASS.rim}" stroke-width="2"/><path d="${DOME}" stroke="${BRASS.lit}" stroke-width="2.6" transform="${HALF_X}"/>
         <path d="M295 244.5h90M295 259.5h90M317.5 244v16M362.5 244v16" stroke="${BRASS.lit}" stroke-width="1.6"/>
         <path d="M317.5 260L308.5 285M362.5 260L371.5 285M295 260L277 285M385 260L403 285" stroke="${BRASS.lit}" stroke-width="1.6"/>
