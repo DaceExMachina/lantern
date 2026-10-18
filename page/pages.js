@@ -7,6 +7,11 @@
 // "Show session text" in the settings menu turns it all off (settings.json `lanternText`: "sessions" or "off"): the
 // words fade out and the timer stops, so nothing runs; turned back on, fresh words fade in once the server sends them.
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
+//
+// Drawn cheaply: the blocks are typeset flat on an offscreen canvas (the paper unrolled), then that page is warped onto
+// the drum in vertical strips, a cylinder being the same all the way down, and shown as one canvas on the paper. It's
+// redrawn only when a fade has moved enough to see, a couple of times a second at most, never per animation frame. In a
+// window too small to read the words (the iTerm toolbelt), none of it runs.
 
 let lanternText = 'sessions';
 let recentProse = []; // from the server's `prose` event
@@ -15,6 +20,11 @@ let recentProse = []; // from the server's `prose` event
 const INK = { warm: '#5A3420', cool: '#2E2350' };
 const FADE = 18000, HOLD = 70000, EVERY = 20000, SHOWN = 6;
 const FONT = "Georgia, 'Times New Roman', serif";
+// The light the words are read by: brightest just above the flame, falling off to a third at the paper's edges.
+const READ_LIGHT = { cx: 340, cy: 340, rx: 88, ry: 165, stops: [[0, 1], [0.55, 0.73], [1, 0.33]] };
+// Under this many CSS pixels of drum on screen the type is a few pixels tall, too small to read, so the text sleeps.
+const MIN_DRUM = 250;
+const STRIPS = 90; // the warp's vertical strips round the front half of the drum
 let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
 // blocks part way through their lives, as if it had been running a while, so a reload doesn't wipe the paper.
@@ -22,9 +32,16 @@ let pagesData = false, primed = false, primeAge = 2 * FADE + HOLD, waitFrom = pe
 // that first set comes up together over INTRO, on a quicker timer of its own, rather than appearing at once
 const INTRO = 1200;
 let introAt = 0, introTimer = 0;
+// the unrolled page, the warped one, and what it was last drawn with; `showing` is the picture on the paper, and `busy`
+// while a new one is being encoded and decoded
+let flat, warped, drawn = { scale: 0, cool: -1 }, showing = '', busy = false, dirty = false;
 
-const measure = document.createElement('canvas').getContext('2d');
-const widthOf = (text, size) => { measure.font = `${size}px ${FONT}`; return measure.measureText(text).width; };
+let measure;
+const widthOf = (text, size) => {
+  measure ??= document.createElement('canvas').getContext('2d');
+  measure.font = `${size}px ${FONT}`;
+  return measure.measureText(text).width;
+};
 const wrapWords = (text, width, size) => text.split(' ').reduce((lines, w) => {
   const last = lines[lines.length - 1];
   if (last && widthOf(last + ' ' + w, size) <= width) lines[lines.length - 1] = last + ' ' + w; else lines.push(w);
@@ -46,6 +63,45 @@ function pickText() {
   return text;
 }
 
+// The part of the unrolled paper worth filling: from 60° left of the front to 60° right (past that the type is squeezed
+// to under half its width), split into loose cells of 3 across by 4 down, in paper units and rows.
+const COLS = 3, BANDS = 4;
+const span = d => d.r * Math.PI / 3;
+// Where a block's lines land on the unrolled paper, once flipped if it's mirrored: [left, right, first row, last row].
+const extent = b => {
+  const w = b.width, [l, r] = b.mirror ? [-b.from - w, -b.from] : [b.from, b.from + w];
+  return [l, r, b.row, b.row + b.lines.length];
+};
+// How much of each cell the showing blocks cover (leaving ones don't count, so their cells are refilled first), as the
+// share of the cell's squares (a fifth of a column wide, one row tall) that have any type on them.
+function cellCover(d, live) {
+  const rows = 2 * (d.ribs.length - 1), U = span(d), sub = 5, n = COLS * sub, step = 2 * U / n;
+  const hit = Array.from({ length: rows }, () => new Array(n).fill(false));
+  for (const b of live) {
+    const [l, r, r0, r1] = extent(b);
+    for (let row = Math.max(0, r0); row < Math.min(rows, r1); row++)
+      for (let c = 0; c < n; c++) if (-U + (c + 1) * step > l && -U + c * step < r) hit[row][c] = true;
+  }
+  return Array.from({ length: BANDS }, (_, band) => Array.from({ length: COLS }, (_, col) => {
+    let on = 0, all = 0;
+    for (let row = Math.floor(band * rows / BANDS); row < Math.floor((band + 1) * rows / BANDS); row++)
+      for (let c = col * sub; c < (col + 1) * sub; c++) { all++; if (hit[row][c]) on++; }
+    return on / all;
+  }));
+}
+
+// A new block's middle goes in the least-covered cell (ties broken at random), nudged up to a third of a cell either way
+// so the blocks overlap loosely rather than sitting on a grid.
+function place(block, live, r = Math.random) {
+  const d = style.drum, rows = 2 * (d.ribs.length - 1), U = span(d), cover = cellCover(d, live);
+  let best = Infinity, band = 0, col = 0;
+  cover.forEach((cells, b) => cells.forEach((v, c) => { if (v + r() * 0.05 < best) { best = v + r() * 0.05; band = b; col = c; } }));
+  const mid = -U + (col + 0.5 + (r() - 0.5) * 0.66) * 2 * U / COLS;
+  const left = mid - block.width / 2;
+  block.from = block.mirror ? -left - block.width : left;
+  block.row = Math.round((band + 0.5 + (r() - 0.5) * 0.66) * rows / BANDS - block.lines.length / 2);
+}
+
 // A block of lines, laid out on the paper unrolled: `from` is how far round (in paper units, 0 at the front) its lines
 // start, and they run `width` on from there, so some start round the left side and some carry on round the right.
 // `age` backdates it: a block that has lived longer than its fade and hold is already fading out.
@@ -54,19 +110,12 @@ function addBlock(now, age = 0) {
   if (!text) return;
   const r = Math.random, d = style.drum, gap = d.ribs[1] - d.ribs[0], size = gap * (0.28 + r() * 0.05), width = d.r * (1.8 + r() * 1.0);
   const block = {
-    born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.4 + r() * 0.3, mirror: r() < 0.4, size,
-    from: -d.r * (1 + r() * 1.4), row: 0, lines: wrapWords(text, width, size),
+    born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.4 + r() * 0.3, mirror: r() < 0.4, size, width,
+    from: 0, row: 0, lines: wrapWords(text, width, size), alpha: 0, drawnAlpha: -1,
     // pasted on a little askew: 4 to 8 degrees either way, so the baseline climbs or falls as it goes round
     slope: Math.tan((4 + r() * 4) * Math.PI / 180) * (r() < 0.5 ? -1 : 1),
   };
-  // spread over the whole paper: of a few random heights, the one whose lines land where the fewest others' do
-  const rows = 2 * (d.ribs.length - 1), covered = new Array(rows).fill(0);
-  for (const b of blocks) if (!b.leaving) b.lines.forEach((_, i) => { if (b.row + i >= 0 && b.row + i < rows) covered[b.row + i]++; });
-  const overlap = row => block.lines.reduce((n, _, i) => n + (covered[row + i] ?? 0), 0);
-  for (let k = 0, best = Infinity; k < 8; k++) {
-    const row = Math.floor(r() * rows) - 2, n = overlap(row) + r() * 0.5; // a little jitter breaks ties
-    if (n < best) { best = n; block.row = row; }
-  }
+  place(block, blocks.filter(b => !b.leaving));
   if (age > FADE + block.hold) block.leaving = now - (age - FADE - block.hold);
   blocks.push(block);
   // the oldest leaves early when too many are showing
@@ -74,43 +123,112 @@ function addBlock(now, age = 0) {
   if (going.length > SHOWN) going[0].leaving = now;
 }
 
-// One glyph at a time, laid out on the paper unrolled (tilted with the block), then placed where its middle falls on
-// the drum: squeezed sideways as the paper turns away and riding the wire's bow. Mirrored blocks run the other way
-// round with their glyphs flipped, like print seen through.
-function blockMarkup(b) {
-  const esc = c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] || c;
-  const d = style.drum, gap = d.ribs[1] - d.ribs[0], tilt = Math.atan(b.slope) * 180 / Math.PI, k = b.mirror ? -1 : 1;
-  let out = '';
+// One block typeset on the unrolled page (ctx in paper units: x round from the front, y down the drum), each line tilted
+// with the block. A mirrored block is flipped about the front, so it runs the other way round, like print seen through.
+function typeset(ctx, b) {
+  const d = style.drum, gap = d.ribs[1] - d.ribs[0];
+  ctx.globalAlpha = b.alpha;
+  ctx.font = `${b.size}px ${FONT}`;
   b.lines.forEach((line, i) => {
     const row = b.row + i, g = Math.floor(row / 2);
     if (g < 0 || g >= d.ribs.length - 1) return; // above or below the paper
-    const base = d.ribs[g] + gap * (row % 2 ? 0.93 : 0.46), bow = d.bow(base);
-    let s = b.from - i * gap / 2 * b.slope; // a tilted page's lines start a little further along as they go down
-    for (const c of line) {
-      const w = widthOf(c, b.size), mid = s + w / 2, a = mid / d.r;
-      s += w;
-      if (c === ' ' || Math.abs(a) >= Math.PI / 2 - 0.05) continue; // round the back
-      const x = d.cx + k * d.r * Math.sin(a), y = base + mid * b.slope + bow * Math.cos(a) ** 2 / 2;
-      out += `<text transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(k * Math.cos(a)).toFixed(3)} 1) rotate(${tilt.toFixed(1)})">${esc(c)}</text>`;
-    }
+    const base = d.ribs[g] + gap * (row % 2 ? 0.93 : 0.46);
+    const s = b.from - i * gap / 2 * b.slope; // a tilted page's lines start a little further along as they go down
+    ctx.save();
+    if (b.mirror) ctx.scale(-1, 1);
+    ctx.translate(s, base + s * b.slope); // the baseline is at base + u * slope, u being how far round
+    ctx.rotate(Math.atan(b.slope));
+    ctx.fillText(line, 0, 0);
+    ctx.restore();
   });
-  return `<g font-size="${b.size.toFixed(2)}" text-anchor="middle">${out}</g>`;
 }
 
-// The light the words are read by, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
+// Where the strip of the unrolled page between angles a0 and a1 (radians round from the front) lands on the drum, in
+// paper units: across, from cx + r sin a, so it narrows as it turns away; down, each end moved by its wire's bow,
+// cos² a / 2 of it, as the words used to ride it one glyph at a time.
+function strip(d, a0, a1) {
+  const c = Math.cos((a0 + a1) / 2) ** 2 / 2;
+  return {
+    u0: d.r * a0, u1: d.r * a1, x0: d.cx + d.r * Math.sin(a0), x1: d.cx + d.r * Math.sin(a1),
+    // ponytail: only the ends are moved and the strip stretched between, exact while the bow is straight in y (it is)
+    y0: d.top + d.bow(d.top) * c, y1: d.bottom + d.bow(d.bottom) * c,
+  };
+}
+
+// The shown canvas's box on the paper, in paper units: the drum's width, and its height plus room for the bow.
+const box = d => {
+  const m = Math.max(Math.abs(d.bow(d.top)), Math.abs(d.bow(d.bottom))) / 2 + 1;
+  return { x: d.cx - d.r, y: d.top - m, w: 2 * d.r, h: d.bottom - d.top + 2 * m };
+};
+
+// Typesets every block flat, warps the page onto the drum, and lights it, `s` device pixels to a paper unit.
+function render(s) {
+  const d = style.drum, out = warped ??= document.createElement('canvas'), B = box(d), U = d.r * Math.PI / 2;
+  const W = Math.ceil(B.w * s), H = Math.ceil(B.h * s);
+  if (out.width !== W || out.height !== H) { out.width = W; out.height = H; }
+  flat ??= document.createElement('canvas');
+  const fw = Math.ceil(2 * U * s), fh = Math.ceil((d.bottom - d.top) * s);
+  if (flat.width !== fw || flat.height !== fh) { flat.width = fw; flat.height = fh; } // also clears it
+  const f = flat.getContext('2d');
+  f.setTransform(1, 0, 0, 1, 0, 0);
+  f.clearRect(0, 0, fw, fh);
+  f.setTransform(s, 0, 0, s, U * s, -d.top * s);
+  f.fillStyle = mix(INK.warm, INK.cool, cool);
+  for (const b of blocks) if (b.alpha > 0) typeset(f, b);
+  const o = out.getContext('2d');
+  o.setTransform(1, 0, 0, 1, 0, 0);
+  o.globalCompositeOperation = 'source-over';
+  o.clearRect(0, 0, W, H);
+  for (let i = 0; i < STRIPS; i++) {
+    const st = strip(d, Math.PI * (i / STRIPS - 0.5), Math.PI * ((i + 1) / STRIPS - 0.5));
+    // whole device pixels across, so neighbouring strips meet without a seam
+    const x0 = Math.round((st.x0 - B.x) * s), x1 = Math.round((st.x1 - B.x) * s);
+    if (x1 <= x0) continue; // edge-on, round the side
+    o.drawImage(flat, (st.u0 + U) * s, 0, (st.u1 - st.u0) * s, fh, x0, (st.y0 - B.y) * s, x1 - x0, (st.y1 - st.y0) * s);
+  }
+  o.globalCompositeOperation = 'destination-in';
+  o.setTransform(s * READ_LIGHT.rx, 0, 0, s * READ_LIGHT.ry, (READ_LIGHT.cx - B.x) * s, (READ_LIGHT.cy - B.y) * s);
+  const light = o.createRadialGradient(0, 0, 0, 0, 0, 1);
+  for (const [at, a] of READ_LIGHT.stops) light.addColorStop(at, `rgba(0,0,0,${a})`);
+  o.fillStyle = light;
+  o.fillRect(-B.w, -B.h, 2 * B.w, 2 * B.h); // the whole box, in the light's units
+  for (const b of blocks) b.drawnAlpha = b.alpha;
+  drawn = { scale: s, cool }; dirty = false;
+  show(out);
+}
+
+// Puts the warped page on the paper as a picture, swapped in only once it's decoded so the words never blink out.
+// (A canvas inside the SVG would skip the encoding, but WebKit doesn't paint one in a foreignObject.)
+function show(out) {
+  busy = true;
+  out.toBlob(async blob => {
+    if (!blob) { busy = false; dirty = true; return; } // nothing to show; the next tick tries again
+    const url = URL.createObjectURL(blob), img = new Image();
+    img.src = url;
+    await img.decode().catch(() => {});
+    $('pagesInk')?.setAttribute('href', url);
+    const was = showing;
+    showing = url; busy = false;
+    if (was) setTimeout(() => URL.revokeObjectURL(was), 1000); // after the picture has swapped
+  });
+}
+
+// Paper units to CSS pixels on screen, whatever the sway's rotation.
+const toScreen = () => { const m = $('lantern')?.getScreenCTM(); return m ? Math.hypot(m.a, m.b) : 0; };
+const legible = () => toScreen() * (STYLES.barrel.drum.bottom - STYLES.barrel.drum.top) >= MIN_DRUM;
+
+// The picture on the paper, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
 function drawPages(root) {
-  root.innerHTML = `<radialGradient id="pagesLight" gradientUnits="userSpaceOnUse" cx="340" cy="340" r="110" gradientTransform="translate(340 340) scale(.8 1.5) translate(-340 -340)">
-      <stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#bbb"/><stop offset="1" stop-color="#555"/></radialGradient>
-    <mask id="pagesMask" maskUnits="userSpaceOnUse" x="270" y="210" width="140" height="240"><rect x="270" y="210" width="140" height="240" fill="url(#pagesLight)"/></mask>
-    <g id="pagesInk" mask="url(#pagesMask)" font-family="${FONT}"></g>`;
-  for (const b of blocks) b.node = null;
+  const B = box(style.drum);
+  root.innerHTML = `<image id="pagesInk" x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" preserveAspectRatio="none" href="${showing}"/>`;
+  drawn = { scale: 0, cool: -1 };
 }
 
 function tickPages() {
   const root = $('pages');
   if (!root) return; // not the barrel
   const now = performance.now();
-  if (lanternText === 'off' && !blocks.length) { root.replaceChildren(); clearInterval(pagesTimer); pagesTimer = 0; return; } // faded out: stop
+  if (lanternText === 'off' && !blocks.length) { root.replaceChildren(); stopPages(); return; } // faded out: stop
   if (lanternText !== 'off' && !primed) {
     if (!pagesData && now - waitFrom < 1500) return; // nothing drawn yet
     primed = true;
@@ -120,24 +238,41 @@ function tickPages() {
   }
   if (!root.firstChild) drawPages(root);
   if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
-  const ink = $('pagesInk');
-  ink.setAttribute('fill', mix(INK.warm, INK.cool, cool));
   inkOpacity();
   blocks = blocks.filter(b => {
     if (!b.leaving && now - b.born > FADE + b.hold) b.leaving = now;
     const fadeIn = Math.min(1, (now - b.born) / FADE), fadeOut = b.leaving ? 1 - (now - b.leaving) / FADE : 1;
-    if (fadeOut <= 0) { b.node?.remove(); return false; }
-    if (!b.node) { ink.insertAdjacentHTML('beforeend', blockMarkup(b)); b.node = ink.lastElementChild; }
-    b.node.setAttribute('opacity', (b.peak * Math.min(fadeIn, fadeOut)).toFixed(3));
-    return true;
+    b.alpha = Math.max(0, b.peak * Math.min(fadeIn, fadeOut));
+    if (Math.abs(b.alpha - b.drawnAlpha) > 0.02 || (b.alpha === 0) !== (b.drawnAlpha === 0)) dirty = true;
+    if (fadeOut <= 0) dirty = true;
+    return fadeOut > 0;
   });
+  const s = toScreen() * devicePixelRatio;
+  if (busy) return; // the last picture isn't up yet; what changed is still dirty next tick
+  if (dirty || Math.abs(s - drawn.scale) > 0.01 || Math.abs(cool - drawn.cool) > 0.03) render(s);
 }
 // Brighter flame, clearer words, times the first set's quick fade in.
 function inkOpacity() {
-  const ink = $('pagesInk'), intro = Math.min(1, (performance.now() - introAt) / INTRO);
+  const intro = Math.min(1, (performance.now() - introAt) / INTRO);
   if (intro >= 1) { clearInterval(introTimer); introTimer = 0; }
-  ink?.setAttribute('opacity', ((0.5 + 0.5 * Math.max(level, cool * 0.45)) * intro).toFixed(3));
+  $('pagesInk')?.setAttribute('opacity', ((0.5 + 0.5 * Math.max(level, cool * 0.45)) * intro).toFixed(3));
 }
+
+function stopPages() { clearInterval(pagesTimer); clearInterval(introTimer); pagesTimer = introTimer = 0; }
+// Starts the timer when there's something to show and room to read it, priming a fresh set (as on load: a full paper,
+// coming up quickly) if it had been put to sleep. Called on load, on resize, and when the words are turned on.
+function wakePages() {
+  if (pagesTimer || lanternText === 'off' || !legible()) return;
+  pagesTimer = setInterval(tickPages, 250);
+}
+// A window shrunk too small to read in drops the words and stops everything; grown back, they fade in again.
+addEventListener('resize', () => {
+  if (legible()) return wakePages();
+  if (!pagesTimer) return;
+  stopPages();
+  blocks = []; $('pages')?.replaceChildren(); URL.revokeObjectURL(showing); showing = '';
+  primed = false; primeAge = 2 * FADE + HOLD; waitFrom = performance.now(); // back to a paper already full when it wakes
+});
 
 // Turning words off fades every block out (then the timer stops); turning them on waits for the server's fresh words
 // and fades a set in. Called by main.js with the shared setting.
@@ -147,6 +282,6 @@ function setLanternText(value) {
   const now = performance.now();
   if (value === 'off') { for (const b of blocks) b.leaving ??= now; return; }
   primed = false; pagesData = false; primeAge = 0; waitFrom = now; // a fresh set, all fading in from nothing
-  pagesTimer ||= setInterval(tickPages, 250);
+  wakePages();
 }
-pagesTimer = setInterval(tickPages, 250);
+wakePages();
