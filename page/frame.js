@@ -248,7 +248,7 @@ function frame(t) {
     put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
     wingsInDepthOrder(m.up, upPts, m.side, sidePts);
     put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${m.tilt.toFixed(1)}) scale(${m.size})`);
-    m.shade = caster(m.x, m.y, m.tilt, m.size, [...upPts, ...sidePts], 0.6);
+    m.shade = caster(m.x, m.y, m.tilt, m.size, [...upPts, ...sidePts], 1);
 
     // color: moths near the lantern catch its light; the session that needs me turns violet with a pale outline
     // snoozed moths rest on the lantern in a paler indigo; agents circling a landed moth take on its colour too
