@@ -90,8 +90,8 @@ function frame(t) {
     dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
       (0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)], (34 + i) * 4);
   });
-  const ambient = document.body.classList.contains('ambient'), remote = ambient && REMOTE ? remoteLight() : null;
-  swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
+  const ambient = AMBIENT, remote = ambient && REMOTE ? remoteLight() : null;
+  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
 
   // moths
   for (const [k, m] of moths) {

@@ -3,6 +3,9 @@
 const NS = 'http://www.w3.org/2000/svg';
 /** @type {(id: string) => any} */ // elements are looked up by id; checking each as HTMLElement would just be casts
 const $ = id => document.getElementById(id);
+// A second display's screensaver (?ambient): the lantern's light and the drifting wisps, with no lantern, moths or
+// fireflies made there at all.
+const AMBIENT = new URLSearchParams(location.search).has('ambient');
 const CX = 340, CY = 330, FLAME_BASE = 388;
 // the original two-petal moth, split into its wings as absolute quadratic curves from the joint at 0,0
 const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
