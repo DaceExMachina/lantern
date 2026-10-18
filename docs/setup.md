@@ -76,6 +76,14 @@ Choose Lantern in System Settings > Wallpaper > Screen Saver, under Other. It sh
 
 With more than one display, the biggest gets the lantern and the rest get the background and drifting specks. The light spills across onto the other displays, lined up with where they actually sit. The screensaver shows whichever lantern you picked in any other Lantern window.
 
+If the page stops drawing (the server isn't answering, its web process crashed, or the GPU reset), the screensaver loads it again, waiting a little longer each time, up to 30 seconds. To see what it did, for example after a black screen:
+
+```sh
+log show --predicate 'subsystem == "com.lantern.screensaver"' --last 1h
+```
+
+The screensaver and the page are updated together, so after updating Lantern, run the installer again (or `sh screensaver/build.sh` from the same checkout the app serves the page from).
+
 ## GitHub status
 
 GitHub status is optional. Turn it on and fireflies take on the colour of what each PR needs, and [stale PRs](guide.md#fireflies-and-stale-prs) show up.
