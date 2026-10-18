@@ -8,7 +8,12 @@ import WebKit
 if CommandLine.arguments.contains("--unregister") { try? SMAppService.mainApp.unregister(); exit(0) }
 
 let env = ProcessInfo.processInfo.environment
-let port = env["LANTERN_PORT"] ?? "7717" // apps opened from the Dock don't get your shell's env; `open --env` can still set it
+let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Lantern").path
+let data = env["LANTERN_DATA"] ?? support
+// Apps opened from the Dock don't get your shell's env, so the port normally comes from settings.json (the installer
+// writes it there when LANTERN_PORT is set). `open --env LANTERN_PORT=…` still overrides it.
+let saved = FileManager.default.contents(atPath: data + "/settings.json").flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
+let port = env["LANTERN_PORT"] ?? (saved?["port"] as? NSNumber)?.stringValue ?? "7717"
 let home = URL(string: "http://127.0.0.1:\(port)/")!
 
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
@@ -19,9 +24,8 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     func applicationDidFinishLaunching(_ note: Notification) {
         // Settings live in Application Support, since an app can't write inside itself. The page comes from the app,
         // or, when the installer ran from a git checkout, from that checkout, so edits to index.html go live.
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Lantern").path
         let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
-        server = LanternServer(port: UInt16(port) ?? 7717, data: env["LANTERN_DATA"] ?? support, web: checkout ?? Bundle.main.resourcePath!)
+        server = LanternServer(port: UInt16(port) ?? 7717, data: data, web: checkout ?? Bundle.main.resourcePath!)
         server.start()
         // Hooks need the server even with no window open, so an installed copy opens at login. That's offered once;
         // turning it off in System Settings > General > Login Items sticks.

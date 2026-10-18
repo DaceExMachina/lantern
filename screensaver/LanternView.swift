@@ -51,7 +51,9 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         if web.responds(to: Selector("_setOverrideDeviceScaleFactor:")) {
             web.setValue(1.0, forKey: "overrideDeviceScaleFactor")
         }
-        page = URL(string: "http://127.0.0.1:7717/?\(mode)")! // screensavers don't get your shell's env, so the port is fixed here
+        // screensavers don't get your shell's env, so the installer builds the port into the saver's Info.plist
+        let port = Bundle(for: Self.self).object(forInfoDictionaryKey: "LanternPort") as? String ?? "7717"
+        page = URL(string: "http://127.0.0.1:\(port)/?\(mode)")!
         web.navigationDelegate = self
         web.load(URLRequest(url: page))
         Self.newest[display] = ObjectIdentifier(self)

@@ -12,7 +12,10 @@ let SEED_RECENT_MS = 15.0 * 60 * 1000 // on startup, also bring back any session
 let TITLE_EVERY_MS = 15.0 * 1000
 let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "elicitation_dialog", "agent_needs_input"]
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
-let PROJECTS = HOME + "/.claude/projects"
+// Claude Code's config folder: CLAUDE_CONFIG_DIR, or `claudeDir` in Lantern's settings.json (an app opened from the Dock
+// doesn't see your shell's env, so the installer writes it there), or ~/.claude. Settings can override it at startup.
+var CLAUDE_DIR = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"] ?? HOME + "/.claude"
+var PROJECTS: String { CLAUDE_DIR + "/projects" }
 
 typealias JSON = [String: Any]
 
@@ -568,6 +571,7 @@ final class LanternServer {
         settingsFile = data + "/settings.json"
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
+        if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_DIR = (dir as NSString).expandingTildeInPath }
         stats = Stats(data + "/stats.sqlite")
     }
 
