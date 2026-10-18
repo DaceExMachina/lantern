@@ -85,12 +85,16 @@ function playFlash(id) {
   // A slow swirl over the whole pill: three crossing waves of a stream function, changing over a few seconds, and the
   // fireflies flow along its curl, carried frame by frame (`flow`). A flow like that never squeezes or spreads what it
   // carries, so it can take them a long way round without opening holes; the stream function fades out at the rim,
-  // so there the flow only runs along the edge and nobody is carried out.
+  // straight down to it (not easing in, which would stop the flow there), so at the edge the flow runs along it and
+  // nobody is carried out.
   const waves = [0, 1, 2].map(() => {
     const k = 2 * Math.PI / ((8 + rand() * 8) * step), a = rand() * 6.28;
     return { kx: k * Math.cos(a), ky: k * Math.sin(a), w: 2 * Math.PI / (3000 + rand() * 3000), ph: rand() * 6.28, amp: 0.025 * px / k };
   });
-  const stream = (x, y, t) => Math.min(1, Math.max(0, inside([x, y]) / (2 * step))) ** 2 * waves.reduce((sum, v) => sum + v.amp * Math.sin(v.kx * x + v.ky * y + v.w * t + v.ph), 0);
+  // A gentle current round the rim on top (its stream function is just the fade itself), so nothing near the edge is
+  // ever still where the waves happen to cancel out.
+  const rimCurrent = (rand() < 0.5 ? -1 : 1) * 0.015 * px * 2 * step;
+  const stream = (x, y, t) => { const m = Math.min(1, Math.max(0, inside([x, y]) / (2 * step))); return m * (rimCurrent + waves.reduce((sum, v) => sum + v.amp * Math.sin(v.kx * x + v.ky * y + v.w * t + v.ph), 0)); };
   const swirl = (p, t) => { const e = 0.5; return [(stream(p[0], p[1] + e, t) - stream(p[0], p[1] - e, t)) / (2 * e) * jostle, -(stream(p[0] + e, p[1], t) - stream(p[0] - e, p[1], t)) / (2 * e) * jostle]; }; // px per ms
   // back onto the outline, along the way it went out, if a point is past it
   const keepIn = p => {
@@ -98,12 +102,13 @@ function playFlash(id) {
     const q = Math.max(-half, Math.min(half, p[0] - cx)), d = Math.hypot(p[0] - cx - q, p[1] - cy) || 1;
     return [cx + q + (p[0] - cx - q) / d * r, cy + (p[1] - cy) / d * r];
   };
-  // Each firefly's own wander on top, a quarter of a spacing, and now and then a quick dart of half a spacing, on its
-  // own clocks (`t` in ms since the landings began). Kept small: unlike the swirl, these can open gaps.
+  // Each firefly's own wander on top, two fifths of a spacing, and now and then a quick dart of half a spacing, on its
+  // own clocks (`t` in ms since the landings began). Enough that none is ever still where the swirl is calm, and kept
+  // small, since unlike the swirl these can open gaps.
   const wanderAt = (f, t) => {
     const n = (t + f.dartAt) % f.every, dart = n < 450 ? Math.sin(Math.PI * n / 450) * 0.5 * step : 0, a = f.dir + Math.floor((t + f.dartAt) / f.every) * 2.4;
-    return [jostle * ((Math.sin(t * f.ax + f.ph) * 0.15 + Math.sin(t * f.bx + f.ph * 2.3) * 0.1) * step + Math.cos(a) * dart),
-      jostle * ((Math.sin(t * f.ay + f.ph * 1.7) * 0.15 + Math.sin(t * f.by + f.ph * 3.1) * 0.1) * step + Math.sin(a) * dart)];
+    return [jostle * ((Math.sin(t * f.ax + f.ph) * 0.25 + Math.sin(t * f.bx + f.ph * 2.3) * 0.15) * step + Math.cos(a) * dart),
+      jostle * ((Math.sin(t * f.ay + f.ph * 1.7) * 0.25 + Math.sin(t * f.by + f.ph * 3.1) * 0.15) * step + Math.sin(a) * dart)];
   };
   // where a firefly's place in the current is at `t`, with its wander but before any swirl (it all runs from the start,
   // so it lands on a moving spot; the swirl starts carrying it once it's there)
@@ -119,18 +124,23 @@ function playFlash(id) {
     const at = [b[0] + off[0], b[1] + off[1]], v1 = swirl(at, t), v2 = swirl([at[0] + v1[0] * dt / 2, at[1] + v1[1] * dt / 2], t + dt / 2);
     return [off[0] + v2[0] * dt, off[1] + v2[1] * dt];
   };
-  // One frame of the hold: the swirl carries the firefly on, then its place, wander and offset make where it is.
-  // Now and then one of the outer two rings strays a spacing or two past the outline (a few, three to five) and comes
-  // back, so the edge looks like a living swarm, not a drawn pill: each about once in 12 to 21 seconds, shared between
-  // the two rings so the rim doesn't thin, which puts about a fifth of a rim's worth out at once.
+  // Now and then one of the outer three rings strays a spacing or two past the outline (a few, three to five) and
+  // comes back, so the edge looks like a living swarm, not a drawn pill. It's part of the swarm from the start: each
+  // one's first stray comes at a random moment after it lands, and some land in the middle of one, arriving past the
+  // rim and drifting back in. Shared between three rings so the rim doesn't thin.
+  const strayFor = f => 600 + f.strayBy / step * 300; // the further it strays, the longer out and back
+  const strayOff = (f, t, p) => {
+    const n = t - f.land + f.lead, away = strayFor(f);
+    if (!f.strayBy || n < 0 || n % f.strayEvery >= away) return [0, 0];
+    const q = Math.max(-half, Math.min(half, p[0] - cx)), d = Math.hypot(p[0] - cx - q, p[1] - cy) || 1, out = Math.sin(Math.PI * (n % f.strayEvery) / away) * f.strayBy;
+    return [(p[0] - cx - q) / d * out, (p[1] - cy) / d * out];
+  };
+  // One frame of the hold: the swirl carries the firefly on, then its place, wander, offset and any stray make where it is.
   const flow = (f, t) => {
     const b = holdAt(f, t);
     f.off = carry(b, f.off, f.flowT - gather, Math.min(50, t - f.flowT)); f.flowT = t;
-    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), n = t - f.land - 800 - f.strayAt;
-    const away = 600 + f.strayBy / step * 300; // the further it strays, the longer out and back
-    if (!f.strayBy || n < 0 || n % f.strayEvery >= away) return p;
-    const q = Math.max(-half, Math.min(half, p[0] - cx)), d = Math.hypot(p[0] - cx - q, p[1] - cy) || 1, out = Math.sin(Math.PI * (n % f.strayEvery) / away) * f.strayBy;
-    return [p[0] + (p[0] - cx - q) / d * out, p[1] + (p[1] - cy) / d * out];
+    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, t, p);
+    return [p[0] + o[0], p[1] + o[1]];
   };
   const heading = (f, t) => { const a = holdAt(f, t - 1), b = holdAt(f, t + 1); return [(b[0] - a[0]) / 2, (b[1] - a[1]) / 2]; }; // px per ms
   // rings from the rim in to the innermost, evenly spaced and no further apart than a hexagonal packing's rows
@@ -138,15 +148,16 @@ function playFlash(id) {
   for (let ring = 0; ring < rings; ring++) {
     const rr = r - (r - inner) * ring / (rings - 1);
     const loop = 4 * half + 2 * Math.PI * rr, n = Math.max(1, Math.round(loop / step)), at = rand() * step;
-    const way = (ring % 2 ? -1 : 1) * (0.9 + rand() * 0.2); // one pace per loop, so its fireflies never bunch
+    // one pace per loop, so its fireflies never bunch; the rim's a little quicker, since the edge clips half its wander
+    const way = (ring % 2 ? -1 : 1) * (0.9 + rand() * 0.2);
     for (let i = 0; i < n; i++) {
       let pick = rand(), col = FLASH_COLOURS[0][1];
       for (const [share, c] of FLASH_COLOURS) if ((pick -= share) < 0) { col = c; break; }
-      const wander = () => (0.0006 + rand() * 0.0012) * (rand() < 0.5 ? -1 : 1); // radians per ms, each its own
-      flies.push({ rr, s0: at + i * loop / n, v: way * swarm, col, ph: rand() * 6.28,
+      const wander = () => (0.0015 + rand() * 0.0015) * (rand() < 0.5 ? -1 : 1); // radians per ms, each its own
+      flies.push({ rr, s0: at + i * loop / n, v: way * (ring || still ? swarm : Math.max(swarm, 0.008 * px / 1.2)), col, ph: rand() * 6.28,
         ax: wander(), bx: wander(), ay: wander(), by: wander(), every: 2000 + rand() * 3000, dartAt: rand() * 5000, dir: rand() * 6.28,
         land: rand() * 400, go: FLASH.leave * (0.8 + rand() * 0.2), tilt: (rand() - 0.5) * 1.2,
-        strayBy: ring > 1 || !jostle ? 0 : (r - rr) + (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: 11600 + rand() * 9400, strayAt: rand() * 11600 });
+        strayBy: ring > 2 || !jostle ? 0 : (r - rr) + (rand() < 0.15 ? 3 + rand() * 2 : 1 + rand()) * step * jostle, strayEvery: 4300 + rand() * 3500, overshoot: rand() < 0.3 });
     }
   }
   // Each firefly's landing time is set first, which fixes where it joins its loop and which way it's moving there. It
@@ -157,9 +168,13 @@ function playFlash(id) {
     // firefly landing later lands where the swirl would have carried it by then, already moving the way it goes.
     f.off = [0, 0];
     for (let at = 0; at < f.land; at += 16) f.off = carry(holdAt(f, at), f.off, at, Math.min(16, f.land - at));
+    // its first stray: some are mid-stray as they land (they arrive past the rim and drift back in), the rest stray
+    // at a random moment after landing
+    f.lead = f.overshoot ? strayFor(f) * (0.3 + rand() * 0.3) : -rand() * f.strayEvery;
     const b = holdAt(f, f.land), carried = swirl([b[0] + f.off[0], b[1] + f.off[1]], f.land), own = heading(f, f.land);
-    f.spot = keepIn([b[0] + f.off[0], b[1] + f.off[1]]);
-    f.vel = [own[0] + carried[0], own[1] + carried[1]];
+    const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, f.land, p), o2 = strayOff(f, f.land + 1, p);
+    f.spot = [p[0] + o[0], p[1] + o[1]];
+    f.vel = [own[0] + carried[0] + o2[0] - o[0], own[1] + carried[1] + o2[1] - o[1]];
     const behind = Math.abs(f.vel[0]) > 0.3 * Math.abs(f.vel[1]) ? f.vel[0] > 0 : f.spot[0] < cx;
     f.from = still ? f.spot : [behind ? -radii[0] : W + radii[0], rand() * H];
     f.len = Math.hypot(f.spot[0] - f.from[0], f.spot[1] - f.from[1]) * 1.15;
