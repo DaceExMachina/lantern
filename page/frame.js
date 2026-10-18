@@ -18,6 +18,14 @@ function findPerch(m, rand, from) {
   return best;
 }
 
+// A pierced lantern's solid bands (class band in its drawing), measured once per lantern in its own units: top, bottom, half-width.
+/** @type {Element[]} */
+let bandEls = [], bandBoxes = [];
+function measureBands() {
+  if (!bandEls[0]?.isConnected) { bandEls = [...document.querySelectorAll('#lantern .band')]; bandBoxes = bandEls.map(e => { const b = /** @type {SVGGraphicsElement} */ (e).getBBox(); return [b.y, b.y + b.height, b.width / 2]; }); }
+  return bandBoxes;
+}
+
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   const s = t / 1000;
@@ -361,6 +369,10 @@ function frame(t) {
   }
   drawStale(dt, s);
   // the background last, once every moth has moved, so their shadows fall where they are now
+  // the flame core's centre, live, in the lantern's units: what the holder's fan and the bands' shadows are seen from
+  const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), [fx, fy, fk] = style.flame;
+  const flameAt = [fx + (core.x + core.width / 2 - 340) * size * fk, fy + (core.y + core.height / 2 - FLAME_BASE) * size * fk];
+  const flameR = 6 * size * fk; // about how wide the flame is: the bands' shadows soften by that much
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
   const casters = ambient ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
@@ -371,7 +383,10 @@ function frame(t) {
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: rad,
     // the flame core's lean (its layer in the loop above), exaggerated so the shimmer visibly follows it
     shim: [...rot(style.light[0] + wobble(s, 4) * 3 * size * 3, style.light[1]), (style.shimmer || 0) * flick, wobble(s, 4) * 0.5 + wobble(s * 1.6, 3) * 0.25],
-    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])] : [0, 0],
+    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
+      : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameAt[1])] : [0, 0],
+    bandO: rot(...flameAt),
+    bands: remote ? [] : measureBands().map(([top, bottom, r]) => [(top - flameAt[1]) / r, (bottom - flameAt[1]) / r, flameR / r]),
   });
   placeCard();
 }

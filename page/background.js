@@ -26,9 +26,12 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
+uniform vec2 uBandO; uniform vec3 uBand[8]; uniform int uBands; // solid bands round a pierced lantern: from the flame, each
+// covers a range of slopes (up or down over out), softened at its edges
 uniform vec4 uShim; // a pierced lantern's shimmer: the flame's live x, y, how strong, and its turn
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
+const float BAND = 0.22; // how much light a solid band holds back
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
@@ -62,7 +65,15 @@ void main() {
   // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
-  float open = 1.0 - CAPS * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope);
+  float open = 1.0 - CAPS * step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope);
+  // each solid band shades the room at the slopes it covers, seen from the live flame, so the bands move as it flickers
+  vec2 bq = p - uBandO;
+  float tb = (-bq.x * sin(uSway) + bq.y * cos(uSway)) / max(abs(bq.x * cos(uSway) + bq.y * sin(uSway)), 0.001);
+  for (int i = 0; i < 8; i++) {
+    if (i >= uBands) break;
+    vec3 b = uBand[i];
+    open *= 1.0 - BAND * smoothstep(b.x - b.z, b.x + b.z, tb) * smoothstep(b.y + b.z, b.y - b.z, tb);
+  }
   // through filigree the light averages out, leaving only a faint, soft texture of rays from the flame; as the flame
   // leans and flickers its centre and turn shift, so the texture moves with it
   vec2 fq = p - uShim.xy; float fa = atan(fq.y, fq.x);
@@ -138,7 +149,9 @@ function drawBackground(v) {
   gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR); gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uAirA, v.airA);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
-  gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform4f(u.uShim, ...v.shim); gl.uniform1i(u.uMoths, shadows.length);
+  gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform4f(u.uShim, ...v.shim);
+  const bands = v.bands.slice(0, 8); gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, bands.length);
+  if (bands.length) gl.uniform3fv(u['uBand[0]'], bands.flat()); gl.uniform1i(u.uMoths, shadows.length);
   if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
