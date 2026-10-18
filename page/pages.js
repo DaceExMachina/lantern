@@ -1,103 +1,119 @@
-// Book pages on the barrel's paper: three pages pasted on at slight angles, filling slowly with fragments of what the
-// sessions wrote (each session's `prose`, already filtered by the server). A fragment fades in over about 18s, lingers
-// for about a minute, and fades out; some are printed on the inside (mirrored), some run off a page's edge. The words
-// read best where the flame's light is strongest. Besides live sessions' words, the server sends a pool from the newest
-// few transcripts (recentProse), ended sessions too. With no words at all the pages stay empty. settings.json
-// `lanternText`: "sessions" (the default) or "off".
+// Printed pages on the barrel's paper: paragraphs of what the sessions wrote (each session's `prose`, runs of plain
+// sentences the server already filtered) wrapped round the cylinder. Each block's lines run the paper's full width and
+// on round the sides, squeezing as they turn away and vanishing round the back, on the rows between the wires. A block
+// fades in over about 18s, lingers for about a minute, and fades out, overlapping the others; some are printed on the
+// inside (mirrored). The words read best where the flame's light is strongest. Besides live sessions' words, the server
+// sends a pool from the newest few transcripts (recentProse), ended sessions too. With no words the paper stays blank.
+// settings.json `lanternText`: "sessions" (the default) or "off".
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
 
 let lanternText = 'sessions';
 let recentProse = []; // from the server's `prose` event
-// on the barrel's paper (x 280 to 400, y 216 to 445), tilted about their middles
-const PAGES = [{ x: 286, y: 238, w: 90, h: 140, rot: -6 }, { x: 310, y: 305, w: 86, h: 125, rot: 5 }, { x: 298, y: 270, w: 72, h: 95, rot: 1.5 }];
+// The Odawara barrel's drum (ODAWARA in lanterns.js): centred on x 340, radius 60, 19 gaps between its 20 wires from
+// y 216 to 445, each wire bowing by bow(y) at the front. A line of type sits in a gap, near its lower wire.
+const DRUM = { cx: 340, r: 60, top: 216, gap: 229 / 19, rows: 19, bow: y => 120 * (y - 350) / 1350 };
 const INK = { warm: '#5A3420', cool: '#2E2350' };
-const FADE = 18000, HOLD = 70000, EVERY = 9000, SHOWN = 10;
-let fragments = [], shownLately = [], nextFragmentAt = 0;
+const FADE = 18000, HOLD = 70000, EVERY = 20000, SHOWN = 6;
+const FONT = "Georgia, 'Times New Roman', serif";
+let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
-// fragments part way through their lives, as if it had been running a while, so a reload doesn't wipe the pages.
+// blocks part way through their lives, as if it had been running a while, so a reload doesn't wipe the paper.
 let pagesData = false, primed = false;
 const loadedAt = performance.now();
 
-const wrapWords = (text, width) => text.split(' ').reduce((lines, w) => {
+const measure = document.createElement('canvas').getContext('2d');
+const widthOf = (text, size) => { measure.font = `${size}px ${FONT}`; return measure.measureText(text).width; };
+const wrapWords = (text, width, size) => text.split(' ').reduce((lines, w) => {
   const last = lines[lines.length - 1];
-  if (last && (last + ' ' + w).length <= width) lines[lines.length - 1] = last + ' ' + w; else lines.push(w);
+  if (last && widthOf(last + ' ' + w, size) <= width) lines[lines.length - 1] = last + ' ' + w; else lines.push(w);
   return lines;
 }, /** @type {string[]} */ ([]));
 
-// Any session's words, live or recent, skipping those shown lately; nothing when there are none.
+// A paragraph from one place: a live session's runs, or the recent transcripts' pool, both oldest first. From a random
+// starting run it takes the ones after it until there are about 45 words, skipping starts shown lately. Nothing when
+// there are no words.
 function pickText() {
-  const said = [...new Set([...raw.flatMap(s => s.prose || []), ...recentProse])];
-  const fresh = said.filter(t => !shownLately.includes(t)), pool = fresh.length ? fresh : said;
-  const text = pool[Math.floor(Math.random() * pool.length)];
-  if (text) shownLately = [...shownLately, text].slice(-12);
+  const sources = [...raw.map(s => s.prose || []), recentProse].filter(list => list.length);
+  const starts = sources.flatMap(list => list.map((run, i) => ({ list, i, run })));
+  const fresh = starts.filter(st => !shownLately.includes(st.run)), pool = fresh.length ? fresh : starts;
+  const start = pool[Math.floor(Math.random() * pool.length)];
+  if (!start) return;
+  shownLately = [...shownLately, start.run].slice(-8);
+  let text = start.run;
+  for (let i = start.i + 1; i < start.list.length && text.split(' ').length < 45; i++) text += ' ' + start.list[i];
   return text;
 }
 
-// `age` backdates it: a fragment that has lived longer than its fade and hold is already fading out.
-function addFragment(now, age = 0) {
+// A block of lines, laid out on the paper unrolled: `from` is how far round (in paper units, 0 at the front) its lines
+// start, and they run `width` on from there, so some start round the left side and some carry on round the right.
+// `age` backdates it: a block that has lived longer than its fade and hold is already fading out.
+function addBlock(now, age = 0) {
   const text = pickText();
   if (!text) return;
-  const r = Math.random, page = Math.floor(r() * PAGES.length), pg = PAGES[page];
-  const size = 4.4 + r() * 1.6;
-  fragments.push({
-    page, born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.35 + r() * 0.35, mirror: r() < 0.4, size,
-    lines: wrapWords(text, Math.round(26 + r() * 10)).slice(0, 1 + Math.floor(r() * 3)),
-    x: pg.x - 10 + r() * pg.w * 0.55, y: pg.y + 8 + r() * (pg.h - 10), // can start off the page's left edge and get cut off
-  });
+  const r = Math.random, size = DRUM.gap * (0.55 + r() * 0.1), width = DRUM.r * (2.2 + r() * 1.4);
+  const block = {
+    born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.4 + r() * 0.3, mirror: r() < 0.4, size,
+    from: -DRUM.r * (1 + r() * 1.4), row: Math.floor(r() * (DRUM.rows - 3)), lines: wrapWords(text, width, size),
+  };
+  if (age > FADE + block.hold) block.leaving = now - (age - FADE - block.hold);
+  blocks.push(block);
   // the oldest leaves early when too many are showing
-  const f = fragments[fragments.length - 1];
-  if (age > FADE + f.hold) f.leaving = now - (age - FADE - f.hold);
-  const going = fragments.filter(f => !f.leaving);
+  const going = blocks.filter(b => !b.leaving);
   if (going.length > SHOWN) going[0].leaving = now;
 }
 
-// The pages' frame, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
-function drawPages(root) {
-  const page = (pg, k) => `<g transform="rotate(${pg.rot} ${pg.x + pg.w / 2} ${pg.y + pg.h / 2})">
-    <clipPath id="pageClip${k}"><rect x="${pg.x}" y="${pg.y}" width="${pg.w}" height="${pg.h}"/></clipPath>
-    <rect x="${pg.x}" y="${pg.y}" width="${pg.w}" height="${pg.h}" opacity="0.07"/><g id="page${k}" clip-path="url(#pageClip${k})"></g></g>`;
-  root.innerHTML = `<radialGradient id="pagesLight" gradientUnits="userSpaceOnUse" cx="340" cy="330" r="100" gradientTransform="translate(340 330) scale(.85 1.3) translate(-340 -330)">
-      <stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#bbb"/><stop offset="1" stop-color="#000"/></radialGradient>
-    <mask id="pagesMask" maskUnits="userSpaceOnUse" x="270" y="210" width="140" height="240"><rect x="270" y="210" width="140" height="240" fill="url(#pagesLight)"/></mask>
-    <g id="pagesInk" mask="url(#pagesMask)">${PAGES.map(page).join('')}</g>`;
-  for (const f of fragments) f.node = null;
+// One glyph at a time, each placed where its middle falls on the drum and squeezed sideways as the paper turns away,
+// riding the wire's bow. Mirrored blocks run the other way round with their glyphs flipped, like print seen through.
+function blockMarkup(b) {
+  const esc = c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c] || c;
+  let out = '';
+  b.lines.forEach((line, i) => {
+    const row = b.row + i;
+    if (row >= DRUM.rows) return; // runs off the bottom of the paper
+    const base = DRUM.top + DRUM.gap * (row + 0.8), bow = DRUM.bow(base);
+    let s = b.from;
+    for (const c of line) {
+      const w = widthOf(c, b.size), a = (s + w / 2) / DRUM.r;
+      s += w;
+      if (c === ' ' || Math.abs(a) >= Math.PI / 2 - 0.05) continue; // round the back
+      const k = b.mirror ? -1 : 1, x = DRUM.cx + k * DRUM.r * Math.sin(a), y = base + bow * Math.cos(a) ** 2 / 2;
+      out += `<text transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${(k * Math.cos(a)).toFixed(3)} 1)">${esc(c)}</text>`;
+    }
+  });
+  return `<g font-size="${b.size.toFixed(2)}" text-anchor="middle">${out}</g>`;
 }
 
-function fragmentNode(f) {
-  const g = document.createElementNS(NS, 'g');
-  if (f.mirror) { const pg = PAGES[f.page]; g.setAttribute('transform', `translate(${2 * (pg.x + pg.w / 2)} 0) scale(-1 1)`); }
-  f.lines.forEach((line, i) => {
-    const t = document.createElementNS(NS, 'text');
-    t.setAttribute('x', f.x.toFixed(1)); t.setAttribute('y', (f.y + i * f.size * 1.3).toFixed(1));
-    t.setAttribute('font-size', f.size.toFixed(1)); t.setAttribute('font-family', "Georgia, 'Times New Roman', serif");
-    t.textContent = line;
-    g.append(t);
-  });
-  return g;
+// The light the words are read by, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
+function drawPages(root) {
+  root.innerHTML = `<radialGradient id="pagesLight" gradientUnits="userSpaceOnUse" cx="340" cy="330" r="110" gradientTransform="translate(340 330) scale(.8 1.25) translate(-340 -330)">
+      <stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#bbb"/><stop offset="1" stop-color="#222"/></radialGradient>
+    <mask id="pagesMask" maskUnits="userSpaceOnUse" x="270" y="210" width="140" height="240"><rect x="270" y="210" width="140" height="240" fill="url(#pagesLight)"/></mask>
+    <g id="pagesInk" mask="url(#pagesMask)" font-family="${FONT}"></g>`;
+  for (const b of blocks) b.node = null;
 }
 
 function tickPages() {
   const root = $('pages');
   if (!root) return; // not the barrel
-  if (lanternText === 'off') { root.replaceChildren(); fragments = []; return; }
+  if (lanternText === 'off') { root.replaceChildren(); blocks = []; return; }
   const now = performance.now();
   if (!primed) {
-    if (!pagesData && now - loadedAt < 1500) return; // nothing drawn yet, not even the pages
+    if (!pagesData && now - loadedAt < 1500) return; // nothing drawn yet
     primed = true;
-    for (let i = 0; i < SHOWN; i++) addFragment(now, Math.random() * (2 * FADE + HOLD));
-    nextFragmentAt = now + EVERY * (0.6 + Math.random() * 0.8);
+    for (let i = 0; i < SHOWN; i++) addBlock(now, Math.random() * (2 * FADE + HOLD));
+    nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8);
   }
   if (!root.firstChild) drawPages(root);
-  if (now >= nextFragmentAt) { addFragment(now); nextFragmentAt = now + EVERY * (0.6 + Math.random() * 0.8); }
+  if (now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
   const ink = $('pagesInk');
   ink.setAttribute('fill', mix(INK.warm, INK.cool, cool));
   ink.setAttribute('opacity', (0.5 + 0.5 * Math.max(level, cool * 0.45)).toFixed(2)); // brighter flame, clearer words
-  fragments = fragments.filter(f => {
-    if (!f.leaving && now - f.born > FADE + f.hold) f.leaving = now;
-    const fadeIn = Math.min(1, (now - f.born) / FADE), fadeOut = f.leaving ? 1 - (now - f.leaving) / FADE : 1;
-    if (fadeOut <= 0) { f.node?.remove(); return false; }
-    f.node ??= $('page' + f.page).appendChild(fragmentNode(f));
-    f.node.setAttribute('opacity', (f.peak * Math.min(fadeIn, fadeOut)).toFixed(3));
+  blocks = blocks.filter(b => {
+    if (!b.leaving && now - b.born > FADE + b.hold) b.leaving = now;
+    const fadeIn = Math.min(1, (now - b.born) / FADE), fadeOut = b.leaving ? 1 - (now - b.leaving) / FADE : 1;
+    if (fadeOut <= 0) { b.node?.remove(); return false; }
+    if (!b.node) { ink.insertAdjacentHTML('beforeend', blockMarkup(b)); b.node = ink.lastElementChild; }
+    b.node.setAttribute('opacity', (b.peak * Math.min(fadeIn, fadeOut)).toFixed(3));
     return true;
   });
 }

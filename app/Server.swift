@@ -194,37 +194,42 @@ func forYou(_ message: Any?) -> JSON {
             "questions": questions.prefix(5).map { $0.cut(160) }]
 }
 
-// The plain sentences in a message, for the barrel's paper (page/pages.js) to show in passing: whole sentences of 6 to 20
-// words, starting with a capital and ending in a full stop. Anyone walking past can read the screensaver, so a sentence
+// Runs of plain sentences in a message, for the barrel's paper (page/pages.js) to show in passing: each run is the
+// consecutive sentences that pass, joined into a paragraph of at most about 70 words, and anything that doesn't pass ends
+// the run. A sentence passes when it's whole, 6 to 20 words, starting with a capital and ending in a full stop. Anyone walking past can read the screensaver, so a sentence
 // goes whole if it holds anything that could identify work: code, a link or path, any digit (ids, hashes, ports), a
 // capitalised word past its first (a name), or talk to or about the person (I, you). Kept in memory only.
 func prose(_ message: Any?) -> [String] {
-    let text = Re("```[\\s\\S]*?```").replace(message == nil ? "" : str(message), "")
+    let text = Re("```[\\s\\S]*?```").replace(message == nil ? "" : str(message), "\n#\n") // a code block ends a run
     let person = Re("\\b(I|I'm|I'll|I've|I'd|me|my|you|your|you're|you'll|we|we're|let's|us|our)\\b", .caseInsensitive)
     // a sentence's first word could be a name too: it has to be a common opener, or a word the message also writes in lowercase
     let lower = Set(Re("\\b[a-z][a-z']*\\b").matches(text).compactMap { text.sub($0.range) }.map { $0.hasSuffix("s") ? String($0.dropLast()) : $0 })
     let openers: Set<String> = ["the", "this", "that", "these", "those", "it", "its", "a", "an", "each", "every", "both", "all", "some", "most",
                                 "now", "then", "there", "here", "when", "while", "if", "once", "after", "before", "only", "no", "nothing",
                                 "everything", "their", "they", "one", "so", "but", "and", "with", "without", "instead", "also", "still"]
-    var out: [String] = []
+    var out: [String] = [], run: [String] = []
+    func end() { let p = run.joined(separator: " "); if !p.isEmpty && !out.contains(p) { out.append(p) }; run = [] }
     for line in text.components(separatedBy: "\n") {
         let l = line.trim
-        if l.isEmpty || Re("^(#|>|\\|)").test(l) || Re("\\*\\*[A-Za-z ]+:\\*\\*").test(l) { continue } // headings, quotes, tables, footer labels
+        if l.isEmpty { continue } // a blank line between paragraphs doesn't end a run
+        if Re("^(#|>|\\|)").test(l) || Re("\\*\\*[A-Za-z ]+:\\*\\*").test(l) { end(); continue } // headings, quotes, tables, footer labels
         for raw in Re("(?<=[.!?])\\s+").split(Re("^([-*+]|[0-9]+[.)])\\s+").replace(l, "")) {
-            if Re("[`/\\\\\\[\\]()<>#@:=|{}0-9]|https?|\\w\\.\\w").test(raw) || person.test(raw) { continue }
+            if Re("[`/\\\\\\[\\]()<>#@:=|{}0-9]|https?|\\w\\.\\w").test(raw) || person.test(raw) { end(); continue }
             let s = Re("[*_]").replace(raw, "").trim
             let words = s.split(separator: " ")
             let first = words.first.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) } ?? ""
             guard (6...20).contains(words.count), Re("^[A-Z][a-z']*,?$").test(String(words[0])), s.hasSuffix("."), !s.hasSuffix("..."),
                   openers.contains(first) || lower.contains(first.hasSuffix("s") ? String(first.dropLast()) : first),
-                  !words.dropFirst().contains(where: { Re("^[^a-z]*[A-Z]").test(String($0)) }) else { continue }
-            if !out.contains(s) { out.append(s) }
+                  !words.dropFirst().contains(where: { Re("^[^a-z]*[A-Z]").test(String($0)) }) else { end(); continue }
+            if run.joined(separator: " ").split(separator: " ").count + words.count > 70 { end() }
+            run.append(s)
         }
     }
+    end()
     return out
 }
 
-// The plain sentences in a transcript's assistant messages, oldest first.
+// The runs of plain sentences in a transcript's assistant messages, oldest first.
 func transcriptProse(_ lines: [String]) -> [String] {
     var said: [String] = []
     for line in lines {
@@ -507,7 +512,7 @@ func seedSession(_ file: String, live: Bool) -> (JSON, Ordered<JSON>)? {
                    "unconfirmed": !live]
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
     // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
-    if case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
+    if case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(6)) }
     s["created"] = createdPRs(file, dir)
     // subagents that look like they're still going: transcript touched in the last two minutes and not finished
     var agents = Ordered<JSON>()
@@ -609,7 +614,7 @@ final class LanternServer {
     struct Seen { var waiting = false, snoozed: String?, title: String? }
     var seen: [String: Seen] = [:]
     var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
-    var recentProse: [String] = [] // sentences from the newest transcripts, ended sessions too, for the barrel's pages; memory only
+    var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the barrel's pages; memory only
     var violet = false, quiet = false
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh
@@ -767,7 +772,7 @@ final class LanternServer {
             s["tasks"] = Array(running.map { $0["description"] }.filter(truthy).prefix(4)).map { $0! }
             s["forYou"] = forYou(e["last_assistant_message"])
             let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
-            if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(10)) } // the newest ~10 sentences
+            if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(6)) } // the newest few runs
             s["error"] = false
             if !running.isEmpty && q.isEmpty { s["state"] = "paused"; s["note"] = "Waiting on \(tasks)" }
             else { s["state"] = "waiting"; s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
@@ -904,13 +909,13 @@ final class LanternServer {
                 for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
             } else { print("seeding failed: no \(PROJECTS)") }
             // the barrel's pages also draw on the newest few transcripts, so they aren't blank when little is running:
-            // a handful of sentences from the tail of each, a few dozen in all
+            // a few runs from the tail of each, a couple of dozen in all
             let started = now()
             let newest = ((try? FileManager.default.contentsOfDirectory(atPath: PROJECTS)) ?? []).flatMap { transcripts(PROJECTS + "/" + $0) }
                 .map { ($0, fileTimes($0)?.mtime ?? 0) }.sorted { $0.1 > $1.1 }.prefix(8).map(\.0)
             var pool: [String] = []
-            for f in newest { pool += transcriptProse(tail(f)).suffix(6).filter { !pool.contains($0) } }
-            print("Read \(pool.count) sentence(s) from \(newest.count) recent transcript(s) in \(Int(now() - started)) ms")
+            for f in newest { pool += transcriptProse(tail(f)).suffix(3).filter { !pool.contains($0) } }
+            print("Read \(pool.count) run(s) of prose from \(newest.count) recent transcript(s) in \(Int(now() - started)) ms")
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
                 for (s, a) in seeded {
@@ -922,7 +927,7 @@ final class LanternServer {
                     self.loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
                 }
                 print("Seeded \(self.sessions.count) session(s) from disk")
-                self.recentProse = Array(pool.prefix(40))
+                self.recentProse = Array(pool.prefix(24))
                 self.send("event: prose\ndata: \(self.proseOut())\n\n")
                 self.linkSpawned()
                 // last known PR status, until the first refresh replaces it

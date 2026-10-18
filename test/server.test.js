@@ -87,7 +87,7 @@ test('a turn that asks a question or names a Blocker is waiting, with the questi
 test('snooze, snooze for good, and wake', t => replay(t, 'snooze'));
 test('a manual /compact ends idle, an automatic one leaves the session as it was', t => replay(t, 'compact'));
 test('SessionEnd removes the session', t => replay(t, 'session-end'));
-test('a turn\'s plain sentences become its prose, newest ten, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
+test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
 test('with lanternText off the real words stay off the page', t => replay(t, 'prose-off', { 'data/settings.json': '{"lanternText": "off"}' }));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
