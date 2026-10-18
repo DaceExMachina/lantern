@@ -99,9 +99,9 @@ The daily recap opens by itself when quiet hours start. If you miss that, it sho
 
 ## Quiet hours
 
-The moon in the footer snoozes everything on every display until 8am, or the time in "quiet until" in the settings menu. Click it again to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
+The moon in the footer snoozes everything on every display until 8am, or the time in "quiet until" in the settings menu. Switch "quiet until" off and quiet lasts until you click the moon again. Either way, click it to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
 
-To have quiet come on by itself every night, switch "quiet from" on in the settings menu and pick a time. It works with no window open, since the app does it. If quiet is already on by then, it stays as it is, and if you end it early, it stays off until the next night.
+To have quiet come on by itself every night, switch "quiet from" on in the settings menu and pick a time. It works with no window open, since the app does it. It ends at "quiet until", or when you click the moon if that's off. If quiet is already on by then, it stays as it is, and if you end it early, it stays off until the next night.
 
 ## The app
 

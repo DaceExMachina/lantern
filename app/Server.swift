@@ -22,6 +22,8 @@ typealias JSON = [String: Any]
 // MARK: - Small JS-alikes, so the logic treats odd input the way JavaScript would
 
 func now() -> Double { (Date().timeIntervalSince1970 * 1000).rounded(.down) }
+/// quietUntil for quiet hours with no end (quiet until switched off): the latest time a JavaScript Date can hold.
+let QUIET_FOREVER = 8.64e15
 
 /// JavaScript truthiness for a parsed JSON value.
 func truthy(_ v: Any?) -> Bool {
@@ -452,16 +454,24 @@ final class LanternServer {
         let ghosts = stale.compactMap { (owners[str($0["url"])] as? JSON)?["id"] as? String }
         if Dictionary(grouping: ghosts) { $0 }.values.contains(where: { $0.count >= 5 }) { stats.earn("restless_spirits") }
     }
-    /// Quiet from (settings.quietFrom): quiet hours start by themselves each night, as if the moon were pressed, until
-    /// quietEnd. Not if quiet hours already started, or were turned on or off by hand, since that night's quietFrom:
-    /// quietUntil says when they last ended (or will). True when it turned them on.
+    /// Quiet until (settings.quietEnd, on unless settings.quietEndOn is false): whether quiet hours end by themselves.
+    var quietEndOn: Bool { (settings["quietEndOn"] as? NSNumber)?.boolValue ?? true }
+    /// When quiet hours started now would end: the next quietEnd, or never while quiet until is off.
+    func quietEndsAt(_ t: Date = Date()) -> Double {
+        guard quietEndOn else { return QUIET_FOREVER }
+        let ended = lastAt(clockMinutes(settings["quietEnd"]) ?? 8 * 60, t)
+        return (Calendar.current.date(byAdding: .day, value: 1, to: ended)!.timeIntervalSince1970 * 1000).rounded()
+    }
+    /// Quiet from (settings.quietFrom): quiet hours start by themselves once a night, as if the moon were pressed. Not if
+    /// quiet hours already started, or were turned on or off by hand, since that night's quietFrom (quietUntil says when
+    /// they last ended, or will), nor once quietEnd has passed while quiet until is on. True when it turned them on.
     @discardableResult
     func autoQuiet() -> Bool {
         guard let from = clockMinutes(settings["quietFrom"]) else { return false }
         let t = Date(), began = lastAt(from, t), ended = lastAt(clockMinutes(settings["quietEnd"]) ?? 8 * 60, t)
         let until = (settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0
-        guard ended < began, until < began.timeIntervalSince1970 * 1000 else { return false }
-        settings["quietUntil"] = (Calendar.current.date(byAdding: .day, value: 1, to: ended)!.timeIntervalSince1970 * 1000).rounded()
+        guard !quietEndOn || ended < began, until < began.timeIntervalSince1970 * 1000 else { return false }
+        settings["quietUntil"] = quietEndsAt(t)
         return true
     }
     /// The warm moths goal from the stats panel, or 75%: it decides which days count toward a warm streak.
@@ -682,6 +692,11 @@ final class LanternServer {
                 // times of day, "HH:MM": the day rollover (a stats day starts), when quiet hours end, and when they start by themselves (null: never)
                 for key in ["dayStart", "quietEnd", "quietFrom"] where clockMinutes(j[key]) != nil { settings[key] = j[key]; ok = true }
                 if j["quietFrom"] is NSNull { settings["quietFrom"] = nil; ok = true }
+                // quiet until switched on or off: quiet hours already on now end at quietEnd, or last until the moon is pressed
+                if let on = j["quietEndOn"] as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() {
+                    settings["quietEndOn"] = on.boolValue; ok = true
+                    if ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now() { settings["quietUntil"] = quietEndsAt() }
+                }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }
             if !ok { return respond(c, 400) }

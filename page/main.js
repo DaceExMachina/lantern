@@ -22,10 +22,11 @@ es.addEventListener('settings', e => {
   if (isTime.test(st.dayStart || '')) dayStart = st.dayStart;
   $('quietEnd').value = hhmm(quietEnd); $('dayStart').value = hhmm(dayStart);
   if (isTime.test(st.quietFrom || '')) $('quietFrom').value = hhmm(st.quietFrom);
-  showQuietFrom(isTime.test(st.quietFrom || ''));
+  showSwitch($('quietFromRow'), isTime.test(st.quietFrom || ''));
+  quietEndOn = st.quietEndOn !== false; showSwitch($('quietEndRow'), quietEndOn);
   paintRibbon(st.ribbon);
-  const until = quietEndLabel();
-  $('quiet').title = `Treat everything as snoozed until ${until}`;
+  const until = quietEndOn ? `until ${quietEndLabel()}` : 'until you press it again';
+  $('quiet').title = `Treat everything as snoozed ${until}`;
   $('quietUntil').textContent = until;
   setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('textToggle').checked = lanternText !== 'off';
   try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
@@ -48,7 +49,7 @@ fitView();
 $('quiet').onclick = () => {
   const [h, m] = quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);
   if (morning <= new Date()) morning.setDate(morning.getDate() + 1);
-  post('/settings', { quietUntil: quiet() ? 0 : morning.getTime() });
+  post('/settings', { quietUntil: quiet() ? 0 : quietEndOn ? morning.getTime() : QUIET_FOREVER });
 };
 
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
@@ -57,16 +58,16 @@ $('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
   post('/settings', { lanternText });
 };
-// times of day: quiet from (off, or on at a time), quiet until, and the day rollover
+// times of day: quiet from and quiet until (each switched off or on, with a time), and the day rollover
 for (const id of ['quietFrom', 'quietEnd', 'dayStart']) $(id).onchange = e => e.target.value && post('/settings', { [id]: e.target.value });
-function showQuietFrom(on) {
-  $('quietFrom').disabled = !on;
-  for (const b of $('quietFromRow').querySelectorAll('.pill button')) b.setAttribute('aria-pressed', String(!!b.dataset.on === on));
+function showSwitch(row, on) {
+  row.querySelector('input').disabled = !on;
+  for (const b of row.querySelectorAll('.pill button')) b.setAttribute('aria-pressed', String(!!b.dataset.on === on));
 }
-for (const b of $('quietFromRow').querySelectorAll('.pill button')) b.onclick = () => {
-  const on = !!b.dataset.on;
-  showQuietFrom(on);
-  post('/settings', { quietFrom: on ? $('quietFrom').value || '22:00' : null });
+for (const b of document.querySelectorAll('#menu .pill button')) /** @type {HTMLButtonElement} */ (b).onclick = () => {
+  const row = b.closest('.switch'), on = !!/** @type {HTMLButtonElement} */ (b).dataset.on;
+  showSwitch(row, on);
+  post('/settings', row.id === 'quietFromRow' ? { quietFrom: on ? $('quietFrom').value || '22:00' : null } : { quietEndOn: on });
 };
 for (const name of Object.keys(RIBBONS)) {
   const b = document.createElement('button');

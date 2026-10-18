@@ -36,12 +36,13 @@
   #menu:popover-open { gap: 0; }
   #menu > label { display: flex; padding: 5px 0; }
   #menu .time { justify-content: space-between; white-space: nowrap; }
-  /* quiet from: its words, an off | on switch built like the time input, then the time (faded while off) lined up with those below.
+  /* quiet from and quiet until: their words, an off | on switch built like the time input, then the time (faded while off).
+     The times line up with the day rollover's below.
      Nothing moves when it flips. The words and each half of the switch run the row's full height, and the halves touch. */
-  #quietFromRow { display: flex; }
-  #quietFromRow > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
-  #quietFromRow > label { display: flex; padding-left: 8px; } /* the time's click area runs the row's full height too */
-  #quietFromRow input:disabled { opacity: .4; }
+  #menu .switch { display: flex; }
+  #menu .switch > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
+  #menu .switch > label { display: flex; padding-left: 8px; } /* the time's click area runs the row's full height too */
+  #menu .switch input:disabled { opacity: .4; }
   #menu input[type=time], .pill button span { box-sizing: border-box; height: 26px; } /* the switch matches the input */
   #menu input[type=time] { width: 8.6em; } /* one width for every time, the widest value's, so their edges line up */
   .pill { display: flex; }
@@ -239,8 +240,8 @@
     <label title="Print lines your sessions wrote on the paper lanterns"><input type="checkbox" id="textToggle"> show session text</label>
     <label title="Which lantern hangs in every window, the iTerm2 panel and the screensaver"><select id="style" aria-label="Lantern style"></select></label>
     <div class="ribbon" title="The barrel lantern's ribbon colour"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour"></span></div>
-    <div class="time" id="quietFromRow" title="Every night at this time, quiet turns on by itself and snoozes everything until quiet hours end"><span>quiet from</span><span class="pill" role="group" aria-label="Quiet from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" disabled></label></div>
-    <label class="time" title="When quiet hours end and moths can call you again">quiet until <input type="time" id="quietEnd" value="08:00"></label>
+    <div class="time switch" id="quietFromRow" title="Every night at this time, quiet turns on by itself and snoozes everything until quiet hours end"><span>quiet from</span><span class="pill" role="group" aria-label="Quiet from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" disabled></label></div>
+    <div class="time switch" id="quietEndRow" title="When quiet hours end and moths can call you again. Off: they last until you press the moon"><span>quiet until</span><span class="pill" role="group" aria-label="Quiet until"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietEnd" value="08:00" aria-label="Quiet until"></label></div>
     <label class="time" title="When one day ends and the next begins in your stats. Set it later than midnight to keep late nights with the day they belong to">day rollover <input type="time" id="dayStart" value="00:00"></label>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
@@ -249,7 +250,7 @@
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
       <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>right-click</b> to snooze it.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
-      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything until <span id="quietUntil">8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
+      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span id="quietUntil">until 8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
       <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
     </details>

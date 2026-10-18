@@ -299,15 +299,27 @@ test('stats: days start at the day rollover', async t => {
 
 // Quiet from turns quiet hours on by itself, until quietEnd, as if the moon were pressed; turned off by hand that night,
 // they stay off.
+const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 test('quiet from turns quiet hours on, and leaves them off once ended by hand', async t => {
   const base = await serve(t);
-  const hhmm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   const hour = 3600000, from = new Date(Date.now() - hour), end = new Date(Date.now() + hour);
   const until = new Date(end); until.setSeconds(0, 0);
   await post(base, '/settings', { quietFrom: hhmm(from), quietEnd: hhmm(end) });
   assert.strictEqual((await snapshot(base)).settings.quietUntil, +until);
   await post(base, '/settings', { quietUntil: 0 }); // the moon, pressed to end it
   await post(base, '/settings', { quietFrom: hhmm(from) });
+  assert.ok((await snapshot(base)).settings.quietUntil <= Date.now(), 'quiet hours came back on after being turned off');
+});
+
+// With quiet until switched off, quiet hours have no end: quiet from turns them on even with quietEnd behind it, and
+// they last until the moon is pressed. Ended by hand, they stay off that night.
+test('with quiet until off, quiet hours last until the moon is pressed', async t => {
+  const base = await serve(t, { 'data/settings.json': '{"quietEndOn": false}' });
+  const hour = 3600000;
+  await post(base, '/settings', { quietFrom: hhmm(new Date(Date.now() - 2 * hour)), quietEnd: hhmm(new Date(Date.now() - hour)) });
+  assert.strictEqual((await snapshot(base)).settings.quietUntil, 8.64e15);
+  await post(base, '/settings', { quietUntil: 0 });
+  await post(base, '/settings', { quietFrom: hhmm(new Date(Date.now() - 2 * hour)) });
   assert.ok((await snapshot(base)).settings.quietUntil <= Date.now(), 'quiet hours came back on after being turned off');
 });
 
