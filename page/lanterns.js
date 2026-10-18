@@ -77,14 +77,16 @@ const SUNKEN = (cx, half, ribs, dip, bow) => {
     wires: ribs.slice(1, -1).map(y => `<path d="M${n(cx - half(y))} ${n(y)}${arc(y, 1)}"/>`).join(''),
   };
 };
-// the Odawara barrel: a straight cylinder on 19 close wires, bowed from the flame's height like its drums
-const ODAWARA = SUNKEN(340, _y => 60, Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), 1.2, y => 120 * (y - 350) / 1350);
+// the Odawara barrel: a straight cylinder on 19 close wires (top and bottom edges included), each bowed from the flame's
+// height like its drums. style.drum, so whatever is drawn on the paper can follow the same curves.
+const BARREL = { cx: 340, r: 60, top: 216, bottom: 445, ribs: Array.from({ length: 20 }, (_, i) => 216 + 229 * i / 19), bow: y => 120 * (y - 350) / 1350 };
+const ODAWARA = SUNKEN(BARREL.cx, _y => BARREL.r, BARREL.ribs, 1.2, BARREL.bow);
 // the chōchin, in its mockup units: round, its wires wider apart and bowing away from the middle, so it sinks in less
 const CHOCHIN = SUNKEN(95, y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)), [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], 0.35, y => 0.115 * (y - 122));
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [216, 445, 63],
-    body: { top: 216, bottom: 445, half: _y => 60 }, // a straight cylinder
+    drum: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: _y => BARREL.r }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
     <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
