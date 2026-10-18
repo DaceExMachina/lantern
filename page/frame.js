@@ -314,6 +314,6 @@ function frame(t) {
       });
     }
   }
-  drawGraveyard(dt, s, pal('thread'));
+  drawGraveyard(dt, s);
   placeCard();
 }
