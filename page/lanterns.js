@@ -103,13 +103,13 @@ function applyStyle(key) {
 function pickPerch(a = Math.random() * 2 * Math.PI, rand = Math.random) {
   const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + rand() * 0.65;
   const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a) * depth);
-  const sin = Math.max(Math.sin(15 * Math.PI / 180), Math.abs(Math.cos(a)) * depth); // how far round the side, from the front
+  // how far round the side, from the front: always in the outer half of the lantern, never its middle, squeezed rather
+  // than clamped so the slices keep their order
+  const sin = 0.5 + 0.5 * Math.abs(Math.cos(a)) * depth;
   const slope = (half(y + 1) - half(y - 1)) / 2, len = Math.hypot(1, slope); // how fast the surface bulges at this height
-  // the surface's outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped up or
-  // down by how the lantern bulges at this height. It's pulled halfway toward the side-on view at the rim, so closed
-  // wings near the middle still show a side profile instead of pointing straight at you (not quite true to the curve,
-  // but it reads better); the landing spot itself stays put.
-  const shown = (sin + 1) / 2, normal = unit([side * shown, -slope, Math.sqrt(1 - shown * shown)]);
+  // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
+  // up or down by how the lantern bulges at this height
+  const normal = unit([side * sin, -slope, Math.sqrt(1 - sin * sin)]);
   return [340 + side * half(y) * sin, y, normal];
 }
 
