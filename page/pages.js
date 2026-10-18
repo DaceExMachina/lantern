@@ -23,7 +23,7 @@ const FONT = "Georgia, 'Times New Roman', serif";
 // The light the words are read by: brightest just above the flame, falling off to a third at the paper's edges.
 const READ_LIGHT = { cx: 340, cy: 340, rx: 88, ry: 165, stops: [[0, 1], [0.55, 0.73], [1, 0.33]] };
 // Under this many CSS pixels of drum on screen the type is a few pixels tall, too small to read, so the text sleeps.
-const MIN_DRUM = 250;
+const MIN_DRUM = 175;
 const STRIPS = 90; // the warp's vertical strips round the front half of the drum
 let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
