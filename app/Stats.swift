@@ -4,8 +4,9 @@
 //          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), violet (the lantern
 //          calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
 //   events (time, kind, session, data): moments. kind is pr (data.change: appeared, need, merged, closed, stray, gone),
-//          api_error (the singed moth) or compact.
-//   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays): counts every five minutes.
+//          graveyard (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
+//          singed moth) or compact.
+//   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays, graveyard): counts every five minutes.
 // PRAGMA user_version is the schema version, for later migrations. Writes run on their own queue and give up quietly,
 // so a missing or broken database never slows or stops the lantern.
 import Foundation
@@ -31,7 +32,7 @@ final class Stats {
                     BEGIN;
                     CREATE TABLE spans (kind TEXT NOT NULL, session TEXT, began INTEGER NOT NULL, ended INTEGER, data TEXT NOT NULL DEFAULT '{}');
                     CREATE TABLE events (time INTEGER NOT NULL, kind TEXT NOT NULL, session TEXT, data TEXT NOT NULL DEFAULT '{}');
-                    CREATE TABLE gauges (time INTEGER NOT NULL, alive INTEGER, working INTEGER, waiting INTEGER, snoozed INTEGER, fireflies INTEGER, agents INTEGER, strays INTEGER);
+                    CREATE TABLE gauges (time INTEGER NOT NULL, alive INTEGER, working INTEGER, waiting INTEGER, snoozed INTEGER, fireflies INTEGER, agents INTEGER, strays INTEGER, graveyard INTEGER);
                     CREATE INDEX spans_began ON spans (began);
                     CREATE INDEX events_time ON events (time);
                     CREATE INDEX gauges_time ON gauges (time);
@@ -75,6 +76,15 @@ final class Stats {
               AND json_extract(data, '$.change') IN ('appeared', 'need')
             """) }
         return rows.reduce(into: [:]) { if let url = $1[0], let need = $1[1], let session = $1[2] { $0[url] = (need, session) } }
+    }
+
+    /// The graveyard when the lantern last looked, by url.
+    func buried() -> Set<String> {
+        Set(queue.sync { run("""
+            SELECT json_extract(data, '$.url') FROM events
+            WHERE rowid IN (SELECT max(rowid) FROM events WHERE kind = 'graveyard' GROUP BY json_extract(data, '$.url'))
+              AND json_extract(data, '$.change') = 'entered'
+            """) }.compactMap { $0[0] })
     }
 
     /// The app is quitting: close what's open now, and wait for every write to land.

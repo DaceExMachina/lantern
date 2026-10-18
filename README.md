@@ -21,16 +21,17 @@ A paper lantern that glows with your Claude Code sessions. Moths are your sessio
 - **Each project gets a faint tint**, a little different per session, so you can tell moths apart at a glance.
 - **Fireflies** hang around a session's moth, one per open PR it owns (up to ten). A moth lands on the slice of the lantern facing its home, like a slice of pie, so the lines never cross. While it's landed a dotted line in its thread colour ties it to one of its fireflies back home. Hovering that cluster shows the session's card too, PRs and all. Only PRs the session (or one of its agents, in any worktree) created with `gh pr create` count, plus its branch's PR when it's the only session in that folder; a PR it just mentions never does. Without GitHub status, a fly appears when the You: line points at one of those.
 - **With GitHub status on**, fireflies show what each PR needs: green is ready to merge, red (blinking faster) is failing checks, orange is changes requested, amber is a draft, and blue is waiting on review. Merged ones drift off. Reviews requested from you hover by the lantern, and the footer links to them.
+- **The graveyard** along the bottom holds your open PRs that no session owns and nobody has touched for a week, as dead fireflies: dark husks in four poses (folded, wings splayed, curled up, or on their side with a wing raised) with a dull trace of their PR colour, older ones further back, the odd one on its back. Now and then a tail lights up: half pulse slowly like an ember, half flicker like a dying bulb. Up to 30 lie out, and the rest pile into a heap with a count. Hover one for what it needs; click to open it. When one gets touched again, it rises and fades. It needs GitHub status, and you can turn it off in the settings menu.
 - **A singed moth** (grey, dark edge) means the turn ended with an API error.
 - **"quiet"** in the footer treats everything as snoozed until 8am, on every display.
 - **Right-click a waiting moth** to snooze it. It rests on the lantern in pale indigo and stops turning the light violet until the session does something new. Right-click again to snooze it for good, so new activity never wakes it (handy for a chat you only drop into now and then), and once more to wake it. Right-clicking a moth that isn't waiting snoozes it for good straight away.
 - **Pick a lantern** from the settings menu (the sliders icon at the bottom right), which also holds "notify me" and GitHub: the book-page barrel, a round chōchin, or a brass Moroccan lantern. The choice is shared, so every window, the iTerm2 panel, and the screensaver switch together.
-- **Open windows update themselves.** When `index.html` changes, every Lantern window (the iTerm2 panel, the Dock app, the screensaver) reloads on its own.
+- **Open windows update themselves.** When the page (`index.html` or a script in `page/`) changes, every Lantern window (the iTerm2 panel, the Dock app, the screensaver) reloads on its own.
 - **Any window shape works.** The scene stretches to fill wide, tall, or square windows, with the lantern staying the same size in the middle.
 
 ## How it works
 
-Claude Code hooks send every session event to a small server: inside Lantern.app it's written in Swift, and without the app it's `server.js` (Node, no dependencies). Both do the same thing. The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page is one HTML file that animates an inline SVG.
+Claude Code hooks send every session event to a small server: inside Lantern.app it's written in Swift, and without the app it's `server.js` (Node, no dependencies). Both do the same thing. The server keeps track of sessions and subagents and streams them to the page with Server-Sent Events. The page is one HTML file and a handful of plain scripts that animate an inline SVG over a WebGL background.
 
 When the server starts, it rebuilds the sessions you already have open from their transcripts in `~/.claude/projects`, so a restart doesn't lose them.
 
@@ -58,7 +59,7 @@ npx claude-lantern uninstall
 
 ### Working on Lantern
 
-Clone the repo and run the installer from it. Lantern.app then serves your checkout's `index.html` instead of its own copy, so page changes go live:
+Clone the repo and run the installer from it. Lantern.app then serves your checkout's page (`index.html` and `page/`) instead of its own copy, so page changes go live:
 
 ```bash
 git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
@@ -68,7 +69,7 @@ git clone https://github.com/DaceExMachina/lantern.git ~/projects/lantern
 node ~/projects/lantern/install.js
 ```
 
-The page reloads itself when `index.html` changes. The server inside the app is `app/Server.swift`; after changing it, rebuild the app (below). `server.js` is the same server for setups without the app, so a change to one belongs in the other. To run it on a spare port alongside the app:
+The page is `index.html` plus plain scripts in `page/`, one per part of the scene (moths, lanterns, fireflies, the card, and so on), loaded in order with `main.js` last to wire everything up. It reloads itself when any of them changes. The server inside the app is `app/Server.swift`; after changing it, rebuild the app (below). `server.js` is the same server for setups without the app, so a change to one belongs in the other. To run it on a spare port alongside the app:
 
 ```bash
 LANTERN_PORT=7718 node ~/projects/lantern/server.js
@@ -80,7 +81,7 @@ To see every state without real sessions:
 node ~/projects/lantern/fake.js
 ```
 
-To type-check the JavaScript (including the page's inline script) with TypeScript, no build step involved:
+To type-check the JavaScript (the servers, the installer and the page's scripts) with TypeScript, no build step involved:
 
 ```bash
 npm install && npm run check

@@ -357,7 +357,7 @@ func seedSession(_ file: String, live: Bool) -> (JSON, Ordered<JSON>)? {
 let GH = [ProcessInfo.processInfo.environment["LANTERN_GH"], HOME + "/.local/bin/gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
     .compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0) } ?? "gh" // an app's PATH is minimal, so look in the usual places
 let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "claude-lantern"
-let PR_GQL = "url number title state isDraft reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+let PR_GQL = "url number title state isDraft updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
 func prQuery(_ fields: String) -> String {
     """
     query {
@@ -421,6 +421,7 @@ final class LanternServer {
     var agents: [String: Ordered<JSON>] = [:] // session_id -> agent_id -> { type, description, activity, tries, last }
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
+    var graveyard: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var refreshing = false
@@ -435,6 +436,7 @@ final class LanternServer {
     var violet = false, quiet = false
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh
+    var buried = Set<String>() // the graveyard the log last saw, by url
 
     init(port: UInt16, data: String, web: String) {
         self.port = port
@@ -471,13 +473,14 @@ final class LanternServer {
         stats.open()
         stats.begin("server")
         ownedPRs = stats.ownedPRs()
+        buried = stats.buried()
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
         Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep() }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in self.observe() } // quiet hours end with nothing else happening
         Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in self.gauge() }
-        // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when index.html changes on disk.
+        // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
         pageMtime = pageVersion()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
             let v = self.pageVersion()
@@ -499,14 +502,18 @@ final class LanternServer {
         })
     }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
-    func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\ndata: \(snapshot())\n\n") }
+    func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyard))\n\ndata: \(snapshot())\n\n") }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
     func broadcastGitHub() { send("event: github\ndata: \(jsonText(githubState()))\n\n") }
     func saveSettings() {
         let text = String(decoding: (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
         DispatchQueue.global().async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
     }
-    func pageVersion() -> Double { fileTimes(web + "/index.html")?.mtime ?? 0 }
+    // the newest change to index.html or any of its scripts in page/
+    func pageVersion() -> Double {
+        let scripts = ((try? FileManager.default.contentsOfDirectory(atPath: web + "/page")) ?? []).map { web + "/page/" + $0 }
+        return ([web + "/index.html"] + scripts).compactMap { fileTimes($0)?.mtime }.max() ?? 0
+    }
 
     // MARK: hook events
 
@@ -720,6 +727,7 @@ final class LanternServer {
                 // last known PR status, until the first refresh replaces it
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {
                     self.reviews = cache["reviews"] as? [JSON] ?? []
+                    self.graveyard = cache["graveyard"] as? [JSON] ?? []
                     for (id, _) in self.sessions.items { if let g = (cache["bySession"] as? JSON)?[id] { self.sessions[id]!["github"] = g } }
                 }
                 // give the titles a moment to load, then find each seeded session's iTerm tab so it's clickable right away
@@ -802,15 +810,24 @@ final class LanternServer {
                 for url in created { if let p = all[url] { prs[url] = p } }
                 github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1)] }
             }
+            // The graveyard: my open PRs that no session owns and nobody has touched for a week, oldest first.
+            let owned = Set(github.values.flatMap { $0.map { str($0["url"]) } }), weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
+            let iso = ISO8601DateFormatter()
+            let dead: [JSON] = all.items.compactMap { url, p in
+                guard !owned.contains(url), let at = iso.date(from: str(p["updatedAt"])), at < weekAgo else { return nil }
+                return ["url": url, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))",
+                        "need": prNeed(p), "updatedAt": p["updatedAt"]!]
+            }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }
             DispatchQueue.main.async {
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
                 self.reviews = wanted.items.map(\.1)
+                self.graveyard = dead
                 for (id, g) in github { self.sessions[id]?["github"] = g }
                 // a failed query would make every PR look gone, so only a complete answer goes in the log
                 if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
                 let bySession = self.sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
-                let text = jsonText(["reviews": self.reviews, "bySession": bySession]) + "\n"
+                let text = jsonText(["reviews": self.reviews, "graveyard": self.graveyard, "bySession": bySession]) + "\n"
                 DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
                 self.refreshing = false
                 self.broadcast()
@@ -850,7 +867,7 @@ final class LanternServer {
     }
 
     // PR changes, from what the sessions own after a refresh. One no session owns any more was merged or closed, or is
-    // still open with no session (a stray), or fell out of the closed search (gone).
+    // still open with no session (a stray), or fell out of the closed search (gone). Graveyard changes go in too.
     func logPRs(open: Set<String>, closed: [String: String]) {
         var owned: [String: (need: String, session: String, title: Any)] = [:]
         for (id, s) in sessions.items {
@@ -866,6 +883,14 @@ final class LanternServer {
         }
         ownedPRs = owned.mapValues { ($0.need, $0.session) }
         strays = open.subtracting(owned.keys).count
+        // PRs entering the graveyard, and leaving it: merged, closed, or revived (a session took it, or someone touched it)
+        let dead = Set(graveyard.map { str($0["url"]) })
+        for url in dead.subtracting(buried) { stats.event("graveyard", nil, ["url": url, "change": "entered"]) }
+        for url in buried.subtracting(dead) {
+            let how = open.contains(url) ? "revived" : closed[url].map { $0 == "MERGED" ? "merged" : "closed" } ?? "gone"
+            stats.event("graveyard", nil, ["url": url, "change": "left", "how": how])
+        }
+        buried = dead
     }
 
     func gauge() {
@@ -873,10 +898,10 @@ final class LanternServer {
         let fireflies = Set(sessions.items.flatMap { ($0.1["github"] as? [JSON] ?? []).filter { !["merged", "closed"].contains(str($0["need"])) }.map { str($0["url"]) } })
         stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { str($0.1["state"]) == "working" }.count),
                      ("waiting", waiting.count), ("snoozed", waiting.filter { truthy($0.1["snoozed"]) || forGood($0.0) }.count),
-                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays)])
+                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("graveyard", graveyard.count)])
     }
 
-    func clearGitHub() { reviews = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
+    func clearGitHub() { reviews = []; graveyard = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
 
     // Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain.
     func loadAccounts() {
@@ -1053,6 +1078,7 @@ final class LanternServer {
                     if github.boolValue { DispatchQueue.main.async { self.refreshGitHub() } } else { clearGitHub() }
                 }
                 if let style = j["style"] as? String, Re("^[a-z]+$").test(style) { settings["style"] = style; ok = true }
+                if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
                 if let quiet = j["quietUntil"] as? NSNumber, CFGetTypeID(quiet) != CFBooleanGetTypeID(), quiet.doubleValue.isFinite {
                     settings["quietUntil"] = quiet; ok = true // quiet hours: every wait counts as snoozed until then
                 }
@@ -1070,7 +1096,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyard))\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()
@@ -1079,6 +1105,9 @@ final class LanternServer {
         let icons = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = icons[req.url] { return respond(c, 200, type, FileManager.default.contents(atPath: web + req.url) ?? Data()) }
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
+        if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil, let js = FileManager.default.contents(atPath: web + page) {
+            return respond(c, 200, "text/javascript; charset=utf-8", js)
+        }
         if page == "/" || page == "/index.html" { return respond(c, 200, "text/html; charset=utf-8", FileManager.default.contents(atPath: web + "/index.html") ?? Data()) }
         respond(c, 404)
     }

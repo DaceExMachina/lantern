@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "lib": ["es2022", "dom", "dom.iterable"], "types": [], "strictNullChecks": false },
-  "include": [".check/page.js", "page-globals.d.ts"]
+  "include": ["page/*.js", "page-globals.d.ts"]
 }

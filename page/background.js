@@ -1,0 +1,117 @@
+// The background drawn on the GPU: rings, glow, rays and dust (WebGL), plus rays carried across onto other displays.
+
+// ---- background on the GPU ------------------------------------------------------------------------------
+// The full-screen layer (background, glow rings, soft glow, turning rays, dust) is drawn by a WebGL shader on a canvas
+// behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
+const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
+function program(vert, frag) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vert], [gl.FRAGMENT_SHADER, frag]]) {
+    const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
+    gl.attachShader(p, sh);
+  }
+  gl.linkProgram(p);
+  const u = {}; // uniform locations by name
+  for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i++) { const n = gl.getActiveUniform(p, i).name; u[n] = gl.getUniformLocation(p, n); }
+  return { p, u };
+}
+// Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
+const BG = program(`attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`, `
+precision highp float;
+uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient, uTime;
+uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
+uniform vec2 uGlowC; uniform float uGlowR, uGlowA; uniform vec3 uGlowCol;
+uniform vec2 uRayC; uniform float uRayScale, uRayA, uRotA, uRotB;
+void main() {
+  vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
+  float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
+  vec3 col = uBg;
+  if (uAmbient < 0.5) {
+    // glow rings: three nested discs, shown together at one opacity
+    float d = length(p - uRingC);
+    vec3 ring = mix(mix(uRing0, uRing1, smoothstep(px, -px, d - uRingR.y)), uRing2, smoothstep(px, -px, d - uRingR.z));
+    col = mix(col, ring, smoothstep(px, -px, d - uRingR.x) * uRingA);
+    // soft glow: radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
+    float g = length(p - uGlowC) / uGlowR;
+    float ga = g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));
+    col = mix(col, uGlowCol, ga * uGlowA);
+  }
+  if (uRayA > 0.0) {
+    // rays: two sets of nine wedges turning opposite ways, twinkling on their own, fading out over a long soft tail
+    // (long enough to carry on to a display beside this one, where they're drawn from a light that's off its edge)
+    vec2 q = (p - uRayC) / uRayScale;
+    float r = length(q), th = atan(q.y, q.x), x = clamp(r / 700.0, 0.0, 1.0), fall = 0.9 * (1.0 - x) * (1.0 - x);
+    float clear = 1.0;
+    for (int i = 0; i < 18; i++) {
+      float fi = float(i), k = mod(fi, 9.0), setB = step(9.0, fi);
+      float a = k / 9.0 * 6.2831853 + setB * 0.35 + mix(uRotA, uRotB, setB);
+      float w = 0.05 + mod(k, 3.0) * 0.025, diff = abs(mod(th - a + 3.1415927, 6.2831853) - 3.1415927);
+      float edge = px / max(r * uRayScale, px);
+      float tw = sin(uTime * (0.4 + mod(fi, 5.0) * 0.13) + fi * 1.7);
+      clear *= 1.0 - smoothstep(w + edge, w - edge, diff) * fall * (0.35 + 0.65 * tw * tw);
+    }
+    col = mix(col, uGlowCol, (1.0 - clear) * uRayA);
+  }
+  gl_FragColor = vec4(col, 1.0);
+}`);
+// dust: soft points, positions worked out in JS each frame
+const DUST = program(`
+attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; varying float vA;
+void main() {
+  gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
+  gl_PointSize = a.z * 2.0 * uRes.x / uBox.z + 1.0; vA = a.w;
+}`, `
+precision mediump float; uniform vec3 uCol; varying float vA;
+void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(uCol, vA * smoothstep(1.0, 0.6, d)); }`);
+const quad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+const dustBuf = gl.createBuffer(), dustData = new Float32Array(60 * 4);
+const rgb = c => hex(c).map(v => v / 255);
+
+const dust = Array.from({ length: 34 }, () => ({ a: Math.random() * 6.28, d: 40 + Math.random() * 230, w: (Math.random() - 0.5) * 0.12,
+  ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2 }));
+// a fainter, wider ring of specks out in the dark, beyond the glow
+const farDust = Array.from({ length: 26 }, () => ({ a: Math.random() * 6.28, d: 230 + Math.random() * 110, w: (Math.random() - 0.5) * 0.08,
+  ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
+
+// On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
+// screens' frames (global points, y up), so the rays can carry on from where the lantern's light is, off this screen's edge.
+const REMOTE = (() => {
+  const q = new URLSearchParams(location.search), f = k => q.get(k)?.split(',').map(Number);
+  const L = f('lantern'), S = f('self');
+  return L?.length === 4 && S?.length === 4 && ![...L, ...S].some(isNaN) ? { L, S } : null;
+})();
+function remoteRays() {
+  const { L: [lx, ly, lw, lh], S: [sx, sy, sw, sh] } = REMOTE;
+  // the lantern display's view, worked out the same way fitView does it there
+  const kx = Math.max(1, lw / lh), ky = Math.max(1, lh / lw), vw = 600 * kx, vh = 600 * ky, vx = 340 - vw / 2, vy = 320 - vh / 2;
+  const gx = lx + (style.light[0] - vx) / vw * lw, gyUp = ly + lh - (style.light[1] - vy) / vh * lh; // the light, in global points
+  const ax = gx - sx, ay = sy + sh - gyUp; // ...and in this screen's pixels (y down)
+  const [bx, by, bw, bh] = VIEW.box;
+  return { c: [bx + ax / sw * bw, by + ay / sh * bh], scale: Math.max(kx, ky) * (bw / sw) / (vw / lw) };
+}
+
+function drawBackground(v) {
+  if (!VIEW.box) return; // not laid out yet
+  const c = $('bg'), [x, y, w, h] = VIEW.box;
+  gl.viewport(0, 0, c.width, c.height);
+  gl.disable(gl.BLEND);
+  gl.useProgram(BG.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  const u = BG.u;
+  gl.uniform2f(u.uRes, c.width, c.height); gl.uniform4f(u.uBox, x, y, w, h); gl.uniform3fv(u.uBg, rgb('#2B2440'));
+  gl.uniform1f(u.uAmbient, document.body.classList.contains('ambient') ? 1 : 0); gl.uniform1f(u.uTime, v.time);
+  gl.uniform2f(u.uRingC, ...v.ringC); gl.uniform3f(u.uRingR, ...v.ringR); gl.uniform1f(u.uRingA, v.ringA);
+  v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
+  gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR); gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
+  gl.uniform2f(u.uRayC, ...v.rayC); gl.uniform1f(u.uRayScale, v.rayScale); gl.uniform1f(u.uRayA, v.rayA); gl.uniform1f(u.uRotA, v.rotA); gl.uniform1f(u.uRotB, v.rotB);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  // dust over it
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(DUST.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, dustBuf); gl.bufferData(gl.ARRAY_BUFFER, dustData, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
+  gl.uniform4f(DUST.u.uBox, x, y, w, h); gl.uniform2f(DUST.u.uRes, c.width, c.height); gl.uniform3fv(DUST.u.uCol, rgb(v.dustCol));
+  gl.drawArrays(gl.POINTS, 0, 60);
+}

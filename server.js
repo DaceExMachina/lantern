@@ -31,7 +31,7 @@ function snapshot() {
 }
 
 function broadcast() {
-  const msg = `event: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`;
+  const msg = `event: reviews\ndata: ${JSON.stringify(reviews)}\n\nevent: graveyard\ndata: ${JSON.stringify(graveyard)}\n\ndata: ${snapshot()}\n\n`;
   for (const res of clients) res.write(msg);
 }
 
@@ -385,6 +385,7 @@ function seed() {
     const cache = JSON.parse(fs.readFileSync(GITHUB_CACHE, 'utf8'));
     if (settings.githubAccounts?.length || settings.github) { // (accounts are still loading from the Keychain here)
       reviews = cache.reviews || [];
+      graveyard = cache.graveyard || [];
       for (const s of sessions.values()) if (cache.bySession?.[s.id]) s.github = cache.bySession[s.id];
     }
   } catch {}
@@ -402,6 +403,7 @@ function seed() {
 const GH = [process.env.LANTERN_GH, path.join(require('os').homedir(), '.local/bin/gh'), '/opt/homebrew/bin/gh', '/usr/local/bin/gh']
   .find(p => p && fs.existsSync(p)) || 'gh'; // launchd's PATH is minimal, so look in the usual places
 let reviews = []; // open PRs waiting on my review, from every account the sessions' folders use
+let graveyard = []; // my open PRs that no session owns and nobody has touched for a week, oldest first
 // what a PR needs from me: merged/closed (gone), checks failing, changes requested, ready to merge, or nothing yet
 function prNeed(p) {
   if (p.state !== 'OPEN') return p.state === 'MERGED' ? 'merged' : 'closed';
@@ -428,7 +430,7 @@ async function refreshGitHub() {
     await refreshPRs(live, alone);
     // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
     const bySession = Object.fromEntries([...sessions.values()].filter(s => s.github).map(s => [s.id, s.github]));
-    fs.writeFile(GITHUB_CACHE, JSON.stringify({ reviews, bySession }) + '\n', () => {});
+    fs.writeFile(GITHUB_CACHE, JSON.stringify({ reviews, graveyard, bySession }) + '\n', () => {});
   } finally { refreshing = false; }
   broadcast();
 }
@@ -437,7 +439,7 @@ async function refreshGitHub() {
 // the open ones it created plus its branch's (merged ones simply drop out). It runs through the Claude Lantern GitHub
 // App's tokens when an account is connected, or else through the gh CLI from each session's folder, so a gh that picks
 // the account by folder does the right thing. Either way it's a handful of calls, all at once.
-const PR_GQL = 'url number title state isDraft reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
+const PR_GQL = 'url number title state isDraft updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }';
 const prQuery = fields => `query {
   reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { ${fields} } } }
   mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 100) { nodes { ... on PullRequest { ${fields} } } }
@@ -478,6 +480,10 @@ async function refreshPRs(live, alone) {
     for (const url of s.created || []) if (all.has(url)) prs.set(url, all.get(url));
     s.github = [...prs.values()].map(p => ({ url: p.url, title: p.title, label: `#${p.number}`, need: prNeed(p) }));
   }));
+  // The graveyard: my open PRs that no session owns and nobody has touched for a week, oldest first.
+  const owned = new Set(live.flatMap(s => (s.github || []).map(p => p.url))), weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+  graveyard = [...all.values()].filter(p => !owned.has(p.url) && Date.parse(p.updatedAt) < weekAgo).sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+    .map(p => ({ url: p.url, title: p.title, label: `${p.repository.name}#${p.number}`, need: prNeed(p), updatedAt: p.updatedAt }));
 }
 
 // ---- Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain ----
@@ -530,13 +536,15 @@ async function disconnectGitHub(login) {
   if (!accounts.size && !settings.github) clearGitHub(); else refreshGitHub();
 }
 
-function clearGitHub() { reviews = []; for (const s of sessions.values()) delete s.github; broadcast(); }
+function clearGitHub() { reviews = []; graveyard = []; for (const s of sessions.values()) delete s.github; broadcast(); }
 loadAccounts();
 setInterval(refreshGitHub, 2 * 60 * 1000);
 
-// Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when index.html changes on disk.
-const pageVersion = () => { try { return fs.statSync(path.join(__dirname, 'index.html')).mtimeMs; } catch { return 0; } };
-fs.watchFile(path.join(__dirname, 'index.html'), { interval: 1000 }, () => { for (const c of clients) c.write(`event: version\ndata: ${pageVersion()}\n\n`); });
+// Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk:
+// index.html or any of its scripts in page/.
+const pageFiles = () => [path.join(__dirname, 'index.html'), ...(fs.existsSync(path.join(__dirname, 'page')) ? fs.readdirSync(path.join(__dirname, 'page')).map(f => path.join(__dirname, 'page', f)) : [])];
+const pageVersion = () => Math.max(0, ...pageFiles().map(f => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } }));
+for (const f of pageFiles()) fs.watchFile(f, { interval: 1000 }, () => { for (const c of clients) c.write(`event: version\ndata: ${pageVersion()}\n\n`); });
 
 // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
 const alive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
@@ -637,9 +645,10 @@ http.createServer((req, res) => {
     req.on('end', () => {
       let ok = false;
       try {
-        const { style, quietUntil, github } = JSON.parse(body);
+        const { style, quietUntil, github, graveyard: showGraveyard } = JSON.parse(body);
         if (typeof github === 'boolean') { settings.github = github; ok = true; if (github) setTimeout(refreshGitHub, 0); else clearGitHub(); }
         if (typeof style === 'string' && /^[a-z]+$/.test(style)) { settings.style = style; ok = true; } // (test() would pass undefined as "undefined")
+        if (typeof showGraveyard === 'boolean') { settings.graveyard = showGraveyard; ok = true; }
         if (Number.isFinite(quietUntil)) { settings.quietUntil = quietUntil; ok = true; } // quiet hours: every wait counts as snoozed until then
       } catch {}
       if (!ok) return res.writeHead(400).end();
@@ -651,7 +660,7 @@ http.createServer((req, res) => {
   }
   if (req.url === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
-    res.write(`retry: 2000\nevent: version\ndata: ${pageVersion()}\n\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: github\ndata: ${JSON.stringify(githubState())}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\ndata: ${snapshot()}\n\n`);
+    res.write(`retry: 2000\nevent: version\ndata: ${pageVersion()}\n\nevent: settings\ndata: ${JSON.stringify(settings)}\n\nevent: github\ndata: ${JSON.stringify(githubState())}\n\nevent: reviews\ndata: ${JSON.stringify(reviews)}\n\nevent: graveyard\ndata: ${JSON.stringify(graveyard)}\n\ndata: ${snapshot()}\n\n`);
     clients.add(res);
     req.on('close', () => clients.delete(res));
     return;
@@ -662,6 +671,10 @@ http.createServer((req, res) => {
     return fs.createReadStream(path.join(__dirname, req.url)).pipe(res);
   }
   const page = (req.url || '').split('?')[0]; // ?panel and friends are for the page, not the server
+  if (/^\/page\/[a-z]+\.js$/.test(page) && fs.existsSync(path.join(__dirname, page))) {
+    res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
+    return fs.createReadStream(path.join(__dirname, page)).pipe(res);
+  }
   if (page === '/' || page === '/index.html') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
