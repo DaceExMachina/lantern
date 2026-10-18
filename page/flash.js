@@ -139,10 +139,13 @@ function playFlash(id) {
   const strayOff = (f, t, p) => {
     const n = t - f.land + f.lead, away = strayFor(f);
     if (!f.strayBy || n < 0 || n % f.strayEvery >= away) return [0, 0];
-    const q = Math.max(-half, Math.min(half, p[0] - cx)), d = Math.hypot(p[0] - cx - q, p[1] - cy) || 1, up = (cy - p[1]) / d;
+    // outward from its own place on its loop, which never crosses the pill's middle line (the swirl can carry the
+    // firefly itself across it, and outward from there would flip it to the other side in a frame)
+    const o = aroundPill(f.s0 + f.v * (t - gather), half, f.rr, cx, cy);
+    const q = Math.max(-half, Math.min(half, o[0] - cx)), d = Math.hypot(o[0] - cx - q, o[1] - cy) || 1, up = (cy - o[1]) / d;
     // upward, only as far as keeps its glow inside the window (the pill sits near the top)
-    const out = Math.sin(Math.PI * (n % f.strayEvery) / away) * (up > 0.05 ? Math.min(f.strayBy, Math.max(0, p[1] - radii[0] - 2) / up) : f.strayBy);
-    return [(p[0] - cx - q) / d * out, (p[1] - cy) / d * out];
+    const out = Math.sin(Math.PI * (n % f.strayEvery) / away) * (up > 0 ? Math.min(f.strayBy, Math.max(0, p[1] - radii[0] - 2) / up) : f.strayBy);
+    return [(o[0] - cx - q) / d * out, (o[1] - cy) / d * out];
   };
   // One frame of the hold: the swirl carries the firefly on, then its place, wander, offset and any stray make where it is.
   const flow = (f, t) => {
@@ -179,6 +182,9 @@ function playFlash(id) {
     for (let at = 0; at < f.land; at += 16) f.off = carry(holdAt(f, at), f.off, at, Math.min(16, f.land - at));
     // its first stray: some are mid-stray as they land (they arrive past the rim and drift back in), the rest stray
     // at a random moment after landing
+    // a stray's cycle is never shorter than the stray itself (plus a rest), or it would restart mid-stray and the
+    // firefly would snap back to the rim in a frame
+    f.strayEvery = Math.max(f.strayEvery, strayFor(f) + 800);
     f.lead = f.overshoot ? strayFor(f) * (0.3 + rand() * 0.3) : -rand() * f.strayEvery;
     const b = holdAt(f, f.land), carried = swirl([b[0] + f.off[0], b[1] + f.off[1]], f.land), own = heading(f, f.land);
     const p = keepIn([b[0] + f.off[0], b[1] + f.off[1]]), o = strayOff(f, f.land, p), o2 = strayOff(f, f.land + 1, p);
