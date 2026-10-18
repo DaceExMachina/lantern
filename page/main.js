@@ -13,9 +13,10 @@ es.addEventListener('settings', e => {
   quietUntil = st.quietUntil || 0;
   usingGh = !!st.github; renderGitHub();
   graveyardOn = st.graveyard !== false; $('graveToggle').checked = graveyardOn;
+  goals = st.goals || {}; renderGoals();
   sync();
 });
-setInterval(() => quiet() || !quietUntil || sync(), 60 * 1000); // notice when quiet hours end, even with nothing else happening
+setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
 es.onerror = () => { $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline'; };
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
@@ -66,6 +67,7 @@ box.onchange = () => {
 // menu leaves it open); it reads the log when it opens, and again every minute while it stays open
 $('statsButton').onclick = () => { $('menu').hidePopover(); $('stats').showPopover(); };
 let statsTimer;
+for (const key of Object.keys(GOALS)) $('goal-' + key).onchange = e => setGoal(key, e.target.value);
 $('stats').addEventListener('toggle', e => {
   clearInterval(statsTimer);
   if (e.newState === 'open') { loadStats(); statsTimer = setInterval(loadStats, MIN); }

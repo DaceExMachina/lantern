@@ -5,11 +5,14 @@ const moths = new Map(); // key -> moth
 let seenWaiting = new Set(), nextUp = 0;
 // ---- state from server -------------------------------------------------------
 let raw = [], quietUntil = 0, reviews = [];
+// When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
+// server doesn't say yet; windows opened at different times can differ.
+let violetAt = Date.now();
 // quiet hours: until 8am every waiting session counts as snoozed, so nothing turns violet, notifies or badges
 const quiet = () => quietUntil > Date.now();
 
 function sync() {
-  sessions = quiet() ? raw.map(s => s.state === 'waiting' ? { ...s, snoozed: true } : s) : raw;
+  sessions = quiet() ? raw.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : raw;
   const q = $('quiet');
   q.textContent = quiet() ? 'quiet until 8am' : 'quiet';
   q.classList.toggle('on', quiet());
@@ -24,6 +27,10 @@ function sync() {
     m.satellite = parent && !parent.leaving ? s.parent : null;
     m.size = m.satellite ? SIZE.supervisor * 1.15 : SIZE.session;
     if (m.satellite) m.slot = -1; // it doesn't hold one of the home spots
+    // a fresh snooze (not quiet hours, not waking) puffs a "zz" off the moth; the first sync only records where it stands
+    const snooze = s.forGood ? 'always' : s.snoozed && !s.quiet ? 'once' : '';
+    if (m.snooze !== undefined && snooze && snooze !== m.snooze) m.puff = { at: performance.now() / 1000, kind: snooze };
+    m.snooze = snooze;
     for (const a of s.subagents) {
       const k = s.id + '/' + a.id;
       live.add(k);
@@ -55,6 +62,12 @@ function sync() {
       st.append(' · ', next);
     }
     if (snoozed) st.append(` · ${snoozed} snoozed`);
+    if (waiting.length) violetAt = Date.now();
+    else if (!quiet() && Date.now() - violetAt >= 60000) {
+      const m = Math.floor((Date.now() - violetAt) / 60000), warm = document.createElement('span');
+      warm.className = 'warm'; warm.textContent = `warm for ${m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`}`;
+      st.append(' · ', warm);
+    }
     if (reviews.length) {
       const a = document.createElement('a');
       a.href = 'https://github.com/pulls/review-requested'; a.target = '_blank'; a.rel = 'noopener'; a.className = 'next';

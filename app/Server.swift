@@ -1247,6 +1247,15 @@ final class LanternServer {
                     if github.boolValue { DispatchQueue.main.async { self.refreshGitHub() } } else { clearGitHub() }
                 }
                 if let style = j["style"] as? String, Re("^[a-z]+$").test(style) { settings["style"] = style; ok = true }
+                // goals for the stats panel: a number turns one on, null turns it off
+                if let g = j["goals"] as? JSON {
+                    var goals = settings["goals"] as? JSON ?? [:]
+                    for key in ["fireflies", "answer", "warm"] {
+                        if g[key] is NSNull { goals[key] = nil; ok = true }
+                        if let n = g[key] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.doubleValue.isFinite, n.doubleValue >= 0 { goals[key] = n; ok = true }
+                    }
+                    settings["goals"] = goals
+                }
                 if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
                 if let quiet = j["quietUntil"] as? NSNumber, CFGetTypeID(quiet) != CFBooleanGetTypeID(), quiet.doubleValue.isFinite {
                     settings["quietUntil"] = quiet; ok = true // quiet hours: every wait counts as snoozed until then
