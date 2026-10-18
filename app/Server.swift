@@ -281,6 +281,31 @@ func liveTranscripts() -> [String] {
 // PRs a session created, read back from its transcript and its subagents' (a restart forgets the live ones).
 // ponytail: reads every transcript in full (memory-mapped); read only the tails if startup drags.
 // Each Bash call that ran `gh pr create`, and the PR URL in that call's own output:
+// Which old session made each dead PR. Every transcript from the last 60 days is mapped into memory and searched
+// for the PR links with memmem (fast: a few seconds for gigabytes); a hit in a subagent's transcript counts for its
+// session. Then that session's own `gh pr create` output has to contain the link, so a PR it only mentioned doesn't
+// count. PRs with no owner come back as NSNull (their transcript may have been cleaned up by Claude Code).
+func findOwners(_ urls: [String]) -> [String: Any] {
+    var found: [String: Any] = Dictionary(uniqueKeysWithValues: urls.map { ($0, NSNull()) })
+    let needles = urls.map { Array($0.utf8) }, since = Date().addingTimeInterval(-60 * 24 * 3600)
+    var checked = Set<String>()
+    let walk = FileManager.default.enumerator(at: URL(fileURLWithPath: PROJECTS), includingPropertiesForKeys: [.contentModificationDateKey])
+    while let file = walk?.nextObject() as? URL {
+        guard file.pathExtension == "jsonl", let at = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, at > since,
+              let data = try? Data(contentsOf: file, options: .alwaysMapped) else { continue }
+        let mentions = data.withUnsafeBytes { raw in needles.contains { n in n.withUnsafeBytes { memmem(raw.baseAddress, raw.count, $0.baseAddress, $0.count) != nil } } }
+        guard mentions else { continue }
+        let path = file.path, sessionFile = path.contains("/subagents/") ? path.components(separatedBy: "/subagents/")[0] + ".jsonl" : path
+        guard checked.insert(sessionFile).inserted, FileManager.default.fileExists(atPath: sessionFile) else { continue }
+        let dir = String(sessionFile.dropLast(".jsonl".count)), made = Set(createdPRs(sessionFile, dir))
+        for url in urls where made.contains(url) && found[url] is NSNull {
+            found[url] = ["id": (dir as NSString).lastPathComponent, "title": readTitle(dir, nil) ?? NSNull(),
+                          "cwd": lastTurn(tail(sessionFile)).cwd ?? NSNull(), "last": fileTimes(sessionFile)?.mtime ?? 0] as JSON
+        }
+    }
+    return found
+}
+
 func createdPRs(_ file: String, _ dir: String) -> [String] {
     var calls = Set<String>(), urls: [String] = []
     for f in [file] + transcripts(dir + "/subagents") {
@@ -421,6 +446,9 @@ final class LanternServer {
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
     var graveyard: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
+    var owners: JSON = [:] // dead PR url -> the old session that made it (or NSNull: looked, found none); looked up once
+    // the graveyard as the page gets it: each PR with the old session that made it, when there is one
+    func graveyardOut() -> [JSON] { graveyard.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var refreshing = false
@@ -485,7 +513,7 @@ final class LanternServer {
         })
     }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
-    func broadcast() { send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyard))\n\ndata: \(snapshot())\n\n") }
+    func broadcast() { send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
     func broadcastGitHub() { send("event: github\ndata: \(jsonText(githubState()))\n\n") }
     func saveSettings() {
@@ -708,6 +736,7 @@ final class LanternServer {
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {
                     self.reviews = cache["reviews"] as? [JSON] ?? []
                     self.graveyard = cache["graveyard"] as? [JSON] ?? []
+                    self.owners = cache["owners"] as? JSON ?? [:]
                     for (id, _) in self.sessions.items { if let g = (cache["bySession"] as? JSON)?[id] { self.sessions[id]!["github"] = g } }
                 }
                 // give the titles a moment to load, then find each seeded session's iTerm tab so it's clickable right away
@@ -803,13 +832,24 @@ final class LanternServer {
                 self.graveyard = dead
                 for (id, g) in github { self.sessions[id]?["github"] = g }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
-                let bySession = self.sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
-                let text = jsonText(["reviews": self.reviews, "graveyard": self.graveyard, "bySession": bySession]) + "\n"
-                DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
+                self.saveGitHubCache()
                 self.refreshing = false
                 self.broadcast()
+                // then, in the background, find which old sessions made any dead PRs we haven't looked up yet
+                let missing = self.graveyard.map { str($0["url"]) }.filter { self.owners[$0] == nil }
+                if !missing.isEmpty {
+                    DispatchQueue.global().async {
+                        let found = findOwners(missing)
+                        DispatchQueue.main.async { for (url, o) in found { self.owners[url] = o }; self.saveGitHubCache(); self.broadcast() }
+                    }
+                }
             }
         }
+    }
+    func saveGitHubCache() {
+        let bySession = sessions.items.filter { $0.1["github"] != nil }.reduce(into: JSON()) { $0[$1.0] = $1.1["github"] }
+        let text = jsonText(["reviews": reviews, "graveyard": graveyard, "owners": owners, "bySession": bySession]) + "\n"
+        DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
     }
     func clearGitHub() { reviews = []; graveyard = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
 
@@ -928,6 +968,29 @@ final class LanternServer {
             return respond(c, 200)
         }
         // Bring a session's iTerm tab to the front. Only an id we stored ourselves ever reaches AppleScript.
+        // Resume the old session behind a dead moth: a new iTerm tab in its folder running `claude --resume <id>`.
+        // Only sessions that own something in the graveyard can be resumed this way.
+        if json && req.url == "/resume" {
+            guard let id = body?["id"] as? String, UUID_RE.test(id),
+                  let o = owners.values.compactMap({ $0 as? JSON }).first(where: { str($0["id"]) == id }) else { return respond(c, 404) }
+            let shell = "cd '\(str(o["cwd"]).replacingOccurrences(of: "'", with: "'\\''"))' && claude --resume \(id)"
+            let script = shell.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+            DispatchQueue.global().async {
+                let r = run("osascript", ["-e", """
+                    tell application "iTerm2"
+                      activate
+                      if (count of windows) = 0 then
+                        create window with default profile
+                      else
+                        tell current window to create tab with default profile
+                      end if
+                      tell current session of current window to write text "\(script)"
+                    end tell
+                    """], timeout: 30)
+                DispatchQueue.main.async { self.respond(c, r.ok ? 204 : 500) }
+            }
+            return
+        }
         if json && req.url == "/focus" {
             guard let id = body?["id"] as? String, sessions[id] != nil else { return respond(c, 404) }
             let focus = { (tab: Any?) in
@@ -1005,7 +1068,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyard))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()
