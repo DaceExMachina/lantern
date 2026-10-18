@@ -260,11 +260,11 @@ function drawLight(dt, s, { size, flick, pulse }) {
 }
 
 // ---- moths -------------------------------------------------------------------
-// Where a moth heads this frame and how fast it eases there (and beats its wings): flying off, circling its session's
-// moth, landed on the lantern (fidgeting now and then), or drifting near home. One that has flown far enough off is
-// removed, and gets null.
+// Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
+// wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
+// home. One that has flown far enough off is removed, and gets null.
 function mothTarget(k, m, dt, s) {
-  let tx, ty, ease = 1.5, flap = 22.4; // radians per second: about 3.6 wingbeats a second
+  let tx, ty, ease = 2.4, flap = 22.4; // radians per second: about 3.6 wingbeats a second
   const orbit = m.satellite && moths.get(m.satellite);
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
     const a = m.phase + s * 0.12;
@@ -276,14 +276,14 @@ function mothTarget(k, m, dt, s) {
   const needsMe = !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
   if (m.leaving) {
     const ang = Math.atan2(m.y - CY, m.x - CX);
-    tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
+    tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 1.3;
     if (Math.hypot(m.x - CX, m.y - CY) > 420) { dropMoth(k, m); return null; }
   } else if (parent) {
     // subagents circle their own session's moth
     m.a += m.speed * dt;
     const r = m.r + Math.sin(s * 2.1 + m.phase) * 6;
     tx = parent.x + Math.cos(m.a) * r; ty = parent.y + Math.sin(m.a) * r * 0.75;
-    ease = 5; flap = 29;
+    ease = 8; flap = 29;
   } else if (needsMe) {
     // land with the wing joint on the paper (the joint sits 2,6 from the moth's position)
     if (!m.wasLanded) {
@@ -291,7 +291,7 @@ function mothTarget(k, m, dt, s) {
       m.perch = findPerch(m, m.rand);
       m.hops = 0;
     }
-    [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
+    [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 4;
     m.perchAim = m.perch; // the spot this frame's target came from (a hop below may pick the next one)
     // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
     // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
@@ -380,24 +380,24 @@ function mothZones(m, needsMe) {
   if (m.leaving) m.zone.style.pointerEvents = 'none';
 }
 
-// Ease toward the target, leaning into the turn.
+// Glide toward the target on the ghosts' spring (stale.js's settle), so a new target (taking off, landing, a hop,
+// leaving) means speeding up and slowing down smoothly, never a snap onto a new heading. Lean into the turn.
 function mothMove(m, { tx, ty, ease, needsMe }, dt, s) {
   // a landed moth is carried with its spot as the lantern sways (easing alone would always trail it, so it'd seem to float);
   // the easing is only for getting there: landing, and the jump to a new spot after a hop
   if (needsMe && m.wasLanded && m.perchAim === m.lastAim) { m.x += tx - m.lastT[0]; m.y += ty - m.lastT[1]; }
   m.lastAim = needsMe ? m.perchAim : undefined; m.lastT = [tx, ty];
-  const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
+  [m.x, m.vx] = settle(m.x, m.vx || 0, tx, ease, dt); [m.y, m.vy] = settle(m.y, m.vy || 0, ty, ease, dt);
   // lean gently into the direction of travel, eased so position jitter doesn't shake it
   // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
   if (needsMe && !m.wasLanded) m.landJitter = ((m.rand || Math.random)() * 2 - 1) * 15;
   m.wasLanded = needsMe;
   // and each one slowly turns to face its own way, but only as far as it's rolled toward side-on: seen from above a
   // moth points up (flying away from you), and by fully side-on it can turn up to 60 degrees; upright again to land
-  const lean = needsMe ? 0 : Math.max(-15, Math.min(15, (nx - m.x) / (dt || 1) * 0.25));
+  const lean = needsMe ? 0 : Math.max(-15, Math.min(15, m.vx * 0.25));
   const sideOn = Math.min(1, Math.abs(m.roll || 0) / (80 * Math.PI / 180));
   const facing = needsMe ? 0 : 60 * sideOn * (0.6 * Math.sin(s * 0.13 + m.phase * 3) + 0.4 * Math.sin(s * 0.29 + m.phase * 5));
   m.tilt = (m.tilt || 0) + (lean + facing - (m.tilt || 0)) * Math.min(1, dt * 3);
-  m.x = nx; m.y = ny;
 }
 
 // A flying moth's wingbeat (stale.js's ghost moths beat the same way): each moth beats at its own speed, so they drift
