@@ -9,6 +9,7 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npm run check
+      - run: npm test # builds the Swift server headless and replays hook events against it
   swift:
     runs-on: macos-latest
     steps:

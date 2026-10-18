@@ -1,0 +1,199 @@
+[
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "UserPromptSubmit",
+      "cwd": "/work/s1",
+      "prompt": "Audit everything"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "SubagentStart",
+      "cwd": "/work/s1",
+      "agent_id": "a1",
+      "agent_type": "opus-audit"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Two audits are running.",
+      "background_tasks": [
+        {
+          "description": "Audit the server",
+          "status": "running"
+        },
+        {
+          "description": "Audit the page"
+        },
+        {
+          "description": "Old one",
+          "status": "completed"
+        }
+      ]
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Two audits are running."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Waiting on 2 background tasks",
+          "prompt": "Audit everything",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "paused",
+          "subagents": [
+            {
+              "activity": "",
+              "description": "",
+              "id": "a1",
+              "last": "<time>",
+              "tries": 0,
+              "type": "opus-audit"
+            }
+          ],
+          "tasks": [
+            "Audit the server",
+            "Audit the page"
+          ],
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "PreToolUse",
+      "cwd": "/work/s1",
+      "agent_id": "a1",
+      "tool_name": "Read",
+      "tool_input": {
+        "file_path": "/work/s1/app/Server.swift"
+      }
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Notification",
+      "cwd": "/work/s1",
+      "notification_type": "idle_prompt",
+      "message": "Claude is waiting for your input"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [],
+            "you": [
+              "Two audits are running."
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Waiting on 2 background tasks",
+          "prompt": "Audit everything",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "paused",
+          "subagents": [
+            {
+              "activity": "Reading Server.swift",
+              "description": "",
+              "id": "a1",
+              "last": "<time>",
+              "tries": 0,
+              "type": "opus-audit"
+            }
+          ],
+          "tasks": [
+            "Audit the server",
+            "Audit the page"
+          ],
+          "ticks": 1,
+          "unconfirmed": false,
+          "waitingSince": 0
+        }
+      ]
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "SubagentStop",
+      "cwd": "/work/s1",
+      "agent_id": "a1"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
+      "hook_event_name": "Stop",
+      "cwd": "/work/s1",
+      "last_assistant_message": "Both audits are back. Ship it?"
+    }
+  },
+  {
+    "expect": {
+      "sessions": [
+        {
+          "activity": "Thinking about your message",
+          "cwd": "/work/s1",
+          "error": false,
+          "forYou": {
+            "prs": [],
+            "questions": [
+              "Ship it?"
+            ],
+            "you": [
+              "Both audits are back. Ship it?"
+            ]
+          },
+          "id": "s1",
+          "last": "<time>",
+          "note": "Asks: Ship it?",
+          "prompt": "Audit everything",
+          "snoozed": false,
+          "started": "<time>",
+          "state": "waiting",
+          "subagents": [],
+          "tasks": [],
+          "ticks": 1,
+          "unconfirmed": false,
+          "waitingSince": "<time>"
+        }
+      ]
+    }
+  }
+]

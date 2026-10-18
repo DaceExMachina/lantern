@@ -112,6 +112,14 @@ To type-check the JavaScript (the servers, the installer and the page's scripts)
 npm install && npm run check
 ```
 
+To run the tests (macOS only, since they build the Swift server with `swiftc`):
+
+```bash
+npm test
+```
+
+They use Node's built-in test runner, so there's nothing extra to install. `test/server.test.js` builds the app's server without its window, runs it on a spare port with its own temporary home folder, and replays the hook events in `test/replay/` against it: each file is a list of requests to send, and `expect` steps holding the sessions the page should get by then. After changing what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps from what it does now, so read the diff before committing it. `test/page.test.js` covers the page's landing spots and wing flapping, and `test/legacy.test.js` covers how `server.js` reads transcripts and turns.
+
 ### The Lantern app
 
 The installer puts `Lantern.app` in `~/Applications`. It's a plain window around the page, with the moth as its Dock icon and a badge counting the sessions that need you. It remembers where you left its window, and links open in your default browser. Drag it to your Dock to keep it there.
