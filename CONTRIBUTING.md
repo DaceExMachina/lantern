@@ -16,7 +16,7 @@ Claude Code hooks send every session event to a small server inside Lantern.app.
 | `app/main.swift` | The app's window, Dock badge and login item. |
 | `screensaver/`, `iterm/` | The screensaver and the iTerm2 toolbelt panel. Both show the page served by the app. |
 | `install.js` | The installer: hooks, building the app and screensaver, the iTerm2 panel. |
-| `fake.js` | Plays every lantern state without real sessions: `node fake.js`. |
+| `fake.js` | Plays every lantern state without real sessions, on a throwaway lantern (see below). |
 | `test/` | The tests (see below). |
 
 When the server starts, it rebuilds the sessions you already have open from their transcripts in `~/.claude/projects` (or under `CLAUDE_CONFIG_DIR`), so a restart doesn't lose them.
@@ -31,15 +31,19 @@ git worktree add ../lantern-my-change -b my-change
 
 ## Previewing a change
 
-To preview a branch's page with your real sessions and PRs, run the older Node server from the worktree on a spare port, mirroring the app:
+A Swift-based preview command is coming, for seeing a branch's page with your real sessions and PRs.
+
+To see every lantern state without real sessions, start a throwaway copy of the app on a spare port with its own empty data folder, then point `fake.js` at it:
 
 ```bash
-LANTERN_PORT=7718 LANTERN_MIRROR=http://127.0.0.1:7717 node server.js
+open -n -a Lantern --env LANTERN_PORT=7718 --env LANTERN_DATA="$(mktemp -d)"
 ```
 
-Then open <http://127.0.0.1:7718>. It serves the branch's page and takes everything else live from the app, and snoozes, settings and clicks in the preview go nowhere. This is a stopgap: a preview built on the Swift server is coming and will replace it.
+```bash
+LANTERN_PORT=7718 node fake.js
+```
 
-To see every state without real sessions, point `fake.js` at the preview: `LANTERN_PORT=7718 node fake.js`.
+`fake.js` refuses to run against your real lantern on 7717, since fake sessions would stay in its stats for good.
 
 ## Changing the server or the app
 

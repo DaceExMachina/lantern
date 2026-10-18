@@ -102,7 +102,7 @@ Lantern keeps its settings in `settings.json` in `~/Library/Application Support/
 
 ## Known limits
 
-- **macOS only.** The installer refuses to run anywhere else.
+- **Lantern is macOS only.** The app, the server inside it, the screensaver and click to focus all need a Mac, and the installer refuses to run anywhere else.
 - **Claude Code versions.** Tested with 2.1.302. The installer registers hooks for newer events such as `PermissionRequest` and `PostCompact`, which a much older Claude Code may not know (see [troubleshooting](troubleshooting.md#claude-code-complains-about-the-hooks)).
 - **The prebuilt app is Apple silicon only.** On an Intel Mac, the installer builds it from source.
 - **The screensaver leans on WebKit settings Apple doesn't document.** It's tested on macOS 26.
