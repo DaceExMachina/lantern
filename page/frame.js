@@ -92,18 +92,21 @@ function frame(t) {
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs
   const ringR = [250, 190, 135].map((r, i) => r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9)));
-  // dust drifts around the light; the far specks fill the dark out to the edges
+  // dust drifts around the light; the far specks fill the dark out to the edges. A speck stays lit for most of a
+  // slow cycle (about 40 seconds) and now and then fades out and back over a few seconds, so its brightness mostly
+  // changes as it drifts through light and shadow, not from twinkling
+  const fadeOut = (t, ph) => 1 - Math.max(0, Math.sin(t + ph)) ** 6;
   dust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18;
     dustData.set([gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
-      (0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))], i * 4);
+      (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph))], i * 4); // no fading with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22;
     dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
-      (0.2 + 0.25 * strength) * (0.35 + 0.65 * Math.sin(s * 0.9 + p.ph) ** 2)], (34 + i) * 4);
+      (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (34 + i) * 4);
   });
   const ambient = AMBIENT, remote = ambient && REMOTE ? remoteLight() : null;
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), [gx, gy], [125, 170], dt, s);
@@ -382,7 +385,8 @@ function frame(t) {
   drawBackground({
     ringC: rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
-    glowC: [gx, gy], glowR: 150 + 90 * level + 25 * cool + 14 * breathe, glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
+    // on a second display the glow centres on the lantern's light off its edge (it's only drawn there as the dust's light)
+    glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: ambient && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: rad,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
