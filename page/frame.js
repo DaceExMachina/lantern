@@ -131,17 +131,19 @@ function frame(t) {
         m.hops = 0;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
-      // Every 8-16s a waiting moth fidgets, each kind equally likely: at rest it fans its wings, flutters them, or
-      // breathes (one very slow open and close); after 15 minutes it's restless and may also hop off the paper. A fan or
-      // hop takes 1.6s, a flutter 3s, a breath 5s.
+      // Every 8-16s a waiting moth fidgets. Mostly it breathes: its wings open over 3s, stay open a moment, and close
+      // over 3s. Now and then it fans them quickly or flutters them instead; after 15 minutes it's restless and may
+      // also hop off the paper. A fan or hop takes 1.6s, a flutter 3s, a breath 8s.
       // Snoozed ones stay still.
       const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
-      const kinds = waited >= 15 ? ['fan', 'flutter', 'breathe', 'hop'] : ['fan', 'flutter', 'breathe'];
+      const weights = waited >= 15 ? { breathe: 0.5, hop: 0.25, fan: 0.1, flutter: 0.15 } : { breathe: 0.7, fan: 0.15, flutter: 0.15 };
       m.fidget = '';
       if (m.session.snoozed) m.fidgetAt = 0;
       else {
         if (!m.fidgetAt) { m.fidgetAt = s + 3 + Math.random() * 8; m.dice = Math.random(); }
-        const kind = kinds[Math.floor(m.dice * kinds.length)], dur = { flutter: 3, breathe: 5 }[kind] ?? 1.6, into = m.into = s - m.fidgetAt;
+        let kind = 'breathe', acc = 0;
+        for (const [k, w] of Object.entries(weights)) if (m.dice < (acc += w)) { kind = k; break; }
+        const dur = { flutter: 3, breathe: 8 }[kind] ?? 1.6, into = m.into = s - m.fidgetAt;
         if (into > dur) { m.fidgetAt = s + 8 + Math.random() * 8; m.dice = Math.random(); }
         else if (into > 0) {
           m.fidget = kind;
@@ -246,7 +248,9 @@ function frame(t) {
     // slowly, and a fan swings them open and shut. In flight each wing's angle comes from its lift.
     m.open = (m.open || 0) + ((resting ? 1 : 0) - (m.open || 0)) * Math.min(1, dt * 1.5);
     const flutter = m.fidget === 'flutter' ? Math.sin(Math.PI * m.into / 3) * (0.5 - 0.5 * Math.cos(2 * Math.PI * m.into)) : 0;
-    const breath = m.fidget === 'breathe' ? Math.sin(Math.PI * m.into / 5) ** 2 : 0; // one slow open and close
+    // one slow breath: open over 3s, hold for 2s, close over 3s, eased at both ends
+    const smooth = t => t * t * (3 - 2 * t), i = m.into || 0;
+    const breath = m.fidget === 'breathe' ? (i < 3 ? smooth(i / 3) : i < 5 ? 1 : smooth(Math.max(0, (8 - i) / 3))) : 0;
     // at rest the wings sit nearly together
     const landOpen = m.fidget === 'fan' ? 0.3 + 0.8 * (0.5 + 0.5 * Math.sin(beat)) : 0.05 + 0.05 * m.open + 0.9 * flutter + 0.75 * breath;
     const openAt = (lag, extra) => (Math.PI / 2 - liftAt(lag)) * (1 - f) + (landOpen + extra) * f;
