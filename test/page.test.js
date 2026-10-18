@@ -49,3 +49,10 @@ test('flapWing matches the old closed-form flap', () => {
       `${wing} lift ${lift} sweep ${sweep} roll ${roll}: point ${i} is at ${x},${y}, was ${was[i]}`));
   }
 });
+
+test("the Moroccan lantern's holes come from its own mask, and the paper lanterns have none", () => {
+  const holes = run('holesIn(STYLES.moroccan.back)');
+  assert.strictEqual(holes.length, 40);
+  for (const [x, y, r] of holes) assert.ok(x > 280 && x < 400 && y > 240 && y < 440 && r >= 2 && r < 8, `hole at ${x},${y} r ${r}`);
+  for (const key of ['barrel', 'chochin']) assert.strictEqual(run(`holesIn(STYLES.${key}.back).length`), 0, key);
+});
