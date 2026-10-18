@@ -63,14 +63,15 @@ const snapshot = base => new Promise((done, fail) => {
 const normalize = v => JSON.parse(JSON.stringify(v, (k, x) => ['iterm', 'parent'].includes(k) && x === null ? undefined : typeof x === 'number' && x > 1e12 ? '<time>' : x));
 const sorted = v => Array.isArray(v) ? v.map(sorted) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map(k => [k, sorted(v[k])])) : v;
 
-// Runs one replay file. Expect steps retry for a couple of seconds, since seeding and side-session links land async.
+// Runs one replay file. Expect steps retry for up to five seconds, since seeding, the session-text pool and side-session
+// links land async, and slowly on a busy CI machine.
 async function replay(t, name, files) {
   const file = path.join(__dirname, 'replay', name + '.json'), steps = JSON.parse(fs.readFileSync(file, 'utf8'));
   const base = await serve(t, files);
   for (const step of steps) {
     if (step.post) { await post(base, step.post, step.body); continue; }
     let got;
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 100; i++) {
       const s = normalize(await snapshot(base));
       got = { sessions: s.sessions, ...('settings' in step.expect ? { settings: s.settings } : {}), ...('prose' in step.expect ? { prose: s.prose } : {}) };
       try { assert.deepStrictEqual(got, step.expect); break; } catch { await wait(50); }
@@ -110,6 +111,7 @@ const recent = () => ({
 test('with little to draw on, the pool reads further back than the newest eight transcripts', t => replay(t, 'prose-pool-deep',
   Object.assign({}, ...["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"].map((w, i) => transcript(UUID(i), [user('Go'), answer(`The glow on the paper settles at row ${w} tonight.`), turnEnd])))));
 test('the newest transcripts fill a shared pool of sentences for the pages', t => replay(t, 'prose-pool', recent()));
+// It waits for the two transcripts to be seeded before posting, so the hook's session lands after them in every run.
 test('with session text off nothing is filtered or read; turning them on reads the pool, turning them off drops every word', t => replay(t, 'prose-toggle', { ...recent(), 'data/settings.json': '{"lanternText": "off"}' }));
 test('a transcript ending on an unanswered task notification seeds as waiting, not working', t => replay(t, 'seed-task-notification', {
   ...transcript(UUID(1), [user('Fix it'), answer('Fixed. **You:** try it'), turnEnd, user('<task-notification><summary>Agent finished</summary></task-notification>')]),
