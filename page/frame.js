@@ -165,19 +165,6 @@ function swingLantern(elapsed, s) {
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
 
-// The halo is a wide flame tongue, blurred. An SVG blur would re-run on every frame as the lantern sways, so the tongue
-// is blurred once, at start, into the picture #halo shows it through (2px a unit; a canvas shadow's blur is twice its
-// sigma, and only the shadow lands: the shape itself is drawn a canvas-width off to the left).
-function blurHalo() {
-  const img = $('haloBlur'), [x, y, w, h] = ['x', 'y', 'width', 'height'].map(a => Number(img.getAttribute(a))), k = 2;
-  const canvas = Object.assign(document.createElement('canvas'), { width: w * k, height: h * k });
-  const ctx = /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d'));
-  ctx.setTransform(k, 0, 0, k, -k * x - canvas.width, -k * y);
-  Object.assign(ctx, { shadowColor: '#fff', shadowBlur: 2 * 7 * k, shadowOffsetX: canvas.width });
-  ctx.fill(new Path2D(flamePath(46, 118, 0)));
-  img.setAttribute('href', canvas.toDataURL());
-}
-
 // flame: layered tongues that lean and stretch independently, ember-small when idle
 function drawFlame(s, { size, pulse }) {
   const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
@@ -189,11 +176,10 @@ function drawFlame(s, { size, pulse }) {
   put($('fBase'), 'fill', pal('base'));
   const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
   put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
-  // the halo's blurred tongue (46 by 118) grows with the flame, and stretches and leans like a tongue, its tip pushed
-  // sideways about its base
+  // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
   const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-wobble(s, 1) * 6 / (118 * hh)) * 180 / Math.PI;
   put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
-  put($('fHalo'), 'fill', pal('halo'));
+  put($('fHalo'), 'color', pal('halo'));
   put($('flame'), 'opacity', pulse.toFixed(3));
 }
 

@@ -7,9 +7,13 @@
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass), and `holder` is the burner cup under its flame.
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
-// Behind paper, the tongues are softened. The halo, already soft, sits outside that blur, since WebKit would redraw its
-// picture through it every frame.
-const FLAME = paper => `<g id="flame"><rect id="fHalo" x="285" y="249" width="110" height="165" mask="url(#halo)" opacity="0.8"/>
+// The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
+// two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
+// Behind paper, the tongues are softened; the halo is soft already.
+const HALO_FADE = (id, stops) => `<radialGradient id="${id}">${stops.map(([o, a]) => `<stop offset="${o}" stop-color="currentColor" stop-opacity="${a}"/>`).join('')}</radialGradient>`;
+const FLAME = paper => `<g id="flame"><g id="fHalo" opacity="0.8">
+  ${HALO_FADE('haloBody', [[0.4, 0.96], [0.55, 0.77], [0.7, 0.36], [0.8, 0.13], [0.9, 0.03], [1, 0]])}<ellipse cx="340" cy="346" rx="49" ry="69" fill="url(#haloBody)"/>
+  ${HALO_FADE('haloTip', [[0, 0.94], [0.2, 0.82], [0.4, 0.57], [0.55, 0.33], [0.7, 0.13], [0.8, 0.05], [1, 0]])}<ellipse cx="340" cy="304" rx="26.5" ry="49" fill="url(#haloTip)"/></g>
   <g ${paper ? 'filter="url(#behindPaper)"' : ''}><g id="tongues"><path id="fOuter"/><path id="fMid"/><path id="fCore"/><ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g></g></g>
   <g id="sparks"></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
