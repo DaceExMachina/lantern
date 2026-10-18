@@ -8,11 +8,10 @@ const http = require('http');
 const { execFileSync } = require('child_process');
 
 const HOME = os.homedir();
-// npx runs from a cache npm may clear, so the server gets a stable copy here. A git checkout runs in place.
-// Lantern.app keeps its settings here too, and the port and Claude config folder are written there once (below), since
+// Lantern.app keeps its data and settings here, and the port and Claude config folder are written there once (below), since
 // the app, opened from the Dock, never sees your shell's env.
-const COPY = path.join(HOME, 'Library', 'Application Support', 'Lantern');
-const SETTINGS = path.join(COPY, 'settings.json');
+const DATA = path.join(HOME, 'Library', 'Application Support', 'Lantern');
+const SETTINGS = path.join(DATA, 'settings.json');
 const saved = fs.existsSync(SETTINGS) ? JSON.parse(fs.readFileSync(SETTINGS, 'utf8')) : {};
 const PORT = Number(process.env.LANTERN_PORT) || saved.port || 7717;
 const FILE = path.join(process.env.CLAUDE_CONFIG_DIR || saved.claudeDir || path.join(HOME, '.claude'), 'settings.json');
@@ -27,8 +26,7 @@ const COMMAND = `curl -s -m 1 -H 'Content-Type: application/json' -H "X-Iterm-Se
   `-H "X-Term-Program: $TERM_PROGRAM" -H "X-Term-App: $__CFBundleIdentifier" -H "X-Term-Pane: $WEZTERM_PANE$KITTY_WINDOW_ID" -H "X-Kitty-Socket: $KITTY_LISTEN_ON" ` +
   `--data-binary @- ${URL}/event >/dev/null 2>&1; exit 0 ${MARK}`;
 
-const LABEL = 'com.lantern.server';
-const OLD_LABELS = ['com.dace.lantern']; // hand-made login items from before this installer
+const LABEL = 'com.lantern.server'; // the launchd agent older installs ran their Node server under
 const DOMAIN = `gui/${/** @type {() => number} */ (process.getuid)()}`;
 const AGENTS = path.join(HOME, 'Library', 'LaunchAgents');
 const SAVER = path.join(HOME, 'Library', 'Screen Savers', 'Lantern.saver');
@@ -62,42 +60,9 @@ function hooks() {
   console.log(`${uninstall ? 'Removed' : 'Added'} Claude Code hooks`);
 }
 
-function stopServer() {
-  for (const label of [LABEL, ...OLD_LABELS]) {
-    tryRun('launchctl', 'bootout', `${DOMAIN}/${label}`);
-    fs.rmSync(path.join(AGENTS, `${label}.plist`), { force: true });
-  }
-}
-
-// Starts at login, restarts if it crashes. Uses the node that's running this, so nvm users get theirs.
-function startServer(dir) {
-  const plist = path.join(AGENTS, `${LABEL}.plist`);
-  const env = process.env.LANTERN_PORT ? `<key>EnvironmentVariables</key><dict><key>LANTERN_PORT</key><string>${PORT}</string></dict>` : '';
-  fs.mkdirSync(AGENTS, { recursive: true });
-  fs.writeFileSync(plist, `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>${LABEL}</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>${process.execPath}</string>
-    <string>${path.join(dir, 'server.js')}</string>
-  </array>
-  ${env}
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>/tmp/lantern.log</string>
-  <key>StandardErrorPath</key><string>/tmp/lantern.log</string>
-</dict>
-</plist>
-`);
-  // A bootout that's still finishing makes bootstrap fail for a moment, so retry briefly.
-  for (let i = 0; !tryRun('launchctl', 'bootstrap', DOMAIN, plist); i++) {
-    if (i === 10) throw new Error(`launchctl couldn't load ${plist}`);
-    sleep(500);
-  }
-  console.log(`Server starts at login (${plist})`);
+function stopOldServer() {
+  tryRun('launchctl', 'bootout', `${DOMAIN}/${LABEL}`);
+  fs.rmSync(path.join(AGENTS, `${LABEL}.plist`), { force: true });
 }
 
 // The app and the screensaver are built from source on this Mac, which needs Xcode's command line tools.
@@ -118,13 +83,18 @@ function iterm(dir) {
   fs.mkdirSync(autoLaunch, { recursive: true });
   const script = fs.readFileSync(path.join(dir, 'iterm', 'lantern.py'), 'utf8').replace('127.0.0.1:7717', `127.0.0.1:${PORT}`);
   fs.writeFileSync(path.join(autoLaunch, 'lantern.py'), script);
-  console.log('Added the iTerm2 panel: see the README to switch it on');
+  console.log('Added the iTerm2 panel: see docs/setup.md#the-iterm2-toolbelt to switch it on');
 }
 
 async function main() {
   if (process.platform !== 'darwin') throw new Error('Lantern needs macOS');
+  // Without them, a Lantern.app from a release zip will do: this then only adds the hooks and the iTerm2 panel.
+  if (!uninstall && !tryRun('xcode-select', '-p') && !fs.existsSync(APP_BIN)) {
+    throw new Error('Lantern builds its app on this Mac, which needs Xcode command line tools: run `xcode-select --install`, then this again.\n' +
+      'Or put Lantern.app from https://github.com/DaceExMachina/lantern/releases in ~/Applications, then run this again.');
+  }
   hooks();
-  stopServer();
+  stopOldServer();
   if (uninstall) {
     fs.rmSync(SAVER, { recursive: true, force: true });
     if (fs.existsSync(APP_BIN)) {
@@ -134,44 +104,35 @@ async function main() {
     }
     tryRun('defaults', 'delete', 'com.lantern.app');
     fs.rmSync(path.join(ITERM_SCRIPTS, 'AutoLaunch', 'lantern.py'), { force: true });
-    fs.rmSync(COPY, { recursive: true, force: true });
+    fs.rmSync(DATA, { recursive: true, force: true });
     return console.log('Removed the app, login items, screensaver, and iTerm2 panel. Lantern is out.');
   }
 
-  let dir = __dirname;
-  if (dir.split(path.sep).includes('_npx')) {
-    fs.cpSync(dir, COPY, { recursive: true }); // keeps the lantern style the user picked (settings.json)
-    dir = COPY;
-  }
+  const dir = __dirname;
+  const npx = dir.split(path.sep).includes('_npx'); // a cache npm may clear, unlike a git checkout
   // The port and Claude config folder you installed with, for the app (and LANTERN_PORT for the screensaver's build).
   // A first install from a checkout starts from the lantern style picked there.
   const from = [SETTINGS, path.join(dir, 'settings.json')].find(f => fs.existsSync(f));
   const settings = from ? JSON.parse(fs.readFileSync(from, 'utf8')) : {};
   if (PORT !== 7717 || settings.port) settings.port = PORT;
   if (process.env.CLAUDE_CONFIG_DIR) settings.claudeDir = process.env.CLAUDE_CONFIG_DIR;
-  fs.mkdirSync(COPY, { recursive: true });
+  fs.mkdirSync(DATA, { recursive: true });
   fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
   process.env.LANTERN_PORT = String(PORT);
-  // Lantern.app runs the server and opens at login. Without Xcode's command line tools, a launchd agent runs it instead.
+  // Lantern.app runs the server and opens at login.
   tryRun('pkill', '-f', APP_BIN); // a running copy would keep its old server
-  const app = build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications: it runs the server and opens at login');
-  if (app) {
-    if (dir === COPY) tryRun('defaults', 'delete', 'com.lantern.app', 'pageDir'); // the app serves its own copy of the page
-    else {
-      run('defaults', 'write', 'com.lantern.app', 'pageDir', dir); // a checkout: the app serves its index.html, so edits go live
-      const cache = 'github-cache.json'; // and the last PR status it saw comes along
-      if (fs.existsSync(path.join(dir, cache)) && !fs.existsSync(path.join(COPY, cache))) fs.cpSync(path.join(dir, cache), path.join(COPY, cache));
-    }
-    run('open', ...(process.stdout.isTTY ? [] : ['-g']), APP); // the app is the server; agents running this get it in the background
-  } else startServer(dir);
+  if (!build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications: it runs the server and opens at login') && !fs.existsSync(APP_BIN)) {
+    throw new Error('Lantern.app didn\'t build, see above');
+  }
+  if (npx) tryRun('defaults', 'delete', 'com.lantern.app', 'pageDir'); // the app serves its own copy of the page
+  else run('defaults', 'write', 'com.lantern.app', 'pageDir', dir); // a checkout: the app serves its index.html, so edits go live
+  run('open', ...(process.stdout.isTTY ? [] : ['-g']), APP); // agents running this get it in the background
   build(dir, 'the screensaver', 'screensaver/build.sh', 'Installed the screensaver: pick Lantern in System Settings > Wallpaper > Screen Saver');
   iterm(dir);
 
-  // launchd waits ~10s before restarting a server that couldn't get the port from the one we just stopped.
   for (let i = 0; i < 30 && !(await up()); i++) sleep(500);
-  if (!(await up())) throw new Error(`The server didn't come up on ${URL}. Is something else using port ${PORT}? ${app ? '' : 'See /tmp/lantern.log'}`);
+  if (!(await up())) throw new Error(`The server didn't come up on ${URL}. Is something else using port ${PORT}?`);
   console.log(`Lantern lit at ${URL}`);
-  if (!app && process.stdout.isTTY) tryRun('open', URL); // scripts and agents running this don't get a browser tab
 }
 
 main().catch(e => { console.error(e.message); process.exit(1); });
