@@ -1,10 +1,25 @@
 name: check
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled] # labeled: add the run-ci label to a PR to run the checks again
   push:
     branches: [main] # sessions push small fixes straight to main, so check those too
+permissions:
+  contents: read
 jobs:
+  # takes the run-ci label straight back off, so adding it again triggers another run
+  unlabel:
+    if: github.event.action == 'labeled' && github.event.label.name == 'run-ci'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - run: gh pr edit "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --remove-label run-ci
+        env:
+          GH_TOKEN: ${{ github.token }}
   types:
+    if: github.event.action != 'labeled' || github.event.label.name == 'run-ci'
     runs-on: macos-latest # package.json says os: darwin, so npm ci refuses on Linux
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +29,7 @@ jobs:
       - run: npm run check
       - run: npm test # builds the Swift server headless and replays hook events against it
   swift:
+    if: github.event.action != 'labeled' || github.event.label.name == 'run-ci'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
