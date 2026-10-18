@@ -9,7 +9,7 @@
 //   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays, stale): counts every five minutes.
 //   achievements (id, day, time, data): badges, good and cheeky, at most one of each per day (day is yyyy-MM-dd).
 //          Their names and blurbs live in page/stats.js; this side only decides when one is earned.
-// A day runs from dayStart (settings.dayStart, 8am unless changed) to the next, and is named for the date it starts on,
+// A day runs from one day rollover (settings.dayStart, midnight unless changed) to the next, and is named for the date it starts on,
 // so late-night work stays with the day it belongs to.
 // PRAGMA user_version is the schema version, for later migrations. Writes run on their own queue and give up quietly,
 // so a missing or broken database never slows or stops the lantern.
@@ -24,7 +24,7 @@ final class Stats {
     private let file: String
     private var earned = Set<String>() // "id day" already in the table, so live checks don't write on every broadcast
     var onEarn: (String) -> Void = { _ in } // a badge just earned (its id), on the main queue: the server tells open pages
-    var dayStart = 8 * 60 // when a day starts, in minutes after midnight (settings.dayStart)
+    var dayStart = 0 // the day rollover, in minutes after midnight (settings.dayStart)
 
     init(_ file: String) { self.file = file }
 

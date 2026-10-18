@@ -21,8 +21,8 @@ es.addEventListener('settings', e => {
   if (isTime.test(st.quietEnd || '')) quietEnd = st.quietEnd;
   if (isTime.test(st.dayStart || '')) dayStart = st.dayStart;
   $('quietEnd').value = hhmm(quietEnd); $('dayStart').value = hhmm(dayStart);
-  $('quietFromOn').checked = isTime.test(st.quietFrom || '');
-  if ($('quietFromOn').checked) $('quietFrom').value = hhmm(st.quietFrom);
+  if (isTime.test(st.quietFrom || '')) $('quietFrom').value = hhmm(st.quietFrom);
+  showQuietFrom(isTime.test(st.quietFrom || ''));
   paintRibbon(st.ribbon);
   const until = quietEndLabel();
   $('quiet').title = `Treat everything as snoozed until ${until}`;
@@ -57,10 +57,17 @@ $('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
   post('/settings', { lanternText });
 };
-// times of day: quiet from (off unless ticked; picking a time ticks it), quiet until, and when a stats day starts
-for (const id of ['dayStart', 'quietEnd']) $(id).onchange = e => e.target.value && post('/settings', { [id]: e.target.value });
-$('quietFrom').onchange = e => { if (e.target.value) { $('quietFromOn').checked = true; post('/settings', { quietFrom: e.target.value }); } };
-$('quietFromOn').onchange = e => post('/settings', { quietFrom: e.target.checked ? $('quietFrom').value || '22:00' : null });
+// times of day: quiet from (off, or on at a time), quiet until, and the day rollover
+for (const id of ['quietFrom', 'quietEnd', 'dayStart']) $(id).onchange = e => e.target.value && post('/settings', { [id]: e.target.value });
+function showQuietFrom(on) {
+  $('quietFrom').disabled = !on;
+  for (const b of $('quietFromRow').querySelectorAll('.pill button')) b.setAttribute('aria-pressed', String(!!b.dataset.on === on));
+}
+for (const b of $('quietFromRow').querySelectorAll('.pill button')) b.onclick = () => {
+  const on = !!b.dataset.on;
+  showQuietFrom(on);
+  post('/settings', { quietFrom: on ? $('quietFrom').value || '22:00' : null });
+};
 for (const name of Object.keys(RIBBONS)) {
   const b = document.createElement('button');
   b.dataset.name = name; b.title = name; b.setAttribute('aria-label', `${name} ribbon`); b.style.setProperty('--c', RIBBONS[name][0]);

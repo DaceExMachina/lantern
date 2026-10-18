@@ -173,7 +173,7 @@ final class LanternServer {
         if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_DIR = (dir as NSString).expandingTildeInPath }
         stats = Stats(data + "/stats.sqlite")
-        stats.dayStart = clockMinutes(settings["dayStart"]) ?? 8 * 60
+        stats.dayStart = clockMinutes(settings["dayStart"]) ?? 0
         // a badge just earned flashes on the open pages; only live, never in a new page's opening burst
         stats.onEarn = { [unowned self] id in self.send("event: badge\ndata: \(jsonText(["id": id]))\n\n") }
     }
@@ -679,13 +679,13 @@ final class LanternServer {
                 if let quiet = j["quietUntil"] as? NSNumber, CFGetTypeID(quiet) != CFBooleanGetTypeID(), quiet.doubleValue.isFinite {
                     settings["quietUntil"] = max(quiet.doubleValue, now()); ok = true
                 }
-                // times of day, "HH:MM": when a stats day starts, when quiet hours end, and when they start by themselves (null: never)
+                // times of day, "HH:MM": the day rollover (a stats day starts), when quiet hours end, and when they start by themselves (null: never)
                 for key in ["dayStart", "quietEnd", "quietFrom"] where clockMinutes(j[key]) != nil { settings[key] = j[key]; ok = true }
                 if j["quietFrom"] is NSNull { settings["quietFrom"] = nil; ok = true }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }
             if !ok { return respond(c, 400) }
-            stats.dayStart = clockMinutes(settings["dayStart"]) ?? 8 * 60
+            stats.dayStart = clockMinutes(settings["dayStart"]) ?? 0
             autoQuiet()
             settingsChanged()
             return respond(c, 204)

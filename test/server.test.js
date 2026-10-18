@@ -267,7 +267,7 @@ function yesterdayFrom(hour) {
 // The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
 // eight hours of sessions with two hours of waits (three answered: 10, 30 and 50 minutes; one that ended unanswered).
 test('stats: warm moths, warm lantern and response times', async t => {
-  const day = yesterdayFrom(8); // days start at 8am unless settings say otherwise
+  const day = yesterdayFrom(0); // days start at midnight unless settings say otherwise
   const at = (h, m = 0) => new Date(day).setHours(h, m);
   const min = 60 * 1000, answered = { how: 'answered' };
   const base = await serve(t, { 'data/stats.sqlite': statsLog([
@@ -286,8 +286,8 @@ test('stats: warm moths, warm lantern and response times', async t => {
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });
 });
 
-// A day runs from settings.dayStart to the next, so an hour of work just before it lands on the day before.
-test('stats: days start at dayStart', async t => {
+// A day runs from one day rollover (settings.dayStart) to the next, so an hour of work just before it lands on the day before.
+test('stats: days start at the day rollover', async t => {
   const start = +yesterdayFrom(6), hour = 3600000;
   const base = await serve(t, { 'data/settings.json': '{"dayStart": "06:00"}', 'data/stats.sqlite': statsLog([
     ['alive', 'late', start - 2 * hour, start - hour], // 4am to 5am: still the day before's

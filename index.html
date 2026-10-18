@@ -35,17 +35,31 @@
   #menu { padding-top: 7px; }
   #menu:popover-open { gap: 0; }
   #menu > label { display: flex; padding: 5px 0; }
-  #menu .time { justify-content: space-between; }
-  #menu label:has(#quietFromOn:not(:checked)) #quietFrom { opacity: .45; }
-  #menu select { flex: 1; }
-  #menu > label:has(#style) { padding-bottom: 10px; } /* down to the GitHub section's line */
+  #menu .time { justify-content: space-between; white-space: nowrap; }
+  /* quiet from: its words, the time (faded while off), then an off | on switch built like the time input beside it.
+     Nothing moves when it flips. The words and each half of the switch run the row's full height, and the halves touch. */
+  #quietFromRow { display: flex; }
+  #quietFromRow > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
+  #quietFromRow > label { padding: 0 8px 0 0; } /* the time's click area runs the row's full height too */
+  #quietFromRow input:disabled { opacity: .4; }
+  #menu input[type=time], .pill button span { box-sizing: border-box; height: 26px; } /* the switch matches the input */
+  .pill { display: flex; }
+  .pill button { all: unset; cursor: pointer; display: flex; align-items: center; padding: 5px 0; }
+  .pill button span { display: flex; align-items: center; padding: 0 8px; border: 1px solid #4A3B68; background: #2B2440; color: #C3B2FF; }
+  .pill button:first-child span { border-radius: 6px 0 0 6px; }
+  .pill button:last-child span { border-radius: 0 6px 6px 0; border-left: none; }
+  .pill button[aria-pressed=true] span { background: #4A3B68; color: #F5E9FF; }
+  .pill button:hover span { color: #F0E8FF; }
+  .pill button:focus-visible span { outline: 1px solid #B9A8FF; outline-offset: 1px; }
+  #menu #style { flex: 1; }
+  #menu > :has(+ #gh) { padding-bottom: 10px; } /* the last row reaches down to the GitHub section's line */
   #menu #help { margin-top: 5px; }
   #menu .ribbon { display: flex; align-items: center; gap: 6px; }
   #menu .ribbon.unavailable { opacity: .4; }
   #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
   #ribbons button { all: unset; flex: 1; display: flex; justify-content: center; padding: 5px 0; cursor: pointer; }
-  #ribbons button::before { content: ''; width: 14px; height: 14px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
-  #ribbons button[aria-pressed=true]::before { box-shadow: 0 0 0 1.5px #1E1930, 0 0 0 2.6px #F0E8FF; }
+  #ribbons button::before { content: ''; width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); } /* a pale rim so the dark ones read */
+  #ribbons button[aria-pressed=true]::before { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22), 0 0 0 1.5px #1E1930, 0 0 0 2.6px #F0E8FF; }
   #ribbons button:focus-visible::before { outline: 1px solid #B9A8FF; outline-offset: 4px; }
   #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
@@ -219,14 +233,14 @@
   </div>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
-    <label class="notify"><input type="checkbox" id="notify"> notify me when a session needs me</label>
-    <label><input type="checkbox" id="staleToggle"> show stale PRs</label>
-    <label><input type="checkbox" id="textToggle"> show session text</label>
-    <div class="ribbon"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour"></span></div>
-    <label class="time"><span><input type="checkbox" id="quietFromOn"> quiet from</span><input type="time" id="quietFrom" value="22:00"></label>
-    <label class="time">quiet until <input type="time" id="quietEnd" value="08:00"></label>
-    <label class="time">day starts at <input type="time" id="dayStart" value="08:00"></label>
-    <label><select id="style" aria-label="Lantern style"></select></label>
+    <label class="notify" title="Send a notification when a session starts waiting on you"><input type="checkbox" id="notify"> notify me when a session needs me</label>
+    <label title="Show open PRs that no session owns and nobody touched for a week, as pale wisps"><input type="checkbox" id="staleToggle"> show stale PRs</label>
+    <label title="Print lines your sessions wrote on the paper lanterns"><input type="checkbox" id="textToggle"> show session text</label>
+    <label title="Which lantern hangs in every window, the iTerm2 panel and the screensaver"><select id="style" aria-label="Lantern style"></select></label>
+    <div class="ribbon" title="The barrel lantern's ribbon colour"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour"></span></div>
+    <div class="time" id="quietFromRow" title="Every night at this time, quiet turns on by itself and snoozes everything until quiet hours end"><span>quiet from</span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" disabled></label><span class="pill" role="group" aria-label="Quiet from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span></div>
+    <label class="time" title="When quiet hours end and moths can call you again">quiet until <input type="time" id="quietEnd" value="08:00"></label>
+    <label class="time" title="When one day ends and the next begins in your stats. Set it later than midnight to keep late nights with the day they belong to">day rollover <input type="time" id="dayStart" value="00:00"></label>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
       <summary>What's what?</summary>
@@ -235,7 +249,7 @@
       <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>right-click</b> to snooze it.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
       <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything until <span id="quietUntil">8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
-      <p>A day in your stats starts at <b>day starts at</b>, so late nights count toward the day before.</p>
+      <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
     </details>
   </div>

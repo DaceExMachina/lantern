@@ -96,7 +96,7 @@ It runs read-only `gh api graphql` queries from each session's folder, and only 
 
 ## Settings
 
-Lantern keeps its settings in `settings.json` in `~/Library/Application Support/Lantern`, and the settings menu handles most of them, including when quiet starts and ends, when a stats day starts, and the ribbon colour. You set the few below by hand. The app reads them at startup, so quit and reopen it after an edit.
+Lantern keeps its settings in `settings.json` in `~/Library/Application Support/Lantern`, and the settings menu handles most of them, including quiet from, quiet until, the day rollover (when a stats day starts), and the ribbon colour. You set the few below by hand. The app reads them at startup, so quit and reopen it after an edit.
 
 | Setting | Default | What it does |
 |---|---|---|
