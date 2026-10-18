@@ -77,6 +77,7 @@ function fitView() {
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
   VIEW.box = [x, y, w, h];
+  VIEW.px = width / w; // CSS pixels per unit
   const canvas = $('bg'), dpr = devicePixelRatio || 1;
   canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
   VIEW.top = y;
