@@ -286,17 +286,25 @@ func claudePids() -> [String] {
         .map { $0.trim.split(whereSeparator: \.isWhitespace).map(String.init) }.filter { $0.count > 1 && $0[1] == "claude" }.map { $0[0] }
 }
 
-// Each running terminal `claude` writes into the project folder named after its working folder, so the newest
-// transcripts there (one per process) are live sessions, however long they've been quiet.
-func liveTranscripts() -> [String] {
-    let pids = claudePids()
-    if pids.isEmpty { return [] }
+// The transcripts of running terminal `claude`s, however long they've been quiet, each with its process when known.
+// Claude Code names a process's session in sessions/<pid>.json. Without that (older versions), each process writes into
+// the project folder named after its working folder, so the newest transcripts there (one per process) stand in.
+func liveTranscripts() -> [(file: String, pid: Int?)] {
+    var live: [(file: String, pid: Int?)] = [], rest: [String] = []
+    for pid in claudePids() {
+        if let d = FileManager.default.contents(atPath: "\(CLAUDE_DIR)/sessions/\(pid).json"), let j = parse(d) as? JSON,
+           let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String,
+           case let f = "\(PROJECTS)/\(cwd.projectName)/\(id).jsonl", FileManager.default.fileExists(atPath: f) { live.append((f, Int(pid))) }
+        else { rest.append(pid) }
+    }
+    if rest.isEmpty { return live }
     var count = Ordered<Int>()
-    for line in run("lsof", ["-a", "-d", "cwd", "-p", pids.joined(separator: ","), "-Fn"]).out.components(separatedBy: "\n") where line.hasPrefix("n") {
+    for line in run("lsof", ["-a", "-d", "cwd", "-p", rest.joined(separator: ","), "-Fn"]).out.components(separatedBy: "\n") where line.hasPrefix("n") {
         let d = String(line.dropFirst()).projectName
         count[d] = (count[d] ?? 0) + 1
     }
-    return count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).prefix(n) }
+    let named = Set(live.map(\.file))
+    return live + count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).filter { !named.contains($0) }.prefix(n).map { ($0, nil) } }
 }
 
 // PRs a session created, read back from its transcript and its subagents' (a restart forgets the live ones).
@@ -838,14 +846,15 @@ final class LanternServer {
     func seed() {
         DispatchQueue.global().async {
             var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
-            let take = { (f: String, live: Bool) in
+            let take = { (f: String, live: Bool, pid: Int?) in
                 let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
                 if seen.contains(id) { return }
-                if let s = seedSession(f, live: live) { seen.insert(id); seeded.append(s) }
+                // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
+                if var s = seedSession(f, live: live) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
             }
-            for f in liveTranscripts() { take(f, true) }
+            for (f, pid) in liveTranscripts() { take(f, true, pid) }
             if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false) } }
+                for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
             } else { print("seeding failed: no \(PROJECTS)") }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {

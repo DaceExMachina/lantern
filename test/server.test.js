@@ -21,13 +21,15 @@ const freePort = () => new Promise(done => { const s = net.createServer().listen
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 // A server of its own: HOME, the Claude folder and the data folder all live in a fresh temp folder, and PATH is empty,
-// so it can't see real sessions (ps, lsof) or drive a terminal (osascript). `files` are written there first.
-async function serve(t, files = {}) {
+// so it can't see real sessions (ps, lsof) or drive a terminal (osascript). `files` are written there first, and
+// `prep(home)` runs after them, for anything a file's text can't say (its mode, its age).
+async function serve(t, files = {}, prep = () => {}) {
   const home = fs.mkdtempSync(path.join(tmp, 'home-')), port = await freePort();
   for (const [file, text] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(home, file)), { recursive: true });
     fs.writeFileSync(path.join(home, file), text);
   }
+  prep(home);
   const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: String(port), LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin') };
   const child = spawn(BIN, [], { env, stdio: 'ignore' });
   t.after(() => child.kill());
@@ -107,6 +109,27 @@ test('a side session with a live parent points at it', t => replay(t, 'seed-side
   ...appSession('local_parent', UUID(3)),
   ...appSession('local_child', UUID(4), 'local_parent'),
 }));
+
+// A terminal `claude` that's been quiet for a day is still there after a restart, and stays: it's seeded with its process
+// (from Claude Code's sessions/<pid>.json), so the sweep keeps it until that process ends instead of timing it out.
+// A sleeping child stands in for the process, and a fake `ps` on the server's PATH reports it as `claude`.
+test('a long-quiet session whose claude process is alive is seeded with that process', async t => {
+  const proc = spawn('sleep', ['60']), id = UUID(5), file = `.claude/projects/-work/${id}.jsonl`;
+  t.after(() => proc.kill());
+  const base = await serve(t, {
+    [file]: jsonl([user('Fix it'), answer('Fixed. **You:** try it'), turnEnd]),
+    [`.claude/sessions/${proc.pid}.json`]: JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/work' }),
+    'no-bin/ps': `#!/bin/sh\necho "  ${proc.pid} claude"\n`,
+  }, home => {
+    fs.chmodSync(path.join(home, 'no-bin/ps'), 0o755);
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+    fs.utimesSync(path.join(home, file), dayAgo, dayAgo);
+  });
+  let s;
+  for (let i = 0; i < 40 && !s; i++) { s = (await snapshot(base)).sessions.find(x => x.id === id); if (!s) await wait(50); }
+  assert.ok(s, 'the live session was not seeded');
+  assert.deepStrictEqual({ pid: s.pid, unconfirmed: s.unconfirmed, state: s.state }, { pid: proc.pid, unconfirmed: false, state: 'waiting' });
+});
 
 // The stats panel's numbers, from GET /stats over a small log: yesterday, ten hours of lantern with two of them violet,
 // eight hours of sessions with two hours of waits (three answered: 10, 30 and 50 minutes; one that ended unanswered).
