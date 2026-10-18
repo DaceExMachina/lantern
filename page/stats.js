@@ -117,7 +117,7 @@ for (const root of [$('stats'), $('recap')]) {
 function renderStats(j) {
   const days = j.days, today = days[days.length - 1], pct = v => v == null ? '–' : `${v}%`;
   const r = slices(today, j.spans, j.gauges, 160);
-  const grave = today.graveyard == null ? '–' : today.graveyard + (today.graveyardChange ? ` (${today.graveyardChange > 0 ? '+' : ''}${today.graveyardChange})` : '');
+  const stale = today.stale == null ? '–' : today.stale + (today.staleChange ? ` (${today.staleChange > 0 ? '+' : ''}${today.staleChange})` : '');
   const nums = [
     ['lantern warm', pct(today.warmLantern), 'time the lantern glowed warm, outside quiet hours'],
     ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
@@ -125,7 +125,7 @@ function renderStats(j) {
     ['waits', today.waits, 'times a moth landed on the lantern for you'],
     ['merged', today.merged, 'fireflies that flew home (merged PRs)'],
     ['in flight', today.open ?? '–', 'open PRs your sessions own'],
-    ['stale PRs', grave, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
+    ['stale PRs', stale, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
   ];
   const week = days.slice(0, -1).map((d, i) => {
     const mini = slices(d, j.spans, j.gauges, 48), name = DAY_NAMES[new Date(d.start).getDay()];

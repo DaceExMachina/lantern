@@ -146,7 +146,7 @@ test('the PR lists are sent when they change, not with every snapshot', async t 
     await post(base, '/event', toolCall(UUID(1)));
     await until(() => ticksSeen(blocks, UUID(1)).includes(2), 'the second event\'s snapshot');
   });
-  assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|graveyard)/.test(b)), []);
+  assert.deepStrictEqual(blocks.filter(b => /^event: (reviews|stale)/.test(b)), []);
 });
 
 // A badge earned live goes out once as `event: badge`, for the page's flash: not again when it's earned again that day,
@@ -271,4 +271,12 @@ test('stats: warm moths, warm lantern and response times', async t => {
   assert.deepStrictEqual(
     { warmMoths: y.warmMoths, warmLantern: y.warmLantern, medianWait: y.medianWait, slowWait: y.slowWait, waits: y.waits, answered: y.answered },
     { warmMoths: 75, warmLantern: 80, medianWait: 30 * min, slowWait: 50 * min, waits: 4, answered: 3 });
+});
+
+// The stale switch used to be saved as "graveyard"; a settings.json from then must still turn the stale PRs off.
+test('an old "graveyard" setting is read as "stale"', async t => {
+  const base = await serve(t, { 'data/settings.json': '{"graveyard": false}' });
+  const { settings } = await snapshot(base);
+  assert.strictEqual(settings.stale, false);
+  assert.strictEqual('graveyard' in settings, false);
 });

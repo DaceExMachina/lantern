@@ -4,9 +4,9 @@
 //          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), violet (the lantern
 //          calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
 //   events (time, kind, session, data): moments. kind is pr (data.change: appeared, need, merged, closed, stray, gone),
-//          graveyard (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
+//          stale (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
 //          singed moth) or compact.
-//   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays, graveyard): counts every five minutes.
+//   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays, stale): counts every five minutes.
 //   achievements (id, day, time, data): badges, good and cheeky, at most one of each per local day (day is yyyy-MM-dd).
 //          Their names and blurbs live in page/stats.js; this side only decides when one is earned.
 // PRAGMA user_version is the schema version, for later migrations. Writes run on their own queue and give up quietly,
@@ -52,6 +52,15 @@ final class Stats {
                     COMMIT;
                     """)
             }
+            if Int(run("PRAGMA user_version").first?[0] ?? "") ?? 0 < 3 { // the stale list was called the graveyard
+                exec("""
+                    BEGIN;
+                    ALTER TABLE gauges RENAME COLUMN graveyard TO stale;
+                    UPDATE events SET kind = 'stale' WHERE kind = 'graveyard';
+                    PRAGMA user_version = 3;
+                    COMMIT;
+                    """)
+            }
             earned = Set(run("SELECT id || ' ' || day FROM achievements").compactMap { $0[0] })
             // spans a crash or a kill left open end when the lantern last wrote anything (at most one gauge ago)
             exec("""
@@ -91,11 +100,11 @@ final class Stats {
         return rows.reduce(into: [:]) { if let url = $1[0], let need = $1[1], let session = $1[2] { $0[url] = (need, session) } }
     }
 
-    /// The graveyard when the lantern last looked, by url.
+    /// The stale list when the lantern last looked, by url.
     func buried() -> Set<String> {
         Set(queue.sync { run("""
             SELECT json_extract(data, '$.url') FROM events
-            WHERE rowid IN (SELECT max(rowid) FROM events WHERE kind = 'graveyard' GROUP BY json_extract(data, '$.url'))
+            WHERE rowid IN (SELECT max(rowid) FROM events WHERE kind = 'stale' GROUP BY json_extract(data, '$.url'))
               AND json_extract(data, '$.change') = 'entered'
             """) }.compactMap { $0[0] })
     }
@@ -128,10 +137,10 @@ final class Stats {
                 SELECT d, count(*) FROM days JOIN events ON kind = 'pr' AND json_extract(data, '$.change') = 'merged' AND time >= f AND time < t
                 GROUP BY d
                 """, [bounds]) { if let d = Int(r[0] ?? "") { merged[d] = Int(r[1] ?? "") ?? 0 } }
-            // gauges in the window, and the last one before it so the first day's graveyard has something to compare to
+            // gauges in the window, and the last one before it so the first day's stale count has something to compare to
             let gauges = self.run("""
-                SELECT * FROM (SELECT time, alive, working, fireflies, graveyard FROM gauges WHERE time < ?1 ORDER BY time DESC LIMIT 1)
-                UNION ALL SELECT time, alive, working, fireflies, graveyard FROM gauges WHERE time >= ?1 ORDER BY time
+                SELECT * FROM (SELECT time, alive, working, fireflies, stale FROM gauges WHERE time < ?1 ORDER BY time DESC LIMIT 1)
+                UNION ALL SELECT time, alive, working, fireflies, stale FROM gauges WHERE time >= ?1 ORDER BY time
                 """, [from]).map { $0.map { num($0) ?? -1 } }
             // the spans themselves, clipped to the window, for the ribbons and the recap's constellation: [kind, began, ended,
             // seeded (already running at startup), session, title (sessions only)]
@@ -153,8 +162,8 @@ final class Stats {
                         // the lantern's warm share of the time it ran outside quiet hours (it's never violet in quiet hours)
                         "warmLantern": pct(c["violet"] ?? 0, (c["server"] ?? 0) - (c["quiet"] ?? 0)),
                         "medianWait": at(0.5), "slowWait": at(0.9), "waits": waits[d].count, "answered": answered.count,
-                        "merged": merged[d], "open": value(end, 3) ?? NSNull(), "graveyard": value(end, 4) ?? NSNull(),
-                        "graveyardChange": value(end, 4).flatMap { e in value(start, 4).map { e - $0 } } ?? NSNull()]
+                        "merged": merged[d], "open": value(end, 3) ?? NSNull(), "stale": value(end, 4) ?? NSNull(),
+                        "staleChange": value(end, 4).flatMap { e in value(start, 4).map { e - $0 } } ?? NSNull()]
             }
             let achievements = self.run("SELECT id, day, time FROM achievements WHERE time >= ?1 OR day >= ?2 ORDER BY time", [from, dayKey(from)])
                 .map { [$0[0] ?? "", $0[1] ?? "", num($0[2]) ?? 0] as [Any] }
@@ -200,14 +209,14 @@ final class Stats {
                 // Revived: a stale PR merged, straight off the stale list or after it was revived
                 if yes("""
                     SELECT count(*) FROM events e WHERE e.time >= ?1 AND e.time < ?2 AND (
-                      (e.kind = 'graveyard' AND json_extract(e.data, '$.how') = 'merged') OR
-                      (e.kind = 'pr' AND json_extract(e.data, '$.change') = 'merged' AND EXISTS (SELECT 1 FROM events g WHERE g.kind = 'graveyard'
+                      (e.kind = 'stale' AND json_extract(e.data, '$.how') = 'merged') OR
+                      (e.kind = 'pr' AND json_extract(e.data, '$.change') = 'merged' AND EXISTS (SELECT 1 FROM events g WHERE g.kind = 'stale'
                         AND json_extract(g.data, '$.how') = 'revived' AND json_extract(g.data, '$.url') = json_extract(e.data, '$.url') AND g.time < e.time)))
                     """) { got.append("revived") }
                 // Séance: five stale PRs revived in a week (touched again, or picked up by a session)
-                if self.run("SELECT count(*) >= 5 FROM events WHERE kind = 'graveyard' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
-                // Ghostbuster: five stale PRs merged or closed in a day (the stale list is 'graveyard' in the log)
-                if yes("SELECT count(*) >= 5 FROM events WHERE kind = 'graveyard' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
+                if self.run("SELECT count(*) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
+                // Ghostbuster: five stale PRs merged or closed in a day
+                if yes("SELECT count(*) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
                 if self.lightsOut(f, min(e, t)) { got.append("lights_out") }
                 if over {
                     // Warm all day: an hour or more of sessions, and the lantern warm nine tenths of the time it ran outside quiet hours
@@ -221,7 +230,7 @@ final class Stats {
                     // more than three fireflies in flight
                     let history: [Any?] = [e - week, e]
                     let enough = "(SELECT min(time) FROM gauges) <= ?1 AND (SELECT count(*) FROM gauges WHERE time >= ?1 AND time < ?2) > 0"
-                    if self.run("SELECT \(enough) AND (SELECT max(graveyard) FROM gauges WHERE time >= ?1 AND time < ?2) = 0", history).first?[0] == "1" { got.append("clear_night") }
+                    if self.run("SELECT \(enough) AND (SELECT max(stale) FROM gauges WHERE time >= ?1 AND time < ?2) = 0", history).first?[0] == "1" { got.append("clear_night") }
                     if self.run("SELECT \(enough) AND (SELECT max(fireflies) FROM gauges WHERE time >= ?1 AND time < ?2) <= 3", history).first?[0] == "1" { got.append("small_batches") }
                     // Warm streaks, on the day they reach 3, 7, 14 and 30 days
                     if let n = streaks[day], [3, 7, 14, 30].contains(n) { got.append("streak_\(n)") }

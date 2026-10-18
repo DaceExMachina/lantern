@@ -4,7 +4,7 @@ addEventListener('resize', fitView);
 const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
-es.addEventListener('graveyard', e => { stalePRs = JSON.parse(e.data); }); // the server calls them the graveyard
+es.addEventListener('stale', e => { stalePRs = JSON.parse(e.data); });
 // a badge just earned (sent once, never on reconnect): the fireflies' flash, except in quiet hours and on the screensavers
 es.addEventListener('badge', e => { if (!quiet() && !document.body.matches('.screensaver, .ambient')) flashBadge(JSON.parse(e.data).id); });
 const PINNED = Q.get('style'); // ?style= previews one lantern, whatever the settings say
@@ -25,7 +25,7 @@ es.addEventListener('settings', e => {
   try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();
-  staleOn = st.graveyard !== false; $('staleToggle').checked = staleOn;
+  staleOn = st.stale !== false; $('staleToggle').checked = staleOn;
   sync();
 });
 setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
@@ -53,7 +53,7 @@ $('textToggle').onchange = e => {
 };
 $('staleToggle').onchange = e => {
   staleOn = e.target.checked;
-  post('/settings', { graveyard: staleOn });
+  post('/settings', { stale: staleOn });
 };
 
 // lantern picker

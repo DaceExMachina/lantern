@@ -139,16 +139,16 @@ final class LanternServer {
     var agents: [String: Ordered<JSON>] = [:] // session_id -> agent_id -> { type, description, activity, tries, last }
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
-    var graveyard: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
+    var stale: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
     var owners: JSON = [:] // dead PR url -> the old session that made it (or NSNull: looked, found none); looked up once
-    // the graveyard as the page gets it: each PR with the old session that made it, when there is one
-    func graveyardOut() -> [JSON] { graveyard.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
+    // the stale list as the page gets it: each PR with the old session that made it, when there is one
+    func staleOut() -> [JSON] { stale.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var refreshing = false
     // the test server replaces it, since the machine running the tests may well be locked
     var screenLocked = { (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true }
-    var broadcastDue = false, sentReviews = "[]", sentGraveyard = "[]" // see broadcast()
+    var broadcastDue = false, sentReviews = "[]", sentStale = "[]" // see broadcast()
     var listener: NWListener?
     var started = false
     var pageMtime = 0.0
@@ -161,7 +161,7 @@ final class LanternServer {
     var violet = false, quiet = false
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh
-    var buried = Set<String>() // the graveyard the log last saw, by url
+    var buried = Set<String>() // the stale list the log last saw, by url
 
     init(port: UInt16, data: String, web: String) {
         self.port = port
@@ -170,6 +170,7 @@ final class LanternServer {
         settingsFile = data + "/settings.json"
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
+        if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_DIR = (dir as NSString).expandingTildeInPath }
         stats = Stats(data + "/stats.sqlite")
         // a badge just earned flashes on the open pages; only live, never in a new page's opening burst
@@ -245,9 +246,9 @@ final class LanternServer {
     func sendState() {
         observe()
         var msg = ""
-        let r = jsonText(reviews), g = jsonText(graveyardOut())
+        let r = jsonText(reviews), g = jsonText(staleOut())
         if r != sentReviews { sentReviews = r; msg += "event: reviews\ndata: \(r)\n\n" }
-        if g != sentGraveyard { sentGraveyard = g; msg += "event: graveyard\ndata: \(g)\n\n" }
+        if g != sentStale { sentStale = g; msg += "event: stale\ndata: \(g)\n\n" }
         send(msg + "data: \(snapshot())\n\n")
     }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
@@ -434,15 +435,15 @@ final class LanternServer {
         let open = ownedPRs.filter { !["merged", "closed"].contains($0.value.need) }
         if Dictionary(grouping: open.values, by: \.session).values.contains(where: { $0.count >= 10 }) { stats.earn("swarm_season") }
         if open.count >= 20 { stats.earn("light_pollution") }
-        if graveyard.count > 30 { stats.earn("haunted") }
-        let ghosts = graveyard.compactMap { (owners[str($0["url"])] as? JSON)?["id"] as? String }
+        if stale.count > 30 { stats.earn("haunted") }
+        let ghosts = stale.compactMap { (owners[str($0["url"])] as? JSON)?["id"] as? String }
         if Dictionary(grouping: ghosts) { $0 }.values.contains(where: { $0.count >= 5 }) { stats.earn("restless_spirits") }
     }
     /// The warm moths goal from the stats panel, or 75%: it decides which days count toward a warm streak.
     var warmGoal: Double { ((settings["goals"] as? JSON)?["warm"] as? NSNumber)?.doubleValue ?? 75 }
 
     // PR changes, from what the sessions own after a refresh. One no session owns any more was merged or closed, or is
-    // still open with no session (a stray), or fell out of the closed search (gone). Graveyard changes go in too.
+    // still open with no session (a stray), or fell out of the closed search (gone). Stale list changes go in too.
     func logPRs(open: Set<String>, closed: [String: String]) {
         var owned: [String: (need: String, session: String, title: Any)] = [:]
         for (id, s) in sessions.items {
@@ -458,12 +459,12 @@ final class LanternServer {
         }
         ownedPRs = owned.mapValues { ($0.need, $0.session) }
         strays = open.subtracting(owned.keys).count
-        // PRs entering the graveyard, and leaving it: merged, closed, or revived (a session took it, or someone touched it)
-        let dead = Set(graveyard.map { str($0["url"]) })
-        for url in dead.subtracting(buried) { stats.event("graveyard", nil, ["url": url, "change": "entered"]) }
+        // PRs entering the stale list, and leaving it: merged, closed, or revived (a session took it, or someone touched it)
+        let dead = Set(stale.map { str($0["url"]) })
+        for url in dead.subtracting(buried) { stats.event("stale", nil, ["url": url, "change": "entered"]) }
         for url in buried.subtracting(dead) {
             let how = open.contains(url) ? "revived" : closed[url].map { $0 == "MERGED" ? "merged" : "closed" } ?? "gone"
-            stats.event("graveyard", nil, ["url": url, "change": "left", "how": how])
+            stats.event("stale", nil, ["url": url, "change": "left", "how": how])
         }
         buried = dead
     }
@@ -473,7 +474,7 @@ final class LanternServer {
         let fireflies = Set(sessions.items.flatMap { ($0.1["github"] as? [JSON] ?? []).filter { !["merged", "closed"].contains(str($0["need"])) }.map { str($0["url"]) } })
         stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { str($0.1["state"]) == "working" }.count),
                      ("waiting", waiting.count), ("snoozed", waiting.filter { truthy($0.1["snoozed"]) || forGood($0.0) }.count),
-                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("graveyard", graveyard.count)])
+                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("stale", stale.count)])
         stats.award(warmGoal: warmGoal)
     }
 
@@ -538,7 +539,7 @@ final class LanternServer {
             return respond(c, 200)
         }
         // Resume the old session behind a dead moth: a new iTerm tab in its folder running `claude --resume <id>`.
-        // Only sessions that own something in the graveyard can be resumed this way.
+        // Only sessions that own something on the stale list can be resumed this way.
         if json && req.url == "/resume" {
             guard let id = body?["id"] as? String, UUID_RE.test(id),
                   let o = owners.values.compactMap({ $0 as? JSON }).first(where: { str($0["id"]) == id }) else { return respond(c, 404) }
@@ -634,7 +635,7 @@ final class LanternServer {
                     }
                     settings["goals"] = goals
                 }
-                if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
+                if let g = j["stale"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["stale"] = g.boolValue; ok = true }
                 // session text on the barrel: turning them off drops every word held; turning them on reads the pool afresh
                 if let t = j["lanternText"] as? String, ["sessions", "off"].contains(t) {
                     let was = wordsOn
@@ -665,7 +666,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()
