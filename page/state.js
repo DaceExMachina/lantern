@@ -20,9 +20,7 @@ function sync() {
   const alive = new Set(raw.map(s => s.id));
   const base = raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
   sessions = quiet() ? base.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : base;
-  const q = $('quiet');
-  q.textContent = quiet() ? `quiet until ${quietEndLabel()}` : 'quiet';
-  q.classList.toggle('on', quiet());
+  $('quiet').classList.toggle('on', quiet());
   const live = new Set();
   for (const s of AMBIENT ? [] : sessions) { // the ambient view only needs the sessions for the glow's colour
     live.add(s.id);
@@ -68,7 +66,7 @@ function sync() {
       };
       st.append(' · ', next);
     }
-    if (snoozed) st.append(` · ${snoozed} snoozed`);
+    if (snoozed || quiet()) st.append(` · ${snoozed ? `${snoozed} ` : ''}snoozed${quiet() ? ` until ${quietEndLabel()}` : ''}`);
     if (waiting.length) violetAt = Date.now();
     else if (!quiet() && Date.now() - violetAt >= 60000) {
       const m = Math.floor((Date.now() - violetAt) / 60000), warm = document.createElement('span');
