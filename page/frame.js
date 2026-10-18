@@ -197,6 +197,10 @@ function frame(t) {
       }
       if (m.leaving) m.zone.style.pointerEvents = 'none';
     }
+    // a landed moth is carried with its spot as the lantern sways (easing alone would always trail it, so it'd seem to float);
+    // the easing is only for getting there: landing, and the jump to a new spot after a hop
+    if (needsMe && m.wasLanded && m.perch === m.lastPerch) { m.x += tx - m.lastT[0]; m.y += ty - m.lastT[1]; }
+    m.lastPerch = needsMe ? m.perch : undefined; m.lastT = [tx, ty];
     const nx = m.x + (tx - m.x) * Math.min(1, dt * ease), ny = m.y + (ty - m.y) * Math.min(1, dt * ease);
     // lean gently into the direction of travel, eased so position jitter doesn't shake it
     // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
