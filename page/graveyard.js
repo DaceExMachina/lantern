@@ -68,7 +68,7 @@ function drawGraveyard(dt, s, rim) {
     // half flicker like a dying bulb: a burst of quick, uneven on-and-off, then dark again.
     const wave = Math.sin(s * 6.283 / d.period + d.ph), n = flickerNoise(Math.floor(s * 14) + d.ph * 100);
     const spark = d.flicker ? (wave > 0.94 && n > 0.4 ? 0.35 + 0.65 * n : 0) : Math.max(0, wave) ** 8;
-    const glow = Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
+    const glow = 0.3 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0)); // the dead only glow faintly
     put(d.body, 'fill', mix('#3E3550', '#2A2240', back)); put(d.body, 'opacity', fade.toFixed(2));
     put(d.wings, 'fill', mix('#544A68', '#2E2644', back)); put(d.wings, 'opacity', fade.toFixed(2));
     put(d.rim, 'stroke', rim); put(d.rim, 'opacity', (0.45 * fade).toFixed(2));
