@@ -5,5 +5,6 @@ import Foundation
 setvbuf(stdout, nil, _IOLBF, 0)
 let env = ProcessInfo.processInfo.environment
 let server = LanternServer(port: UInt16(env["LANTERN_PORT"]!)!, data: env["LANTERN_DATA"]!, web: env["LANTERN_WEB"]!)
+server.screenLocked = { false } // a locked screen pauses adoption, and whoever runs the tests may have stepped away
 server.start()
 RunLoop.main.run()
