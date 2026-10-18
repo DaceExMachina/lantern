@@ -18,6 +18,7 @@ function program(vert, frag) {
   return { p, u };
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
+const BAND = 0.36; // how much light a solid band or bar holds back, from the brighter light through the lace (1.25 × 0.64 ≈ 0.8)
 const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions, agents and ghosts)
 const BG = program(`attribute vec2 a; void main() { gl_Position = vec4(a, 0.0, 1.0); }`, `
 precision highp float;
@@ -28,10 +29,12 @@ uniform vec2 uLightC, uCaps; uniform float uLightScale, uAirA, uLightR, uSway;
 uniform vec4 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec3 uBand[8]; uniform int uBands; // solid bands round a pierced lantern: from the flame, each
 // covers a range of slopes (up or down over out), softened at its edges
+uniform vec3 uSpoke[2]; uniform int uSpokes; uniform float uThrough; // the bars' spokes on the wall behind: offset across
+// from the flame, half-width and softness; and how much brighter the light is everywhere else
 uniform vec4 uShim; // a pierced lantern's shimmer: the flame's live x, y, how strong, and its turn
 // how much light the shadow's outer band and its core take away (subtle: plenty of light still gets round a moth)
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
-const float BAND = 0.22; // how much light a solid band holds back
+const float BAND = ${BAND};
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
@@ -74,6 +77,13 @@ void main() {
     vec3 b = uBand[i];
     open *= 1.0 - BAND * smoothstep(b.x - b.z, b.x + b.z, tb) * smoothstep(b.y + b.z, b.y - b.z, tb);
   }
+  float across = bq.x * cos(uSway) + bq.y * sin(uSway); // sideways from the flame, along the lantern's own level
+  for (int i = 0; i < 2; i++) {
+    if (i >= uSpokes) break;
+    vec3 k = uSpoke[i];
+    open *= 1.0 - BAND * smoothstep(k.y + k.z, k.y - k.z, abs(across - k.x));
+  }
+  open *= uThrough;
   // through filigree the light averages out, leaving only a faint, soft texture of rays from the flame; as the flame
   // leans and flickers its centre and turn shift, so the texture moves with it
   vec2 fq = p - uShim.xy; float fa = atan(fq.y, fq.x);
@@ -151,7 +161,8 @@ function drawBackground(v) {
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform1f(u.uLightR, v.lightR); gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform4f(u.uShim, ...v.shim);
   const bands = v.bands.slice(0, 8); gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, bands.length);
-  if (bands.length) gl.uniform3fv(u['uBand[0]'], bands.flat()); gl.uniform1i(u.uMoths, shadows.length);
+  if (bands.length) gl.uniform3fv(u['uBand[0]'], bands.flat());
+  gl.uniform1i(u.uSpokes, v.spokes.length); if (v.spokes.length) gl.uniform3fv(u['uSpoke[0]'], v.spokes.flat()); gl.uniform1f(u.uThrough, v.through); gl.uniform1i(u.uMoths, shadows.length);
   if (shadows.length) gl.uniform4fv(u['uMoth[0]'], shadows.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it

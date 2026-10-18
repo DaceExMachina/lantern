@@ -27,7 +27,8 @@ const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="${BOTTOM}"/><path d="M295 24
 const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="420"/>
   <rect x="0" y="0" width="680" height="800" fill="url(#lace)" transform="translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
 // a rope-twist rim at height y, `half` wide either side, its front face `front` wide either side
-// Solid bands (class band) hold the light back: frame.js measures them off the drawing and shades the room at their angles.
+// Solid bands (class band) and the bars between the body's faces (class bar) hold the light back: frame.js measures them off the
+// drawing and shades the room where they block the flame.
 // The twist's stripes are spaced along the true way round the hexagon, so they carry on across each corner and crowd to half
 // spacing on the side faces, which turn away (half their width shows).
 const ROPE = (y, band = true, half = 63, front = half / 2) => {
@@ -119,7 +120,9 @@ const STYLES = {
   moroccan: {
     chain: 123, // its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, shimmer: 0.4, tassel: [340, 486],
-    holder: [404, 6], // the burner cup under the flame: its bottom and half-width; it throws a fan of shadow straight down
+    holder: [404, 6],
+    // light falls on a wall this far behind the lantern, where it shows brighter (×through) except in the bars' spokes
+    wall: 200, through: 1.25, // the burner cup under the flame: its bottom and half-width; it throws a fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
@@ -143,7 +146,7 @@ const STYLES = {
         <path d="M317.5 260L308.5 285M362.5 260L371.5 285M295 260L277 285M385 260L403 285" stroke="${BRASS.lit}" stroke-width="1.6"/>
         <path d="M312.5 293.5h55v111h-55ZM280.5 293.5h25v111h-25ZM374.5 293.5h25v111h-25Z" stroke="${BRASS.rim}" stroke-width="1.2"/>
       </g>
-      <path d="M306.5 290h4v118h-4ZM369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
+      <path class="bar" d="M306.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path class="bar" d="M369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
       ${ROPE(285)}${ROPE(408, false)}
       <g mask="url(#cutouts)"><path d="${SKIRT}" fill="${BRASS.side}"/><path d="${SKIRT_F}" fill="${BRASS.front}"/></g>
       <path d="M308.5 413L320 428M371.5 413L360 428" stroke="${BRASS.lit}" stroke-width="1.4"/>

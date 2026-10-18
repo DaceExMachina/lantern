@@ -21,9 +21,26 @@ function findPerch(m, rand, from) {
 // A pierced lantern's solid bands (class band in its drawing), measured once per lantern in its own units: top, bottom, half-width.
 /** @type {Element[]} */
 let bandEls = [], bandBoxes = [];
+// ...and the bars between its faces (class bar): how far across from the middle, and half their width.
+let barBoxes = [];
 function measureBands() {
-  if (!bandEls[0]?.isConnected) { bandEls = [...document.querySelectorAll('#lantern .band')]; bandBoxes = bandEls.map(e => { const b = /** @type {SVGGraphicsElement} */ (e).getBBox(); return [b.y, b.y + b.height, b.width / 2]; }); }
-  return bandBoxes;
+  if (!bandEls[0]?.isConnected) {
+    const box = e => /** @type {SVGGraphicsElement} */ (e).getBBox();
+    bandEls = [...document.querySelectorAll('#lantern .band')]; bandBoxes = bandEls.map(e => { const b = box(e); return [b.y, b.y + b.height, b.width / 2]; });
+    barBoxes = [...document.querySelectorAll('#lantern .bar')].map(e => { const b = box(e); return [b.x + b.width / 2 - 340, b.width / 2]; });
+  }
+  return { bands: bandBoxes, bars: barBoxes };
+}
+// What a pierced lantern's bands and bars leave of the light at scene point (x, y), as the shader works it out (bar the
+// rings and caps): 1 in the clear, less where one blocks the flame. The dust uses it to catch the light only in the wedges.
+function throughLight(x, y, w, sway) {
+  const dx = x - w.o[0], dy = y - w.o[1], across = dx * Math.cos(sway) + dy * Math.sin(sway), up = -dx * Math.sin(sway) + dy * Math.cos(sway);
+  const step = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const tb = up / Math.max(Math.abs(across), 0.001);
+  let open = 1;
+  for (const [lo, hi, soft] of w.bands) open *= 1 - BAND * step(lo - soft, lo + soft, tb) * step(hi + soft, hi - soft, tb);
+  for (const [at, half, soft] of w.spokes) open *= 1 - BAND * step(half + soft, half - soft, Math.abs(across - at));
+  return open;
 }
 
 function frame(t) {
@@ -87,12 +104,22 @@ function frame(t) {
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs
   const ringR = [250, 190, 135].map((r, i) => r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9)));
-  // dust drifts around the light; the far specks fill the dark out to the edges
+  // the flame core's centre, live, in the lantern's units: what the holder's fan and the bands' and bars' shadows are seen from
+  const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), [fx, fy, fk] = style.flame;
+  const flameAt = [fx + (core.x + core.width / 2 - 340) * size * fk, fy + (core.y + core.height / 2 - FLAME_BASE) * size * fk];
+  const flameR = 6 * size * fk; // about how wide the flame is: the shadows soften by that much
+  // A band covers a range of slopes from the flame. A bar shows as a spoke on the wall behind: the one at a back corner
+  // (the mirror of the front bar we see) is |c|·√3 deep, so from the flame it lands across by (c − lean) × wall / depth.
+  const { bands, bars } = measureBands(), lean = flameAt[0] - 340;
+  const wedges = { o: rot(...flameAt), bands: bands.map(([top, bottom, r]) => [(top - flameAt[1]) / r, (bottom - flameAt[1]) / r, flameR / r]),
+    spokes: style.wall ? bars.map(([c, half]) => { const t = style.wall / (Math.abs(c) * Math.sqrt(3)); return [(c - lean) * t, half * t, flameR * t]; }) : [] };
+  // dust drifts around the light, catching it in the wedges and fading in the spokes; the far specks fill the dark out to the edges
   dust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18;
     dustData.set([gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
       (0.15 + 0.75 * strength) * Math.max(0, 1 - d / 280) * (0.5 + 0.5 * Math.sin(s * 1.3 + p.ph))], i * 4);
+    if (style.wall) dustData[i * 4 + 3] *= 0.15 + 0.85 * Math.max(0, (throughLight(dustData[i * 4], dustData[i * 4 + 1], wedges, rad) - 1 + BAND) / BAND);
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
@@ -369,10 +396,6 @@ function frame(t) {
   }
   drawStale(dt, s);
   // the background last, once every moth has moved, so their shadows fall where they are now
-  // the flame core's centre, live, in the lantern's units: what the holder's fan and the bands' shadows are seen from
-  const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), [fx, fy, fk] = style.flame;
-  const flameAt = [fx + (core.x + core.width / 2 - 340) * size * fk, fy + (core.y + core.height / 2 - FLAME_BASE) * size * fk];
-  const flameR = 6 * size * fk; // about how wide the flame is: the bands' shadows soften by that much
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
   const casters = ambient ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
@@ -385,8 +408,7 @@ function frame(t) {
     shim: [...rot(style.light[0] + wobble(s, 4) * 3 * size * 3, style.light[1]), (style.shimmer || 0) * flick, wobble(s, 4) * 0.5 + wobble(s * 1.6, 3) * 0.25],
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameAt[1])] : [0, 0],
-    bandO: rot(...flameAt),
-    bands: remote ? [] : measureBands().map(([top, bottom, r]) => [(top - flameAt[1]) / r, (bottom - flameAt[1]) / r, flameR / r]),
+    bandO: wedges.o, bands: remote ? [] : wedges.bands, spokes: remote ? [] : wedges.spokes, through: style.through || 1,
   });
   placeCard();
 }
