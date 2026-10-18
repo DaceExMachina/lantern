@@ -6,6 +6,18 @@ const sparks = [];
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
 const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
+// Land in the slice of the lantern facing the moth's home, so its dotted line never crosses another; if a neighbour
+// is closer than 40, nudge around within the slice and keep the roomiest spot.
+function findPerch(m, rand, from) {
+  const { top, bottom } = style.body, toward = Math.atan2(m.home[1] - (top + bottom) / 2, m.home[0] - 340);
+  const spots = [...moths.values()].filter(o => o !== m && o.wasLanded).map(o => o.perch);
+  if (from) spots.push(from); // a hop must go somewhere new, so the spot it left counts as taken
+  const room = p => Math.min(Infinity, ...spots.map(o => Math.hypot(o[0] - p[0], o[1] - p[1])));
+  let best = pickPerch(toward, rand);
+  for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(toward + (rand() - 0.5) * 0.5, rand); if (room(c) > room(best)) best = c; }
+  return best;
+}
+
 function frame(t) {
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   const s = t / 1000;
@@ -104,7 +116,7 @@ function frame(t) {
     if (m.leaving) {
       const ang = Math.atan2(m.y - CY, m.x - CX);
       tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 0.8;
-      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
+      if (Math.hypot(m.x - CX, m.y - CY) > 420) { m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove(); m.flies?.forEach(f => f.n.forEach(c => c.remove())); m.flyLine?.remove(); m.zz?.remove(); moths.delete(k); if (hovered === m) { hovered = null; $('card').classList.remove('show'); } continue; }
     } else if (parent) {
       // subagents circle their own session's moth
       m.a += m.speed * dt;
@@ -114,15 +126,9 @@ function frame(t) {
     } else if (needsMe) {
       // land with the wing joint on the paper (the joint sits 2,6 from the moth's position)
       if (!m.wasLanded) {
-        // land in the slice of the lantern facing its home, so its dotted line never crosses another; if a neighbour
-        // is closer than 40, nudge around within the slice and keep the roomiest spot
-        const { top, bottom } = style.body, toward = Math.atan2(m.home[1] - (top + bottom) / 2, m.home[0] - 340);
-        const others = [...moths.values()].filter(o => o !== m && o.wasLanded);
-        const room = p => Math.min(Infinity, ...others.map(o => Math.hypot(o.perch[0] - p[0], o.perch[1] - p[1])));
         m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
-        let best = pickPerch(toward, m.rand);
-        for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(toward + (m.rand() - 0.5) * 0.5, m.rand); if (room(c) > room(best)) best = c; }
-        m.perch = best;
+        m.perch = findPerch(m, m.rand);
+        m.hops = 0;
       }
       [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 2.5;
       // Every 20-40s a waiting moth fidgets, each kind equally likely: at rest it fans its wings or slowly flutters them;
@@ -138,7 +144,14 @@ function frame(t) {
         if (into > dur) { m.fidgetAt = s + 20 + Math.random() * 20; m.dice = Math.random(); }
         else if (into > 0) {
           m.fidget = kind;
-          if (m.fidget === 'hop') ty -= 16 * Math.sin(Math.PI * into / dur);
+          if (m.fidget === 'hop') {
+            ty -= 16 * Math.sin(Math.PI * into / dur);
+            // a hop lands on a new spot in its own slice, picked once as it lifts off (seeded by the hop count, so windows agree)
+            if (into > dur * 0.35 && m.hoppedAt !== m.fidgetAt) {
+              m.hoppedAt = m.fidgetAt;
+              m.perch = findPerch(m, seeded(hash(`${m.key}:${m.session.waitingSince || 0}:${++m.hops}`)), m.perch);
+            }
+          }
         }
       }
     } else {
@@ -242,6 +255,16 @@ function frame(t) {
     const st = m.g.style;
     st.setProperty('--wing', wing);
     st.setProperty('--edge', singed ? `rgba(46,34,40,${(m.cool * 0.9).toFixed(2)})` : `rgba(246,240,255,${(m.cool * 0.9).toFixed(2)})`);
+
+    // a fresh snooze: the moth settles (a brief dim) and a quiet "zz" drifts up off it and fades; for good gets a longer "zzz"
+    const pf = m.puff, z = pf ? (s - pf.at) / (pf.kind === 'always' ? 1.8 : 1.4) : 1;
+    if (z >= 1) { if (pf) { m.puff = null; m.zz?.remove(); m.zz = null; m.g.style.opacity = ''; } }
+    else if (z >= 0) {
+      if (!m.zz) { m.zz = $('moths').appendChild(el('text', { 'font-size': 15, 'font-style': 'italic', 'text-anchor': 'middle', fill: '#C9BDF5', 'pointer-events': 'none' })); m.zz.textContent = pf.kind === 'always' ? 'zzz' : 'zz'; }
+      put(m.zz, 'x', (m.x + 14 * m.size + Math.sin(z * 5) * 3).toFixed(1)); put(m.zz, 'y', (m.y - 10 * m.size - 26 * z).toFixed(1));
+      put(m.zz, 'opacity', (0.8 * Math.sin(Math.PI * Math.min(1, z * 1.2)) ** 0.7).toFixed(2));
+      m.g.style.opacity = (1 - 0.3 * Math.sin(Math.PI * z)).toFixed(2);
+    }
 
     // one thread from the light to each session moth, bowing gently
     if (m.thread) {

@@ -15,7 +15,7 @@ es.addEventListener('settings', e => {
   graveyardOn = st.graveyard !== false; $('graveToggle').checked = graveyardOn;
   sync();
 });
-setInterval(() => quiet() || !quietUntil || sync(), 60 * 1000); // notice when quiet hours end, even with nothing else happening
+setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
 es.onerror = () => { $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline'; };
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
