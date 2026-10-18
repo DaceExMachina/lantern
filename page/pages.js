@@ -19,6 +19,9 @@ let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
 // blocks part way through their lives, as if it had been running a while, so a reload doesn't wipe the paper.
 let pagesData = false, primed = false, primeAge = 2 * FADE + HOLD, waitFrom = performance.now(), pagesTimer = 0;
+// that first set comes up together over INTRO, on a quicker timer of its own, rather than appearing at once
+const INTRO = 1200;
+let introAt = 0, introTimer = 0;
 
 const measure = document.createElement('canvas').getContext('2d');
 const widthOf = (text, size) => { measure.font = `${size}px ${FONT}`; return measure.measureText(text).width; };
@@ -52,10 +55,18 @@ function addBlock(now, age = 0) {
   const r = Math.random, d = style.drum, gap = d.ribs[1] - d.ribs[0], size = gap * (0.28 + r() * 0.05), width = d.r * (1.8 + r() * 1.0);
   const block = {
     born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.4 + r() * 0.3, mirror: r() < 0.4, size,
-    from: -d.r * (1 + r() * 1.4), row: Math.floor(r() * 2 * (d.ribs.length - 1)) - 6, lines: wrapWords(text, width, size),
+    from: -d.r * (1 + r() * 1.4), row: 0, lines: wrapWords(text, width, size),
     // pasted on a little askew: 4 to 8 degrees either way, so the baseline climbs or falls as it goes round
     slope: Math.tan((4 + r() * 4) * Math.PI / 180) * (r() < 0.5 ? -1 : 1),
   };
+  // spread over the whole paper: of a few random heights, the one whose lines land where the fewest others' do
+  const rows = 2 * (d.ribs.length - 1), covered = new Array(rows).fill(0);
+  for (const b of blocks) if (!b.leaving) b.lines.forEach((_, i) => { if (b.row + i >= 0 && b.row + i < rows) covered[b.row + i]++; });
+  const overlap = row => block.lines.reduce((n, _, i) => n + (covered[row + i] ?? 0), 0);
+  for (let k = 0, best = Infinity; k < 8; k++) {
+    const row = Math.floor(r() * rows) - 2, n = overlap(row) + r() * 0.5; // a little jitter breaks ties
+    if (n < best) { best = n; block.row = row; }
+  }
   if (age > FADE + block.hold) block.leaving = now - (age - FADE - block.hold);
   blocks.push(block);
   // the oldest leaves early when too many are showing
@@ -88,8 +99,8 @@ function blockMarkup(b) {
 
 // The light the words are read by, rebuilt whenever the barrel is drawn afresh (picking a lantern replaces its drawing).
 function drawPages(root) {
-  root.innerHTML = `<radialGradient id="pagesLight" gradientUnits="userSpaceOnUse" cx="340" cy="330" r="110" gradientTransform="translate(340 330) scale(.8 1.25) translate(-340 -330)">
-      <stop offset="0" stop-color="#fff"/><stop offset=".5" stop-color="#bbb"/><stop offset="1" stop-color="#222"/></radialGradient>
+  root.innerHTML = `<radialGradient id="pagesLight" gradientUnits="userSpaceOnUse" cx="340" cy="340" r="110" gradientTransform="translate(340 340) scale(.8 1.5) translate(-340 -340)">
+      <stop offset="0" stop-color="#fff"/><stop offset=".55" stop-color="#bbb"/><stop offset="1" stop-color="#555"/></radialGradient>
     <mask id="pagesMask" maskUnits="userSpaceOnUse" x="270" y="210" width="140" height="240"><rect x="270" y="210" width="140" height="240" fill="url(#pagesLight)"/></mask>
     <g id="pagesInk" mask="url(#pagesMask)" font-family="${FONT}"></g>`;
   for (const b of blocks) b.node = null;
@@ -104,13 +115,14 @@ function tickPages() {
     if (!pagesData && now - waitFrom < 1500) return; // nothing drawn yet
     primed = true;
     for (let i = 0; i < SHOWN; i++) addBlock(now, Math.random() * primeAge);
+    introAt = now; clearInterval(introTimer); introTimer = setInterval(inkOpacity, 40);
     nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8);
   }
   if (!root.firstChild) drawPages(root);
   if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(now); nextBlockAt = now + EVERY * (0.6 + Math.random() * 0.8); }
   const ink = $('pagesInk');
   ink.setAttribute('fill', mix(INK.warm, INK.cool, cool));
-  ink.setAttribute('opacity', (0.5 + 0.5 * Math.max(level, cool * 0.45)).toFixed(2)); // brighter flame, clearer words
+  inkOpacity();
   blocks = blocks.filter(b => {
     if (!b.leaving && now - b.born > FADE + b.hold) b.leaving = now;
     const fadeIn = Math.min(1, (now - b.born) / FADE), fadeOut = b.leaving ? 1 - (now - b.leaving) / FADE : 1;
@@ -120,6 +132,13 @@ function tickPages() {
     return true;
   });
 }
+// Brighter flame, clearer words, times the first set's quick fade in.
+function inkOpacity() {
+  const ink = $('pagesInk'), intro = Math.min(1, (performance.now() - introAt) / INTRO);
+  if (intro >= 1) { clearInterval(introTimer); introTimer = 0; }
+  ink?.setAttribute('opacity', ((0.5 + 0.5 * Math.max(level, cool * 0.45)) * intro).toFixed(3));
+}
+
 // Turning words off fades every block out (then the timer stops); turning them on waits for the server's fresh words
 // and fades a set in. Called by main.js with the shared setting.
 function setLanternText(value) {
