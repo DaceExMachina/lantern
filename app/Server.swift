@@ -194,6 +194,51 @@ func forYou(_ message: Any?) -> JSON {
             "questions": questions.prefix(5).map { $0.cut(160) }]
 }
 
+// Runs of plain sentences in a message, for the barrel's paper (page/pages.js) to show in passing: each run is the
+// consecutive sentences that pass, joined into a paragraph of at most about 70 words, and anything that doesn't pass ends
+// the run. A sentence passes when it's whole, 6 to 20 words, starting with a capital and ending in a full stop. Anyone walking past can read the screensaver, so a sentence
+// goes whole if it holds anything that could identify work: code, a link or path, any digit (ids, hashes, ports), a
+// capitalised word past its first (a name), or talk to or about the person (I, you). Kept in memory only.
+func prose(_ message: Any?) -> [String] {
+    let text = Re("```[\\s\\S]*?```").replace(message == nil ? "" : str(message), "\n#\n") // a code block ends a run
+    let person = Re("\\b(I|I'm|I'll|I've|I'd|me|my|you|your|you're|you'll|we|we're|let's|us|our)\\b", .caseInsensitive)
+    // a sentence's first word could be a name too: it has to be a common opener, or a word the message also writes in lowercase
+    let lower = Set(Re("\\b[a-z][a-z']*\\b").matches(text).compactMap { text.sub($0.range) }.map { $0.hasSuffix("s") ? String($0.dropLast()) : $0 })
+    let openers: Set<String> = ["the", "this", "that", "these", "those", "it", "its", "a", "an", "each", "every", "both", "all", "some", "most",
+                                "now", "then", "there", "here", "when", "while", "if", "once", "after", "before", "only", "no", "nothing",
+                                "everything", "their", "they", "one", "so", "but", "and", "with", "without", "instead", "also", "still"]
+    var out: [String] = [], run: [String] = []
+    func end() { let p = run.joined(separator: " "); if !p.isEmpty && !out.contains(p) { out.append(p) }; run = [] }
+    for line in text.components(separatedBy: "\n") {
+        let l = line.trim
+        if l.isEmpty { continue } // a blank line between paragraphs doesn't end a run
+        if Re("^(#|>|\\|)").test(l) || Re("\\*\\*[A-Za-z ]+:\\*\\*").test(l) { end(); continue } // headings, quotes, tables, footer labels
+        for raw in Re("(?<=[.!?])\\s+").split(Re("^([-*+]|[0-9]+[.)])\\s+").replace(l, "")) {
+            if Re("[`/\\\\\\[\\]()<>#@:=|{}0-9]|https?|\\w\\.\\w").test(raw) || person.test(raw) { end(); continue }
+            let s = Re("[*_]").replace(raw, "").trim
+            let words = s.split(separator: " ")
+            let first = words.first.map { $0.lowercased().trimmingCharacters(in: .punctuationCharacters) } ?? ""
+            guard (6...20).contains(words.count), Re("^[A-Z][a-z']*,?$").test(String(words[0])), s.hasSuffix("."), !s.hasSuffix("..."),
+                  openers.contains(first) || lower.contains(first.hasSuffix("s") ? String(first.dropLast()) : first),
+                  !words.dropFirst().contains(where: { Re("^[^a-z]*[A-Z]").test(String($0)) }) else { end(); continue }
+            if run.joined(separator: " ").split(separator: " ").count + words.count > 70 { end() }
+            run.append(s)
+        }
+    }
+    end()
+    return out
+}
+
+// The runs of plain sentences in a transcript's assistant messages, oldest first.
+func transcriptProse(_ lines: [String]) -> [String] {
+    var said: [String] = []
+    for line in lines {
+        guard let j = parse(Data(line.utf8)) as? JSON, str(j["type"]) == "assistant" else { continue }
+        for c in (j["message"] as? JSON)?["content"] as? [JSON] ?? [] where str(c["type"]) == "text" { said += prose(c["text"]).filter { !said.contains($0) } }
+    }
+    return said
+}
+
 // Agent reports and notifications arrive as "prompts" wrapped in XML; keep just the readable part, labelled.
 func cleanPrompt(_ p: String) -> String {
     let tag = Re("^\\s*<([A-Za-z0-9_-]+)").match(p)?[1]
@@ -457,15 +502,17 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
 }
 
 /// A session rebuilt from its transcript, before it joins the live ones.
-func seedSession(_ file: String, live: Bool) -> (JSON, Ordered<JSON>)? {
+func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON>)? {
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
-    let turn = lastTurn(tail(file))
+    let lines = tail(file), turn = lastTurn(lines)
     var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "state": turn.compacted ? "idle" : turn.done ? "waiting" : "working",
                    "note": turn.done && !turn.compacted ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
                    "unconfirmed": !live]
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
+    // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
+    if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
     // subagents that look like they're still going: transcript touched in the last two minutes and not finished
     var agents = Ordered<JSON>()
@@ -567,6 +614,7 @@ final class LanternServer {
     struct Seen { var waiting = false, snoozed: String?, title: String? }
     var seen: [String: Seen] = [:]
     var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
+    var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the barrel's pages; memory only
     var violet = false, quiet = false
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh
@@ -637,6 +685,8 @@ final class LanternServer {
             return out
         })
     }
+    // Session text (the barrel's pages) are on unless settings.json says "off"; while off, none are read, kept or sent.
+    var wordsOn: Bool { settings["lanternText"] as? String != "off" }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
     func broadcast() { observe(); send("event: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n") }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
@@ -721,6 +771,10 @@ final class LanternServer {
             let tasks = running.isEmpty ? "" : "\(running.count) background task\(running.count > 1 ? "s" : "")"
             s["tasks"] = Array(running.map { $0["description"] }.filter(truthy).prefix(4)).map { $0! }
             s["forYou"] = forYou(e["last_assistant_message"])
+            if wordsOn {
+                let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
+                if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(10)) } // the newest few runs
+            }
             s["error"] = false
             if !running.isEmpty && q.isEmpty { s["state"] = "paused"; s["note"] = "Waiting on \(tasks)" }
             else { s["state"] = "waiting"; s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
@@ -841,16 +895,37 @@ final class LanternServer {
         }
     }
 
+    // The barrel's pages also draw on recent transcripts, so they aren't blank when little is running: up to five runs
+    // from the tail of each, newest first, going further back until there are about forty (reading at most sixty
+    // transcripts). Read when the server starts and when session text is turned on.
+    func seedProse() {
+        DispatchQueue.global().async {
+            let started = now()
+            let newest = ((try? FileManager.default.contentsOfDirectory(atPath: PROJECTS)) ?? []).flatMap { transcripts(PROJECTS + "/" + $0) }
+                .map { ($0, fileTimes($0)?.mtime ?? 0) }.sorted { $0.1 > $1.1 }.prefix(60).map(\.0)
+            var pool: [String] = [], read = 0
+            for f in newest where pool.count < 40 { read += 1; pool += transcriptProse(tail(f)).suffix(5).filter { !pool.contains($0) } }
+            print("Read \(pool.count) run(s) of prose from \(read) recent transcript(s) in \(Int(now() - started)) ms")
+            DispatchQueue.main.async {
+                if !self.wordsOn { return } // turned off again while reading
+                self.recentProse = Array(pool.prefix(40))
+                self.send("event: prose\ndata: \(jsonText(self.recentProse))\n\n")
+            }
+        }
+    }
+
     // MARK: seeding: rebuild sessions from disk when the server starts, so a restart doesn't forget them
 
     func seed() {
+        let words = wordsOn
+        if words { seedProse() }
         DispatchQueue.global().async {
             var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
             let take = { (f: String, live: Bool, pid: Int?) in
                 let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
                 if seen.contains(id) { return }
                 // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
-                if var s = seedSession(f, live: live) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
+                if var s = seedSession(f, live: live, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
             }
             for (f, pid) in liveTranscripts() { take(f, true, pid) }
             if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
@@ -1305,6 +1380,17 @@ final class LanternServer {
                     settings["goals"] = goals
                 }
                 if let g = j["graveyard"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["graveyard"] = g.boolValue; ok = true }
+                // session text on the barrel: turning them off drops every word held; turning them on reads the pool afresh
+                if let t = j["lanternText"] as? String, ["sessions", "off"].contains(t) {
+                    let was = wordsOn
+                    settings["lanternText"] = t; ok = true
+                    if was && !wordsOn {
+                        recentProse = []
+                        for (id, _) in sessions.items { sessions[id]!["prose"] = nil }
+                        send("event: prose\ndata: []\n\n"); broadcast()
+                    }
+                    if !was && wordsOn { seedProse() }
+                }
                 // the last day a recap opened by itself, so every window shows each one once
                 if let day = j["recapSeen"] as? String, Re("^[0-9]{4}-[0-9]{2}-[0-9]{2}$").test(day) { settings["recapSeen"] = day; ok = true }
                 if let quiet = j["quietUntil"] as? NSNumber, CFGetTypeID(quiet) != CFBooleanGetTypeID(), quiet.doubleValue.isFinite {
@@ -1324,7 +1410,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: graveyard\ndata: \(jsonText(graveyardOut()))\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()

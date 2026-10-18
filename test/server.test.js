@@ -50,6 +50,7 @@ const snapshot = base => new Promise((done, fail) => {
       for (const block of text.split('\n\n').slice(0, -1)) {
         const event = block.match(/^event: (.+)$/m)?.[1], data = block.match(/^data: (.*)$/m)?.[1];
         if (event === 'settings') out.settings = JSON.parse(data);
+        if (event === 'prose') out.prose = JSON.parse(data);
         if (!event && data) { out.sessions = JSON.parse(data); req.destroy(); return done(out); }
       }
     });
@@ -71,7 +72,7 @@ async function replay(t, name, files) {
     let got;
     for (let i = 0; i < 40; i++) {
       const s = normalize(await snapshot(base));
-      got = { sessions: s.sessions, ...('settings' in step.expect ? { settings: s.settings } : {}) };
+      got = { sessions: s.sessions, ...('settings' in step.expect ? { settings: s.settings } : {}), ...('prose' in step.expect ? { prose: s.prose } : {}) };
       try { assert.deepStrictEqual(got, step.expect); break; } catch { await wait(50); }
     }
     if (process.env.UPDATE) step.expect = sorted(got);
@@ -86,6 +87,7 @@ test('a turn that asks a question or names a Blocker is waiting, with the questi
 test('snooze, snooze for good, and wake', t => replay(t, 'snooze'));
 test('a manual /compact ends idle, an automatic one leaves the session as it was', t => replay(t, 'compact'));
 test('SessionEnd removes the session', t => replay(t, 'session-end'));
+test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
 // Transcripts on disk, for the seeding cases: one JSON object per line.
@@ -96,6 +98,19 @@ const user = text => ({ type: 'user', cwd: '/work', message: { role: 'user', con
 const answer = text => ({ type: 'assistant', cwd: '/work', message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] } });
 const turnEnd = { type: 'system', subtype: 'turn_duration', cwd: '/work' };
 
+test('a seeded session brings back the plain sentences from its whole transcript, not just the last turn', t => replay(t, 'seed-prose', {
+  ...transcript(UUID(3), [user('Look at the glow'), answer('The glow sits a little higher on the paper than before.'), turnEnd,
+    user('And the moths?'), answer('Every moth now lands where the light is warmest on the paper.'), turnEnd]),
+}));
+// the newest transcripts, ended ones too, give the pages a shared pool of sentences, unless lanternText is off
+const recent = () => ({
+  ...transcript(UUID(4), [user('Look'), answer('The glow sits a little higher on the paper than before.'), turnEnd]),
+  ...transcript(UUID(5), [user('Go'), answer('Every moth now lands where the light is warmest on the paper.'), turnEnd]),
+});
+test('with little to draw on, the pool reads further back than the newest eight transcripts', t => replay(t, 'prose-pool-deep',
+  Object.assign({}, ...["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"].map((w, i) => transcript(UUID(i), [user('Go'), answer(`The glow on the paper settles at row ${w} tonight.`), turnEnd])))));
+test('the newest transcripts fill a shared pool of sentences for the pages', t => replay(t, 'prose-pool', recent()));
+test('with session text off nothing is filtered or read; turning them on reads the pool, turning them off drops every word', t => replay(t, 'prose-toggle', { ...recent(), 'data/settings.json': '{"lanternText": "off"}' }));
 test('a transcript ending on an unanswered task notification seeds as waiting, not working', t => replay(t, 'seed-task-notification', {
   ...transcript(UUID(1), [user('Fix it'), answer('Fixed. **You:** try it'), turnEnd, user('<task-notification><summary>Agent finished</summary></task-notification>')]),
   ...transcript(UUID(2), [user('Start on the docs')]), // mid-turn, for contrast

@@ -3,11 +3,12 @@
 addEventListener('resize', fitView);
 const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
+es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
 es.addEventListener('graveyard', e => { stalePRs = JSON.parse(e.data); }); // the server calls them the graveyard
 const PINNED = new URLSearchParams(location.search).get('style'); // ?style= previews one lantern, whatever the settings say
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
-es.onmessage = e => { raw = JSON.parse(e.data); sync(); };
+es.onmessage = e => { raw = JSON.parse(e.data); pagesData = true; sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
   const key = PINNED || st.style;
@@ -18,6 +19,7 @@ es.addEventListener('settings', e => {
   const until = quietEndLabel();
   $('quiet').title = `Treat everything as snoozed until ${until}`;
   $('quietUntil').textContent = until;
+  setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('textToggle').checked = lanternText !== 'off';
   try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();
@@ -40,6 +42,10 @@ $('quiet').onclick = () => {
 
 es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
 
+$('textToggle').onchange = e => {
+  setLanternText(e.target.checked ? 'sessions' : 'off');
+  fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lanternText: lanternText }) });
+};
 $('staleToggle').onchange = e => {
   staleOn = e.target.checked;
   fetch('/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ graveyard: staleOn }) });

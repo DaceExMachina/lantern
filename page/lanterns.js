@@ -91,7 +91,8 @@ const STYLES = {
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
     <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
     <rect id="paperGlow" x="270" y="200" width="140" height="260" fill="url(#paperGrad)" clip-path="url(#bodyClip)"/>
-    <path id="paperTint" d="${ODAWARA.outline}"/>`,
+    <path id="paperTint" d="${ODAWARA.outline}"/>
+    <g id="pages" clip-path="url(#bodyClip)"></g>`, // session text printed on the paper (pages.js)
     // built like an Odawara lantern, seen from the flame's height: every horizontal edge (wires, drums) bows up above the
     // flame and down below it. The paper sinks in a little between wires (scalloped edge, a darker band mid-gap).
     front: `<path d="${ODAWARA.outline}" fill="#F2DCC0" opacity="0.2"/>
