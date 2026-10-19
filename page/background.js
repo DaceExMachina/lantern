@@ -22,7 +22,6 @@ function program(vert, frag) {
   return { p, u };
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
-const glf = v => v.toFixed(3); // a number as a GLSL float
 const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and agents)
 // How much of the flame's light reaches a point (1 = all of it): moths' shadows, the caps' fans and a pierced lantern's bands. Shared by the
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.

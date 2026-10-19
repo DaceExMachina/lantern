@@ -286,8 +286,8 @@ function lightPaper({ size, flick, pulse }) {
 // A bare flame lights what's round it (style.shine, the candle's own numbers): glints on the brass that slide as the
 // flame leans (a reflection moves with what it reflects) and brighten as it flickers, its reflection in the molten pool at
 // the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
-// on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background), and every few
-// minutes a thin curl of smoke leaves its tip. All of it follows this frame's flame but the smoke, which keeps only where
+// on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background), and every
+// minute or two a thin curl of smoke leaves its tip. All of it follows this frame's flame but the smoke, which keeps only where
 // it left.
 // The hot air over the flame, set by drawShine (null without one): the outer tongue's tip, how strong, and the time.
 let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
@@ -304,20 +304,29 @@ function heatAt(x, y) {
 function liftDust(p, x, y, dt) {
   return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
 }
-// The smoke's schedule, scorch's kind (scorchClock): one 6-second curl in each 3-minute slot, keyed on the wall clock alone
-// so every window lets it go at once. Each bit of it is let go from the tip over the first 1.5 seconds and then rises
-// SMOKE.rise a second from where the curl left, curling by its own age only, so the flame's flicker never moves smoke
-// already let go.
-const SMOKE = { slot: 180, window: 60, length: 6, release: 1.5, rise: 16 }; // starts in a slot's first minute: 2 to 4 minutes apart
+// The smoke's schedule, scorch's kind (scorchClock): one 6-second curl in each 90-second slot, keyed on the wall clock alone
+// so every window lets it go at once. Each bit of it is let go from the tip over the curl's first second or two, then rises
+// steadily from where the curl left, curling by its own age only, so the flame's flicker never moves smoke already let go.
+const SMOKE = { slot: 90, window: 30, length: 6 }; // starts in a slot's first 30 seconds: 1 to 2 minutes apart
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
-let smokeFrom = /** @type {{ slot: number, x: number, y: number } | null} */ (null); // the slot and where its curl left the tip
-// the curl `a` seconds after it started, from (x, y), oldest bit first
-function smokePoints(x, y, a) {
-  const pts = [];
+// Slot `slot`'s curl, its own shape seeded from the slot so every window draws the same one: how far it sways for each
+// second of age and how often, where in its sway it starts, a slow drift to one side, how fast it rises, how long the
+// thread takes to let go (all per second), and a smaller, quicker wobble on top.
+function smokeShape(slot) {
+  const rand = seeded(hash(`candle:smoke:${slot}:shape`)), at = (a, b) => a + (b - a) * rand();
+  return { sway: at(1.2, 3.2), often: at(0.6, 1.3), phase: at(0, 2 * Math.PI), drift: at(-3, 3), rise: at(13, 19), release: at(1.1, 1.9),
+    wobble: at(0, 0.6), wobbleOften: at(2.5, 4) };
+}
+/** @typedef {ReturnType<typeof smokeShape>} SmokeShape */
+// the slot, where its curl left the tip, and its shape
+let smokeFrom = /** @type {{ slot: number, x: number, y: number, shape: SmokeShape } | null} */ (null);
+// the curl of `shape` `a` seconds after it started, from (x, y), oldest bit first
+function smokePoints(x, y, a, shape) {
+  const { sway, often, phase, drift, rise, release, wobble, wobbleOften } = shape, pts = [];
   for (let k = 0; k <= 30; k++) {
-    const age = a - k / 30 * SMOKE.release;
+    const age = a - k / 30 * release;
     if (age <= 0) break;
-    pts.push([x + Math.sin(age * 0.9 + 0.6) * age * 2.2, y - age * SMOKE.rise]);
+    pts.push([x + (Math.sin(age * often + phase) * sway + Math.sin(age * wobbleOften + 2 * phase) * wobble + drift) * age, y - age * rise]);
   }
   return pts;
 }
@@ -346,8 +355,8 @@ function drawShine(s, { size, flick, pulse }) {
   put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
   const e = scorchClock('candle:smoke', Date.now(), SMOKE), smoke = $('cdSmoke');
   if (!e) { smokeFrom = null; return put(smoke, 'opacity', 0); }
-  if (smokeFrom?.slot !== e.slot) smokeFrom = { slot: e.slot, x: tip[0], y: tip[1] - 2 };
-  const pts = smokePoints(smokeFrom.x, smokeFrom.y, e.t);
+  if (smokeFrom?.slot !== e.slot) smokeFrom = { slot: e.slot, x: tip[0], y: tip[1] - 2, shape: smokeShape(e.slot) };
+  const pts = smokePoints(smokeFrom.x, smokeFrom.y, e.t, smokeFrom.shape);
   put(smoke, 'd', pts.length > 1 ? `M${pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L')}` : '');
   put(smoke, 'opacity', (Math.min(1, e.t * 2) * Math.max(0, 1 - e.t / SMOKE.length)).toFixed(2));
 }

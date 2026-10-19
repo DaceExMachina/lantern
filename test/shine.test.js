@@ -1,5 +1,5 @@
 // The candle's shine (page/frame.js drawShine): what its bare flame lights round it, following the flame's live lean and
-// flicker, the hot air rising over it, and the curl of smoke it lets go every few minutes on a schedule every window
+// flicker, the hot air rising over it, and the curl of smoke it lets go every minute or two on a schedule every window
 // shares. The page is plain classic scripts, run here in a vm context in index.html's order, over a stub DOM holding only
 // the shine's elements.
 const test = require('node:test');
@@ -16,12 +16,15 @@ const node = () => {
 const clock = { wall: BASE };
 function context() {
   const els = {};
+  // background.js isn't loaded (it needs WebGL): drawLight's dust is one speck the test places, and the background draws nothing
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, wall: () => clock.wall,
-    document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] } });
+    document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] },
+    dust: [], farDust: [], dustData: new Float32Array(4), drawBackground: () => {}, DUST_DEBUG: 0 });
   for (const f of ['scene', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle;');
   for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow', 'cdSmoke']) els[id] = node();
+  els.fCore = { getBBox: () => ({ x: 333, y: 352, width: 14, height: 30 }) }; // drawLight's flame core, somewhere in the tongue
   // the glint groups as the candle's markup draws them, each child with its attributes
   const back = run('STYLES.candle.back');
   for (const id of ['cdGlints', 'cdPedestalGlints', 'cdGrapeGlints']) {
@@ -99,12 +102,12 @@ const nextSmoke = (ctx, from) => {
   return at;
 };
 
-test('a curl of smoke leaves the flame every few minutes, at the same moments in every window', () => {
+test('a curl of smoke leaves the flame every minute or two, at the same moments in every window', () => {
   const a = context(), b = context(), plan = a.run('SMOKE'), starts = [];
-  // a week of curls: each two to four minutes after the last
+  // a week of curls: each one to two minutes after the last
   for (let from = BASE; from < BASE + 7 * 864e5;) starts.push(nextSmoke(a, from)), from = starts[starts.length - 1] + plan.length * 1000;
   const gaps = starts.slice(1).map((t, i) => (t - starts[i]) / 1000);
-  assert.ok(Math.min(...gaps) >= 120 && Math.max(...gaps) <= 240, `between ${Math.min(...gaps)} and ${Math.max(...gaps)} seconds apart`);
+  assert.ok(Math.min(...gaps) >= 60 && Math.max(...gaps) <= 120, `between ${Math.min(...gaps)} and ${Math.max(...gaps)} seconds apart`);
   // two windows with different frame clocks, so their flames lean differently, show it at the same moments
   for (let t = starts[0] - 3000; t < starts[0] + 9000; t += 700) {
     clock.wall = t; a.shine(1.3 + t / 1000); b.shine(87.1 + t / 1000);
@@ -128,7 +131,7 @@ test('smoke already let go rises steadily from where it left, whatever the flame
     const ps = pts(a);
     assert.ok(ps.length > 2, `${at}s in, a curl`);
     // each bit, let go `k / 30` of the release in, is as high above where the curl left as its age says
-    ps.forEach(([, y], k) => assert.ok(Math.abs(from.y - y - (at - k / 30 * plan.release) * plan.rise) < 0.1, `${at}s in, bit ${k}`));
+    ps.forEach(([, y], k) => assert.ok(Math.abs(from.y - y - (at - k / 30 * from.shape.release) * from.shape.rise) < 0.1, `${at}s in, bit ${k}`));
   }
   clock.wall = start + plan.length * 1000 + 100; ctx.shine(left);
   assert.strictEqual(ctx.els.cdSmoke.getAttribute('opacity'), '0', 'gone once it has faded');
@@ -153,8 +156,9 @@ test('the hot air lifts dust only inside its column, and lets it sink back out o
   assert.strictEqual(lift(p, x, y - 40, 1 / 60), 0, 'none over a flame behind paper');
 });
 
-test('the column\'s edges sit where HEAT_COLUMN, the shader\'s numbers too, puts them, and it never goes NaN below the tip', () => {
+test('the column\'s edges sit where HEAT_COLUMN puts them, and it never goes NaN below the tip', () => {
   const ctx = context(), C = ctx.run('HEAT_COLUMN');
+  assert.ok(C.half > 0 && C.widen >= 0 && C.start > 0 && C.fade[0] < C.fade[1] && C.bend > 0, 'a column that starts above the tip, has width and fades out');
   ctx.run('heat = { x: 340, y: 100, k: 1, t: 0 }');
   const at = (dx, up) => ctx.run(`heatAt(${340 + dx}, ${100 - up})`);
   for (const up of [C.start, 60, C.fade[0]]) {
@@ -167,4 +171,57 @@ test('the column\'s edges sit where HEAT_COLUMN, the shader\'s numbers too, puts
   // where the column's width would reach 0 and below it, each speck still gets a number
   const zero = -C.half / C.widen;
   for (const up of [zero, zero - 1, zero + 1, -1e6]) for (const dx of [0, 0.5, 5]) assert.strictEqual(at(dx, up), 0, `${dx} across at ${up} up`);
+});
+
+test('the dust drawn over the candle rises where the hot air carries it', () => {
+  const ctx = context(), [left] = leaning(ctx), data = ctx.run('dustData');
+  // one heavy speck (the wind barely moves it) on its orbit straight above the light, 50 or so over the flame's tip
+  const p = { a: -Math.PI / 2, d: 120, w: 0, ph: 0, r: 10, lift: 0 };
+  ctx.run('dust').push(p);
+  const frame = (s, dt) => { ctx.shine(s); ctx.run('drawLight')(dt, s, ctx.flame); return data[1]; };
+  for (let i = 0; i < 120; i++) frame(left + i / 60, 1 / 60);
+  // the same frame drawn again, lifted and then not: the speck is drawn as high as its lift
+  const s = left + 2, lifted = frame(s, 0);
+  p.lift = 0;
+  const still = frame(s, 0);
+  assert.ok(still - lifted > 10, `drawn ${(still - lifted).toFixed(1)} higher for the hot air`);
+});
+
+test('the shader\'s column is HEAT_COLUMN, each number in its place', () => {
+  const ctx = context(), src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8');
+  const body = src.match(/vec2 heat\(vec2 p\) \{[\s\S]*?\n\}/)[0], glf = ctx.run('glf');
+  for (const v of [18, 0.12, 0.1234, 0.0004, 1.25, 1e-7]) assert.strictEqual(Number(glf(v)), v, `${v} as a GLSL float`), assert.match(glf(v), /[.e]/);
+  // the shader as background.js writes it, with HEAT_COLUMN's values and with others in their place
+  for (const C of [ctx.run('({ ...HEAT_COLUMN })'), { half: 17.5, widen: 0.125, start: 11, fade: [121.5, 219], bend: 1.3 }]) {
+    ctx.run(`Object.assign(HEAT_COLUMN, ${JSON.stringify(C)})`);
+    const glsl = ctx.run('`' + body + '`'), f = glf;
+    for (const slot of [`wide = max(1.0, ${f(C.half)} + ${f(C.widen)} * up)`, `smoothstep(0.0, ${f(C.start)}, up)`,
+      `smoothstep(${f(C.fade[0])}, ${f(C.fade[1])}, up)`, `return ${f(C.bend)} * k`]) assert.ok(glsl.includes(slot), `heat() has ${slot}`);
+  }
+});
+
+test('each curl of smoke has its own shape, the same one in every window, and every bit of it rises steadily', () => {
+  const a = context(), b = context(), shape = slot => a.run(`smokeShape(${slot})`), curl = (sh, at) => [...a.run('smokePoints')(0, 0, at, sh)].map(p => [...p]);
+  const BOUNDS = { sway: [1.2, 3.2], often: [0.6, 1.3], phase: [0, 2 * Math.PI], drift: [-3, 3], rise: [13, 19], release: [1.1, 1.9], wobble: [0, 0.6], wobbleOften: [2.5, 4] };
+  for (let slot = 0; slot < 500; slot++) {
+    const sh = shape(slot);
+    assert.strictEqual(JSON.stringify(b.run(`smokeShape(${slot})`)), JSON.stringify(sh), `slot ${slot}: the same shape in another window`);
+    for (const [k, [lo, hi]] of Object.entries(BOUNDS)) assert.ok(sh[k] >= lo && sh[k] <= hi, `slot ${slot}: ${k} ${sh[k]} within ${lo} to ${hi}`);
+    // two slots in a row draw different curls
+    const now = curl(sh, 3), next = curl(shape(slot + 1), 3);
+    assert.ok(now.some((p, k) => !next[k] || Math.hypot(p[0] - next[k][0], p[1] - next[k][1]) > 0.5), `slots ${slot} and ${slot + 1} differ`);
+    // each bit, once let go, only ever goes up as it ages
+    for (let at = 0.2; at < 6; at += 0.25) {
+      const was = curl(sh, at), then = curl(sh, at + 0.25);
+      was.forEach(([, y], k) => assert.ok(then[k][1] < y, `slot ${slot}: bit ${k} rises from ${at}s on`));
+    }
+  }
+  // in two windows whose flames lean differently, the same slot's curl has the same shape about where it left
+  const start = nextSmoke(a, BASE), [left] = leaning(a), [, right] = leaning(b);
+  clock.wall = start + 100; a.shine(left); b.shine(right);
+  clock.wall = start + 2500; a.shine(left + 2.4); b.shine(right + 2.4);
+  const rel = ctx => { const f = ctx.run('smokeFrom'); return ctx.els.cdSmoke.getAttribute('d').slice(1).split('L').map(p => p.split(' ').map(Number)).map(([x, y]) => [x - f.x, y - f.y]); };
+  const ra = rel(a), rb = rel(b);
+  assert.ok(ra.length > 2 && ra.length === rb.length, `both curls drawn: ${ra.length} and ${rb.length} points`);
+  ra.forEach(([x, y], k) => assert.ok(Math.abs(x - rb[k][0]) < 0.11 && Math.abs(y - rb[k][1]) < 0.11, `bit ${k} sits the same in both windows`));
 });
