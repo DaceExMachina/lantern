@@ -28,8 +28,11 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 const TAPERS = [['dome', 244, 154, 154], ['bottom', 434, 486, 486], ['shoulder', 285, 235, 260], ['skirt', 413, 445, 428]];
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
-// Dace's brass experiments, each off unless named in ?brass= (comma-separated, or all): edges, horizon, glow, patina, radial, back.
+// Dace's brass experiments, each off unless named in ?brass= (comma-separated, or all): edges, horizon, glow, patina, radial, back, facets.
 // ponytail: plain flags while he tries them; the keepers lose their flag, the rest get deleted.
+// ?brass=facets: the body's three panels are flat polished brass, each one flat tone from this ramp (dark to lit) chosen by
+// how squarely it faces the light (frame.js), so the shine steps from panel to panel as the lantern swings
+const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B'];
 const BRASS_FX = new Set((Q.get('brass') || '').split(','));
 const fx = k => BRASS_FX.has(k) || BRASS_FX.has('all');
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
@@ -227,7 +230,8 @@ const STYLES = {
         <path d="${DOME}" fill="url(#domeS)"/><path d="${DOME}" fill="url(#domeF)" transform="${HALF_X}"/>
         <path d="M295 244h90v16h-90Z" fill="${BRASS.side}"/><path d="M317.5 244h45v16h-45Z" fill="${BRASS.front}"/>
         <path d="${SHOULDER}" fill="url(#shoulderS)"/><path d="${SHOULDER_F}" fill="url(#shoulderF)"/>
-        <path d="M277 290h126v118h-126Z" fill="${BRASS.side}"/><path d="M308.5 290h63v118h-63Z" fill="${BRASS.front}"/>
+        ${fx('facets') ? '<path id="facetL" d="M277 290h31.5v118h-31.5Z"/><path id="facetF" d="M308.5 290h63v118h-63Z"/><path id="facetR" d="M371.5 290h31.5v118h-31.5Z"/>'
+          : `<path d="M277 290h126v118h-126Z" fill="${BRASS.side}"/><path d="M308.5 290h63v118h-63Z" fill="${BRASS.front}"/>`}
         ${fx('radial') ? `<path d="${DOME}" fill="url(#domeR)"/><path d="${BOTTOM}" fill="url(#bottomR)"/><path d="${SHOULDER}" fill="url(#shoulderR)"/>` : ''}
         ${fx('horizon') ? '<path d="M277 290h126v118h-126Z" fill="url(#horizon)"/>' : ''}${fx('glow') ? '<path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>' : ''}
       </g>
