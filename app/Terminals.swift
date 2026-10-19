@@ -1,10 +1,10 @@
 // Running `claude` processes and the apps around them: finding a session's terminal tab and bringing it to the front.
 import Foundation
 
-/// pids of terminal `claude` processes
+/// pids of running `claude` processes: a terminal's, named plainly, and the Claude app's, named by a full path with spaces in it
 func claudePids() -> [String] {
     run("ps", ["-axo", "pid=,comm="]).out.components(separatedBy: "\n")
-        .map { $0.trim.split(whereSeparator: \.isWhitespace).map(String.init) }.filter { $0.count > 1 && $0[1] == "claude" }.map { $0[0] }
+        .map { $0.trim.split(separator: " ", maxSplits: 1).map(String.init) }.filter { $0.count > 1 && ($0[1] as NSString).lastPathComponent == "claude" }.map { $0[0] }
 }
 
 /// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet.

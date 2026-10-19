@@ -219,6 +219,24 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
+// The Claude app's Code tab runs `claude` from inside its own folder, so ps names it by a full path with spaces in it.
+// It's as live as a terminal one: a preview, which gets no hooks, has only seeding and adoption to find it by.
+test('a quiet Claude app session is seeded with its process, though ps names it by a path with spaces', async t => {
+  const proc = spawn('sleep', ['60']), id = UUID(7), file = `.claude/projects/-work/${id}.jsonl`;
+  t.after(() => proc.kill());
+  const base = await serve(t, {
+    [file]: jsonl([user('Fix it'), answer('Fixed. **You:** try it'), turnEnd]),
+    [`.claude/sessions/${proc.pid}.json`]: JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/work', entrypoint: 'claude-desktop' }),
+    'no-bin/ps': `#!/bin/sh\necho "${proc.pid} /Users/me/Library/Application Support/Claude/claude-code/2.1.299/x/claude.app/Contents/MacOS/claude"\n`,
+  }, home => {
+    fs.chmodSync(path.join(home, 'no-bin/ps'), 0o755);
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+    fs.utimesSync(path.join(home, file), dayAgo, dayAgo);
+  });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the Claude app session to be seeded');
+  assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
+});
+
 // A `claude` the hooks never told the lantern about (iTerm restarted, a hook failed) shows up after startup: the next
 // adoption pass finds it through ps and its sessions/<pid>.json and seeds it with its process, as startup would have.
 test('a running session the lantern missed is adopted with its process on the next pass', async t => {
