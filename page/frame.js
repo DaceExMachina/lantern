@@ -178,13 +178,13 @@ function swingLantern(elapsed, s) {
     const cy = +base + 0.65 * (+end - +base), ry = 0.45 * Math.abs(+end - +base), cx = 325 + dx + k * (cy - +base);
     put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
   });
-  // ?brass=facets: each body panel (facing -60, 0 or 60 degrees round) lit by how squarely it meets a light 20 degrees to the
-  // left, which turns 8 degrees per degree of sway, in five flat tones (lanterns.js FACET_TONES)
-  for (const [id, a] of /** @type {[string, number][]} */ ([['facetL', -60], ['facetF', 0], ['facetR', 60]])) {
-    const c = Math.cos((a + 20 - swayAngle * 8) * Math.PI / 180);
-    put($(id), 'fill', FACET_TONES[Math.max(0, Math.min(4, Math.round((c - 0.2) / 0.8 * 4)))]);
+  // the straight panels' faces (round at -60, 0 and 60 degrees) lit by how squarely they meet a light 20 degrees to the left,
+  // which turns 8 degrees per degree of sway, in five flat tones (lanterns.js FACET_TONES)
+  for (const [side, a] of /** @type {[string, number][]} */ ([['L', -60], ['F', 0], ['R', 60]])) {
+    const c = Math.cos((a + 20 - swayAngle * 8) * Math.PI / 180), tone = FACET_TONES[Math.max(0, Math.min(4, Math.round((c - 0.2) / 0.8 * 4)))];
+    document.querySelectorAll(`.facet${side}`).forEach(n => put(n, 'fill', tone));
   }
-  put($('farWall'), 'transform', `translate(${(-swayAngle * 4).toFixed(1)} 0)`); // ?brass=back: the far wall slides against the sway
+  put($('farWall'), 'transform', `translate(${(-swayAngle).toFixed(1)} 0)`); // ?brass=back: the far wall slides against the sway
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
