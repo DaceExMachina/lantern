@@ -156,6 +156,10 @@ const pal = k => mix(WARM[k], COOL[k], cool);
 // The lantern's sway on its string, in degrees. Anything attached to the lantern goes through rot(), which turns a point
 // in the lantern's own units with it, about where it hangs from the top of the window.
 let swayAngle = 0;
+// A fake twist on the chain, in degrees of yaw: the swing alone wouldn't turn the faces to the light, but the brass's lighting
+// (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
+// its own, within about ±13. The drawing itself doesn't turn.
+let twist = 0;
 /** @returns {[number, number]} */
 function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
@@ -172,9 +176,11 @@ function swingLantern(elapsed, s) {
   swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
+  twist += (swayAngle * 5 + Math.sin(s * 0.23) * 3 - twist) * dt * 1.2;
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
-  // SHEEN), and slides 14 units per degree around that, staying within 291 to 347; half-unit steps so put() skips frames that wouldn't show it
-  const dx = Math.round(swayAngle * 28) / 2 - 6;
+  // SHEEN), and slides 1.75 units per degree of twist around that, staying within 296 to 342; half-unit steps so put() skips
+  // frames that wouldn't show it
+  const dx = Math.round(twist * 3.5) / 2 - 6;
   document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', `translate(${dx} 0)`));
   // a tapering part's band leans by k per unit of height, so it meets the middle (340, 15 right of the stops' 325) at its apex;
   // a radial one (?brass=radial) is a narrow ellipse along that band, two thirds of the way to the part's narrow end
@@ -184,15 +190,16 @@ function swingLantern(elapsed, s) {
     const cy = +base + 0.65 * (+end - +base), ry = 0.45 * Math.abs(+end - +base), cx = 325 + dx + k * (cy - +base);
     put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
   });
-  // the straight panels' faces (round at -60, 0 and 60 degrees) lit by how squarely they meet a light 20 degrees to the left,
-  // which turns 8 degrees per degree of sway: one flat tone each, blended continuously along lanterns.js FACET_TONES
-  // (put() skips a face whose rounded colour hasn't changed)
-  for (const [side, a] of /** @type {[string, number][]} */ ([['L', -60], ['F', 0], ['R', 60]])) {
-    const c = Math.cos((a + 20 - swayAngle * 8) * Math.PI / 180), t = Math.max(0, Math.min(1, (c - 0.2) / 0.8)) * 4, i = Math.min(3, Math.floor(t));
-    const tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
-    document.querySelectorAll(`.facet${side}`).forEach(n => put(n, 'fill', tone));
-  }
-  put($('farWall'), 'transform', `translate(${(-swayAngle).toFixed(1)} 0)`); // ?brass=back: the far wall slides against the sway
+  // the flat parts (lanterns.js FLAT), each facing some angle round the lantern, lit by how squarely they meet a light 40
+  // degrees to the left, as the lantern twists: one flat tone each, blended continuously along FACET_TONES,
+  // then lifted toward white (an edge) or black (a rim); put() skips any whose rounded colour hasn't changed
+  document.querySelectorAll('[data-facet]').forEach(n => {
+    // a sloping face (data-tilt, degrees up) takes the light, which sits a little above, by its tilt too
+    const { facet, lift, paint, tilt = '0' } = /** @type {SVGElement} */ (n).dataset, e = +tilt * Math.PI / 180;
+    const c = Math.cos((+facet + 40 - twist) * Math.PI / 180) * Math.cos(e) + Math.sin(e) * 0.5;
+    const t = Math.max(0, Math.min(1, (c - 0.2) / 0.8)) * 4, i = Math.min(3, Math.floor(t)), tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
+    put(n, paint || 'fill', +lift ? mix(tone, +lift > 0 ? '#ffffff' : '#000000', Math.abs(+lift)) : tone);
+  });
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
@@ -245,11 +252,6 @@ function lightPaper({ size, flick, pulse }) {
   put($('paperTint'), 'fill', pal('paper'));
   put($('paperTint'), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
   // where a lantern's caps face the paper, they catch the flame's light
-  // ?brass=back: the far wall's lit inside is its brass lifted two thirds of the way to the flame's colour, at two thirds the
-  // brightness; its solid structure catches a little more
-  const wall = mix(mix('#8A6A32', pal('paper'), 2 / 3), '#000000', 1 / 3);
-  document.querySelectorAll('.wallStop').forEach(n => put(n, 'stop-color', wall));
-  document.querySelectorAll('.farWall').forEach(n => put(n, 'fill', mix(wall, '#FFFFFF', 0.25)));
   document.querySelectorAll('.paperLit').forEach(n => { put(n, 'color', pal('paper')); put(n, 'opacity', ((0.35 + 0.55 * size) * flick * pulse).toFixed(3)); });
 }
 
@@ -297,6 +299,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
+    // ?brass=back: the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
+    // the way to the flame's colour at five sixths the brightness
+    farWall: style.farWall && fx('back') && !AMBIENT ? { shift: twist * 0.2, col: mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6) } : null,
     bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
 }
