@@ -96,17 +96,8 @@ const MOROCCAN_FX_DEFS = (fx('horizon') ? `<linearGradient id="horizon" gradient
   + (fx('glow') ? `<radialGradient id="bounce" class="paperLit" gradientUnits="userSpaceOnUse" cx="340" cy="372" r="64"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/>
     <stop offset=".6" stop-color="currentColor" stop-opacity=".2"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>` : '')
   + '';
-// ?brass=back's far wall, baked into one image (a live pattern under a clip cost 20 fps at 2560x1440 in WebKit): the inside of
-// the three far faces, lit warm by the flame, the middle one face-on and the two beside it at half width, inside the lantern's
-// outline. frame.js draws it a little smaller (further away) and slides it against the sway.
-const FAR_FACE = (x0, x1, squeeze) => `<g clip-path="url(#c)"><rect x="0" y="140" width="680" height="360" fill="url(#l)"
-  transform="translate(340 0) scale(${squeeze} 1) translate(-340 0)" clip-path="url(#s${x0})"/></g><clipPath id="s${x0}"><rect x="${x0 / squeeze + 340 - 340 / squeeze}" y="140" width="${(x1 - x0) / squeeze}" height="360"/></clipPath>`;
-const FAR_WALL = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="250 140 180 360" width="180" height="360">
-  <defs>${LACE_TILE('l', '#FFD890').replace('stroke-width="1.3"', 'stroke-width="2"')}<clipPath id="c">${MOROCCAN_SHAPE}</clipPath></defs>
-  ${FAR_FACE(250, 308.5, 0.5)}${FAR_FACE(308.5, 371.5, 1)}${FAR_FACE(371.5, 430, 0.5)}</svg>`);
-const MOROCCAN_DEFS = `${SHEENS}${MOROCCAN_FX_DEFS}${LACE_TILE('lace', '#fff')}
-  <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
-  <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
+// where each part's lace sits: inset from its edges, the side faces' own clips separate from the front ones
+const LACE_CLIPS = `  <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 244) scale(.4 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="bottomSide"><path d="${BOTTOM}" transform="translate(340 434) scale(.88 .8) translate(-340 -434)"/></clipPath>
   <clipPath id="bottomFront"><path d="${BOTTOM}" transform="translate(340 434) scale(.4 .8) translate(-340 -434)"/></clipPath>
@@ -114,12 +105,24 @@ const MOROCCAN_DEFS = `${SHEENS}${MOROCCAN_FX_DEFS}${LACE_TILE('lace', '#fff')}
   <clipPath id="skirtF"><path d="M312 416H368L358 425H322Z"/></clipPath>
   <clipPath id="shoulderL"><path d="M298 263L315 263L308 282L282 282Z"/></clipPath><clipPath id="shoulderR"><path d="M382 263L365 263L372 282L398 282Z"/></clipPath>
   <clipPath id="shoulderF"><path d="M320 263L360 263L367 282L313 282Z"/></clipPath>
-  <clipPath id="faceL"><path d="M281 294h24v110h-24Z"/></clipPath><clipPath id="faceR"><path d="M375 294h24v110h-24Z"/></clipPath><clipPath id="faceF"><path d="M313 294h54v110h-54Z"/></clipPath>
-  <mask id="cutouts" maskUnits="userSpaceOnUse" x="260" y="120" width="160" height="380"><rect x="260" y="120" width="160" height="380" fill="#fff"/>
+  <clipPath id="faceL"><path d="M281 294h24v110h-24Z"/></clipPath><clipPath id="faceR"><path d="M375 294h24v110h-24Z"/></clipPath><clipPath id="faceF"><path d="M313 294h54v110h-54Z"/></clipPath>`;
+// The pierced design as a mask (white keeps brass): each lace panel cut out whole and its lace laid back, and the frieze's windows.
+const CUTOUTS = id => `<mask id="${id}" maskUnits="userSpaceOnUse" x="260" y="120" width="160" height="380"><rect x="260" y="120" width="160" height="380" fill="#fff"/>
     ${LACE('domeSide', 0.55, 0.7)}${LACE('domeFront', 1, 0.7)}
     <path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/>
     ${LACE('shoulderL', 0.5, 0.8, -0.54, 272.5)}${LACE('shoulderR', 0.5, 0.8, 0.54, 272.5)}${LACE('shoulderF', 1, 0.8)}
-    ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}${LACE('skirtL', 0.5, 0.8, 1.15, 420.5)}${LACE('skirtR', 0.5, 0.8, -1.15, 420.5)}${LACE('skirtF', 1, 0.8)}${LACE('bottomSide', 0.55, 0.7)}${LACE('bottomFront', 1, 0.7)}</mask>`;
+    ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}${LACE('skirtL', 0.5, 0.8, 1.15, 420.5)}${LACE('skirtR', 0.5, 0.8, -1.15, 420.5)}${LACE('skirtF', 1, 0.8)}
+    ${LACE('bottomSide', 0.55, 0.7)}${LACE('bottomFront', 1, 0.7)}</mask>`;
+// ?brass=back's far wall, seen through the holes: its lit inside is the glow behind them (#mg, class wallStop: brass lifted
+// toward the flame's colour, frame.js lightPaper), and its solid structure (pillars, frame rims, rope and neck bands, the
+// frieze round its windows) is one path, lit brighter, at 0.92 width for distance, sliding against the sway. Its lace isn't
+// drawn: as a live pattern it cost 20 fps at 2560x1440 in WebKit, and as one baked bitmap 10.
+const FAR_WALL = `<g id="farWall"><path class="farWall" fill-rule="evenodd" transform="translate(340 0) scale(.92 1) translate(-340 0)" d="M275.5 290h3v118h-3ZM306.5 290h4v118h-4ZM369.5 290h4v118h-4ZM401.5 290h3v118h-3Z
+  M277 285h126v5h-126ZM277 408h126v5h-126ZM300 428h80v6h-80ZM280 293h126v1.2h-126ZM280 403.8h126v1.2h-126Z
+  M295 244h90v16h-90ZM299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/></g>`;
+const MOROCCAN_DEFS = `${SHEENS}${MOROCCAN_FX_DEFS}${LACE_TILE('lace', '#fff')}
+  <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="${fx('back') ? 'wallStop' : 'paperStop'}" offset="0" stop-opacity=".8"/><stop class="${fx('back') ? 'wallStop' : 'paperStop'}" offset="1" stop-opacity=".3"/></radialGradient>
+${LACE_CLIPS}${CUTOUTS('cutouts')}`;
 // Paper stretched over rib wires sinks in a little between them: its outline scallops in by `dip` between wires, and a flat
 // darker band runs through the middle of each gap. `half(y)` is the paper's half-width at height y, `ribs` the wire heights
 // from its top edge to its bottom edge, and `bow(y)` how far a wire's front arc bends there (its curve's control offset).
@@ -239,7 +242,7 @@ const STYLES = {
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
       <g fill="#24160A">${MOROCCAN_SHAPE}</g><g fill="url(#mg)">${MOROCCAN_SHAPE}</g>
-      ${fx('back') ? `<image id="farWall" href="${FAR_WALL}" x="250" y="140" width="180" height="360"/>` : ''}
+      ${fx('back') ? FAR_WALL : ''}
       <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
     front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>

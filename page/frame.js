@@ -192,8 +192,7 @@ function swingLantern(elapsed, s) {
     const tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
     document.querySelectorAll(`.facet${side}`).forEach(n => put(n, 'fill', tone));
   }
-  // ?brass=back: the far wall, 0.92 the size (further away), slides against the sway
-  put($('farWall'), 'transform', `translate(${(340 - swayAngle * 1.5).toFixed(1)} 320) scale(.92) translate(-340 -320)`);
+  put($('farWall'), 'transform', `translate(${(-swayAngle).toFixed(1)} 0)`); // ?brass=back: the far wall slides against the sway
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
@@ -246,6 +245,11 @@ function lightPaper({ size, flick, pulse }) {
   put($('paperTint'), 'fill', pal('paper'));
   put($('paperTint'), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
   // where a lantern's caps face the paper, they catch the flame's light
+  // ?brass=back: the far wall's lit inside is its brass lifted two thirds of the way to the flame's colour, at two thirds the
+  // brightness; its solid structure catches a little more
+  const wall = mix(mix('#8A6A32', pal('paper'), 2 / 3), '#000000', 1 / 3);
+  document.querySelectorAll('.wallStop').forEach(n => put(n, 'stop-color', wall));
+  document.querySelectorAll('.farWall').forEach(n => put(n, 'fill', mix(wall, '#FFFFFF', 0.25)));
   document.querySelectorAll('.paperLit').forEach(n => { put(n, 'color', pal('paper')); put(n, 'opacity', ((0.35 + 0.55 * size) * flick * pulse).toFixed(3)); });
 }
 
