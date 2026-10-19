@@ -149,7 +149,7 @@ const fly = (ctx, m, until, at = () => {}) => {
   for (let i = 0; i * 1000 / 60 <= until * 1000; i++) {
     const t = i / 60;
     at(t);
-    const before = ctx.sparks.length, aim = frameAt(ctx, m, first.at + i * 1000 / 60);
+    const before = ctx.sparks.length, aim = frameAt(ctx, m, first.at + 1 + i * 1000 / 60); // 1ms in: the start itself can round to just before
     frames.push({ t, scorch: m.scorch ? { ...m.scorch } : null, added: ctx.sparks.length - before, aim });
   }
   return frames;
