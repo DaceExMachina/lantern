@@ -168,8 +168,13 @@ function swingLantern(elapsed, s) {
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
   // SHEEN), and slides 14 units per degree around that, staying within 291 to 347; half-unit steps so put() skips frames that wouldn't show it
-  const sheen = `translate(${Math.round(swayAngle * 28) / 2 - 6} 0)`;
-  document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', sheen));
+  const dx = Math.round(swayAngle * 28) / 2 - 6;
+  document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', `translate(${dx} 0)`));
+  // a tapering part's band leans by k per unit of height, so it meets the middle (340, 15 right of the stops' 325) at the cone's tip
+  document.querySelectorAll('.taper').forEach(g => {
+    const { base, apex } = /** @type {SVGElement} */ (g).dataset, k = (15 - dx) / (+apex - +base);
+    put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(dx - k * +base).toFixed(2)} 0)`);
+  });
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail

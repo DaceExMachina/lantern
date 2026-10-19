@@ -27,12 +27,17 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 // narrow white peak glints as an edge passes under it. swingLantern slides them all with the sway (frame.js).
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
-const SHEENS = SHEEN('brassF', [[270, '#3A2710'], [296, '#6E4C1C'], [312, '#A87A30'], [320, '#E2B75E'], [325, '#FFF3CF'], [329, '#E8C06A'],
-  [338, '#B8893A'], [356, '#7A5420'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
-  + SHEEN('brassS', [[270, '#2E1F0C'], [284, '#6A4A1E'], [292, '#8C6828'], [302, '#5E4119'], [320, '#8A6428'], [325, '#C9A050'], [330, '#8A6428'],
+const SHEENS = SHEEN('brassF', [[270, '#33220D'], [296, '#5E4118'], [312, '#8A6428'], [318, '#B08840'], [325, '#CFA960'], [332, '#B08840'],
+  [340, '#94692C'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
+  + SHEEN('brassS', [[270, '#2A1C0A'], [284, '#5A3F1A'], [292, '#735624'], [302, '#4F3715'], [318, '#735224'], [325, '#A07E40'], [332, '#735224'],
   [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
-  + SHEEN('brassE', [[270, '#8A6428'], [310, '#C9A050'], [320, '#E8C46E'], [324, '#FFFBEA'], [326, '#FFFFFF'], [328, '#FFFBEA'], [332, '#E8C46E'],
-  [350, '#C9A050'], [372, '#8A6224'], [400, '#5A3A14'], [410, '#4A2E10']]);
+  + SHEEN('brassE', [[270, '#73532A'], [310, '#A07F40'], [318, '#B89650'], [324, '#D9BA78'], [326, '#E4C888'], [328, '#D9BA78'], [334, '#B89650'],
+  [350, '#9E7E40'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']])
+  // On the tapering parts the band leans in toward the narrow end, as it would on a cone: each part's faces and side faces get
+  // their own gradient (class taper) inheriting the stops by href, leaned each frame so the band runs from where it sits at the
+  // part's wide edge (`base`) to the middle at the cone's tip (`apex`, where its slope would meet the middle). frame.js sets it.
+  + [['dome', 244, 154], ['bottom', 434, 486], ['shoulder', 285, 197.5], ['skirt', 413, 454]].map(([id, base, apex]) => ['F', 'S'].map(k =>
+    `<linearGradient id="${id}${k}" class="taper" href="#brass${k}" data-base="${base}" data-apex="${apex}"/>`).join('')).join('');
 const BRASS = { front: 'url(#brassF)', side: 'url(#brassS)', lit: 'url(#brassE)', rim: 'url(#brassS)' };
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
@@ -193,10 +198,10 @@ const STYLES = {
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
       <path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>
       <g mask="url(#cutouts)">
-        <path d="${BOTTOM}" fill="${BRASS.side}"/><path d="${BOTTOM}" fill="${BRASS.front}" transform="${HALF_X}"/>
-        <path d="${DOME}" fill="${BRASS.side}"/><path d="${DOME}" fill="${BRASS.front}" transform="${HALF_X}"/>
+        <path d="${BOTTOM}" fill="url(#bottomS)"/><path d="${BOTTOM}" fill="url(#bottomF)" transform="${HALF_X}"/>
+        <path d="${DOME}" fill="url(#domeS)"/><path d="${DOME}" fill="url(#domeF)" transform="${HALF_X}"/>
         <path d="M295 244h90v16h-90Z" fill="${BRASS.side}"/><path d="M317.5 244h45v16h-45Z" fill="${BRASS.front}"/>
-        <path d="${SHOULDER}" fill="${BRASS.side}"/><path d="${SHOULDER_F}" fill="${BRASS.front}"/>
+        <path d="${SHOULDER}" fill="url(#shoulderS)"/><path d="${SHOULDER_F}" fill="url(#shoulderF)"/>
         <path d="M277 290h126v118h-126Z" fill="${BRASS.side}"/><path d="M308.5 290h63v118h-63Z" fill="${BRASS.front}"/>
       </g>
       <g fill="none" stroke-linejoin="round">
@@ -208,7 +213,7 @@ const STYLES = {
       </g>
       <path d="M306.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
       ${ROPE(285)}${ROPE(408)}
-      <g mask="url(#cutouts)"><path d="${SKIRT}" fill="${BRASS.side}"/><path d="${SKIRT_F}" fill="${BRASS.front}"/></g>
+      <g mask="url(#cutouts)"><path d="${SKIRT}" fill="url(#skirtS)"/><path d="${SKIRT_F}" fill="url(#skirtF)"/></g>
       <path d="M308.5 413L320 428M371.5 413L360 428" stroke="${BRASS.lit}" stroke-width="1.4"/>
       <path class="band" d="M300 428h80v6h-80Z" fill="${BRASS.side}"/><path d="M320 428h40v6h-40Z" fill="${BRASS.front}"/>
       <path d="M300 428.6h80M300 433.4h80" stroke="${BRASS.lit}" stroke-width="1.2"/>
