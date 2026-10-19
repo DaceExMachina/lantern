@@ -92,7 +92,7 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
     for (let i = 2; i + 5 < n.length; i += 6) for (let t = 0; t <= 1; t += 0.05) {
       const b = (p0, p1, p2, p3) => (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t * t * p2 + t ** 3 * p3;
       const x = fx + (b(n[i - 2], n[i], n[i + 2], n[i + 4]) - 340) * k, y = fy + (b(n[i - 1], n[i + 1], n[i + 3], n[i + 5]) - FLAME_BASE) * k;
-      flame.set(`${x.toFixed(1)},${y.toFixed(1)}`, [x, y]);
+      flame.set(`${Math.round(x)},${Math.round(y)}`, [x, y]); // one point a unit, enough to measure a 10-unit gap by
     }
   }
   const tongue = [...flame.values()];
