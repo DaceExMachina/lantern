@@ -34,9 +34,9 @@ let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
 // ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
 let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
-// takes to forget a push the wind holds, and how hard the wind's changes push it; and about how many seconds a gust of the
-// scene's wind lasts (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
-const SWAY = { period: 3.8, damping: 0.15, forget: 1, gain: 1.2, gust: 3 };
+// takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
+// scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
+const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
 // ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
 // and is kept in the URL).
@@ -79,7 +79,7 @@ if (Q.has('dev')) {
     ['damping', 0.05, 0.6, 0.01, 'How quickly the swinging dies down. Lower rocks longer'],
     ['forget', 0.3, 5, 0.1, 'How long a steady lean in the wind keeps pushing the lantern, in seconds. Longer makes it lean with the wind instead of swinging back'],
     ['gain', 0, 3, 0.05, 'How hard changes in the wind push the lantern'],
-    ['gust', 1, 8, 0.1, 'About how long each gust of wind lasts, in seconds. The dust, fireflies and moths feel it too']]) {
+    ['gust', 1, 8, 0.1, 'How long a gust of wind lasts on average, in seconds. Each one runs from half to one and a half times this. The dust, fireflies and moths feel it too']]) {
     const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
     r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
   }

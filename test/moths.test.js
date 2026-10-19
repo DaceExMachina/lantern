@@ -9,9 +9,11 @@ const vm = require('vm');
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
 for (const f of ['scene', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const mothMove = vm.runInContext('mothMove', page), GUST = vm.runInContext('GUST', page);
-// a moment the wind is still: it changes sign between 4.9s and 5s, so halve in on where
-let calm = 4.9;
-for (let hi = 5, i = 0; i < 40; i++) { const mid = (calm + hi) / 2; if (Math.sign(GUST(mid)) === Math.sign(GUST(calm))) calm = mid; else hi = mid; }
+// a moment the wind is still: the first time it changes sign, halved in on; and the first moment it blows about 1.6 to the right
+let calm = 0, hi = 0.05, windy = 0;
+while (Math.sign(GUST(hi)) === Math.sign(GUST(calm))) { calm = hi; hi += 0.05; }
+for (let i = 0; i < 40; i++) { const mid = (calm + hi) / 2; if (Math.sign(GUST(mid)) === Math.sign(GUST(calm))) calm = mid; else hi = mid; }
+while (!(GUST(windy) > 1.4 && GUST(windy) < 1.8)) windy += 0.05;
 
 test('a moth whose target jumps eases off from rest, then glides in without overshooting', () => {
   const m = { x: 0, y: 0, phase: 0 }, aim = { tx: 100, ty: 0, ease: 2.4, needsMe: false }, dt = 1 / 60;
@@ -27,7 +29,7 @@ test('a moth whose target jumps eases off from rest, then glides in without over
 });
 
 test('the wind pushes a flying moth a little downwind, never a landed one', () => {
-  const s = 16.7, gust = GUST(s), dt = 1 / 60; // GUST(16.7) is about 1.6: blowing to the right
+  const s = windy, gust = GUST(s), dt = 1 / 60; // about 1.6: blowing to the right
   const fly = (needsMe) => { const m = { x: 100, y: 0, phase: 0 }; for (let i = 0; i < 300; i++) mothMove(m, { tx: 100, ty: 0, ease: 2.4, needsMe }, dt, s); return m.x - 100; };
   assert.ok(gust > 1, `the test's moment is a real gust: ${gust}`);
   const pushed = fly(false);

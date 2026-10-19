@@ -36,13 +36,20 @@ function measureBands() {
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
 // One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
-// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds
-// (lanterns.js) a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
+// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds on
+// average (lanterns.js) a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
 // calmer spells, with a faster, fainter flutter on top. Pseudo-random from the clock alone, so every window and the
 // snapshots agree; scaled to the strength of the two steady sines it replaced (an RMS of about 1.17).
 const rnd = x => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
 const knot = i => { const u = 2 * rnd(i) - 1; return Math.sign(u) * Math.abs(u) ** 1.5; };
-const noise = x => { const i = Math.floor(x), f = x - i; return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f); };
+// the knots sit at whole numbers nudged up to a quarter either way, so a gust lasts half to one and a half times the average
+const knotAt = i => i + (rnd(i + 0.17) - 0.5) * 0.5;
+const noise = x => {
+  let i = Math.floor(x);
+  if (x < knotAt(i)) i--; else if (x >= knotAt(i + 1)) i++;
+  const f = (x - knotAt(i)) / (knotAt(i + 1) - knotAt(i));
+  return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f);
+};
 const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
 // heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
