@@ -47,7 +47,8 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, s) {
     f.a += f.w * dt;
     // the one a landed moth's thread is tied to (f.near) eases in to a small orbit near the cluster's middle, still moving
     f.k = (f.k ?? 1) + ((f.near ? 0.2 : 1) - (f.k ?? 1)) * Math.min(1, dt * 1.5);
-    const x = f.x = cx + Math.cos(f.a) * f.r * f.k + Math.sin(s * 0.9 + f.ph) * 6, y = f.y = cy + Math.sin(f.a) * f.r * f.k * 0.7 + Math.cos(s * 1.3 + f.ph) * 5;
+    // the wind carries it about half as far as the dust, each a moment ahead of the next (frame.js's GUST)
+    const x = f.x = cx + Math.cos(f.a) * f.r * f.k + Math.sin(s * 0.9 + f.ph) * 6 + GUST(s - 0.03 * f.ph) * 7, y = f.y = cy + Math.sin(f.a) * f.r * f.k * 0.7 + Math.cos(s * 1.3 + f.ph) * 5;
     const swell = fireflySwell(s, f.ph, f.need === 'failing' ? 2.6 : 1.1); // and the bloom widens as it swells
     addFlyLight(x, y, FIREFLY_BLOOM * (0.75 + 0.45 * swell), (0.6 + 0.4 * swell) * (1 - (f.gone || 0)), FLY[f.need] || FLY.quiet);
   }
