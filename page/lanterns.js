@@ -18,10 +18,60 @@ const FLAME = paper => `<g id="flame"><g id="fHalo" opacity="0.8">
   <g id="sparks"></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
 const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop class="paperStop" offset="0" stop-opacity=".9"/><stop class="paperStop" offset="1" stop-opacity="0"/></radialGradient></defs>`;
-// The Moroccan: satin brass in flat tones (the front faces lit, the side faces a step darker), pierced edge to edge with
-// arabesque lace. Its lace and openings are one mask (#cutouts): each panel is cut out whole, then a tile of scrolling
-// brass lace is laid back over it, squeezed sideways on the faces that turn away.
-const BRASS = { front: '#B8893A', side: '#86612A', lit: '#E0BC6A', rim: '#A47C38' };
+// The Moroccan: polished brass, pierced edge to edge with arabesque lace. Its lace and openings are one mask (#cutouts):
+// each panel is cut out whole, then a tile of scrolling brass lace is laid back over it, squeezed sideways on the faces
+// that turn away. Its flat faces and onion gores are lit by the angle they face (FLAT, GORES); the small round brass (chain,
+// finial, burner cup, tassel) by a warm highlight band shared by three gradients (class sheen, in the lantern's own units,
+// given as [x, colour]), which swingLantern slides with the lantern's twist (frame.js).
+const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
+  stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
+// The straight and sloping parts (body, frieze, rope and neck bands, shoulder, skirt) are flat polished brass: each face is
+// one flat tone from this ramp (dark to lit), chosen by how squarely it faces the light (frame.js), so the shine steps from
+// face to face as the lantern twists. The onion dome and drop keep their leaning gradients.
+const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
+// the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
+let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
+// ?dev: a small panel, top left, to tune the twist by eye (applies at once and is kept in the URL).
+if (Q.has('dev')) {
+  const panel = document.createElement('div'), query = (k, v) => {
+    const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
+  };
+  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 190px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
+    + 'border: 1px solid #4A3B68; border-radius: 10px; color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
+  // each row is one label, its click area the row's full width and height, meeting the next row's
+  const row = (text, attrs) => {
+    const label = document.createElement('label'), input = Object.assign(document.createElement('input'), attrs);
+    label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
+    label.append(...(attrs.type === 'range' ? [text, input] : [input, text])); panel.append(label);
+    return input;
+  };
+  const on = row('twist', { type: 'checkbox', checked: twistGain > 0 });
+  const gain = row('strength', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
+  gain.style.flex = '1';
+  on.onchange = gain.oninput = () => {
+    twistGain = on.checked ? +gain.value : 0;
+    history.replaceState(null, '', query('twist', twistGain === 3 ? null : String(twistGain)));
+  };
+  document.body.append(panel);
+}
+const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
+  + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
+  + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);
+// The onions' gores (left, front, right), each flat across and curved top to bottom: frame.js gives each stop of a gore's
+// gradient the tone of a flat face at that gore's angle, tilted as its profile is there, so the whole gore brightens and
+// dims with the twist. `profile` is how far the surface tilts up (degrees) at points from the base (0) to the tip (1): the
+// dome's bulge turning up to the light above its widest point and steepening again into the tip, the drop turning ever
+// further down. `left` and `right` are the side gores' halves of the outline; the front gore covers the middle.
+const GORES = { dome: { base: 244, tip: 154, profile: [[0, -25], [0.13, 0], [0.36, 30], [0.51, 45], [0.67, 22], [0.82, -5], [1, -35]],
+    left: 'M340 154L340 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z', right: 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L340 244Z' },
+  bottom: { base: 434, tip: 486, profile: [[0, 0], [0.2, -30], [0.5, -60], [0.75, -60], [1, -45]],
+    left: 'M302 434C301 452 314 462 326 470C334 475 338 480 340 486L340 434Z', right: 'M340 486C342 480 346 475 354 470C366 462 379 452 378 434L340 434Z' } };
+const GORE = (id, angle, part) => `<linearGradient id="${id}" class="gore" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${part.base}" y2="${part.tip}"
+  data-angle="${angle}">${part.profile.map(([o, e]) => `<stop offset="${o}" data-tilt="${e}"/>`).join('')}</linearGradient>`;
+const GORE_DEFS = Object.entries(GORES).map(([k, g]) => GORE(`gore-${k}-F`, 0, g) + GORE(`gore-${k}-L`, -60, g) + GORE(`gore-${k}-R`, 60, g)).join('');
+// an onion: its two side gores and its front gore (squeezed to half width, as the front segment of a six-sided shape is)
+const ONION_FILL = (k, d) => `<path d="${GORES[k].left}" fill="url(#gore-${k}-L)"/><path d="${GORES[k].right}" fill="url(#gore-${k}-R)"/><path d="${d}" fill="url(#gore-${k}-F)" transform="${HALF_X}"/>`;
+const BRASS = { front: 'url(#brassF)', side: 'url(#brassS)', lit: 'url(#brassE)', rim: 'url(#brassS)' };
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
 // underneath, a smaller inverted dome ending in a drop, so the lamp reads as hanging (and still top-heavy)
@@ -29,11 +79,27 @@ const BOTTOM = 'M302 434C301 452 314 462 326 470C334 475 338 480 340 486C342 480
 // between the body and that: a short pierced skirt sloping in and a neck band, shorter and simpler than the shoulder and frieze up
 // top. The whole lower part lets light through; only the burner cup under the flame shades the floor.
 const SKIRT = 'M277 413H403L380 428H300Z', SKIRT_F = 'M308.5 413H371.5L360 428H320Z';
+// a straight hexagonal panel `h` tall from y, `half` wide either side with its front face `front` either side; a `band`
+// one is also a solid band that throws a shadow (class band)
+// one `lift` lighter (or darker, below 0), as its edges are
+const PANEL = (half, front, y, h, band = false, lift = 0) => {
+  const r = (x0, x1, more) => `<path ${more} d="M${x0} ${y}H${x1}v${h}H${x0}Z"/>`;
+  return (band ? r(340 - half, 340 + half, 'class="band" fill="none"') : '')
+    + r(340 - half, 340 - front, FLAT(-60, lift)) + r(340 - front, 340 + front, FLAT(0, lift)) + r(340 + front, 340 + half, FLAT(60, lift));
+};
+// A flat part's paint: one tone by the angle round the lantern it faces and its `lift` (frame.js shades every [data-facet]
+// each frame). A sloping face (shoulder, skirt) also tilts up (or down, below 0) by `tilt` degrees.
+const FLAT = (angle, lift = 0, paint = 'fill', tilt = 0) => `data-facet="${angle}" data-lift="${lift}" data-paint="${paint}"${tilt ? ` data-tilt="${tilt}"` : ''}`;
+// The shoulder and skirt are flat-faced too (only the onion dome and drop are round): three sloping faces each, tilted up 36
+// degrees and down 57, and their corner edges. `faces` are [path, angle]; strokes are their corner edges, a little lit.
+const SLOPED = (faces, tilt, paint = 'fill') => faces.map(([d, a]) => `<path d="${d}" ${FLAT(a, paint === 'stroke' ? 0.15 : 0, paint, tilt)}/>`).join('');
 const HALF_X = 'translate(340 0) scale(.5 1) translate(-340 0)'; // the front segment of a six-sided shape spans half its width
 const SHOULDER = 'M295 260H385L403 285H277Z', SHOULDER_F = 'M317.5 260H362.5L371.5 285H308.5Z';
 const MOROCCAN_SHAPE = `<path d="${DOME}"/><path d="${BOTTOM}"/><path d="M295 244h90v16h-90Z${SHOULDER}M277 285h126v128h-126Z${SKIRT}M300 428h80v6h-80Z"/>`;
-const LACE = (clip, squeeze = 1, k = 1) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="420"/>
-  <rect x="0" y="0" width="680" height="800" fill="url(#lace)" transform="translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
+// A regular hexagon's side faces turn 60 degrees away, so their lace shows at half width (squeeze); a slanted one (on the
+// shoulder and skirt) is also sheared along its slope, `shear` units across per unit down, about height y0.
+const LACE = (clip, squeeze = 1, k = 1, shear = 0, y0 = 0) => `<g clip-path="url(#${clip})"><rect x="200" y="100" width="280" height="420"/>
+  <rect x="0" y="0" width="680" height="800" fill="url(#lace)" transform="matrix(1 0 ${shear} 1 ${-shear * y0} 0) translate(340 0) scale(${squeeze * k} ${k}) translate(-340 0)"/></g>`;
 // a rope-twist rim at height y, `half` wide either side, its front face `front` wide either side
 // The twist's stripes are spaced along the true way round the hexagon, so they carry on across each corner and crowd to half
 // spacing on the side faces, which turn away (half their width shows).
@@ -44,14 +110,20 @@ const ROPE = (y, half = 63, front = half / 2) => {
     const lo = Math.max(-end, u - 2.5), hi = Math.min(end, u); // each stripe leans 2.5 over the rim's 5
     twist += `M${(340 + at(lo)).toFixed(2)} ${y + 5 - (lo - u + 2.5) * 2}L${(340 + at(hi)).toFixed(2)} ${y + (u - hi) * 2}`;
   }
-  return `<path class="band" d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
-  <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="${twist}" stroke="#5A3A12" stroke-width="1"/>`;
+  return `${PANEL(half, front, y, 5, true)}<path d="${twist}" stroke="#4A3A16" stroke-width="1"/>`;
 };
-const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="#fff" stroke-width="1.3">
+const LACE_TILE = (id, stroke) => `<pattern id="${id}" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="${stroke}" stroke-width="1.3">
     <path d="M0 0C0 3 5 3 5 6C5 9 10 9 10 12M10 0C10 3 5 3 5 6C5 9 0 9 0 12"/><circle cx="0" cy="6" r="1.3"/><circle cx="10" cy="6" r="1.3"/>
-    <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>
-  <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
-  <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
+    <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>`;
+// The room reflected as a darker band across the body's middle, held level with the window (#horizon, frame.js), and the
+// flame's warm bounce on the lace nearest it (#bounce, class paperLit, so lightPaper colours and flickers it).
+const MOROCCAN_LIGHT_DEFS = `<linearGradient id="horizon" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="290" y2="408">
+    <stop offset="0" stop-color="#FFE0A0" stop-opacity=".04"/><stop offset=".38" stop-color="#140A02" stop-opacity=".2"/><stop offset=".5" stop-color="#140A02" stop-opacity=".25"/>
+    <stop offset=".62" stop-color="#140A02" stop-opacity=".2"/><stop offset="1" stop-color="#FFE0A0" stop-opacity=".04"/></linearGradient>
+  <radialGradient id="bounce" class="paperLit" gradientUnits="userSpaceOnUse" cx="340" cy="372" r="64"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/>
+    <stop offset=".6" stop-color="currentColor" stop-opacity=".2"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>`;
+// where each part's lace sits: inset from its edges, the side faces' own clips separate from the front ones
+const LACE_CLIPS = `  <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 244) scale(.4 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="bottomSide"><path d="${BOTTOM}" transform="translate(340 434) scale(.88 .8) translate(-340 -434)"/></clipPath>
   <clipPath id="bottomFront"><path d="${BOTTOM}" transform="translate(340 434) scale(.4 .8) translate(-340 -434)"/></clipPath>
@@ -59,12 +131,34 @@ const MOROCCAN_DEFS = `<pattern id="lace" width="10" height="12" patternUnits="u
   <clipPath id="skirtF"><path d="M312 416H368L358 425H322Z"/></clipPath>
   <clipPath id="shoulderL"><path d="M298 263L315 263L308 282L282 282Z"/></clipPath><clipPath id="shoulderR"><path d="M382 263L365 263L372 282L398 282Z"/></clipPath>
   <clipPath id="shoulderF"><path d="M320 263L360 263L367 282L313 282Z"/></clipPath>
-  <clipPath id="faceL"><path d="M281 294h24v110h-24Z"/></clipPath><clipPath id="faceR"><path d="M375 294h24v110h-24Z"/></clipPath><clipPath id="faceF"><path d="M313 294h54v110h-54Z"/></clipPath>
-  <mask id="cutouts" maskUnits="userSpaceOnUse" x="260" y="120" width="160" height="380"><rect x="260" y="120" width="160" height="380" fill="#fff"/>
-    ${LACE('domeSide', 0.55, 0.7)}${LACE('domeFront', 1, 0.7)}
-    <path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/>
-    ${LACE('shoulderL', 0.5, 0.8)}${LACE('shoulderR', 0.5, 0.8)}${LACE('shoulderF', 1, 0.8)}
-    ${LACE('faceL', 0.5)}${LACE('faceR', 0.5)}${LACE('faceF')}${LACE('skirtL', 0.5, 0.8)}${LACE('skirtR', 0.5, 0.8)}${LACE('skirtF', 1, 0.8)}${LACE('bottomSide', 0.55, 0.7)}${LACE('bottomFront', 1, 0.7)}</mask>`;
+  <clipPath id="faceL"><path d="M281 294h24v110h-24Z"/></clipPath><clipPath id="faceR"><path d="M375 294h24v110h-24Z"/></clipPath><clipPath id="faceF"><path d="M313 294h54v110h-54Z"/></clipPath>`;
+// The pierced design as a mask (white keeps brass): each lace panel cut out whole and its lace laid back, and the frieze's
+// windows; `k` scales the lace and windows (the far wall's, further away).
+const CUTOUTS = (id, k = 1) => `<mask id="${id}" maskUnits="userSpaceOnUse" x="260" y="120" width="160" height="380"><rect x="260" y="120" width="160" height="380" fill="#fff"/>
+    ${LACE('domeSide', 0.55, 0.7 * k)}${LACE('domeFront', 1, 0.7 * k)}
+    <path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z" transform="translate(340 252) scale(${k}) translate(-340 -252)"/>
+    ${LACE('shoulderL', 0.5, 0.8 * k, -0.54, 272.5)}${LACE('shoulderR', 0.5, 0.8 * k, 0.54, 272.5)}${LACE('shoulderF', 1, 0.8 * k)}
+    ${LACE('faceL', 0.5, k)}${LACE('faceR', 0.5, k)}${LACE('faceF', 1, k)}${LACE('skirtL', 0.5, 0.8 * k, 1.15, 420.5)}${LACE('skirtR', 0.5, 0.8 * k, -1.15, 420.5)}${LACE('skirtF', 1, 0.8 * k)}
+    ${LACE('bottomSide', 0.55, 0.7 * k)}${LACE('bottomFront', 1, 0.7 * k)}</mask>`;
+// The far wall, drawn by the background's WebGL under the SVG (background.js drawFarWall), baked here once into a
+// texture: red its brass, the same pierced design part for part (the same cutouts: windows under the frieze, lace elsewhere,
+// side faces foreshortened) at 0.92 scale for distance, green the lantern's outline it stays inside. 4 texels a unit.
+const FAR_WALL_SVG = (fill, k) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="250 140 180 360" width="720" height="1440">
+  <defs>${LACE_TILE('lace', '#fff')}${LACE_CLIPS}${CUTOUTS('cutouts', k)}</defs><g fill="${fill}"${k ? ' mask="url(#cutouts)"' : ''}>${MOROCCAN_SHAPE}</g></svg>`);
+function bakeFarWall() {
+  if (!style.farWall || farWallTex) return;
+  const c = document.createElement('canvas'), g = c.getContext('2d'), brass = new Image(), outline = new Image();
+  c.width = 720; c.height = 1440;
+  let n = 0;
+  brass.onload = outline.onload = () => {
+    if (++n < 2 || !g) return;
+    g.drawImage(brass, 0, 0); g.globalCompositeOperation = 'lighter'; g.drawImage(outline, 0, 0);
+    setFarWall(c);
+  };
+  brass.src = FAR_WALL_SVG('#f00', 0.92); outline.src = FAR_WALL_SVG('#0f0', 0);
+}
+const MOROCCAN_DEFS = `${SHEENS}${GORE_DEFS}${MOROCCAN_LIGHT_DEFS}${LACE_TILE('lace', '#fff')}
+${LACE_CLIPS}${CUTOUTS('cutouts')}`;
 // Paper stretched over rib wires sinks in a little between them: its outline scallops in by `dip` between wires, and a flat
 // darker band runs through the middle of each gap. `half(y)` is the paper's half-width at height y, `ribs` the wire heights
 // from its top edge to its bottom edge, and `bow(y)` how far a wire's front arc bends there (its curve's control offset).
@@ -126,6 +220,14 @@ const DRUM = (kit, y, half, height, paper = 0) => {
     + `<path d="${band(y, bottom)}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`
     + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
 };
+// a hairline bevel catching the light along the top and left of each frame, pillar and band
+const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
+  M306.9 290v118M369.9 290v118M275.9 290v118M277 285.4h126M277 408.4h126M277 413.4h126M300 428.3h80M295 244.4h90"/></g>`;
+// a darker, dulled gold, with a hint of green, in the recesses (inside the frames, under the bands, round the frieze windows),
+// and rivets at the frame corners sunk in a ring of it
+const MOROCCAN_PATINA = `<g fill="none" stroke="#4A3B18" stroke-opacity=".6"><path d="M314 295h52v108h-52ZM282 295h22v108h-22ZM376 295h22v108h-22Z" stroke-width="1.4"/>
+  <path d="M277 290.8h126M277 407.2h126M277 414h126" stroke-width="1.2"/><path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/></g>
+  ${[312.5, 367.5, 280.5, 305.5, 374.5, 399.5].flatMap(x => [293.5, 404.5].map(y => `<circle cx="${x}" cy="${y}" r="1.9" fill="#4A3B18" opacity=".5"/><circle cx="${x}" cy="${y}" r="1" fill="${BRASS.lit}"/>`)).join('')}`;
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
@@ -168,39 +270,45 @@ const STYLES = {
         <path d="M93.3 199.4L91.4 210.8Q95 212.6 98.6 210.8L96.7 199.4Z" fill="none" stroke="#6E4A1C" stroke-width="0.35" stroke-linejoin="round"/></g>`, 18),
   },
   moroccan: {
-    chain: 123, // its chain of links runs from here up past the top of the window (see drawHang)
+    chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, tassel: [340, 486],
     holder: [404, 6], // the burner cup under the flame: its bottom and half-width; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
-      <g fill="#24160A">${MOROCCAN_SHAPE}</g><g fill="url(#mg)">${MOROCCAN_SHAPE}</g>
+<!-- its inside is the far wall, drawn by the background (bakeFarWall) -->
+      
       <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
-    front: `<circle cx="340" cy="132" r="4" fill="none" stroke="#D9B464" stroke-width="1.8"/>
-      <path d="M338.6 136h2.8v20h-2.8Z" fill="#B8893A"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="#D9B464"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="#B8893A"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="#D9B464"/>
+    front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
+      <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
       <path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>
       <g mask="url(#cutouts)">
-        <path d="${BOTTOM}" fill="${BRASS.side}"/><path d="${BOTTOM}" fill="${BRASS.front}" transform="${HALF_X}"/>
-        <path d="${DOME}" fill="${BRASS.side}"/><path d="${DOME}" fill="${BRASS.front}" transform="${HALF_X}"/>
-        <path d="M295 244h90v16h-90Z" fill="${BRASS.side}"/><path d="M317.5 244h45v16h-45Z" fill="${BRASS.front}"/>
-        <path d="${SHOULDER}" fill="${BRASS.side}"/><path d="${SHOULDER_F}" fill="${BRASS.front}"/>
-        <path d="M277 290h126v118h-126Z" fill="${BRASS.side}"/><path d="M308.5 290h63v118h-63Z" fill="${BRASS.front}"/>
+        ${ONION_FILL('bottom', BOTTOM)}
+        ${ONION_FILL('dome', DOME)}
+        ${PANEL(45, 22.5, 244, 16)}
+        ${SLOPED([['M295 260H317.5L308.5 285H277Z', -60], [SHOULDER_F, 0], ['M362.5 260H385L403 285H371.5Z', 60]], 36)}
+        ${PANEL(63, 31.5, 290, 118)}
+        <path d="M277 290h126v118h-126Z" fill="url(#horizon)"/><path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>
       </g>
       <g fill="none" stroke-linejoin="round">
-        <path d="${DOME}" stroke="${BRASS.rim}" stroke-width="2"/><path d="${DOME}" stroke="${BRASS.lit}" stroke-width="2.6" transform="${HALF_X}"/>
-        <path d="M317.5 244v16M362.5 244v16" stroke="${BRASS.lit}" stroke-width="1.6"/>
-        <path d="${BOTTOM}" stroke="${BRASS.rim}" stroke-width="1.6"/><path d="${BOTTOM}" stroke="${BRASS.lit}" stroke-width="2" transform="${HALF_X}"/>
-        <path d="M317.5 260L308.5 285M362.5 260L371.5 285M295 260L277 285M385 260L403 285" stroke="${BRASS.lit}" stroke-width="1.6"/>
-        <path d="M312.5 293.5h55v111h-55ZM280.5 293.5h25v111h-25ZM374.5 293.5h25v111h-25Z" stroke="${BRASS.rim}" stroke-width="1.2"/>
+        <path d="${DOME}" stroke="url(#gore-dome-F)" stroke-width="2"/><path d="${DOME}" stroke="url(#gore-dome-F)" stroke-width="2.6" transform="${HALF_X}"/>
+        <path d="M317.5 244v16" ${FLAT(-30, 0.15, 'stroke')} stroke-width="1.6"/><path d="M362.5 244v16" ${FLAT(30, 0.15, 'stroke')} stroke-width="1.6"/>
+        <path d="${BOTTOM}" stroke="url(#gore-bottom-F)" stroke-width="1.6"/><path d="${BOTTOM}" stroke="url(#gore-bottom-F)" stroke-width="2" transform="${HALF_X}"/>
+        <g stroke-width="1.6">${SLOPED([['M317.5 260L308.5 285', -30], ['M362.5 260L371.5 285', 30], ['M295 260L277 285', -90], ['M385 260L403 285', 90]], 36, 'stroke')}</g>
+        <path d="M312.5 293.5h55v111h-55Z" ${FLAT(0, -0.25, 'stroke')} stroke-width="1.2"/><path d="M280.5 293.5h25v111h-25Z" ${FLAT(-60, -0.25, 'stroke')} stroke-width="1.2"/>
+        <path d="M374.5 293.5h25v111h-25Z" ${FLAT(60, -0.25, 'stroke')} stroke-width="1.2"/>
       </g>
-      <path d="M306.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
+      <path d="M306.5 290h4v118h-4Z" ${FLAT(-30, 0.15)}/><path d="M369.5 290h4v118h-4Z" ${FLAT(30, 0.15)}/>
+      <path d="M275.5 290h3v118h-3Z" ${FLAT(-90)}/><path d="M401.5 290h3v118h-3Z" ${FLAT(90)}/>
+      <path d="M306.5 290h4v118h-4ZM369.5 290h4v118h-4ZM275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="url(#horizon)"/>
       ${ROPE(285)}${ROPE(408)}
-      <g mask="url(#cutouts)"><path d="${SKIRT}" fill="${BRASS.side}"/><path d="${SKIRT_F}" fill="${BRASS.front}"/></g>
-      <path d="M308.5 413L320 428M371.5 413L360 428" stroke="${BRASS.lit}" stroke-width="1.4"/>
-      <path class="band" d="M300 428h80v6h-80Z" fill="${BRASS.side}"/><path d="M320 428h40v6h-40Z" fill="${BRASS.front}"/>
-      <path d="M300 428.6h80M300 433.4h80" stroke="${BRASS.lit}" stroke-width="1.2"/>
-      <path class="band" d="M295 243.2h90v2.6h-90Z" fill="${BRASS.lit}"/><path class="band" d="M295 258.2h90v2.6h-90Z" fill="${BRASS.lit}"/>
+      <g mask="url(#cutouts)">${SLOPED([['M277 413H308.5L320 428H300Z', -60], [SKIRT_F, 0], ['M371.5 413H403L380 428H360Z', 60]], -57)}</g>
+      <g stroke-width="1.4">${SLOPED([['M308.5 413L320 428', -30], ['M371.5 413L360 428', 30]], -57, 'stroke')}</g>
+      ${PANEL(40, 20, 428, 6, true)}
+      ${PANEL(40, 20, 428, 1.2, false, 0.2)}${PANEL(40, 20, 432.8, 1.2, false, 0.2)}
+      ${PANEL(45, 22.5, 243.2, 2.6, true, 0.2)}${PANEL(45, 22.5, 258.2, 2.6, true, 0.2)}
+      ${MOROCCAN_PATINA}${MOROCCAN_EDGES}
       <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
@@ -231,10 +339,11 @@ function drawHang() {
 function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
-  $('lantern').innerHTML = (style.chain ? '<g id="hang" fill="none" stroke="#B8873A" stroke-width="1.4"></g>' : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
+  $('lantern').innerHTML = (style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>` : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
     + `<g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>`
     + style.front;
   drawHang();
+  bakeFarWall();
   // only a paper lantern has paper to print on and shows session text; elsewhere the toggle stays put but can't be used
   const text = $('textToggle');
   if (text) {

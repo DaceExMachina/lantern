@@ -202,6 +202,43 @@ function setLight(u, v) {
   if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
 }
 
+// ---- the Moroccan's far wall ------------------------------------------------------------------------------------------
+// The inside of the pierced lantern's far wall, seen through its front holes. It lives here, not in the SVG, because this
+// canvas is drawn under the SVG: the front lace's real holes reveal it for next to nothing, where the SVG drawing it cost
+// 10 to 20 fps at 2560x1440 in WebKit. lanterns.js bakes the wall once into a texture (red: its brass, green: the
+// lantern's outline, in the lantern's own units over x 250-430, y 140-500); each frame this draws that rectangle turned
+// with the sway about the lantern's pivot, its brass slid against the sway (shift, in units) and lit by the flame (col,
+// brightest round the flame at 348), kept inside the outline.
+const FAR_WALL = program(`attribute vec2 a; uniform vec4 uBox; uniform vec2 uRes, uPivot; uniform float uSway; varying vec2 vUv, vP;
+void main() {
+  vUv = a; vP = vec2(250.0, 140.0) + a * vec2(180.0, 360.0);
+  vec2 d = vP - uPivot, q = uPivot + vec2(cos(uSway) * d.x - sin(uSway) * d.y, sin(uSway) * d.x + cos(uSway) * d.y);
+  vec2 c = (q - uBox.xy) / uBox.zw; gl_Position = vec4(c.x * 2.0 - 1.0, 1.0 - c.y * 2.0, 0.0, 1.0);
+}`, `precision mediump float; uniform sampler2D uTex; uniform float uShift; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
+void main() {
+  float brass = texture2D(uTex, vUv + vec2(uShift / 180.0, 0.0)).r * texture2D(uTex, vUv).g;
+  gl_FragColor = vec4(mix(uDark, uCol, mix(0.8, 0.3, clamp(length(vP - vec2(340.0, 348.0)) / 160.0, 0.0, 1.0))), brass);
+}`);
+const farWallQuad = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, farWallQuad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
+let farWallTex = /** @type {WebGLTexture | null} */ (null);
+function setFarWall(/** @type {HTMLCanvasElement} */ canvas) {
+  farWallTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, farWallTex);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+}
+function drawFarWall({ shift, col }, w, h, box) {
+  if (!farWallTex) return;
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(FAR_WALL.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, farWallQuad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, farWallTex);
+  const u = FAR_WALL.u;
+  gl.uniform1i(u.uTex, 0); gl.uniform4f(u.uBox, ...box); gl.uniform2f(u.uRes, w, h); gl.uniform2f(u.uPivot, 340, VIEW.top);
+  gl.uniform1f(u.uSway, swayAngle * Math.PI / 180); gl.uniform1f(u.uShift, shift); gl.uniform3fv(u.uCol, rgb(col)); gl.uniform3fv(u.uDark, rgb('#24160A'));
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
 function drawBackground(v) {
   if (!VIEW.box) return; // not laid out yet
   const c = $('bg'), [x, y, w, h] = VIEW.box;
@@ -230,6 +267,7 @@ function drawBackground(v) {
   gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
   if (flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
   flyLightN = 0;
+  if (v.farWall) drawFarWall(v.farWall, c.width, c.height, [x, y, w, h]);
   // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up
   if (!gl.isContextLost()) window.lanternFrames = (window.lanternFrames || 0) + 1;
 }
