@@ -162,9 +162,17 @@ function rot(px, py) {
 }
 // Sway on the string, pushed by the wind (GUST) a moment after it blows, with its tassel, ribbon or knot trailing. It
 // swings from the top of the window, with the angle scaled so the lantern moves sideways as much as it did hung at y=20.
+// ?pendulum=1 swings it as a damped pendulum the wind pushes instead, so it lags, overshoots a little and settles on its
+// own (about a 4.4s swing, damped 0.35; 0.83 keeps today's amplitude at the main gust).
+const PENDULUM = Q.has('pendulum'), swing = { a: NaN, v: 0 };
 function swingLantern(elapsed, s) {
   const top = VIEW.top, sl = s - LAG;
-  swayAngle = -GUST(sl) * 310 / (330 - top);
+  if (PENDULUM) {
+    const push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
+    if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
+    swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
+    swayAngle = swing.a;
+  } else swayAngle = -GUST(sl) * 310 / (330 - top);
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
@@ -232,16 +240,20 @@ function drawLight(dt, s, { size, flick, pulse }) {
   // slow cycle (about 40 seconds) and now and then fades out and back over a few seconds, so its brightness mostly
   // changes as it drifts through light and shadow, not from twinkling
   const fadeOut = (t, ph) => 1 - Math.max(0, Math.sin(t + ph)) ** 6;
+  // The wind carries each speck sideways, at once and further than the lantern swings: the lighter the speck, the further
+  // and the sooner (a heavy one lags a fifth of a second), with a little lift and swirl of its own. It's an offset on the
+  // orbit, so they flow with a gust and drift back as it eases.
+  const blow = (p, k) => { const g = GUST(s - 0.12 * p.r) * k / p.r; return [g, -Math.abs(g) * 0.15 + g * 0.2 * Math.sin(s * 0.9 + p.ph)]; };
   dust.forEach((p, i) => {
     p.a += p.w * dt;
-    const d = p.d + Math.sin(s * 0.3 + p.ph) * 18;
-    dustData.set([gx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
+    const d = p.d + Math.sin(s * 0.3 + p.ph) * 18, [wx, wy] = blow(p, 14);
+    dustData.set([gx + wx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + wy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
       (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph))], i * 4); // no fading with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
-    const d = p.d + Math.sin(s * 0.25 + p.ph) * 22;
-    dustData.set([CX + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + Math.cos(s * 0.45 + p.ph) * 10, p.r,
+    const d = p.d + Math.sin(s * 0.25 + p.ph) * 22, [wx, wy] = blow(p, 16);
+    dustData.set([CX + wx + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + wy + Math.cos(s * 0.45 + p.ph) * 10, p.r,
       (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (dust.length + i) * 4);
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
