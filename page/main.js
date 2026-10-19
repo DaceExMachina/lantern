@@ -99,7 +99,16 @@ setInterval(lanternTick, 16);
 
 setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
-$('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) hovered.zone.dispatchEvent(new MouseEvent('click')); });
+$('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) clickZone(hovered.zone); });
+// every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt)
+const zoneFor = (/** @type {MouseEvent} */ e) => {
+  const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('zones').getScreenCTM().inverse());
+  return zoneAt([...$('zones').children].filter(z => z instanceof SVGElement && z.style.display !== 'none' && z.style.pointerEvents !== 'none'), p.x, p.y);
+};
+for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => enterZone(zoneFor(e)));
+$('zones').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 700); });
+$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) clickZone(z); });
+$('zones').addEventListener('contextmenu', e => { const menu = areas.get(zoneFor(e))?.menu; if (menu) { e.preventDefault(); menu(); } });
 $('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 400); });
 
 try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
