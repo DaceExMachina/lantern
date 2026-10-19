@@ -20,9 +20,12 @@ for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase
   const a = {};
   els[id] = { getAttribute: k => a[k] ?? null, setAttribute: (k, v) => { a[k] = v; } };
 }
+els.fCore.getBBox = () => ({ x: 333, y: 352, width: 14, height: 30 }); // drawLight's flame core, somewhere in the tongue
 const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
 // a plain window, no query string; the Moroccan's far wall counts as baked already (background.js isn't loaded)
-const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {} });
+// background.js isn't loaded: drawBackground only records what drawLight gives it, and there's no dust
+const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {},
+  drawBackground: v => { page.background = v; }, dust: [], farDust: [], dustData: { set() {} } });
 for (const f of ['scene', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
@@ -121,6 +124,22 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
   assert.strictEqual(c.caps, undefined, 'no caps: nothing above the flame');
   assert.strictEqual(c.dim, undefined, 'the flame is bare');
   assert.ok(!/class="band"/.test(c.back + c.front), 'no solid bands');
+});
+
+test('each fan of shade starts at the edge that throws it, not at the light', () => {
+  for (const key of styles) {
+    run(`applyStyle('${key}'); swingLantern(1 / 60, 0.5)`);
+    run(`drawLight(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 })`);
+    // measured along the lantern's own axis, which the shader turns with its sway
+    const c = run(`STYLES.${key}`), y = c.light[1], from = page.background.capFrom;
+    if (c.caps) {
+      assert.ok(Math.abs(y - from[0] - c.caps[0]) < 1e-9, `${key}: the fan above starts at its top cap, ${c.caps[0]}, not ${y - from[0]}`);
+      assert.ok(Math.abs(y + from[1] - c.caps[1]) < 1e-9, `${key}: the fan below starts at its bottom cap, ${c.caps[1]}, not ${y + from[1]}`);
+    } else if (c.holder) {
+      assert.strictEqual(from[0], 0, `${key}: no fan above`);
+      assert.ok(Math.abs(y + from[1] - c.holder[0]) < 1e-9, `${key}: the fan below starts at its holder's edge, ${c.holder[0]}, not ${y + from[1]}`);
+    }
+  }
 });
 
 // The pillar's numbers, changed to untidy ones in a copy of lanterns.js, and the wax drawn there.

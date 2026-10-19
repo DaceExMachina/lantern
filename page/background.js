@@ -27,7 +27,7 @@ const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and ag
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.
 const LIGHT = `
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
-uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
+uniform vec2 uLightC, uCaps, uCapFrom; uniform float uLightScale, uLightR, uSway;
 uniform vec2 uGlowC; uniform float uGlowR;
 uniform vec3 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lantern's solid bands: each one's slope from the flame, and its spread
@@ -68,10 +68,12 @@ float light(vec2 p) {
     lit *= 1.0 - mix(shade, spike, close);
   }
   // the solid caps of a paper lantern: no light leaves through its top or bottom, so above and below it a fan stays
-  // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway
+  // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway.
+  // Each fan starts at its cap's edge (uCapFrom, above and below the light), where the light is first cut off.
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
-  float open = 1.0 - CAPS * step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope); // no cap, no fan
+  float past = step(lq.y < 0.0 ? uCapFrom.x : uCapFrom.y, abs(lq.y));
+  float open = 1.0 - CAPS * step(0.001, capR) * past * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
   // strongest and narrowest beside the lantern, spreading wider and fading out further away (like a moth's, by distance)
   vec2 bq = p - uBandO;
@@ -199,7 +201,7 @@ function setLight(u, v) {
   gl.uniform1f(u.uDebug, DUST_DEBUG); gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uLightR, v.lightR);
-  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
+  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform2f(u.uCapFrom, ...v.capFrom); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
   gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
 }

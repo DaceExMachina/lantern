@@ -302,6 +302,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
+    // how far above and below the light each fan starts: at the edge that throws it
+    capFrom: style.caps ? [style.light[1] - style.caps[0], style.caps[1] - style.light[1]] : style.holder ? [0, style.holder[0] - style.light[1]] : [0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
