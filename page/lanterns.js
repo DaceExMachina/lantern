@@ -34,41 +34,53 @@ let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
 // ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
 let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
-// takes to forget a push the wind holds, and how hard the wind's changes push it (?period=, ?damping=, ?forget=, ?gain=)
-const SWAY = { period: 3.8, damping: 0.15, forget: 1, gain: 1.2 };
+// takes to forget a push the wind holds, and how hard the wind's changes push it; and about how many seconds a gust of the
+// scene's wind lasts (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
+const SWAY = { period: 3.8, damping: 0.15, forget: 1, gain: 1.2, gust: 3 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
-// ?dev: a small panel, top left, to tune the twist and the swing, and fake the flame, by eye (applies at once
+// ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
 // and is kept in the URL).
 if (Q.has('dev')) {
   const panel = document.createElement('div'), query = (k, v) => {
     const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
   };
-  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 190px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
+  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 240px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
     + 'border: 1px solid #4A3B68; border-radius: 10px; color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
-  // each row is one label, its click area the row's full width and height, meeting the next row's
-  const row = (text, attrs) => {
+  // each row is one label, its click area the row's full width and height, meeting the next row's; hovering anywhere on it
+  // shows what it does, and a slider shows its value after it
+  const row = (text, title, attrs) => {
     const label = document.createElement('label'), input = Object.assign(document.createElement('input'), attrs);
     label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
-    label.append(...(attrs.type === 'range' ? [text, input] : [input, text])); panel.append(label);
+    label.title = title;
+    if (attrs.type === 'range') {
+      const value = document.createElement('span');
+      value.style.cssText = 'min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums';
+      const show = () => { value.textContent = input.value; };
+      input.style.flex = '1'; input.addEventListener('input', show); show();
+      label.append(text, input, value);
+    } else label.append(input, text);
+    panel.append(label);
     return input;
   };
-  const on = row('twist', { type: 'checkbox', checked: twistGain > 0 });
-  const gain = row('strength', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
-  gain.style.flex = '1';
+  const on = row('twist', 'Turn the brass to and from the light as the lantern swings', { type: 'checkbox', checked: twistGain > 0 });
+  const gain = row('strength', 'How far the brass turns with the swing. Higher makes its shine move more', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
   on.onchange = gain.oninput = () => {
     twistGain = on.checked ? +gain.value : 0;
     history.replaceState(null, '', query('twist', twistGain === 3 ? null : String(twistGain)));
   };
-  const fake = row('fake flame', { type: 'checkbox', checked: fakeFlame !== null });
-  const bright = row('brightness', { type: 'range', min: 0, max: 1, step: 0.05, value: fakeFlame ?? 1 });
-  bright.style.flex = '1';
+  const fake = row('fake flame', 'Hold the flame at a set brightness, whatever your sessions are doing', { type: 'checkbox', checked: fakeFlame !== null });
+  const bright = row('brightness', 'How bright the fake flame burns, from an idle ember to five sessions working', { type: 'range', min: 0, max: 1, step: 0.05, value: fakeFlame ?? 1 });
   fake.onchange = bright.oninput = () => {
     fakeFlame = fake.checked ? +bright.value : null;
     history.replaceState(null, '', query('flame', fakeFlame === null ? null : String(fakeFlame)));
   };
-  for (const [k, min, max, step] of [['period', 2, 8, 0.1], ['damping', 0.05, 0.6, 0.01], ['forget', 0.3, 5, 0.1], ['gain', 0, 3, 0.05]]) {
-    const r = row(k, { type: 'range', min, max, step, value: sway[k] });
-    r.style.flex = '1';
+  for (const [k, min, max, step, title] of [
+    ['period', 2, 8, 0.1, 'How long one full swing of the lantern takes, in seconds'],
+    ['damping', 0.05, 0.6, 0.01, 'How quickly the swinging dies down. Lower rocks longer'],
+    ['forget', 0.3, 5, 0.1, 'How long a steady lean in the wind keeps pushing the lantern, in seconds. Longer makes it lean with the wind instead of swinging back'],
+    ['gain', 0, 3, 0.05, 'How hard changes in the wind push the lantern'],
+    ['gust', 1, 8, 0.1, 'About how long each gust of wind lasts, in seconds. The dust, fireflies and moths feel it too']]) {
+    const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
     r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
   }
   document.body.append(panel);

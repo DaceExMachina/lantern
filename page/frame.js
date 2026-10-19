@@ -36,8 +36,14 @@ function measureBands() {
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
 // One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
-// with it a moment later (its tassel and knot tail LAG seconds behind).
-const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
+// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds
+// (lanterns.js) a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
+// calmer spells, with a faster, fainter flutter on top. Pseudo-random from the clock alone, so every window and the
+// snapshots agree; scaled to the strength of the two steady sines it replaced (an RMS of about 1.17).
+const rnd = x => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+const knot = i => { const u = 2 * rnd(i) - 1; return Math.sign(u) * Math.abs(u) ** 1.5; };
+const noise = x => { const i = Math.floor(x), f = x - i; return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f); };
+const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
 // heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
 // short as a frame can be (two timers firing together) turned the constraint fix-ups into huge speeds and flung it about.
