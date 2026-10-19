@@ -6,8 +6,9 @@
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
-// for a lantern that holds some back (pierced brass), and `holder` is what its flame stands in (a burner cup, a candle's
-// rim): its bottom and half-width. `stands` is a lantern on its own foot: it doesn't sway and has nothing to hang from.
+// for a lantern that holds some back (pierced brass). `holder` is the height and half-width of the edge below its flame
+// that bounds its light (a burner cup's bottom, a candle's rim). `stands` is a lantern on its own foot, which doesn't sway
+// and has nothing to hang from.
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
@@ -222,8 +223,8 @@ const DRUM = (kit, y, half, height, paper = 0) => {
     + `<path d="${band(y, bottom)}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`
     + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
 };
-// The pillar candle: an ivory pillar on a bronze altar candlestick wound with a grapevine. It stands on its own foot
-// instead of hanging (style.stands), and is drawn seen from its light's height with the barrel's rule: an edge d below
+// The pillar candle is an ivory pillar on a bronze altar candlestick wound with a grapevine. It stands on its own foot
+// instead of hanging (style.stands), and is drawn seen from its light's height by the barrel's rule. An edge d below
 // that sags d / 1350 of its half-width at the front, so the rim, just under the flame, is edge-on and the drip pan and
 // foot are seen from above. The pillar's numbers place the flame, the light, the shade and the wax moths land on: its
 // middle, half-width, crown (the rim, at its mean height), bottom (hidden in the pan), the pan's rim, and the eye.
@@ -248,8 +249,8 @@ const CANDLE = (() => {
   const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#D2A55A', n = v => +v.toFixed(2), pt = ([x, y]) => `${n(x)} ${n(y)}`;
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
   const WAX = ['#EADBC0', '#CDB894'], DRIP = { lit: ['#F2E6CF', '#CDB690'], dark: ['#D9C6A2', '#B9A27C'] }; // lit, dark side
-  // a turned bronze part from its profile, [y, half-width] top to bottom: closed by its bottom edge's front arc and its
-  // top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
+  // a turned bronze part from its profile, [y, half-width] top to bottom. It closes with its bottom edge's front arc and
+  // its top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
   // flat lit, darker from K.side of the way out, in an ink outline
   const turned = (id, prof, bowl = false) => {
     const [y0, h0] = prof[0], [y1, h1] = prof[prof.length - 1];
@@ -286,7 +287,7 @@ const CANDLE = (() => {
   const GRAPE = `<g id="cdGrape"><circle r="5" fill="#5E3470"/><path d="M4.7 -1.71A5 5 0 0 1 -2.5 4.33A8 8 0 0 0 4.7 -1.71Z" fill="#3B1F48"/>
     <circle cx="-1.8" cy="-1.8" r="1.5" fill="#A27DBE"/><circle r="5" fill="none" stroke="#1A0E20" stroke-width=".7"/></g>`;
   const grapes = ps => ps.map(([x, y]) => `<use href="#cdGrape" x="${n(x)}" y="${n(y)}"/>`).join('');
-  // a bunch, hex-packed: rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
+  // a hex-packed bunch, in rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
   // same parity as the one above shifts half a grape so they nest
   const bunch = (x, y, rows, lean) => {
     let shift = -2.4;
@@ -404,7 +405,7 @@ const STYLES = {
   moroccan: {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, tassel: [340, 486],
-    holder: [404, 6], // the burner cup under the flame: its bottom and half-width; it throws a narrow fan of shadow straight down
+    holder: [404, 6], // the burner cup under the flame, its bottom's height and half-width; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },

@@ -289,8 +289,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
-  // what the flame stands in (holder: its bottom and half-width, a burner cup or a candle's rim) throws a fan straight
-  // down, seen from the flame core's live centre so the fan breathes with it
+  // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup's bottom or a candle's
+  // rim) throws a fan straight down, seen from the flame core's live centre so the fan breathes with it
   const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
