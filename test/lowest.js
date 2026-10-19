@@ -34,10 +34,11 @@ function transform(text) {
   return m;
 }
 
-// Highest y (largest value) of a quadratic or cubic Bézier given its control values along y.
+// Highest y (largest value) a quadratic or cubic Bézier reaches between its ends, from its control values along y (its
+// ends are the path's to count).
 function quadratic([a, b, c]) {
   const den = a - 2 * b + c, t = den ? (a - b) / den : -1;
-  return Math.max(a, c, t > 0 && t < 1 ? (1 - t) ** 2 * a + 2 * t * (1 - t) * b + t * t * c : -Infinity);
+  return t > 0 && t < 1 ? (1 - t) ** 2 * a + 2 * t * (1 - t) * b + t * t * c : -Infinity;
 }
 function cubic([a, b, c, d]) {
   const at = t => (1 - t) ** 3 * a + 3 * t * (1 - t) ** 2 * b + 3 * t * t * (1 - t) * c + t ** 3 * d;
@@ -48,7 +49,7 @@ function cubic([a, b, c, d]) {
     const disc = B * B - 4 * A * C;
     if (disc >= 0) ts = [(-B + Math.sqrt(disc)) / (2 * A), (-B - Math.sqrt(disc)) / (2 * A)];
   }
-  return Math.max(a, d, ...ts.filter(t => t > 0 && t < 1).map(at));
+  return Math.max(-Infinity, ...ts.filter(t => t > 0 && t < 1).map(at));
 }
 // Highest y of an ellipse centred (cx, cy), radii rx and ry, turned phi, through M, over angles from t1 sweeping dt
 // (the whole ellipse when dt is null).
@@ -79,7 +80,7 @@ function arc(M, x1, y1, rx, ry, deg, large, sweep, x2, y2) {
   const t1 = angle(1, 0, ux, uy);
   let dt = angle(ux, uy, vx, vy) % (2 * Math.PI);
   if (!sweep && dt > 0) dt -= 2 * Math.PI; else if (sweep && dt < 0) dt += 2 * Math.PI;
-  return Math.max(ellipse(M, cx, cy, rx, ry, phi, t1, dt), Y(x1, y1), Y(x2, y2));
+  return ellipse(M, cx, cy, rx, ry, phi, t1, dt);
 }
 
 const SIZE = { M: 2, L: 2, T: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, A: 7, Z: 0 };
@@ -113,7 +114,7 @@ function path(d, M) {
       if (C === 'T') { q1 = mirror(lastQ); low = Math.max(low, quadratic([Y(...from), Y(...q1), Y(...to)])); }
       [x, y] = to;
       if (C === 'M' && i === 0) [sx, sy] = to;
-      low = Math.max(low, Y(x, y));
+      low = Math.max(low, Y(x, y)); // every segment's end, and so every curve's
       lastC = c2; lastQ = q1;
     }
   }
