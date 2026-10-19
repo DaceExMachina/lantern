@@ -481,7 +481,7 @@ function mothTarget(k, m, dt, s) {
     tx = hx + Math.sin(s * 0.5 + m.phase) * 24 + Math.sin(s * 1.3 + m.phase * 2) * 8;
     ty = hy + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
   }
-  // a scorch steers only a moth drifting near home, into the flame, off it, then darting about as it settles
+  // a scorch steers only a moth drifting near home. It flies into the flame and off it, then darts about as it settles
   const sc = scorchStep(m, flying);
   if (sc && flying) {
     const { phase, a } = scorchFlight(sc.t), ph = m.phase;
