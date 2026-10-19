@@ -27,7 +27,7 @@ function renderGitHub() {
     connect.onclick = () => post('/github', { connect: true });
     nodes.push(connect);
   }
-  const install = make('a', 'Install the app on your account or orgs'); install.href = 'https://github.com/apps/claude-lantern/installations/new'; install.target = '_blank'; install.rel = 'noopener';
+  const install = make('a', 'Install the app on your account or orgs'); install.href = 'https://github.com/apps/lantern-pr/installations/new'; install.target = '_blank'; install.rel = 'noopener';
   nodes.push(make('div', 'Read-only: pull requests, checks and statuses. Tokens stay in your Keychain.', 'dim'), install);
   panel.replaceChildren(...nodes);
 }
