@@ -167,11 +167,13 @@ gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32
 const dustBuf = gl.createBuffer();
 const rgb = c => hex(c).map(v => v / 255);
 
-// the near specks start just outside the lantern's body, so none of them hide behind it
-const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: 125 + Math.random() * 140, w: (Math.random() - 0.5) * 0.12,
+// the near specks start just outside the lantern's body, so none of them hide behind it; a second display has no
+// lantern, so there both rings fill in to the middle, spread evenly over the area (a square root keeps the centre from crowding)
+const ring = (from, to) => AMBIENT ? to * Math.sqrt(Math.random()) : from + Math.random() * (to - from);
+const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: ring(125, 265), w: (Math.random() - 0.5) * 0.12,
   ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
-const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: 230 + Math.random() * 110, w: (Math.random() - 0.5) * 0.08,
+const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: ring(230, 340), w: (Math.random() - 0.5) * 0.08,
   ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
 const dustData = new Float32Array((dust.length + farDust.length) * 4);
 
