@@ -74,7 +74,8 @@ function enterZone(zone) {
   if (hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
   hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
 }
-function clickZone(zone) { areas.get(zone)?.onClick(); clearTimeout(hideTimer); hideCard(); }
+// shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
+function clickZone(zone, shift) { const a = areas.get(zone); (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
 function hideCard() { hovered = null; $('card').classList.remove('show'); }
 
 function renderCard() {
