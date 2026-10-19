@@ -159,7 +159,7 @@ test('the candle\'s fan of shade starts at its rim; every other lantern\'s start
 // The pillar's numbers, changed to untidy ones in a copy of lanterns.js, and the wax drawn there.
 const pageFile = f => fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8');
 test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
-  for (const [r, rim] of [[50, 240], [61, 247]]) {
+  for (const [r, rim] of [[50, 275], [61, 247]]) {
     const at = `r ${r}, rim ${rim}`, c = vm.createContext({ URLSearchParams, location: { search: '' } });
     vm.runInContext(pageFile('scene'), c);
     const lanterns = pageFile('lanterns').replace(/^const PILLAR = .*$/m, line => `${line} PILLAR.r = ${r}; PILLAR.rim = ${rim};`);
