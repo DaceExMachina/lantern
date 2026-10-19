@@ -22,17 +22,17 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 // arabesque lace. Its lace and openings are one mask (#cutouts): each panel is cut out whole, then a tile of scrolling
 // brass lace is laid back over it, squeezed sideways on the faces that turn away.
 // The brass reads as metal through contrast: dark reflected mid-tones, a tight warm highlight left of centre where a fixed
-// light catches it, and a cool reflected edge on the right. The highlight is one band shared by three gradients (class
+// light catches it, and deep warm shadow on the right. The highlight is one band shared by three gradients (class
 // sheen, in the lantern's own units, given as [x, colour]): faces, side faces, and the lit edges, chain and finial, whose
 // narrow white peak glints as an edge passes under it. swingLantern slides them all with the sway (frame.js).
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
 const SHEENS = SHEEN('brassF', [[270, '#3A2710'], [296, '#6E4C1C'], [312, '#A87A30'], [320, '#E2B75E'], [325, '#FFF3CF'], [329, '#E8C06A'],
-  [338, '#B8893A'], [356, '#8A6226'], [380, '#55391A'], [398, '#3E2A12'], [410, '#4A4232']])
+  [338, '#B8893A'], [356, '#7A5420'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#2E1F0C'], [284, '#6A4A1E'], [292, '#8C6828'], [302, '#5E4119'], [320, '#8A6428'], [325, '#C9A050'], [330, '#8A6428'],
-  [360, '#4E3415'], [392, '#33230D'], [404, '#3A2C16'], [410, '#4A4434']])
+  [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#8A6428'], [310, '#C9A050'], [320, '#E8C46E'], [324, '#FFFBEA'], [326, '#FFFFFF'], [328, '#FFFBEA'], [332, '#E8C46E'],
-  [350, '#C9A050'], [400, '#7A5A2A'], [410, '#7E7660']]);
+  [350, '#C9A050'], [372, '#8A6224'], [400, '#5A3A14'], [410, '#4A2E10']]);
 const BRASS = { front: 'url(#brassF)', side: 'url(#brassS)', lit: 'url(#brassE)', rim: 'url(#brassS)' };
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
