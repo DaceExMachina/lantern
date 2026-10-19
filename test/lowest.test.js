@@ -30,6 +30,11 @@ test('arcs are converted from endpoint form as SVG says', () => {
   near(d('M0 0A10 20 90 0 0 0 40'), 40, 'turned, with its lowest point at an end');
   // turned a quarter, its 10 radius stands upright: centred on the chord's middle, it sweeps down through (0, 10)
   near(d('M-5 0A10 5 90 0 0 5 0'), 10, 'turned a quarter, its long radius upright');
+  // turned 30 degrees, from one end of a diameter (θ 0) to the other (θ π) on the side of increasing θ, past the lowest
+  // point at tan θ = (5 cos 30) / (10 sin 30), which is √((10 sin 30)² + (5 cos 30)²) below the centre
+  const r3 = 5 * Math.sqrt(3);
+  near(d(`M${r3} 5A10 5 30 0 1 ${-r3} -5`), Math.sqrt(25 + 18.75), 'turned 30 degrees');
+  near(d(`M${r3} 5A10 5 30 0 0 ${-r3} -5`), 5, 'the other way round it stays above its start');
   near(d('M0 0A20 10 0 1 0 0 0.000001'), 10, 'a near-full ellipse, centred beside its ends', 1e-5);
   assert.throws(() => d('M0 0A5 5 0 2 0 10 0'), /flags/, 'a flag other than 0 or 1');
 });
@@ -39,7 +44,7 @@ test('basic shapes, with missing attributes at their SVG defaults', () => {
   near(lowestY('rect', { width: '10', height: '10', transform: 'translate(0 600)' }), 610, 'a translated rect');
   near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(45)' }), 10 * Math.SQRT2, 'a rect turned on its corner');
   near(lowestY('rect', { width: '10', height: '10', rx: '5', transform: 'rotate(45)' }), 5 * Math.SQRT2 + 5, 'a fully rounded one is a circle');
-  near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(90 0 10)' }), 20, 'turned about (0, 10), x becomes the drop below it');
+  near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(90 10 0)' }), 0, 'turned about (10, 0) it lies above that corner');
   near(lowestY('rect', { width: '10', height: '10', transform: 'skewY(45)' }), 20, 'skewY slides each column down by x');
   near(lowestY('rect', { width: '10', height: '10', transform: 'skewX(45)' }), 10, 'skewX slides rows sideways only');
   near(lowestY('polygon', { points: '0 560 680 560 680 700 0 700' }), 700, 'a polygon');
