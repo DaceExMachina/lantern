@@ -185,12 +185,15 @@ function swingLantern(elapsed, s) {
     put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
   });
   // the straight panels' faces (round at -60, 0 and 60 degrees) lit by how squarely they meet a light 20 degrees to the left,
-  // which turns 8 degrees per degree of sway, in five flat tones (lanterns.js FACET_TONES)
+  // which turns 8 degrees per degree of sway: one flat tone each, blended continuously along lanterns.js FACET_TONES
+  // (put() skips a face whose rounded colour hasn't changed)
   for (const [side, a] of /** @type {[string, number][]} */ ([['L', -60], ['F', 0], ['R', 60]])) {
-    const c = Math.cos((a + 20 - swayAngle * 8) * Math.PI / 180), tone = FACET_TONES[Math.max(0, Math.min(4, Math.round((c - 0.2) / 0.8 * 4)))];
+    const c = Math.cos((a + 20 - swayAngle * 8) * Math.PI / 180), t = Math.max(0, Math.min(1, (c - 0.2) / 0.8)) * 4, i = Math.min(3, Math.floor(t));
+    const tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
     document.querySelectorAll(`.facet${side}`).forEach(n => put(n, 'fill', tone));
   }
-  put($('farWall'), 'transform', `translate(${(-swayAngle).toFixed(1)} 0)`); // ?brass=back: the far wall slides against the sway
+  // ?brass=back: the far wall, 0.92 the size (further away), slides against the sway
+  put($('farWall'), 'transform', `translate(${(340 - swayAngle * 1.5).toFixed(1)} 320) scale(.92) translate(-340 -320)`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
