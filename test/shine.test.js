@@ -158,7 +158,8 @@ test('the hot air lifts dust only inside its column, and lets it sink back out o
 
 test('the column\'s edges sit where HEAT_COLUMN puts them, and it never goes NaN below the tip', () => {
   const ctx = context(), C = ctx.run('HEAT_COLUMN');
-  assert.ok(C.half > 0 && C.widen >= 0 && C.start > 0 && C.fade[0] < C.fade[1] && C.bend > 0, 'a column that starts above the tip, has width and fades out');
+  assert.ok(C.half > 0 && C.widen >= 0 && C.start > 0 && C.start < C.fade[0] && C.fade[0] < C.fade[1] && C.bend > 0,
+    'a column that starts above the tip, has width, and fades in before it fades out');
   ctx.run('heat = { x: 340, y: 100, k: 1, t: 0 }');
   const at = (dx, up) => ctx.run(`heatAt(${340 + dx}, ${100 - up})`);
   for (const up of [C.start, 60, C.fade[0]]) {
@@ -173,18 +174,21 @@ test('the column\'s edges sit where HEAT_COLUMN puts them, and it never goes NaN
   for (const up of [zero, zero - 1, zero + 1, -1e6]) for (const dx of [0, 0.5, 5]) assert.strictEqual(at(dx, up), 0, `${dx} across at ${up} up`);
 });
 
-test('the dust drawn over the candle rises where the hot air carries it', () => {
-  const ctx = context(), [left] = leaning(ctx), data = ctx.run('dustData');
-  // one heavy speck (the wind barely moves it) on its orbit straight above the light, 50 or so over the flame's tip
-  const p = { a: -Math.PI / 2, d: 120, w: 0, ph: 0, r: 10, lift: 0 };
-  ctx.run('dust').push(p);
-  const frame = (s, dt) => { ctx.shine(s); ctx.run('drawLight')(dt, s, ctx.flame); return data[1]; };
-  for (let i = 0; i < 120; i++) frame(left + i / 60, 1 / 60);
-  // the same frame drawn again, lifted and then not: the speck is drawn as high as its lift
-  const s = left + 2, lifted = frame(s, 0);
-  p.lift = 0;
-  const still = frame(s, 0);
-  assert.ok(still - lifted > 10, `drawn ${(still - lifted).toFixed(1)} higher for the hot air`);
+test('the dust drawn over the candle rises where the hot air carries it, in the near ring and the far one', () => {
+  // one heavy speck (the wind barely moves it) on its orbit straight above the middle, 50 or so over the flame's tip: the
+  // near ring circles the light, the far one the scene's middle
+  for (const [ring, d] of [['dust', 120], ['farDust', 240]]) {
+    const ctx = context(), [left] = leaning(ctx), data = ctx.run('dustData');
+    const p = { a: -Math.PI / 2, d, w: 0, ph: 0, r: 10, lift: 0 };
+    ctx.run(ring).push(p);
+    const frame = (s, dt) => { ctx.shine(s); ctx.run('drawLight')(dt, s, ctx.flame); return data[1]; };
+    for (let i = 0; i < 120; i++) frame(left + i / 60, 1 / 60);
+    // the same frame drawn again, lifted and then not: the speck is drawn as high as its lift
+    const s = left + 2, lifted = frame(s, 0);
+    p.lift = 0;
+    const still = frame(s, 0);
+    assert.ok(still - lifted > 10, `${ring}: drawn ${(still - lifted).toFixed(1)} higher for the hot air`);
+  }
 });
 
 test('the shader\'s column is HEAT_COLUMN, each number in its place', () => {
