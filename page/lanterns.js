@@ -284,16 +284,18 @@ LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0
 // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
 // `column` either side of the middle that runs down out of the window, fading into the room from fade[0] to fade[1]. The
 // candlestick's foot stands on it, under a stem STEM tall between the pan's neck and the foot's collar.
+// The candlestick is drawn in its own units, its pan at `dish`, its stem from the pan's neck at `neck` down to the foot's
+// collar at `collar` and its foot on a slab at `slab`, and placed from there (CANDLE's stick).
+const DRAWN = { dish: 426, neck: 460, collar: 518, slab: 549 };
 const STEM = 41;
-const PEDESTAL = { top: PILLAR.dish + 34 + STEM + 31, r: 112, depth: 14, column: 85 };
+const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), r: 112, depth: 14, column: 85 };
 PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
 const CANDLE = (() => {
   const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#D2A55A', n = v => +v.toFixed(2), pt = ([x, y]) => `${n(x)} ${n(y)}`;
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
-  // The candlestick is drawn in its own units, its pan at 426, its stem from the pan's neck at 460 down to the foot's
-  // collar at 518 and its foot on a slab at 549, and placed from there: the pan and all on it under the pillar, the foot
-  // and all on it on the pedestal, and the stem between, scaled about the middle to STEM tall, so a part keeps its shape
-  const DRAWN = { dish: 426, neck: 460, collar: 518, slab: 549 }, k = STEM / (DRAWN.collar - DRAWN.neck);
+  // The candlestick placed from its drawn units (DRAWN): the pan and all on it under the pillar, the foot and all on it on
+  // the pedestal, and the stem between, scaled about the middle to STEM tall, so a part keeps its shape.
+  const k = STEM / (DRAWN.collar - DRAWN.neck);
   const stick = (/** @type {number[]} */ [x, y]) => /** @type {[number, number]} */ (y <= DRAWN.neck ? [x, y + PILLAR.dish - DRAWN.dish]
     : y >= DRAWN.collar ? [x, y + PEDESTAL.top - DRAWN.slab] : [cx + (x - cx) * k, PILLAR.dish + DRAWN.neck - DRAWN.dish + (y - DRAWN.neck) * k]);
   const Y = y => stick([cx, y])[1];
@@ -414,7 +416,7 @@ const CANDLE = (() => {
   // on up the foot and round the baluster to the vine already on the candlestick
   const climb = `${vine(`M${left + 72} ${P.top + 1}${on('Q318 540 330 532Q352 524 352 512Q352 500 334 498Q322 494 330 486Q338 478 352 478')}`)}
     ${leaf(...stick([326, 534]), 19, -40)}${leaf(...stick([354, 506]), 18, 70)}${leaf(...stick([330, 490]), 17, -70)}`;
-  // the knop, its gadroons and their edge in the drawing's units
+  // the knop, placed in the scene (its gadroons are drawn in DRAWN units and placed with on)
   const knop = { cy: Y(474), rx: 25 * k, ry: 11 * k };
   const back = `<defs><clipPath id="cdWax"><path d="${PILLAR_D}"/><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
       <clipPath id="cdDrips"><path d="${DRIPS.map(dripD).join('')}"/></clipPath><clipPath id="cdKnop"><ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}"/></clipPath>
