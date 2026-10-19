@@ -150,6 +150,10 @@ function makeSubMoth(key, parentId, size) {
     phase: rand() * 10, cool: 0, leaving: false });
 }
 
+// The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
+// tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
+// fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
+const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
 function flamePath(w, h, lean) {
   const bx = 340, by = FLAME_BASE, tx = bx + lean, ty = by - h, f = n => n.toFixed(1);
   return `M${f(bx - w * 0.55)} ${f(by - h * 0.14)}` +

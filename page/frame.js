@@ -291,21 +291,27 @@ function lightPaper({ size, flick, pulse }) {
 // it left.
 // The hot air over the flame, set by drawShine (null without one): the outer tongue's tip, how strong, and the time.
 let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
-// How much the hot air moves things at scene point (x, y), 0 to 1: a column rising from the flame's tip, widening as it
-// goes and fading out over 220 units. LIGHT's heat() in background.js draws the same column, so change the two together.
+// How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (state.js HEAT_COLUMN)
+// rising from the flame's tip. LIGHT's heat() in background.js bends the same column, so change the two together.
 function heatAt(x, y) {
   if (!heat) return 0;
-  const up = heat.y - y, half = 18 + 0.12 * up, step = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
-  return heat.k * step(0, 12, up) * (1 - step(120, 220, up)) * (1 - step(0.7 * half, half, Math.abs(x - heat.x)));
+  const { half: h0, widen, start, fade } = HEAT_COLUMN, up = heat.y - y, half = Math.max(1, h0 + widen * up);
+  const step = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
+  return heat.k * step(0, start, up) * (1 - step(fade[0], fade[1], up)) * (1 - step(0.7 * half, half, Math.abs(x - heat.x)));
+}
+// A speck at (x, y) on its orbit, `dt` on: over a bare flame the hot air carries it up at HEAT_RISE a second at its
+// strongest, and once out of it it sinks back a third of its lift a second, another offset on the orbit. Its lift, up.
+function liftDust(p, x, y, dt) {
+  return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
 }
 // The smoke's schedule, scorch's kind (scorchClock): one 6-second curl in each 3-minute slot, keyed on the wall clock alone
 // so every window lets it go at once. Each bit of it is let go from the tip over the first 1.5 seconds and then rises
 // SMOKE.rise a second from where the curl left, curling by its own age only, so the flame's flicker never moves smoke
 // already let go.
-const SMOKE = { slot: 180, window: 170, length: 6, release: 1.5, rise: 16 };
+const SMOKE = { slot: 180, window: 60, length: 6, release: 1.5, rise: 16 }; // starts in a slot's first minute: 2 to 4 minutes apart
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
 let smokeFrom = /** @type {{ slot: number, x: number, y: number } | null} */ (null); // the slot and where its curl left the tip
-// the curl `a` seconds after it started, from (x, y), oldest bit last
+// the curl `a` seconds after it started, from (x, y), oldest bit first
 function smokePoints(x, y, a) {
   const pts = [];
   for (let k = 0; k <= 30; k++) {
@@ -361,21 +367,18 @@ function drawLight(dt, s, { size, flick, pulse }) {
   // and the sooner (a heavy one lags a fifth of a second), with a little lift and swirl of its own. It's an offset on the
   // orbit, so they flow with a gust and drift back as it eases.
   const blow = (p, k) => { const g = GUST(s - 0.12 * p.r) * k / p.r; return [g, -Math.abs(g) * 0.15 + g * 0.2 * Math.sin(s * 0.9 + p.ph)]; };
-  // Over a bare flame the hot air carries a speck up (heatAt) at HEAT_RISE a second at its strongest, and it sinks back
-  // once out of it, a third of its lift a second: another offset on the orbit
-  const lift = (p, x, y) => heat ? (p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt) : (p.lift = 0);
   dust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18, [wx, wy] = blow(p, 14);
     const x = gx + wx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, y = gy + wy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6;
-    dustData.set([x, y - lift(p, x, y), p.r,
+    dustData.set([x, y - liftDust(p, x, y, dt), p.r,
       (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph))], i * 4); // no fading with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22, [wx, wy] = blow(p, 16);
     const x = CX + wx + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, y = CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + wy + Math.cos(s * 0.45 + p.ph) * 10;
-    dustData.set([x, y - lift(p, x, y), p.r,
+    dustData.set([x, y - liftDust(p, x, y, dt), p.r,
       (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (dust.length + i) * 4);
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;

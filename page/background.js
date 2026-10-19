@@ -22,6 +22,7 @@ function program(vert, frag) {
   return { p, u };
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
+const glf = v => v.toFixed(3); // a number as a GLSL float
 const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and agents)
 // How much of the flame's light reaches a point (1 = all of it): moths' shadows, the caps' fans and a pierced lantern's bands. Shared by the
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.
@@ -37,13 +38,15 @@ const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fa
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 uniform vec4 uHeat; // the hot air over a bare flame (frame.js heat): its tip, how strong (0 for none), and the time
-// How far the hot air bends what's seen through it at p, at most 1.25 units: a ripple rising up a column from the flame's
-// tip, widening as it goes and fading out over 220 units. frame.js heatAt is the same column, so change the two together.
+// How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
+// the column (state.js HEAT_COLUMN) from the flame's tip. frame.js heatAt weighs the same column, so change the two together.
+// The half-width never drops under 1, so smoothstep's edges never meet or cross (undefined in GLSL ES 1.00).
 vec2 heat(vec2 p) {
   if (uHeat.z <= 0.0) return vec2(0.0);
-  float up = uHeat.y - p.y, wide = 18.0 + 0.12 * up, t = uHeat.w; // wide: the column's half-width here
-  float k = uHeat.z * smoothstep(0.0, 12.0, up) * (1.0 - smoothstep(120.0, 220.0, up)) * (1.0 - smoothstep(0.7 * wide, wide, abs(p.x - uHeat.x)));
-  return 1.25 * k * vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
+  float up = uHeat.y - p.y, wide = max(1.0, ${glf(HEAT_COLUMN.half)} + ${glf(HEAT_COLUMN.widen)} * up), t = uHeat.w; // wide: the column's half-width here
+  float k = uHeat.z * smoothstep(0.0, ${glf(HEAT_COLUMN.start)}, up) * (1.0 - smoothstep(${glf(HEAT_COLUMN.fade[0])}, ${glf(HEAT_COLUMN.fade[1])}, up))
+    * (1.0 - smoothstep(0.7 * wide, wide, abs(p.x - uHeat.x)));
+  return ${glf(HEAT_COLUMN.bend)} * k * vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
 }
 // the soft glow round the lantern: a radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
 float glow(vec2 p) {
