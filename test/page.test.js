@@ -204,6 +204,30 @@ test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
   }
 });
 
+test('the candlestick\'s parts stack from the pan down to the slab with no gap, its stem STEM tall', () => {
+  const c = run('STYLES.candle'), svg = c.back, P = run('PEDESTAL'), lit = run('LACQUER.candle.lit');
+  // each part's top and bottom at its sides: the turned bands (DRUM), the turned parts' profiles and the knop
+  const parts = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="(#\w+)"/g)]
+    .filter(m => m[7] === lit).map(m => ({ what: `a band at ${m[2]}`, top: +m[2], bottom: +m[5] }));
+  for (const id of ['cdBowl', 'cdBaluster', 'cdFoot']) {
+    const ys = [...svg.match(new RegExp(`<clipPath id="${id}"><path d="M([^Q]+)Q`))[1].matchAll(/[\d.]+ ([\d.]+)/g)].map(m => +m[1]);
+    parts.push({ what: id, top: Math.min(...ys), bottom: Math.max(...ys) });
+  }
+  const [, cy, ry] = svg.match(/<clipPath id="cdKnop"><ellipse cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
+  parts.push({ what: 'the knop', top: cy - ry, bottom: cy + ry });
+  parts.sort((a, b) => a.top - b.top);
+  assert.strictEqual(parts.length, 8, `the pan's bowl, neck, knop, two collars, baluster, foot and its band: ${parts.map(p => p.what)}`);
+  parts.slice(1).forEach((p, i) => {
+    const gap = p.top - parts[i].bottom;
+    assert.ok(gap >= -0.01 && gap <= 3, `${p.what} starts ${gap.toFixed(2)} below ${parts[i].what}`);
+  });
+  assert.strictEqual(parts[0].top, run('PILLAR.dish'), 'the bowl hangs from the pan\'s rim');
+  assert.ok(Math.abs(parts[parts.length - 1].bottom - P.top) <= 3, 'the foot\'s band rests on the slab');
+  // the stem, from the neck's band to the lower collar
+  const neck = parts[1], collar = parts.find(p => p.what === 'cdBaluster');
+  assert.ok(Math.abs(collar.bottom - neck.bottom - run('STEM')) < 0.01, `the stem is ${collar.bottom - neck.bottom} tall`);
+});
+
 test('the candle stands on a marble pedestal tilted as its candlestick is, with no floor under it', () => {
   const c = run('STYLES.candle'), P = run('PEDESTAL'), bow = run('LACQUER.candle.bow'), svg = c.back + c.front;
   const ellipses = [...svg.matchAll(/<ellipse\b[^>]*>/g)].map(([e]) => Object.fromEntries(['cy', 'rx', 'ry'].map(k => [k, +e.match(new RegExp(`\\b${k}="([\\d.]+)"`))[1]])));
