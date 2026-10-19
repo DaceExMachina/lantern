@@ -437,8 +437,8 @@ const CANDLE = (() => {
     <path d="M282 432Q268 434 260 440Q252 446 256 449Q260 450 259 446M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
     ${grapes(lying)}
     ${climb}
-    <g id="cdGlints">${GLINTS.map(() => '<ellipse fill="url(#cdGlint)" opacity="0"/>').join('')}</g>
-    <g id="cdGrapeGlints">${GRAPES.map(() => '<circle r="1" opacity="0"/>').join('')}</g><!-- the flame's shine (frame.js drawShine) -->
+    <g id="cdGlints">${GLINTS.map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#cdGlint)" opacity="0"/>`).join('')}</g>
+    <g id="cdGrapeGlints">${GRAPES.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1" opacity="0"/>`).join('')}</g><!-- the flame's shine (frame.js drawShine) -->
     <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->
     <path id="cdSmoke" fill="none" stroke="url(#cdSmokeG)" stroke-width="1.2" stroke-linecap="round" opacity="0"/>`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember

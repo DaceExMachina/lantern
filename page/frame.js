@@ -323,8 +323,8 @@ function drawShine(s, { size, flick, pulse }) {
   const lean = wobble(s, 3) * 6 * size * fk, tip = [fx + wobble(s, 2) * 9 * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08) * size * fk];
   heat = { x: tip[0], y: tip[1], k: size, t: s % (2 * Math.PI) };
   [...$('cdGlints').children].forEach((e, i) => {
-    const [x, y, rx, ry] = shine.glints[i];
-    put(e, 'cx', (x + lean * (0.9 + 0.25 * i)).toFixed(1)); put(e, 'cy', y); put(e, 'rx', rx); put(e, 'ry', ry);
+    const [x] = shine.glints[i];
+    put(e, 'cx', (x + lean * (0.9 + 0.25 * i)).toFixed(1));
     put(e, 'opacity', (0.45 * flick * bright * (0.75 + 0.25 * Math.sin(s * 2 + i))).toFixed(2));
   });
   const pool = $('cdPoolGlint');
