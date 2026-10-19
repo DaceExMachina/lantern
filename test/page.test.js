@@ -185,6 +185,19 @@ test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
   }
 });
 
+test('the candle stands on a marble pedestal tilted as its candlestick is, with no floor under it', () => {
+  const c = run('STYLES.candle'), P = run('PEDESTAL'), bow = run('LACQUER.candle.bow'), svg = c.back + c.front;
+  const ellipses = [...svg.matchAll(/<ellipse\b[^>]*>/g)].map(([e]) => Object.fromEntries(['cy', 'rx', 'ry'].map(k => [k, +e.match(new RegExp(`\\b${k}="([\\d.]+)"`))[1]])));
+  assert.ok(ellipses.some(e => e.cy === P.top && e.rx === P.r), `the slab's top, ${P.r} wide at ${P.top}`);
+  for (const e of ellipses.filter(e => e.cy >= P.top - 10)) {
+    assert.ok(e.cy <= P.top, `an ellipse at ${e.cy}, below the slab's top: a floor under it`);
+    assert.ok(Math.abs(e.ry - e.rx * bow(e.cy) / 2) < 0.01, `the ellipse ${e.rx} wide at ${e.cy} is ${e.ry} deep, not ${e.rx * bow(e.cy) / 2}`);
+  }
+  // the column keeps going down into a tall window, below the 600-high view's bottom at 620
+  const lowest = Math.max(...[...svg.matchAll(/V([\d.]+)/g)].map(m => +m[1]));
+  assert.ok(lowest >= 700, `the column stops at ${lowest}`);
+});
+
 test('the candle\'s wax under the rim takes the flame\'s colour', () => {
   const c = run('STYLES.candle'), svg = c.back + c.front;
   const glow = svg.match(/<\w+\b[^>]*\bid="paperGlow"[^>]*>/);

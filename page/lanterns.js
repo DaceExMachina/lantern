@@ -246,6 +246,9 @@ const PERCH_SPREAD = 0.44;
 function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5 + PERCH_SPREAD); }
 LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#8A5E2E', dark: '#553A1B', ink: '#1E1209', line: 1.2,
   lip: [0, '#1E1209'], rim: [0, 0, 0] }; // darker and browner than the Moroccan's brass
+// The marble pedestal the candlestick stands on: a round slab, `depth` deep with its top at `top`, on a fluted column
+// `column` either side of the middle that runs down out of the window, fading into the room from fade[0] to fade[1].
+const PEDESTAL = { top: 549, r: 112, depth: 14, column: 85, fade: [590, 740] };
 const CANDLE = (() => {
   const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#D2A55A', n = v => +v.toFixed(2), pt = ([x, y]) => `${n(x)} ${n(y)}`;
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
@@ -320,12 +323,47 @@ const CANDLE = (() => {
   };
   const vine = d => `<path d="${d}" fill="none" stroke="#4A4424" stroke-width="2.2" stroke-linecap="round"/>`;
   const knopEdge = x => n(474 + 11 * Math.sqrt(1 - ((x - cx) / 25) ** 2) - 1);
+  // the pedestal, by the candlestick's rule, in cool marble lit from the left, its right side in shade as the wax is
+  const P = PEDESTAL, left = cx - P.r, slabY = P.top + P.depth, col = P.column, FOOT = 74; // the foot's half-width
+  const MARBLE = { ...K, lit: '#CFC9D8', dark: '#8A8396', ink: '#2A2333' };
+  // a colour fading out down the column
+  const fade = (id, colour, a = 1) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${P.fade[0]}" y2="${P.fade[1]}">`
+    + `<stop offset="0" stop-color="${colour}" stop-opacity="${a}"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></linearGradient>`;
+  // a stem winding `turns` times round the column, `R` from its middle, from y0 up to y1, where it ends `end` radians round
+  // from the front (positive to the right); seen from above, so each turn sags like an edge and only the front ones show
+  const helix = (R, y0, y1, turns, end) => {
+    const runs = [[]];
+    for (let i = 0; i <= 120; i++) {
+      const u = i / 120, th = end - (1 - u) * turns * 2 * Math.PI, y = y0 + (y1 - y0) * u;
+      if (Math.cos(th) > -0.05) runs[runs.length - 1].push(pt([cx + R * Math.sin(th), y + sag(y, R) * Math.cos(th)]));
+      else if (runs[runs.length - 1].length) runs.push([]);
+    }
+    return runs.filter(r => r.length > 2).map(r => `M${r.join('L')}`).join('');
+  };
+  const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the stem leaves the column for the slab
+  const climbAt = pt([cx + climbR * Math.sin(climbEnd), climbTop + sag(climbTop, climbR) * Math.cos(climbEnd)]);
+  const pedestal = `<path d="M${cx - col} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColLit)"/>
+    <path d="M${n(cx + K.side * col)} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColDark)"/>
+    <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${P.fade[1]}`).join('')}" fill="none" stroke="url(#cdColLine)" stroke-width=".8"/>
+    <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
+    <path d="M${cx - col} ${slabY}V${P.fade[1]}M${cx + col} ${slabY}V${P.fade[1]}" fill="none" stroke="url(#cdColInk)" stroke-width="${K.line}"/><!-- the fluted column -->
+    <path d="${helix(climbR, P.fade[1] - 50, climbTop, 1.4, climbEnd)}" fill="none" stroke="url(#cdVineFade)" stroke-width="2.2" stroke-linecap="round"/>
+    ${DRUM(MARBLE, P.top, P.r, P.depth)}<ellipse cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${n(sag(P.top, P.r))}" fill="#E2DDE8" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
+    <path d="M${left + 12} ${P.top + 10}q26 7 42 0t36 7q20 2 26 -2M${left + 158} ${P.top + 16}q16 -2 40 -7" fill="none" stroke="#968DA4" stroke-width=".7" opacity=".6"/><!-- the slab -->
+    <ellipse cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${n(sag(P.top - 5, FOOT))}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
+    ${vine(`M${climbAt}Q${left + 4} ${P.top + 49} ${left + 2} ${P.top + 31}Q${left + 2} ${P.top + 13} ${left + 28} ${P.top + 9}Q${left + 56} ${P.top + 5} ${left + 72} ${P.top + 1}`)}
+    ${leaf(cx - 40, P.top + 63, 24, -20)}${leaf(cx + 56, P.top + 51, 22, 30)}${leaf(left + 4, P.top + 41, 24, -60)}${leaf(cx + P.r - 6, P.top + 25, 22, 50)}
+    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}<!-- the vine, up the column, over the slab's edge and across it to the foot -->`;
+  // on up the foot and round the baluster to the vine already on the candlestick
+  const climb = `${vine(`M${left + 72} ${P.top + 1}Q318 540 330 532Q352 524 352 512Q352 500 334 498Q322 494 330 486Q338 478 352 478`)}
+    ${leaf(326, 534, 19, -40)}${leaf(354, 506, 18, 70)}${leaf(330, 490, 17, -70)}`;
   const back = `<defs><clipPath id="cdWax"><path d="${PILLAR_D}"/><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
       <clipPath id="cdDrips"><path d="${DRIPS.map(dripD).join('')}"/></clipPath><clipPath id="cdKnop"><ellipse cx="${cx}" cy="474" rx="25" ry="11"/></clipPath>
       <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
-      <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}</defs>
-    <ellipse cx="${cx}" cy="571" rx="96" ry="11" fill="#120D1C" opacity=".45"/><!-- on an unseen floor -->
-    ${DRUM(K, 543, 74, 8)}${beads(551, 74, 272, 408, 17, 1.9, -2.6)}
+      <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}
+      ${fade('cdColLit', MARBLE.lit)}${fade('cdColDark', MARBLE.dark)}${fade('cdColLine', '#8E869B', 0.6)}${fade('cdColInk', MARBLE.ink)}${fade('cdVineFade', '#4A4424')}</defs>
+    ${pedestal}
+    ${DRUM(K, 543, FOOT, 8)}${beads(551, FOOT, 272, 408, 17, 1.9, -2.6)}
     ${turned('cdFoot', profile(523, 543, y => { const u = (y - 523) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
     <path d="M${[0.15, 0.3, 0.45, 0.6, 0.75].map(u => { const h = 20 + 50 * u * u * (3 - 2 * u), y = 523 + 20 * u; return pt([cx - 0.7 * h, y + sag(y, h) * 0.51]); }).join('L')}" fill="none" stroke="${GILT}" stroke-width="1" stroke-linecap="round"/>
     ${DRUM(K, 518, 18, 5)}
@@ -355,7 +393,8 @@ const CANDLE = (() => {
     ${vine('M306 452Q330 470 362 476')}${vine('M326 494Q342 500 354 514')}<!-- the vine, where it winds across the front -->
     ${leaf(318, 472, 15, -75)}
     <path d="M282 432Q268 434 260 440Q252 446 256 449Q260 450 259 446M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
-    ${grapes(lying)}`;
+    ${grapes(lying)}
+    ${climb}`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
