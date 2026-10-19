@@ -21,6 +21,7 @@ test('path curves reach their true lowest point, between their ends or at one', 
   near(d('M0 0H10M0 900'), 0, 'a lone move at the end draws nothing');
   assert.strictEqual(d('M0 900'), -Infinity, 'nor does a path that only moves');
   near(d('M0 900z'), 900, 'a closed zero-length subpath draws its caps there');
+  near(d('M0 0 10 10z l0 100'), 100, 'Z goes back to the first pair, not a move\'s extra one');
 });
 
 test('arcs are converted from endpoint form as SVG says', () => {
@@ -47,6 +48,7 @@ test('basic shapes, with missing attributes at their SVG defaults', () => {
   near(lowestY('rect', { width: '10', height: '10', rx: '5', transform: 'rotate(45)' }), 5 * Math.SQRT2 + 5, 'a fully rounded one is a circle');
   near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(90 10 0)' }), 0, 'turned about (10, 0) it lies above that corner');
   near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(90 10 5)' }), 5, 'turned about (10, 5): x - 10 + 5 at most');
+  near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(180 10 5)' }), 10, 'turned half about (10, 5): 2·5 - y');
   near(lowestY('rect', { width: '10', height: '10', transform: 'skewY(45)' }), 20, 'skewY slides each column down by x');
   near(lowestY('rect', { width: '10', height: '10', transform: 'skewX(45)' }), 10, 'skewX slides rows sideways only');
   near(lowestY('polygon', { points: '0 560 680 560 680 700 0 700' }), 700, 'a polygon');
