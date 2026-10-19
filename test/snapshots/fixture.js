@@ -68,15 +68,19 @@
   const snap = name => async () => { await settle(); tickPages(); await settle(); await new Promise(r => realSetTimeout(r, 50)); return name; };
   // On a lantern that scorches, move the wall clock (and nothing else) so sess-alpha's next scorch, found with the page's
   // own schedule, starts the hit plus 0.5s before the last picture, so it shows the puff, the sparks and the first smoke.
+  // On one whose flame smokes too (style.shine), the next such scorch with the flame's smoke 2 to 3.5s into its curl then.
   const LAST = 21000;
   const catchScorch = () => {
-    if (!STYLES[Q.get('style')]?.scorches) return;
-    const u = wall + LAST - (SCORCH.hit + 0.5) * 1000;
-    for (let d = 0; d <= 2 * SCORCH.slot * 1000; d += 1000) {
+    const st = STYLES[Q.get('style')];
+    if (!st?.scorches) return;
+    const u = wall + LAST - (SCORCH.hit + 0.5) * 1000, slots = st.shine ? 400 : 2;
+    for (let d = 0; d <= slots * SCORCH.slot * 1000; d += 1000) {
       const e = scorchClock('sess-alpha', u + d), start = e && u + d - e.t * 1000;
-      if (e && start >= u) { wall += start - u; return; }
+      if (!e || start < u) continue;
+      const smoke = st.shine && scorchClock('candle:smoke', start + (SCORCH.hit + 0.5) * 1000, SMOKE);
+      if (!st.shine || smoke && smoke.t > 2 && smoke.t < 3.5) { wall += start - u; return; }
     }
-    errs.push('no scorch for sess-alpha within two slots');
+    errs.push(`no scorch for sess-alpha within ${slots} slots`);
   };
   const steps = [
     () => {

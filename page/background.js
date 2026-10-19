@@ -36,6 +36,15 @@ const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fa
 // the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
+uniform vec4 uHeat; // the hot air over a bare flame (frame.js heat): its tip, how strong (0 for none), and the time
+// How far the hot air bends what's seen through it at p, at most 1.25 units: a ripple rising up a column from the flame's
+// tip, widening as it goes and fading out over 220 units. frame.js heatAt is the same column, so change the two together.
+vec2 heat(vec2 p) {
+  if (uHeat.z <= 0.0) return vec2(0.0);
+  float up = uHeat.y - p.y, half = 18.0 + 0.12 * up, t = uHeat.w;
+  float k = uHeat.z * smoothstep(0.0, 12.0, up) * (1.0 - smoothstep(120.0, 220.0, up)) * (1.0 - smoothstep(0.7 * half, half, abs(p.x - uHeat.x)));
+  return 1.25 * k * vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
+}
 // the soft glow round the lantern: a radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
 float glow(vec2 p) {
   float g = length(p - uGlowC) / uGlowR;
@@ -95,6 +104,7 @@ uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 ${LIGHT}
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
+  p += heat(p); // seen through the hot air over a bare flame
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
   float lit = light(p);
   vec3 col = uBg;
@@ -123,7 +133,8 @@ attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uNear, uCa
 ${LIGHT}
 const float DIM = 0.6, LIT = 6.0; // a near speck's brightness out of the glow (about the far specks'), and how much the glow adds
 void main() {
-  gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
+  vec2 at = a.xy - heat(a.xy); // seen through the hot air, bent the other way to the room behind it
+  gl_Position = vec4((at.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (at.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
   float lit = uNear * glow(a.xy); // the far specks stay a faint, even layer
   gl_PointSize = max(a.z * (1.0 + 2.5 * lit) * uRes.x / uBox.z + 1.0, 1.5 * uDpr); // never under 1.5 CSS px, at any size or scale
   vS = pow(light(a.xy), uCatch); vA = a.w * mix(1.0, DIM + LIT * lit, uNear) * mix(vS, 1.0, uDebug); vD = uDebug;
@@ -174,10 +185,10 @@ const rgb = c => hex(c).map(v => v / 255);
 // lantern, so there both rings fill in to the middle, spread evenly over the area (a square root keeps the centre from crowding)
 const ring = (from, to) => AMBIENT ? to * Math.sqrt(Math.random()) : from + Math.random() * (to - from);
 const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: ring(125, 265), w: (Math.random() - 0.5) * 0.12,
-  ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2 }));
+  ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2, lift: 0 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
 const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: ring(230, 340), w: (Math.random() - 0.5) * 0.08,
-  ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
+  ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9, lift: 0 }));
 const dustData = new Float32Array((dust.length + farDust.length) * 4);
 
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
@@ -205,6 +216,7 @@ function setLight(u, v) {
   gl.uniform2f(u.uCaps, ...v.caps); gl.uniform2f(u.uCapFrom, ...v.capFrom); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
   gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
+  const h = v.heat; gl.uniform4f(u.uHeat, h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);
 }
 
 // ---- the Moroccan's far wall ------------------------------------------------------------------------------------------
