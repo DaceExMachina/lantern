@@ -19,7 +19,7 @@ function transform(text) {
     if (!t) throw new Error(`transform not understood: "${text}"`);
     at = step.lastIndex;
     const v = nums(t[2]), rad = (v[0] || 0) * Math.PI / 180;
-    const own = {
+    const kinds = {
       matrix: () => v.length === 6 && v,
       translate: () => v.length && v.length <= 2 && [1, 0, 0, 1, v[0], v[1] || 0],
       scale: () => v.length && v.length <= 2 && [v[0], 0, 0, v[1] ?? v[0], 0, 0],
@@ -27,7 +27,7 @@ function transform(text) {
         [Math.cos(rad), Math.sin(rad), -Math.sin(rad), Math.cos(rad), 0, 0]), [1, 0, 0, 1, -(v[1] || 0), -(v[2] || 0)]),
       skewX: () => v.length === 1 && [1, 0, Math.tan(rad), 1, 0, 0],
       skewY: () => v.length === 1 && [1, Math.tan(rad), 0, 1, 0, 0],
-    }[t[1]]?.();
+    }, own = Object.hasOwn(kinds, t[1]) && kinds[t[1]]();
     if (!own) throw new Error(`transform not understood: "${t[0].trim()}"`);
     m = mul(m, own);
   }
@@ -113,8 +113,9 @@ function path(d, M) {
       }
       if (C === 'T') { q1 = mirror(lastQ); low = Math.max(low, quadratic([Y(...from), Y(...q1), Y(...to)])); }
       [x, y] = to;
+      // a move draws nothing; every other segment counts its ends (a curve's own ends included)
       if (C === 'M' && i === 0) [sx, sy] = to;
-      low = Math.max(low, Y(x, y)); // every segment's end, and so every curve's
+      else low = Math.max(low, Y(...from), Y(x, y));
       lastC = c2; lastQ = q1;
     }
   }
