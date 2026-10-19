@@ -35,7 +35,8 @@ function measureBands() {
 // and a light breeze, pinned at the top and held at fixed spacing, so it trails the sway and settles. It twists along its
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
-// One wind for the scene, in the sway's degrees: the ribbon feels it as it blows, the lantern swings with it a moment later.
+// One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
+// with it a moment later (its tassel and knot tail LAG seconds behind).
 const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
 // heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
@@ -160,19 +161,16 @@ function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
 }
-// Sway on the string, pushed by the wind (GUST) a moment after it blows, with its tassel, ribbon or knot trailing. It
-// swings from the top of the window, with the angle scaled so the lantern moves sideways as much as it did hung at y=20.
-// ?pendulum=1 swings it as a damped pendulum the wind pushes instead, so it lags, overshoots a little and settles on its
-// own (about a 4.4s swing, damped 0.35; 0.83 keeps today's amplitude at the main gust).
-const PENDULUM = Q.has('pendulum'), swing = { a: NaN, v: 0 };
+// Sway on the string as a damped pendulum the wind (GUST) pushes, with its tassel, ribbon or knot trailing: it answers a
+// gust a moment after the dust does, overshoots a little and settles on its own (about a 4.4s swing, damped 0.35, which
+// lags the main gust about LAG). It swings from the top of the window, with the push scaled so the lantern moves sideways
+// as much as it did hung at y=20 (0.83 offsets the pendulum's own gain at the main gust).
+const swing = { a: NaN, v: 0 };
 function swingLantern(elapsed, s) {
-  const top = VIEW.top, sl = s - LAG;
-  if (PENDULUM) {
-    const push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
-    if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
-    swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
-    swayAngle = swing.a;
-  } else swayAngle = -GUST(sl) * 310 / (330 - top);
+  const top = VIEW.top, sl = s - LAG, push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
+  if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
+  swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
+  swayAngle = swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
@@ -406,6 +404,7 @@ function mothMove(m, { tx, ty, ease, needsMe }, dt, s) {
   // the easing is only for getting there: landing, and the jump to a new spot after a hop
   if (needsMe && m.wasLanded && m.perchAim === m.lastAim) { m.x += tx - m.lastT[0]; m.y += ty - m.lastT[1]; }
   m.lastAim = needsMe ? m.perchAim : undefined; m.lastT = [tx, ty];
+  if (!needsMe) tx += GUST(s) * 1.8; // a flying moth leans into the wind but gives a little, about a third of the lantern's sway; the spring eases it
   [m.x, m.vx] = settle(m.x, m.vx || 0, tx, ease, dt); [m.y, m.vy] = settle(m.y, m.vy || 0, ty, ease, dt);
   // lean gently into the direction of travel, eased so position jitter doesn't shake it
   // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
