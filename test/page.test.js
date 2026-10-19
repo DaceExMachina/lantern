@@ -86,8 +86,8 @@ test('moths land on the candle\'s wax: below its rim, above its dish and within 
   }
 });
 
-test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest', () => {
-  const [fx, fy, k] = run('STYLES.candle.flame'), FLAME_BASE = run('FLAME_BASE'), clear = run('FLAME_CLEARANCE');
+test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', () => {
+  const [fx, fy, k] = run('STYLES.candle.flame'), FLAME_BASE = run('FLAME_BASE'), clear = run('FLAME_CLEARANCE'), HOP = run('HOP');
   // the outer tongue's outline at full size as it wobbles, sampled along its curves, in the scene
   const flame = new Map();
   for (let s = 0; s < 30; s += 0.05) {
@@ -110,7 +110,7 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
       const t0 = unit([n0[1] * n0[0], n0[1] * n0[1] - 1, n0[1] * n0[2]]), T = unit(lerp3(t0, cross(n0, t0), Math.tan(jitter * Math.PI / 180)));
       const N = unit(lerp3(n0, T, -dot(n0, T)));
       for (const pts of [wing3d(WING_UP, T, N, open), wing3d(WING_SIDE, T, N, open)]) for (const size of Object.values(SIZE)) for (const [wx, wy] of pts) {
-        for (const [x, y] of tongue) nearest = Math.min(nearest, Math.hypot(px + wx * size - x, py + wy * size - y));
+        for (const lift of [0, HOP]) for (const [x, y] of tongue) nearest = Math.min(nearest, Math.hypot(px + wx * size - x, py - lift + wy * size - y));
       }
     }
   }

@@ -240,6 +240,7 @@ const FLAME_DIP = 0.04 * 96 * 1.08;
 const MOTH_REACH = (r => r * EYE / Math.sqrt(EYE * EYE - r * r))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
   * Math.max(...Object.values(SIZE));
 const FLAME_CLEARANCE = 10; // the gap kept between a landed moth's wings and the flame at its fullest
+const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
 // Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (pickPerch); perchTop is the
 // top a body ending at `bottom` needs for its highest spot to sit at `y`.
 const PERCH_SPREAD = 0.44;

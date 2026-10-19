@@ -448,7 +448,7 @@ function mothTarget(k, m, dt, s) {
       else if (into > 0) {
         m.fidget = kind;
         if (m.fidget === 'hop') {
-          ty -= 16 * Math.sin(Math.PI * into / dur);
+          ty -= HOP * Math.sin(Math.PI * into / dur);
           // a hop lands on a new spot in its own slice, picked once as it lifts off (seeded by the hop count, so windows agree)
           if (into > dur * 0.35 && m.hoppedAt !== m.fidgetAt) {
             m.hoppedAt = m.fidgetAt;
