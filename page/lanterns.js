@@ -8,6 +8,7 @@
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass), and `holder` is what its flame stands in (a burner cup, a candle's
 // rim): its bottom and half-width. `stands` is a lantern on its own foot: it doesn't sway and has nothing to hang from.
+// `scorches` puts its bare flame in moths' reach: a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
@@ -432,7 +433,7 @@ const STYLES = {
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
   candle: {
-    name: 'Pillar candle', stands: true, paper: false, // a bare flame, standing on the crown
+    name: 'Pillar candle', stands: true, paper: false, scorches: true, // a bare flame, standing on the crown
     flame: [PILLAR.cx, PILLAR.rim - 2, 0.8], light: [PILLAR.cx, PILLAR.eye],
     holder: [PILLAR.rim, PILLAR.r], // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
     body: { top: PILLAR.rim + 10, bottom: PILLAR.dish - 8, half: () => PILLAR.r }, // the wax alone, a straight cylinder

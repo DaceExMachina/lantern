@@ -130,6 +130,10 @@ function frame(t) {
 
   swingLantern(elapsed, s);
   drawFlame(s, flame);
+  if (style.scorches) { // the outer tongue in the scene, for scorched moths to aim at (the flame's base is style.flame[1])
+    const b = /** @type {SVGGraphicsElement} */ ($('fOuter')).getBBox(), k = flame.size * style.flame[2];
+    tongue = { cx: style.flame[0] + (b.x + b.width / 2 - 340) * k, half: b.width / 2 * k, height: b.height * k };
+  } else tongue = null;
   drawSparks(dt, s, flame.size);
   lightPaper(flame);
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), rot(...style.light), [125, 170], dt, s);
@@ -140,6 +144,7 @@ function frame(t) {
     if (m.zone) mothZones(m, aim.needsMe);
     mothMove(m, aim, dt, s);
     const [upPts, sidePts] = mothWings(m, aim, dt, s);
+    drawScorch(m, upPts, sidePts);
     mothColour(m, aim.needsMe, upPts, sidePts, dt);
     mothZs(m, s);
     mothThread(m, dt, s);
@@ -311,12 +316,92 @@ function drawLight(dt, s, { size, flick, pulse }) {
   });
 }
 
+// ---- scorched moths ----------------------------------------------------------
+// On a lantern whose flame is bare and in reach (style.scorches), a session moth whose PR has failing checks flies too
+// close to the flame once a minute until they pass: a puff and sparks at the touch, then it darts about with its wing
+// tips smoking and its wings charred a little, until they heal. Each moth's wall-clock time splits into `slot`-second
+// slots, shifted by its own seeded phase so red moths don't scorch in step; each slot holds one episode `length` long,
+// starting at a seeded point in the slot's first `window` seconds. A moth must be eligible within `start` of that start,
+// or it waits for the next slot. The flame touches it `hit` seconds in. All in seconds. The schedule reads only the key
+// and the wall clock, so every window (app, panel, screensaver) scorches a moth at the same moments.
+const SCORCH = { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
+const SCORCH_CHAR = '#5B4636', SCORCH_SMOKE = '#B4A8B4'; // the wings' char, a warm brown; the smoke, a pale warm grey
+// The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
+let tongue = null;
+// The episode in progress for `key` at wall-clock `now` (ms): its slot and the seconds since it started, or null.
+function scorchClock(key, now, plan = SCORCH) {
+  const { slot, window: span, length } = plan, at = now / 1000 - seeded(hash(key + ':scorch'))() * slot, n = Math.floor(at / slot);
+  const t = at - n * slot - seeded(hash(key + ':scorch:' + n))() * span;
+  return t >= 0 && t < length ? { slot: n, t } : null;
+}
+// Where an episode is at `t`: approach, recoil (a second after the hit), agitated, then settling over its last 6 seconds;
+// `a` the agitation, `char` the wings' tint toward SCORCH_CHAR, `smoke` how much the tips smoke.
+function scorchFlight(t, { hit, length } = SCORCH) {
+  const calm = length - 6, fade = t >= length ? 0 : t < calm ? 1 : (u => u * u * (3 - 2 * u))((length - t) / (length - calm));
+  return { phase: t < hit ? 'approach' : t < hit + 1 ? 'recoil' : t < calm ? 'agitated' : 'settling',
+    a: t < hit + 1 ? 0 : fade, smoke: t < hit ? 0 : fade, char: t < hit || t >= length ? 0 : 0.2 * (length - t) / (length - hit) };
+}
+// One moth's episode, once a frame (mothTarget; `flying` only in its home-drift branch). It starts within `start` of a
+// scheduled start while the moth is eligible; before the hit, losing eligibility (landing, leaving, green checks, GitHub
+// off, another lantern) ends it with nothing to show; after the hit it runs out its length, steered and smoking only
+// while flying, unless the lantern changes. At the hit it throws sparks into the flame's pool: 5 less the scorch
+// sparks still alive, so scorches never hold more than 5 of its 12. Touches no DOM; m.scorch exists only during one.
+function scorchStep(m, flying, now = Date.now()) {
+  const red = () => flying && tongue && style.scorches && m.session?.github?.some(p => p.need === 'failing');
+  if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
+  const at = scorchClock(m.key, now), sc = m.scorch;
+  if (!sc) {
+    if (!at || at.t >= SCORCH.start) return null;
+    const rand = seeded(hash(`${m.key}:scorch:${at.slot}:touch`));
+    m.scorch = { slot: at.slot, t: at.t, hit: false, flying, rand, up: 0.25 + 0.25 * rand(), side: stretch(m.home)[0] < tongue.cx ? -1 : 1 };
+  } else if (!at || at.slot !== sc.slot || !style.scorches || (!sc.hit && !red())) return m.scorch = null;
+  else Object.assign(sc, { t: at.t, flying });
+  const e = m.scorch;
+  if (!e.hit) e.aim = [tongue.cx + e.side * (tongue.half + 8 * m.size), style.flame[1] - e.up * tongue.height]; // a wing tip at the edge
+  if (!e.hit && e.t >= SCORCH.hit) {
+    e.hit = true;
+    const [fx, fy, k] = style.flame, live = sparks.filter(p => p.scorch && p.life > 0).length;
+    for (let i = live; i < 5; i++) sparks.push({ x: 340 + (e.aim[0] - fx) / k, y: FLAME_BASE + (e.aim[1] - fy) / k, scorch: true, life: 1,
+      vx: e.side * (8 + 30 * e.rand()) / k, vy: -(15 + 40 * e.rand()) / k });
+  }
+  return e;
+}
+// A scorch's puff and smoke: circles in #moths behind the moth, made at the hit, gone the first frame its episode is over.
+// The puff swells at the touch and fades from the flame's colour to smoke; six wisps take turns rising off alternate wing
+// tips, one every quarter second while the moth flies.
+function drawScorch(m, upPts, sidePts) {
+  const sc = m.scorch;
+  if (!sc?.hit) {
+    if (m.smoke && !sc) { m.smoke.forEach(c => c.remove()); m.smoke = null; }
+    return;
+  }
+  if (!m.smoke) {
+    m.smoke = Array.from({ length: 7 }, () => $('moths').insertBefore(el('circle', { r: 0, opacity: 0, 'pointer-events': 'none' }), m.g));
+    sc.wisps = [];
+  }
+  const age = sc.t - SCORCH.hit, [puff, ...wisps] = m.smoke, p = Math.min(1, age / 0.8);
+  put(puff, 'cx', sc.aim[0].toFixed(1)); put(puff, 'cy', sc.aim[1].toFixed(1)); put(puff, 'r', (3 + 12 * p).toFixed(1));
+  put(puff, 'fill', mix(pal('core'), SCORCH_SMOKE, p)); put(puff, 'opacity', (0.7 * (1 - p)).toFixed(2));
+  const j = Math.floor(age / 0.25), level = scorchFlight(sc.t).smoke;
+  if (sc.flying && j !== sc.born) { // a fresh wisp off a wing tip, mapped through the moth's transform as caster() does
+    sc.born = j;
+    const [tx, ty] = (j % 2 ? sidePts : upPts)[2], a = m.tilt * Math.PI / 180, lx = tx - 2, ly = ty - 6;
+    sc.wisps[j % 6] = { n: j, x: m.x + (lx * Math.cos(a) - ly * Math.sin(a)) * m.size, y: m.y + (lx * Math.sin(a) + ly * Math.cos(a)) * m.size };
+  }
+  wisps.forEach((c, i) => {
+    const w = sc.wisps[i], u = w ? (age - w.n * 0.25) / 1.4 : 1;
+    if (!(u >= 0 && u < 1)) return put(c, 'opacity', 0);
+    put(c, 'cx', (w.x + Math.sin(u * 4 + w.n) * 3).toFixed(1)); put(c, 'cy', (w.y - 16 * u).toFixed(1)); put(c, 'r', (1.2 + 2.8 * u).toFixed(2));
+    put(c, 'fill', SCORCH_SMOKE); put(c, 'opacity', (0.4 * level * Math.sin(Math.PI * u)).toFixed(2));
+  });
+}
+
 // ---- moths -------------------------------------------------------------------
 // Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
 function mothTarget(k, m, dt, s) {
-  let tx, ty, ease = 2.4, flap = 22.4; // radians per second: about 3.6 wingbeats a second
+  let tx, ty, ease = 2.4, flap = 22.4, flying = false; // radians per second: about 3.6 wingbeats a second
   const orbit = m.satellite && moths.get(m.satellite);
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
     const a = m.phase + s * 0.12;
@@ -372,16 +457,28 @@ function mothTarget(k, m, dt, s) {
     }
   } else {
     // stay near home, drifting lazily
+    flying = true;
     const [hx, hy] = stretch(m.home);
     tx = hx + Math.sin(s * 0.5 + m.phase) * 24 + Math.sin(s * 1.3 + m.phase * 2) * 8;
     ty = hy + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
+  }
+  // a scorch steers only a moth drifting near home: into the flame, off it, then darting about as it settles
+  const sc = scorchStep(m, flying);
+  if (sc && flying) {
+    const { phase, a } = scorchFlight(sc.t), ph = m.phase;
+    if (phase === 'approach') { [tx, ty] = sc.aim; flap = 26; }
+    else if (phase === 'recoil') { tx = sc.aim[0] + sc.side * 70; ty = sc.aim[1] - 45; ease = 7; flap = 34; }
+    else {
+      tx += a * (16 * Math.sin(3.1 * s + ph) + 6 * Math.sin(7.7 * s + 2 * ph)); ty += a * (12 * Math.cos(2.7 * s + ph) + 5 * Math.sin(6.9 * s + ph));
+      ease = 2.4 + 2 * a; flap = 22.4 + 10 * a;
+    }
   }
   return { tx, ty, ease, flap, needsMe };
 }
 
 function dropMoth(k, m) {
   m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove();
-  m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
+  m.flyLine?.remove(); m.zz?.forEach(t => t.remove()); m.smoke?.forEach(c => c.remove());
   moths.delete(k);
   if (hovered === m) hideCard();
 }
@@ -504,7 +601,8 @@ function mothWings(m, { tx, ty, flap, needsMe }, dt, s) {
   return [upPts, sidePts];
 }
 
-// Colour: moths near the lantern catch its light; the session that needs me turns violet with a pale outline.
+// Colour: moths near the lantern catch its light; the session that needs me turns violet; a scorched one is charred
+// a little, healing as its episode runs out.
 // Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
 function mothColour(m, needsMe, upPts, sidePts, dt) {
   const host = m.parentId ? moths.get(m.parentId) : m, calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
@@ -514,7 +612,8 @@ function mothColour(m, needsMe, upPts, sidePts, dt) {
   const singed = needsMe && m.session.error;
   // Landed, the flame is behind the moth: it turns to a darker silhouette against the glowing paper.
   const backlit = m.fold || 0;
-  const wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+  let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+  if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -m.tilt * Math.PI / 180, [lx, ly] = rot(...style.light), fx = lx - m.x, fy = ly - m.y;

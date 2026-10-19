@@ -12,8 +12,9 @@
   };
   let T = 1000;
   const BASE = Date.parse('2026-10-18T15:00:00Z'), RealDate = Date, realSetTimeout = setTimeout;
+  let wall = BASE; // the wall clock at T = 0: a scorching lantern's scene moves it (catchScorch), the stale PRs' dates stay on BASE
   performance.now = () => T;
-  window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(BASE + T); } static now() { return BASE + T; } };
+  window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(wall + T); } static now() { return wall + T; } };
   window.requestAnimationFrame = () => 0;
   window.setInterval = () => 0;
   window.setTimeout = () => 0;
@@ -65,8 +66,21 @@
   // the session text is encoded and decoded off the clock: let the last picture land, draw the current one, let it land
   const settle = async () => { while (busy) await new Promise(r => realSetTimeout(r, 10)); };
   const snap = name => async () => { await settle(); tickPages(); await settle(); await new Promise(r => realSetTimeout(r, 50)); return name; };
+  // On a lantern that scorches, move the wall clock (and nothing else) so sess-alpha's next scorch, found with the page's
+  // own schedule, starts the hit plus 0.5s before the last picture: it shows the puff, the sparks and the first smoke.
+  const LAST = 21000;
+  const catchScorch = () => {
+    if (!STYLES[Q.get('style')]?.scorches) return;
+    const u = wall + LAST - (SCORCH.hit + 0.5) * 1000;
+    for (let d = 0; d <= 2 * SCORCH.slot * 1000; d += 1000) {
+      const e = scorchClock('sess-alpha', u + d), start = e && u + d - e.t * 1000;
+      if (e && start >= u) { wall += start - u; return; }
+    }
+    errs.push('no scorch for sess-alpha within two slots');
+  };
   const steps = [
     () => {
+      catchScorch();
       emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
       emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too' }]);
       emit('stale', stale(false));
@@ -76,7 +90,7 @@
     run(6),
     ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), () => { hideCard(); }] : []),
     () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
-    run(14), snap('t20'),
+    run(14), snap('t20'), // T = LAST
   ];
   window.__drive = async () => {
     while (steps.length && !errs.length) { const r = await steps.shift()(); if (r && !errs.length) return r; }
