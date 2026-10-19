@@ -270,18 +270,24 @@ const CANDLE = (() => {
   // a curve through points, rounding each corner between them
   const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
   // the crown's back wall, ragged and melted at the shoulders; its front wall runs a unit below (the lip)
-  const CROWN = [[290, 245], [290, 242], [296, 238.6], [312, 237.8], [328, 239], [352, 239.2], [368, 238.4], [384, 239.2], [390, 242], [390, 245]];
-  const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H290Z`;
+  // (each point is across the pillar from -1 to 1, and up from the rim)
+  const { r: R, rim } = PILLAR, side = cx + K.side * R; // the pillar's half-width and rim, and where its dark side starts
+  const CROWN = [[-1, 5], [-1, 2], [-0.88, -1.4], [-0.56, -2.2], [-0.24, -1], [0.24, -0.8], [0.56, -1.6], [0.88, -0.8], [1, 2], [1, 5]]
+    .map(([u, dy]) => [cx + u * R, rim + dy]);
+  const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H${cx - R}Z`;
   // drips from the crown: [middle, width, where it ends, and where a second bulge sits on the way down], each ending in a
-  // bulb 1.3 times its width; the main one runs out of the notch
-  const DRIPS = [[292, 6, 316], [311, 4.5, 262], [330, 5.5, 288], [349, 4, 256], [368, 8, 338, 300], [388, 5, 296]];
+  // bulb 1.3 times its width; the main one runs out of the notch. Each middle is across the pillar from -1 to 1, and the
+  // drops are below the rim.
+  const DRIPS = [[-0.96, 6, 76], [-0.58, 4.5, 22], [-0.2, 5.5, 48], [0.18, 4, 16], [0.56, 8, 98, 60], [0.96, 5, 56]]
+    .map(([u, w, e, bulge]) => [cx + u * R, w, rim + e, ...bulge ? [rim + bulge] : []]);
+  const NOTCH = DRIPS[4][0]; // the main drip's middle
   const dripD = (/** @type {number[]} */ [c, w, e, bulge]) => {
     const r = 0.65 * w, y = n(e - r - Math.sqrt(r * r - w * w / 4)), b = n(0.6 * w);
-    return `M${n(c - w / 2)} 240V${y}A${n(r)} ${n(r)} 0 1 0 ${n(c + w / 2)} ${y}V240Z` + (bulge ? `M${n(c - b)} ${bulge}a${b} ${b} 0 1 0 ${2 * b} 0a${b} ${b} 0 1 0 ${-2 * b} 0Z` : '');
+    return `M${n(c - w / 2)} ${rim}V${y}A${n(r)} ${n(r)} 0 1 0 ${n(c + w / 2)} ${y}V${rim}Z` + (bulge ? `M${n(c - b)} ${bulge}a${b} ${b} 0 1 0 ${2 * b} 0a${b} ${b} 0 1 0 ${-2 * b} 0Z` : '');
   };
   const drips = DRIPS.map(d => {
-    const [lit, dark] = d[0] > 362 ? DRIP.dark : DRIP.lit, r = 0.65 * d[1];
-    return `<path d="${dripD(d)}" fill="${lit}"/><rect x="${n(d[0] + d[1] / 6)}" y="240" width="${n(r + 1 - d[1] / 6)}" height="${d[2] - 239}" fill="${dark}" clip-path="url(#cdDrips)"/>`;
+    const [lit, dark] = d[0] > side ? DRIP.dark : DRIP.lit, r = 0.65 * d[1];
+    return `<path d="${dripD(d)}" fill="${lit}"/><rect x="${n(d[0] + d[1] / 6)}" y="${rim}" width="${n(r + 1 - d[1] / 6)}" height="${d[2] - rim + 1}" fill="${dark}" clip-path="url(#cdDrips)"/>`;
   }).join('');
   // a grape: purple, its lower right in shadow, a pale bloom where the light catches it
   const GRAPE = `<g id="cdGrape"><circle r="5" fill="#5E3470"/><path d="M4.7 -1.71A5 5 0 0 1 -2.5 4.33A8 8 0 0 0 4.7 -1.71Z" fill="#3B1F48"/>
@@ -331,13 +337,14 @@ const CANDLE = (() => {
     ${DRUM(K, 452, 14, 8)}
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#3E2914"/><!-- the pan, its inside in the pillar's shadow -->
-    <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="362" y="230" width="30" height="${PILLAR.bottom - 230}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
+    <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="${n(side)}" y="${rim - 10}" width="${n(cx + R + 2 - side)}" height="${PILLAR.bottom - rim + 10}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
     ${drips}
-    <rect id="paperGlow" x="286" y="236" width="108" height="86" fill="url(#cdGlow)" clip-path="url(#cdWax)"/><!-- lit from within, under the rim -->
+    <rect id="paperGlow" x="${cx - R - 4}" y="${rim - 4}" width="${2 * R + 8}" height="86" fill="url(#cdGlow)" clip-path="url(#cdWax)"/><!-- lit from within, under the rim -->
     <path d="${smooth(CROWN.map(([x, y]) => [x, y + 1]))}" fill="none" stroke="#D8C5A2" stroke-width="1"/>
-    <path class="paperLit" d="M357 239.4C357.5 243.5 360 243.5 368 243.5S378.5 243.5 379 239.4Z" fill="currentColor"/><!-- the notch the main drip spilled from, its far wall lit -->
-    <path d="M357 240C357.5 243.5 360 243.5 368 243.5S378.5 243.5 379 240" fill="none" stroke="#D8C5A2" stroke-width="1"/>
-    <path d="M281 436C280.5 430 283 427.5 286.5 427.2C290 427 292.5 430 292 436Z" fill="${DRIP.lit[0]}"/><path d="M388 436C387.5 430 390 427.5 393.5 427.2C397 427 399.5 430 399 436Z" fill="${DRIP.dark[0]}"/>
+    ${(notch => `<path class="paperLit" d="${notch(-0.6)}Z" fill="currentColor"/><!-- the notch the main drip spilled from, its far wall lit -->
+    <path d="${notch(0)}" fill="none" stroke="#D8C5A2" stroke-width="1"/>`)(dy => `M${n(NOTCH - 11)} ${n(rim + dy)}C${n(NOTCH - 10.5)} ${n(rim + 3.5)} ${n(NOTCH - 8)} ${n(rim + 3.5)} ${n(NOTCH)} ${n(rim + 3.5)}S${n(NOTCH + 10.5)} ${n(rim + 3.5)} ${n(NOTCH + 11)} ${n(rim + dy)}`)}
+    ${[-1, 1].map(u => { const x = cx + u * (R + 3.5), y = PILLAR.dish, fill = (u < 0 ? DRIP.lit : DRIP.dark)[0]; // a drip pooled in the pan at each side
+      return `<path d="M${x - 5.5} ${y + 10}C${x - 6} ${y + 4} ${x - 3.5} ${y + 1.5} ${x} ${n(y + 1.2)}C${x + 3.5} ${y + 1} ${x + 6} ${y + 4} ${x + 5.5} ${y + 10}Z" fill="${fill}"/>`; }).join('')}
     ${turned('cdBowl', profile(PILLAR.dish, 452, y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}
     <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
     ${beads(PILLAR.dish, 81, 262, 418, 13, 2.2, 0)}
@@ -349,8 +356,8 @@ const CANDLE = (() => {
     <path d="M282 432Q268 434 260 440Q252 446 256 449Q260 450 259 446M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
     ${grapes(lying)}`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember
-  const front = `<path d="M340 240V233Q340 229.6 342.5 228.5" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M340.6 230.6Q341.2 229 342.5 228.5" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
+  const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
   return { back, front };
 })();
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
