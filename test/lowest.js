@@ -90,7 +90,8 @@ function path(d, M) {
   let low = -Infinity, x = 0, y = 0, sx = 0, sy = 0, lastC = null, lastQ = null;
   for (const seg of d.match(/[MmLlHhVvCcSsQqTtAaZz][^MmLlHhVvCcSsQqTtAaZz]*/g) || []) {
     const c = seg[0], C = c.toUpperCase(), rel = c !== C, v = nums(seg.slice(1)), n = SIZE[C];
-    if (C === 'Z') { [x, y] = [sx, sy]; lastC = lastQ = null; continue; } // back to the subpath's start
+    // Z closes back to the subpath's start, which a lone `M x y Z` draws too (a zero-length subpath shows its caps)
+    if (C === 'Z') { [x, y] = [sx, sy]; lastC = lastQ = null; low = Math.max(low, Y(x, y)); continue; }
     if (!v.length || v.length % n) throw new Error(`path data not understood: "${seg}"`);
     for (let i = 0; i < v.length; i += n) {
       const g = v.slice(i, i + n), ox = rel ? x : 0, oy = rel ? y : 0, pt = j => [g[j] + ox, g[j + 1] + oy];
@@ -113,7 +114,8 @@ function path(d, M) {
       }
       if (C === 'T') { q1 = mirror(lastQ); low = Math.max(low, quadratic([Y(...from), Y(...q1), Y(...to)])); }
       [x, y] = to;
-      // a move draws nothing; every other segment counts its ends (a curve's own ends included)
+      // a move draws nothing unless a segment or a Z follows it; every other segment counts its ends (a curve's own ends
+      // included)
       if (C === 'M' && i === 0) [sx, sy] = to;
       else low = Math.max(low, Y(...from), Y(x, y));
       lastC = c2; lastQ = q1;
