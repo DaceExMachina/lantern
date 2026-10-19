@@ -1,13 +1,24 @@
-// The page's pure geometry: landing spots on the lantern (page/lanterns.js) and the flapping wing (page/scene.js).
-// The page is plain classic scripts, so they run here in a vm context, in index.html's order, and share its globals.
+// The page's pure geometry and the lantern styles: landing spots on the lantern and what each style draws and does
+// (page/lanterns.js), whether it sways (page/frame.js), and the flapping wing (page/scene.js). The page is plain classic
+// scripts, so they run here in a vm context, in index.html's order, and share its globals; `document` is a stub holding
+// the few elements applyStyle and swingLantern touch.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const page = vm.createContext({ URLSearchParams, location: { search: '' } }); // a plain window, no query string
-for (const f of ['scene', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+const row = () => ({ title: 'its own title', dataset: {}, classList: { toggle() {} } }); // a settings row
+const attrs = {}, els = {
+  lantern: { innerHTML: '', getAttribute: k => attrs[k] ?? null, setAttribute: (k, v) => { attrs[k] = v; } },
+  style: { value: '' },
+  textToggle: { disabled: false, parentElement: row() },
+  ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
+};
+const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
+// a plain window, no query string
+const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, moths: new Map() });
+for (const f of ['scene', 'lanterns', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 // How far round the side a perch sits: 0 at the lantern's middle, 1 at its rim (at that height).
@@ -30,6 +41,73 @@ test('landing spots keep their slices in order: a direction nearer the side land
     const quarter = angles.filter(a => a >= 0 && a <= Math.PI / 2).reverse().map(a => across(key, a, r));
     for (let i = 1; i < quarter.length; i++) assert.ok(quarter[i] > quarter[i - 1], `${key}, rand ${r}: step ${i} lands at ${quarter[i]}, not past ${quarter[i - 1]}`);
   }
+});
+
+test('the candle is the fourth lantern in the menu', () => {
+  assert.deepStrictEqual(styles, ['barrel', 'chochin', 'moroccan', 'candle']);
+  assert.strictEqual(run('STYLES.candle.name'), 'Pillar candle');
+});
+
+test('a standing lantern holds still with nothing to hang from; every hanging one sways on one', () => {
+  assert.deepStrictEqual(styles.filter(k => run(`STYLES.${k}.stands`)), ['candle'], 'the candle, and only the candle, stands');
+  const check = key => {
+    run(`applyStyle('${key}')`);
+    const sway = [0.5, 2, 7.3].map(s => run(`swingLantern(1 / 60, ${s}); swayAngle`));
+    const hang = /id="hang"/.test(els.lantern.innerHTML);
+    if (run(`STYLES.${key}.stands`)) {
+      assert.deepStrictEqual(sway, [0, 0, 0], `${key} stands still`);
+      assert.deepStrictEqual(run('rot(300, 400)'), [300, 400], `${key}: nothing attached to it turns`);
+      assert.ok(!hang, `${key} has nothing to hang from`);
+    } else {
+      assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: ${sway}`);
+      assert.ok(hang, `${key} hangs from a string or chain`);
+    }
+  };
+  for (const key of styles) check(key);
+  run(`applyStyle('candle')`);
+  check('barrel'); // switching back brings the sway and the string back
+});
+
+test('moths land on the candle\'s wax: below its rim, above its dish and within the pillar', () => {
+  const P = run('PILLAR');
+  for (const a of angles) for (const r of [0, 0.5, 1]) {
+    const [x, y] = run(`style = STYLES.candle; pickPerch(${a}, () => ${r})`);
+    assert.ok(P.rim < y && y < P.dish, `a ${a.toFixed(2)}, rand ${r}: y ${y} is off the wax (${P.rim} to ${P.dish})`);
+    assert.ok(Math.abs(x - P.cx) <= P.r, `a ${a.toFixed(2)}, rand ${r}: x ${x} is past the pillar's side`);
+  }
+});
+
+test('the candle shades the room below its rim, and nothing above its flame', () => {
+  const c = run('STYLES.candle'), P = run('PILLAR');
+  assert.deepStrictEqual([...c.holder], [P.rim, P.r], 'the fan below is set by the rim, the widest thing under the flame');
+  assert.ok(c.light[1] < c.holder[0], 'the light sits above the rim, so the fan opens downward');
+  assert.strictEqual(c.caps, undefined, 'no caps: nothing above the flame');
+  assert.strictEqual(c.dim, undefined, 'the flame is bare');
+  assert.ok(!/class="band"/.test(c.back + c.front), 'no solid bands');
+});
+
+test('the candle\'s wax under the rim takes the flame\'s colour', () => {
+  const c = run('STYLES.candle'), svg = c.back + c.front;
+  const glow = svg.match(/<\w+\b[^>]*\bid="paperGlow"[^>]*>/);
+  assert.ok(glow, 'a #paperGlow band');
+  const grad = glow[0].match(/fill="url\(#([\w-]+)\)"/);
+  assert.ok(grad, `filled by a gradient: ${glow[0]}`);
+  const body = svg.match(new RegExp(`<(linear|radial)Gradient\\b[^>]*\\bid="${grad[1]}"[^>]*>([\\s\\S]*?)</\\1Gradient>`));
+  assert.ok(body, `#${grad[1]} is defined in the markup`);
+  const stops = body[2].match(/<stop\b[^>]*>/g) || [];
+  assert.ok(stops.length > 1 && stops.every(t => /class="paperStop"/.test(t)), `its stops take the flame's colour: ${stops}`);
+  assert.strictEqual((svg.match(/class="paperLit"/g) || []).length, 1, 'one patch lit by the flame');
+});
+
+test('on the candle the session text and ribbon controls grey out', () => {
+  run(`applyStyle('candle')`);
+  assert.strictEqual(els.textToggle.disabled, true);
+  assert.strictEqual(els.textToggle.parentElement.title, 'Only the paper lanterns show session text');
+  assert.ok(els.ribbons.children.every(b => b.disabled), 'every swatch');
+  assert.strictEqual(els.ribbons.parentElement.title, 'Only the barrel has a ribbon');
+  run(`applyStyle('barrel')`);
+  assert.strictEqual(els.textToggle.disabled, false, 'and come back on the barrel');
+  assert.strictEqual(els.ribbons.parentElement.title, 'its own title');
 });
 
 // flapWing became a view onto the one 3D wing model (wing3d); in flight it has to draw exactly what the old
