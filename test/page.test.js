@@ -126,19 +126,14 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
   assert.ok(!/class="band"/.test(c.back + c.front), 'no solid bands');
 });
 
-test('each fan of shade starts at the edge that throws it, not at the light', () => {
+test('the candle\'s fan of shade starts at its rim; every other lantern\'s starts at the light', () => {
   for (const key of styles) {
     run(`applyStyle('${key}'); swingLantern(1 / 60, 0.5)`);
     run(`drawLight(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 })`);
     // measured along the lantern's own axis, which the shader turns with its sway
-    const c = run(`STYLES.${key}`), y = c.light[1], from = page.background.capFrom;
-    if (c.caps) {
-      assert.ok(Math.abs(y - from[0] - c.caps[0]) < 1e-9, `${key}: the fan above starts at its top cap, ${c.caps[0]}, not ${y - from[0]}`);
-      assert.ok(Math.abs(y + from[1] - c.caps[1]) < 1e-9, `${key}: the fan below starts at its bottom cap, ${c.caps[1]}, not ${y + from[1]}`);
-    } else if (c.holder) {
-      assert.strictEqual(from[0], 0, `${key}: no fan above`);
-      assert.ok(Math.abs(y + from[1] - c.holder[0]) < 1e-9, `${key}: the fan below starts at its holder's edge, ${c.holder[0]}, not ${y + from[1]}`);
-    }
+    const c = run(`STYLES.${key}`), from = [...page.background.capFrom];
+    if (key === 'candle') assert.deepStrictEqual(from, [0, c.holder[0] - c.light[1]], 'the fan below starts at the rim');
+    else assert.deepStrictEqual(from, [0, 0], `${key}: its fans start at the light`);
   }
 });
 

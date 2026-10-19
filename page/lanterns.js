@@ -8,7 +8,7 @@
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass). `holder` is the height and half-width of the edge below its flame
 // that bounds its light (a burner cup's bottom, a candle's rim). `stands` is a lantern on its own foot, which doesn't sway
-// and has nothing to hang from.
+// and has nothing to hang from. `shadeFromHolder` starts the shade below at the holder's edge instead of at the light.
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
@@ -455,7 +455,7 @@ const STYLES = {
   candle: {
     name: 'Pillar candle', stands: true, paper: false, // a bare flame, standing on the crown
     flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye],
-    holder: [PILLAR.rim, PILLAR.r], // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
+    holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
     // the wax alone, a straight cylinder, its highest landing spot a moth's reach and the clearance below the flame
     body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
       half: () => PILLAR.r },

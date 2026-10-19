@@ -69,7 +69,7 @@ float light(vec2 p) {
   }
   // the solid caps of a paper lantern: no light leaves through its top or bottom, so above and below it a fan stays
   // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway.
-  // Each fan starts at its cap's edge (uCapFrom, above and below the light), where the light is first cut off.
+  // Each fan starts uCapFrom above and below the light (0: at the light).
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
   float past = step(lq.y < 0.0 ? uCapFrom.x : uCapFrom.y, abs(lq.y));
