@@ -1,4 +1,4 @@
-// Scorched moths on the candle (page/frame.js): a session moth whose PR checks are failing flies too close to the flame
+// Scorched moths on the candle (page/frame.js). A session moth whose PR checks are failing flies too close to the flame
 // once a minute, on a schedule every window shares (the wall clock, the moth's key), and darts about smoking until it
 // settles. The page is plain classic scripts, run here in a vm context in index.html's order. Each context's Date.now
 // is the test's own wall clock; its frame clock and performance.now are separate, as they are in a real window.
@@ -26,7 +26,7 @@ const domStub = () => {
   return { els, document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [], createElementNS: (_, tag) => node(tag) } };
 };
 
-// One window: its own performance.now origin (ms); the wall clock is shared through `clock`.
+// One window, with its own performance.now origin (ms). The wall clock is shared through `clock`.
 const clock = { wall: BASE };
 function context(origin = 1000, document = undefined) {
   const perf = { t: origin, now: () => perf.t };

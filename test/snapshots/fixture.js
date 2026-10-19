@@ -12,7 +12,7 @@
   };
   let T = 1000;
   const BASE = Date.parse('2026-10-18T15:00:00Z'), RealDate = Date, realSetTimeout = setTimeout;
-  let wall = BASE; // the wall clock at T = 0: a scorching lantern's scene moves it (catchScorch), the stale PRs' dates stay on BASE
+  let wall = BASE; // the wall clock at T = 0. A scorching lantern's scene moves it (catchScorch); the stale PRs' dates stay on BASE
   performance.now = () => T;
   window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(wall + T); } static now() { return wall + T; } };
   window.requestAnimationFrame = () => 0;
@@ -67,7 +67,7 @@
   const settle = async () => { while (busy) await new Promise(r => realSetTimeout(r, 10)); };
   const snap = name => async () => { await settle(); tickPages(); await settle(); await new Promise(r => realSetTimeout(r, 50)); return name; };
   // On a lantern that scorches, move the wall clock (and nothing else) so sess-alpha's next scorch, found with the page's
-  // own schedule, starts the hit plus 0.5s before the last picture: it shows the puff, the sparks and the first smoke.
+  // own schedule, starts the hit plus 0.5s before the last picture, so it shows the puff, the sparks and the first smoke.
   const LAST = 21000;
   const catchScorch = () => {
     if (!STYLES[Q.get('style')]?.scorches) return;

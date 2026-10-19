@@ -294,8 +294,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
-  // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup's bottom or a candle's
-  // rim) throws a fan straight down, seen from the flame core's live centre so the fan breathes with it
+  // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup or a candle's rim)
+  // throws a fan straight down, seen from the flame core's live centre so the fan breathes with it
   const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
@@ -320,7 +320,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
 
 // ---- scorched moths ----------------------------------------------------------
 // On a lantern whose flame is bare and in reach (style.scorches), a session moth whose PR has failing checks flies too
-// close to the flame once a minute until they pass: a puff and sparks at the touch, then it darts about with its wing
+// close to the flame once a minute until they pass. There's a puff and sparks at the touch, then it darts about with its wing
 // tips smoking and its wings charred a little, until they heal. Each moth's wall-clock time splits into `slot`-second
 // slots, shifted by its own seeded phase so red moths don't scorch in step; each slot holds one episode `length` long,
 // starting at a seeded point in the slot's first `window` seconds. A moth must be eligible within `start` of that start,
@@ -346,7 +346,7 @@ function scorchFlight(t, { hit, length } = SCORCH) {
 // One moth's episode, once a frame (mothTarget; `flying` only in its home-drift branch). It starts within `start` of a
 // scheduled start while the moth is eligible; before the hit, losing eligibility (landing, leaving, green checks, GitHub
 // off, another lantern) ends it with nothing to show; after the hit it runs out its length, steered and smoking only
-// while flying, unless the lantern changes. At the hit it throws sparks into the flame's pool: 5 less the scorch
+// while flying, unless the lantern changes. At the hit it throws 5 sparks into the flame's pool, less the scorch
 // sparks still alive, so scorches never hold more than 5 of its 12. Touches no DOM; m.scorch exists only during one.
 function scorchStep(m, flying, now = Date.now()) {
   const red = () => flying && tongue && style.scorches && m.session?.github?.some(p => p.need === 'failing');
@@ -603,8 +603,8 @@ function mothWings(m, { tx, ty, flap, needsMe }, dt, s) {
   return [upPts, sidePts];
 }
 
-// Colour: moths near the lantern catch its light; the session that needs me turns violet; a scorched one is charred
-// a little, healing as its episode runs out.
+// Moths near the lantern catch its light, the session that needs me turns violet, and a scorched one is charred a
+// little, healing as its episode runs out.
 // Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
 function mothColour(m, needsMe, upPts, sidePts, dt) {
   const host = m.parentId ? moths.get(m.parentId) : m, calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';

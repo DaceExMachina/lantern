@@ -23,7 +23,7 @@ for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase
 els.fCore.getBBox = () => ({ x: 333, y: 352, width: 14, height: 30 }); // drawLight's flame core, somewhere in the tongue
 const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
 // a plain window, no query string; the Moroccan's far wall counts as baked already (background.js isn't loaded)
-// background.js isn't loaded: drawBackground only records what drawLight gives it, and there's no dust
+// background.js isn't loaded, so drawBackground only records what drawLight gives it, and there's no dust
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {},
   drawBackground: v => { page.background = v; }, dust: [], farDust: [], dustData: { set() {} } });
 for (const f of ['scene', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });

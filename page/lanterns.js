@@ -6,10 +6,10 @@
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
-// for a lantern that holds some back (pierced brass). `holder` is the height and half-width of the edge below its flame
-// that bounds its light (a burner cup's bottom, a candle's rim). `stands` is a lantern on its own foot, which doesn't sway
+// for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
+// burner cup, a candle's rim), as a height and a half-width. `stands` is a lantern on its own foot, which doesn't sway
 // and has nothing to hang from. `shadeFromHolder` starts the shade below at the holder's edge instead of at the light.
-// `scorches` puts its bare flame in moths' reach: a moth whose session has failing PR checks gets scorched (frame.js).
+// `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
@@ -235,7 +235,7 @@ PILLAR.flame = [PILLAR.cx, PILLAR.rim - 2, 0.8]; // the shared flame, standing o
 // Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
 // tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units.
 const FLAME_DIP = 0.04 * 96 * 1.08;
-// How far a landed moth's wings reach from its perch on screen: the wing point furthest from the joint, at r, swells with
+// How far a landed moth's wings reach from its perch on screen. The wing point furthest from the joint, at r, swells with
 // perspective to at most r·EYE/√(EYE² − r²) (wing3d), at the largest moth.
 const MOTH_REACH = (r => r * EYE / Math.sqrt(EYE * EYE - r * r))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
   * Math.max(...Object.values(SIZE));
@@ -413,7 +413,7 @@ const STYLES = {
   moroccan: {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, tassel: [340, 486],
-    holder: [404, 6], // the burner cup under the flame, its bottom's height and half-width; it throws a narrow fan of shadow straight down
+    holder: [404, 6], // the burner cup under the flame, the height of its bottom and the half-width of its mouth; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },

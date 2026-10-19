@@ -67,8 +67,9 @@ float light(vec2 p) {
     float spike = SPIKE * smoothstep(-0.4 * am * close, (0.1 + 0.7 * close) * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
     lit *= 1.0 - mix(shade, spike, close);
   }
-  // the solid caps of a paper lantern: no light leaves through its top or bottom, so above and below it a fan stays
-  // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway.
+  // the solid caps of a paper lantern, or the holder below a flame, let no light out past them, so above and below it a
+  // fan stays darker, one shadow about as wide as the cap seen from the flame, with a soft edge, turned with the lantern's
+  // sway.
   // Each fan starts uCapFrom above and below the light (0: at the light).
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
