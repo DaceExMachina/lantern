@@ -261,7 +261,7 @@ const CANDLE = (() => {
   // drips from the crown: [middle, width, where it ends, and where a second bulge sits on the way down], each ending in a
   // bulb 1.3 times its width; the main one runs out of the notch
   const DRIPS = [[292, 6, 316], [311, 4.5, 262], [330, 5.5, 288], [349, 4, 256], [368, 8, 338, 300], [388, 5, 296]];
-  const dripD = ([c, w, e, bulge]) => {
+  const dripD = (/** @type {number[]} */ [c, w, e, bulge]) => {
     const r = 0.65 * w, y = n(e - r - Math.sqrt(r * r - w * w / 4)), b = n(0.6 * w);
     return `M${n(c - w / 2)} 240V${y}A${n(r)} ${n(r)} 0 1 0 ${n(c + w / 2)} ${y}V240Z` + (bulge ? `M${n(c - b)} ${bulge}a${b} ${b} 0 1 0 ${2 * b} 0a${b} ${b} 0 1 0 ${-2 * b} 0Z` : '');
   };
