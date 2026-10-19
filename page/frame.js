@@ -176,13 +176,15 @@ function rot(px, py) {
 // Sway on the string as a damped pendulum the wind (GUST) pushes, with its tassel, ribbon or knot trailing: it answers a
 // gust a moment after the dust does, overshoots a little and settles on its own (about a 4.4s swing, damped 0.35, which
 // lags the main gust about LAG). It swings from the top of the window, with the push scaled so the lantern moves sideways
-// as much as it did hung at y=20 (0.83 offsets the pendulum's own gain at the main gust).
+// as much as it did hung at y=20 (0.83 offsets the pendulum's own gain at the main gust). A standing lantern (style.stands)
+// holds still at 0, so rot() leaves everything where it's drawn; the pendulum keeps going under it, so a hanging lantern
+// picked afterwards picks up the swing where the wind has it.
 const swing = { a: NaN, v: 0 };
 function swingLantern(elapsed, s) {
   const top = VIEW.top, sl = s - LAG, push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
   if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
   swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
-  swayAngle = swing.a;
+  swayAngle = style.stands ? 0 : swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
@@ -287,8 +289,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
-  // a burner cup under the flame (holder: its bottom and half-width) throws a narrow fan straight down, seen from the flame
-  // core's live centre so the fan breathes with it
+  // what the flame stands in (holder: its bottom and half-width, a burner cup or a candle's rim) throws a fan straight
+  // down, seen from the flame core's live centre so the fan breathes with it
   const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({

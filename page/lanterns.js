@@ -1,11 +1,13 @@
-// The three lanterns, landing spots on them, the warm and cool palettes, and seeded randomness.
+// The lanterns (three that hang and a candle that stands), landing spots on them, the warm and cool palettes, and seeded
+// randomness.
 
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame. `flame` places the flame's base and sets its size,
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
-// for a lantern that holds some back (pierced brass), and `holder` is the burner cup under its flame.
+// for a lantern that holds some back (pierced brass), and `holder` is what its flame stands in (a burner cup, a candle's
+// rim): its bottom and half-width. `stands` is a lantern on its own foot: it doesn't sway and has nothing to hang from.
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
@@ -220,6 +222,123 @@ const DRUM = (kit, y, half, height, paper = 0) => {
     + `<path d="${band(y, bottom)}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`
     + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
 };
+// The pillar candle: an ivory pillar on a bronze altar candlestick wound with a grapevine. It stands on its own foot
+// instead of hanging (style.stands), and is drawn seen from its light's height with the barrel's rule: an edge d below
+// that sags d / 1350 of its half-width at the front, so the rim, just under the flame, is edge-on and the drip pan and
+// foot are seen from above. The pillar's numbers place the flame, the light, the shade and the wax moths land on: its
+// middle, half-width, crown (the rim, at its mean height), bottom (hidden in the pan), the pan's rim, and the eye.
+const PILLAR = { cx: 340, r: 50, rim: 240, bottom: 440, dish: 426 };
+PILLAR.eye = PILLAR.rim - 18; // the flame's core: where the light comes from, and the drawing's eye height
+LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#8A5E2E', dark: '#553A1B', ink: '#1E1209', line: 1.2,
+  lip: [0, '#1E1209'], rim: [0, 0, 0] }; // darker and browner than the Moroccan's brass
+const CANDLE = (() => {
+  const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#D2A55A', n = v => +v.toFixed(2), pt = ([x, y]) => `${n(x)} ${n(y)}`;
+  const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
+  const WAX = ['#EADBC0', '#CDB894'], DRIP = { lit: ['#F2E6CF', '#CDB690'], dark: ['#D9C6A2', '#B9A27C'] }; // lit, dark side
+  // a turned bronze part from its profile, [y, half-width] top to bottom: closed by its bottom edge's front arc and its
+  // top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
+  // flat lit, darker from K.side of the way out, in an ink outline
+  const turned = (id, prof, bowl = false) => {
+    const [y0, h0] = prof[0], [y1, h1] = prof[prof.length - 1];
+    const d = `M${prof.map(([y, h]) => pt([cx - h, y])).join('L')}Q${cx} ${n(y1 + 2 * sag(y1, h1))} ${n(cx + h1)} ${n(y1)}`
+      + `L${[...prof].reverse().map(([y, h]) => pt([cx + h, y])).join('L')}Q${cx} ${n(y0 + (bowl ? 2 : -2) * sag(y0, h0))} ${n(cx - h0)} ${n(y0)}Z`;
+    const edge = prof.map(([y, h]) => pt([cx + K.side * h, y + sag(y, h) * (1 - K.side ** 2)]));
+    return `<clipPath id="${id}"><path d="${d}"/></clipPath><path d="${d}" fill="${K.lit}"/>`
+      + `<path d="M${edge.join('L')}L${cx + 100} ${n(y1 + 30)}V${n(y0 - 30)}Z" fill="${K.dark}" clip-path="url(#${id})"/>`
+      + `<path d="${d}" fill="none" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
+  };
+  const profile = (y0, y1, half, steps = 12) => Array.from({ length: steps + 1 }, (_, i) => { const y = y0 + (y1 - y0) * i / steps; return [y, half(y)]; });
+  // gilt beads along an edge's front arc (y, `h` either side), from x0 to x1, nudged `dy` off it
+  const beads = (y, h, x0, x1, count, r, dy) => `<g fill="${GILT}" stroke="${K.ink}" stroke-width=".6">${Array.from({ length: count }, (_, i) => {
+    const x = x0 + (x1 - x0) * i / (count - 1), f = (x - cx) / h;
+    return `<circle cx="${n(x)}" cy="${n(y + sag(y, h) * (1 - f * f) + dy)}" r="${r}"/>`;
+  }).join('')}</g>`;
+  // a curve through points, rounding each corner between them
+  const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
+  // the crown's back wall, ragged and melted at the shoulders; its front wall runs a unit below (the lip)
+  const CROWN = [[290, 245], [290, 242], [296, 238.6], [312, 237.8], [328, 239], [352, 239.2], [368, 238.4], [384, 239.2], [390, 242], [390, 245]];
+  const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H290Z`;
+  // drips from the crown: [middle, width, where it ends, and where a second bulge sits on the way down], each ending in a
+  // bulb 1.3 times its width; the main one runs out of the notch
+  const DRIPS = [[292, 6, 316], [311, 4.5, 262], [330, 5.5, 288], [349, 4, 256], [368, 8, 338, 300], [388, 5, 296]];
+  const dripD = ([c, w, e, bulge]) => {
+    const r = 0.65 * w, y = n(e - r - Math.sqrt(r * r - w * w / 4)), b = n(0.6 * w);
+    return `M${n(c - w / 2)} 240V${y}A${n(r)} ${n(r)} 0 1 0 ${n(c + w / 2)} ${y}V240Z` + (bulge ? `M${n(c - b)} ${bulge}a${b} ${b} 0 1 0 ${2 * b} 0a${b} ${b} 0 1 0 ${-2 * b} 0Z` : '');
+  };
+  const drips = DRIPS.map(d => {
+    const [lit, dark] = d[0] > 362 ? DRIP.dark : DRIP.lit, r = 0.65 * d[1];
+    return `<path d="${dripD(d)}" fill="${lit}"/><rect x="${n(d[0] + d[1] / 6)}" y="240" width="${n(r + 1 - d[1] / 6)}" height="${d[2] - 239}" fill="${dark}" clip-path="url(#cdDrips)"/>`;
+  }).join('');
+  // a grape: purple, its lower right in shadow, a pale bloom where the light catches it
+  const GRAPE = `<g id="cdGrape"><circle r="5" fill="#5E3470"/><path d="M4.7 -1.71A5 5 0 0 1 -2.5 4.33A8 8 0 0 0 4.7 -1.71Z" fill="#3B1F48"/>
+    <circle cx="-1.8" cy="-1.8" r="1.5" fill="#A27DBE"/><circle r="5" fill="none" stroke="#1A0E20" stroke-width=".7"/></g>`;
+  const grapes = ps => ps.map(([x, y]) => `<use href="#cdGrape" x="${n(x)}" y="${n(y)}"/>`).join('');
+  // a bunch, hex-packed: rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
+  // same parity as the one above shifts half a grape so they nest
+  const bunch = (x, y, rows, lean) => {
+    let shift = -2.4;
+    return rows.flatMap((count, i) => {
+      if (i && count % 2 === rows[i - 1] % 2) shift = -shift;
+      return Array.from({ length: count }, (_, j) => [x + lean * i + shift + 9.6 * (j - (count - 1) / 2), y + 8.4 * i]);
+    });
+  };
+  // the bunch lying on the foot, its axis tipped 60 degrees down to the right, nearest grapes drawn last
+  const lying = (() => {
+    const ps = bunch(0, 0, [3, 2, 2], 0), mx = ps.reduce((a, p) => a + p[0], 0) / ps.length, my = ps.reduce((a, p) => a + p[1], 0) / ps.length;
+    return ps.map(([x, y]) => [372 + 0.5 * (x - mx) + 0.866 * (y - my), 536 - 0.866 * (x - mx) + 0.5 * (y - my)]).sort((a, b) => a[1] - b[1]);
+  })();
+  // a vine leaf of five pointed lobes, the middle longest: stem at (x, y), `w` across, pointing `deg` from straight up;
+  // lit on its left half, three veins from the stem to the main tips
+  const EDGE = [[[0.3, -0.02], [0.5, -0.22]], [[0.3, -0.26], [0.22, -0.36]], [[0.4, -0.44], [0.44, -0.66]], [[0.26, -0.62], [0.14, -0.66]], [[0.14, -0.86], [0, -1]]];
+  const leaf = (x, y, w, deg) => {
+    const a = deg * Math.PI / 180, at = ([u, v]) => pt([x + w * (u * Math.cos(a) - v * Math.sin(a)), y + w * (u * Math.sin(a) + v * Math.cos(a))]);
+    const half = side => `M${at([0, 0])}${EDGE.map(([c, p]) => `Q${at([side * c[0], c[1]])} ${at([side * p[0], p[1]])}`).join('')}Z`;
+    return `<path d="${half(-1)}" fill="#5E6B33"/><path d="${half(1)}" fill="#3D4721"/>`
+      + `<path d="M${at([0, 0])}L${at([0, -0.92])}M${at([0, 0])}L${at([0.38, -0.6])}M${at([0, 0])}L${at([-0.38, -0.6])}" fill="none" stroke="#283016" stroke-width=".7"/>`
+      + `<path d="${half(-1)}${half(1)}" fill="none" stroke="#1A200D" stroke-width=".8" stroke-linejoin="round"/>`;
+  };
+  const vine = d => `<path d="${d}" fill="none" stroke="#4A4424" stroke-width="2.2" stroke-linecap="round"/>`;
+  const knopEdge = x => n(474 + 11 * Math.sqrt(1 - ((x - cx) / 25) ** 2) - 1);
+  const back = `<defs><clipPath id="cdWax"><path d="${PILLAR_D}"/><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
+      <clipPath id="cdDrips"><path d="${DRIPS.map(dripD).join('')}"/></clipPath><clipPath id="cdKnop"><ellipse cx="${cx}" cy="474" rx="25" ry="11"/></clipPath>
+      <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
+      <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}</defs>
+    <ellipse cx="${cx}" cy="571" rx="96" ry="11" fill="#120D1C" opacity=".45"/><!-- on an unseen floor -->
+    ${DRUM(K, 543, 74, 8)}${beads(551, 74, 272, 408, 17, 1.9, -2.6)}
+    ${turned('cdFoot', profile(523, 543, y => { const u = (y - 523) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
+    <path d="M${[0.15, 0.3, 0.45, 0.6, 0.75].map(u => { const h = 20 + 50 * u * u * (3 - 2 * u), y = 523 + 20 * u; return pt([cx - 0.7 * h, y + sag(y, h) * 0.51]); }).join('L')}" fill="none" stroke="${GILT}" stroke-width="1" stroke-linecap="round"/>
+    ${DRUM(K, 518, 18, 5)}
+    ${turned('cdBaluster', profile(489, 518, y => y < 504 ? 10 + 7 * Math.sin((y - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((y - 504) / 14 * Math.PI / 2), 16))}
+    ${DRUM(K, 485, 10, 4)}
+    <ellipse cx="${cx}" cy="474" rx="25" ry="11" fill="${K.lit}"/><rect x="${cx + K.side * 25}" y="462" width="30" height="24" fill="${K.dark}" clip-path="url(#cdKnop)"/>
+    <ellipse cx="${cx}" cy="474" rx="25" ry="11" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>
+    <path d="M316.5 470.2A25 11 0 0 1 331.4 463.7" fill="none" stroke="${GILT}" stroke-width="1.2" stroke-linecap="round"/><!-- the knop, gadrooned underneath -->
+    <path d="${[324, 332, 340, 348, 356].map(x => `M${x} 476.5Q${n(x + (x - cx) * 0.08)} ${n((476.5 + knopEdge(x)) / 2)} ${n(x + (x - cx) * 0.04)} ${knopEdge(x)}`).join('')}" fill="none" stroke="#553A1B" stroke-width=".8"/>
+    ${DRUM(K, 452, 14, 8)}
+    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
+    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#3E2914"/><!-- the pan, its inside in the pillar's shadow -->
+    <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="362" y="230" width="30" height="${PILLAR.bottom - 230}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
+    ${drips}
+    <rect id="paperGlow" x="286" y="236" width="108" height="86" fill="url(#cdGlow)" clip-path="url(#cdWax)"/><!-- lit from within, under the rim -->
+    <path d="${smooth(CROWN.map(([x, y]) => [x, y + 1]))}" fill="none" stroke="#D8C5A2" stroke-width="1"/>
+    <path class="paperLit" d="M357 239.4C357.5 243.5 360 243.5 368 243.5S378.5 243.5 379 239.4Z" fill="currentColor"/><!-- the notch the main drip spilled from, its far wall lit -->
+    <path d="M357 240C357.5 243.5 360 243.5 368 243.5S378.5 243.5 379 240" fill="none" stroke="#D8C5A2" stroke-width="1"/>
+    <path d="M281 436C280.5 430 283 427.5 286.5 427.2C290 427 292.5 430 292 436Z" fill="${DRIP.lit[0]}"/><path d="M388 436C387.5 430 390 427.5 393.5 427.2C397 427 399.5 430 399 436Z" fill="${DRIP.dark[0]}"/>
+    ${turned('cdBowl', profile(PILLAR.dish, 452, y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}
+    <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
+    ${beads(PILLAR.dish, 81, 262, 418, 13, 2.2, 0)}
+    ${leaf(282, 430, 26, -35)}${leaf(398, 430, 24, 30)}
+    ${vine('M286 423Q281 424 279 433')}${grapes(bunch(276, 438, [4, 4, 3, 3, 2, 1], -1.4))}
+    ${vine('M394 423Q399 424 401 433')}${grapes(bunch(404, 438, [4, 3, 3, 2, 1], 1.2))}
+    ${vine('M306 452Q330 470 362 476')}${vine('M326 494Q342 500 354 514')}<!-- the vine, where it winds across the front -->
+    ${leaf(318, 472, 15, -75)}
+    <path d="M282 432Q268 434 260 440Q252 446 256 449Q260 450 259 446M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
+    ${grapes(lying)}`;
+  // the wick, over the flame's base so the flame burns round it, its tip an ember
+  const front = `<path d="M340 240V233Q340 229.6 342.5 228.5" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M340.6 230.6Q341.2 229 342.5 228.5" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
+  return { back, front };
+})();
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
   M306.9 290v118M369.9 290v118M275.9 290v118M277 285.4h126M277 408.4h126M277 413.4h126M300 428.3h80M295 244.4h90"/></g>`;
@@ -312,6 +431,13 @@ const STYLES = {
       <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
+  candle: {
+    name: 'Pillar candle', stands: true, paper: false, // a bare flame, standing on the crown
+    flame: [PILLAR.cx, PILLAR.rim - 2, 0.8], light: [PILLAR.cx, PILLAR.eye],
+    holder: [PILLAR.rim, PILLAR.r], // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
+    body: { top: PILLAR.rim + 10, bottom: PILLAR.dish - 8, half: () => PILLAR.r }, // the wax alone, a straight cylinder
+    back: CANDLE.back, front: CANDLE.front,
+  },
 };
 // The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
 const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
@@ -326,7 +452,8 @@ function paintRibbon(name) {
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
 let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
-// its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves.
+// its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
+// standing lantern has none.
 function drawHang() {
   const h = $('hang');
   if (!h) return;
@@ -339,7 +466,8 @@ function drawHang() {
 function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
-  $('lantern').innerHTML = (style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>` : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
+  $('lantern').innerHTML = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
+    : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
     + `<g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>`
     + style.front;
   drawHang();
