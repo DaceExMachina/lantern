@@ -41,8 +41,8 @@ uniform vec4 uHeat; // the hot air over a bare flame (frame.js heat): its tip, h
 // tip, widening as it goes and fading out over 220 units. frame.js heatAt is the same column, so change the two together.
 vec2 heat(vec2 p) {
   if (uHeat.z <= 0.0) return vec2(0.0);
-  float up = uHeat.y - p.y, half = 18.0 + 0.12 * up, t = uHeat.w;
-  float k = uHeat.z * smoothstep(0.0, 12.0, up) * (1.0 - smoothstep(120.0, 220.0, up)) * (1.0 - smoothstep(0.7 * half, half, abs(p.x - uHeat.x)));
+  float up = uHeat.y - p.y, wide = 18.0 + 0.12 * up, t = uHeat.w; // wide: the column's half-width here
+  float k = uHeat.z * smoothstep(0.0, 12.0, up) * (1.0 - smoothstep(120.0, 220.0, up)) * (1.0 - smoothstep(0.7 * wide, wide, abs(p.x - uHeat.x)));
   return 1.25 * k * vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
 }
 // the soft glow round the lantern: a radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
