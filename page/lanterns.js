@@ -330,6 +330,8 @@ const CANDLE = (() => {
     <circle cx="-1.8" cy="-1.8" r="1.5" fill="#A27DBE"/><circle r="5" fill="none" stroke="#1A0E20" stroke-width=".7"/></g>`;
   const GRAPES = /** @type {number[][]} */ ([]); // every grape drawn, for their glints
   const grapes = ps => ps.map(([x, y]) => (GRAPES.push([n(x), n(y)]), `<use href="#cdGrape" x="${n(x)}" y="${n(y)}"/>`)).join('');
+  // the glints on the grapes from the `from`th drawn on, in their order (frame.js drawShine)
+  const grapeGlints = from => GRAPES.slice(from).map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1" opacity="0"/>`).join('');
   // a hex-packed bunch, in rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
   // same parity as the one above shifts half a grape so they nest
   const bunch = (x, y, rows, lean) => {
@@ -391,7 +393,9 @@ const CANDLE = (() => {
     <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${n(sag(P.top - 5, FOOT))}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
     ${vine(`M${climbAt}Q${left + 4} ${P.top + 49} ${left + 2} ${P.top + 31}Q${left + 2} ${P.top + 13} ${left + 28} ${P.top + 9}Q${left + 56} ${P.top + 5} ${left + 72} ${P.top + 1}`)}
     ${leaf(cx - 40, P.top + 63, 24, -20)}${leaf(cx + 56, P.top + 51, 22, 30)}${leaf(left + 4, P.top + 41, 24, -60)}${leaf(cx + P.r - 6, P.top + 25, 22, 50)}
-    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}<!-- the vine, up the column, over the slab's edge and across it to the foot --></g>`;
+    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}<!-- the vine, up the column, over the slab's edge and across it to the foot -->
+    <g id="cdPedestalGlints">${grapeGlints(0)}</g></g>`;
+  const onPedestal = GRAPES.length; // the grapes drawn so far are the pedestal's bunch
   // on up the foot and round the baluster to the vine already on the candlestick
   const climb = `${vine(`M${left + 72} ${P.top + 1}Q318 540 330 532Q352 524 352 512Q352 500 334 498Q322 494 330 486Q338 478 352 478`)}
     ${leaf(326, 534, 19, -40)}${leaf(354, 506, 18, 70)}${leaf(330, 490, 17, -70)}`;
@@ -439,7 +443,7 @@ const CANDLE = (() => {
     ${grapes(lying)}
     ${climb}
     <g id="cdGlints">${GLINTS.map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#cdGlint)" opacity="0"/>`).join('')}</g>
-    <g id="cdGrapeGlints">${GRAPES.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1" opacity="0"/>`).join('')}</g><!-- the flame's shine (frame.js drawShine) -->
+    <g id="cdGrapeGlints">${grapeGlints(onPedestal)}</g><!-- the flame's shine (frame.js drawShine) -->
     <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->
     <path id="cdSmoke" fill="none" stroke="url(#cdSmokeG)" stroke-width="1.2" stroke-linecap="round" opacity="0"/>`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember

@@ -330,7 +330,7 @@ function drawShine(s, { size, flick, pulse }) {
   const pool = $('cdPoolGlint');
   put(pool, 'cx', (fx + lean * 0.6 + Math.sin(s * 5.3) * 0.6).toFixed(1)); put(pool, 'rx', (2.4 + 0.6 * flick + 0.3 * Math.sin(s * 7)).toFixed(1));
   put(pool, 'fill', core); put(pool, 'opacity', (0.55 * bright).toFixed(2));
-  [...$('cdGrapeGlints').children].forEach((c, i) => {
+  [...$('cdPedestalGlints').children, ...$('cdGrapeGlints').children].forEach((c, i) => { // the pedestal's bunch first, as CANDLE.grapes
     const [x, y] = shine.grapes[i], dx = fx + lean - x, dy = style.light[1] - y, d = Math.hypot(dx, dy), ph = i * 2.39; // spread round the twinkle
     put(c, 'cx', (x + dx / d * 2.4).toFixed(1)); put(c, 'cy', (y + dy / d * 2.4).toFixed(1)); put(c, 'fill', core);
     put(c, 'opacity', (0.4 * flick * bright * (0.55 + 0.45 * Math.sin(s * 1.7 + ph) ** 2)).toFixed(2));

@@ -23,7 +23,9 @@ function context() {
   run('Date.now = () => wall(); style = STYLES.candle;');
   for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow', 'cdSmoke']) els[id] = node();
   els.cdGlints = node(); els.cdGlints.children = run('CANDLE.glints').map(node);
-  els.cdGrapeGlints = node(); els.cdGrapeGlints.children = run('CANDLE.grapes').map(node);
+  const grapes = run('CANDLE.grapes').map(node), pedestal = (run('STYLES.candle.back').match(/id="cdPedestalGlints">(.*?)<\/g>/)[1].match(/<circle/g) || []).length;
+  els.cdPedestalGlints = node(); els.cdPedestalGlints.children = grapes.slice(0, pedestal);
+  els.cdGrapeGlints = node(); els.cdGrapeGlints.children = grapes.slice(pedestal);
   const flame = { size: 1, flick: 1, pulse: 1 };
   return { els, run, flame, shine: s => run('drawShine')(s, flame), lean: s => run(`wobble(${s}, 3) * 6 * 0.8`) };
 }
@@ -53,7 +55,7 @@ test('each grape\'s glint sits on its side facing the flame, wherever it leans',
   assert.ok(grapes.length > 30, 'every grape has a glint');
   for (const s of leaning(ctx)) {
     ctx.shine(s);
-    ctx.els.cdGrapeGlints.children.forEach((c, i) => {
+    [...ctx.els.cdPedestalGlints.children, ...ctx.els.cdGrapeGlints.children].forEach((c, i) => {
       const [x, y] = grapes[i], dx = num(c, 'cx') - x, dy = num(c, 'cy') - y, tx = fx + ctx.lean(s) - x, ty = fy - y;
       assert.ok((dx * tx + dy * ty) / (Math.hypot(dx, dy) * Math.hypot(tx, ty)) > 0.95, `grape ${i} at s ${s}`);
     });
