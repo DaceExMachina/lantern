@@ -158,7 +158,7 @@ const pal = k => mix(WARM[k], COOL[k], cool);
 let swayAngle = 0;
 // A fake twist on the chain, in degrees of yaw: the swing alone wouldn't turn the faces to the light, but the brass's lighting
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
-// its own, within about ±13. The drawing itself doesn't turn.
+// its own, within about ±18. The drawing itself doesn't turn.
 let twist = 0;
 /** @returns {[number, number]} */
 function rot(px, py) {
@@ -176,9 +176,9 @@ function swingLantern(elapsed, s) {
   swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
-  twist += (swayAngle * 5 + Math.sin(s * 0.23) * 3 - twist) * dt * 1.2;
+  twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
-  // SHEEN), and slides 1.75 units per degree of twist around that, staying within 296 to 342; half-unit steps so put() skips
+  // SHEEN), and slides 1.75 units per degree of twist around that, staying within 288 to 350; half-unit steps so put() skips
   // frames that wouldn't show it
   const dx = Math.round(twist * 3.5) / 2 - 6;
   document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', `translate(${dx} 0)`));
@@ -190,14 +190,16 @@ function swingLantern(elapsed, s) {
     const cy = +base + 0.65 * (+end - +base), ry = 0.45 * Math.abs(+end - +base), cx = 325 + dx + k * (cy - +base);
     put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
   });
-  // the flat parts (lanterns.js FLAT), each facing some angle round the lantern, lit by how squarely they meet a light 40
+  // the flat parts (lanterns.js FLAT), each facing some angle round the lantern, lit by how squarely they meet a light 35
   // degrees to the left, as the lantern twists: one flat tone each, blended continuously along FACET_TONES,
   // then lifted toward white (an edge) or black (a rim); put() skips any whose rounded colour hasn't changed
   document.querySelectorAll('[data-facet]').forEach(n => {
     // a sloping face (data-tilt, degrees up) takes the light, which sits a little above, by its tilt too
     const { facet, lift, paint, tilt = '0' } = /** @type {SVGElement} */ (n).dataset, e = +tilt * Math.PI / 180;
-    const c = Math.cos((+facet + 40 - twist) * Math.PI / 180) * Math.cos(e) + Math.sin(e) * 0.5;
-    const t = Math.max(0, Math.min(1, (c - 0.2) / 0.8)) * 4, i = Math.min(3, Math.floor(t)), tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
+    const c = Math.cos((+facet + 35 - twist) * Math.PI / 180) * Math.cos(e) + Math.sin(e) * 0.5;
+    // squared, so a face's tone moves plainly as it turns (polished metal brightens steeply toward the light), and a face
+    // turned a little away still lifts off the darkest tone as the twist brings it round
+    const u = Math.max(0, Math.min(1, (c + 0.45) / 1.45)), t = u * u * 4, i = Math.min(3, Math.floor(t)), tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
     put(n, paint || 'fill', +lift ? mix(tone, +lift > 0 ? '#ffffff' : '#000000', Math.abs(+lift)) : tone);
   });
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);

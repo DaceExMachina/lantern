@@ -37,6 +37,37 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 const BRASS_FX = new Set((Q.get('brass') || '').split(','));
 const fx = k => BRASS_FX.has(k) || (BRASS_FX.has('all') && k !== 'smooth');
+const BRASS_FLAGS = ['back', 'edges', 'horizon', 'glow', 'patina', 'radial', 'smooth'];
+// the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 1)
+let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 1;
+// ?dev: a panel, top left, with a checkbox per brass flag (ticking one reloads with the new ?brass=, since the lantern's
+// drawing is built from them at load), and the twist's switch and strength, which apply at once and are kept in ?twist=.
+if (Q.has('dev')) {
+  const panel = document.createElement('div'), query = (k, v) => {
+    const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
+  };
+  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 190px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
+    + 'border: 1px solid #4A3B68; border-radius: 10px; color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
+  // each row is one label, its click area the row's full width and height, meeting the next row's
+  const row = (text, attrs) => {
+    const label = document.createElement('label'), input = Object.assign(document.createElement('input'), attrs);
+    label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
+    label.append(...(attrs.type === 'range' ? [text, input] : [input, text])); panel.append(label);
+    return input;
+  };
+  for (const f of BRASS_FLAGS) {
+    const box = row(f, { type: 'checkbox', checked: fx(f) });
+    box.onchange = () => { location.search = query('brass', BRASS_FLAGS.filter(g => g === f ? box.checked : fx(g)).join(',') || null); };
+  }
+  const on = row('twist', { type: 'checkbox', checked: twistGain > 0 });
+  const gain = row('strength', { type: 'range', min: 0, max: 3, step: 0.1, value: twistGain || 1 });
+  gain.style.flex = '1';
+  on.onchange = gain.oninput = () => {
+    twistGain = on.checked ? +gain.value : 0;
+    history.replaceState(null, '', query('twist', twistGain === 1 ? null : String(twistGain)));
+  };
+  document.body.append(panel);
+}
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']])
