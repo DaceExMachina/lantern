@@ -90,7 +90,7 @@ function renderCard() {
     h.textContent = name;
     chip.textContent = s.reported ? 'reported back' : s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'snoozed' : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
     chip.className = 'chip ' + (s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'idle' : s.state);
-    if ((s.state === 'waiting' || s.state === 'paused') && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
+    if (s.state !== 'working' && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
     if (s.state === 'waiting' && s.forYou) rows.push(...forYouRows(s.forYou));
     if (s.github?.length) rows.push(...prRows(s.github));
     if (s.tasks?.length) rows.push(line(`Running: ${s.tasks.join(', ')}`, 'dim'));

@@ -101,6 +101,49 @@ test('SessionEnd removes the session', t => replay(t, 'session-end'));
 test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
+// Background tasks: a session waiting on them counts as working while a task is younger than LANTERN_TASK_FRESH_SECONDS
+// or an agent was heard from within LANTERN_AGENT_FRESH_SECONDS; past both it rests (idle, open but quiet), flipped by
+// the sweep (every LANTERN_SWEEP_SECONDS) with no new event.
+const bg = (agentFresh, taskFresh) => ({ LANTERN_AGENT_FRESH_SECONDS: String(agentFresh), LANTERN_TASK_FRESH_SECONDS: String(taskFresh), LANTERN_SWEEP_SECONDS: '0.1' });
+const stopWith = (...tasks) => ({ session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Running in the background.', background_tasks: tasks });
+const SERVER = { id: 'b1', type: 'shell', status: 'running', description: 'preview server', command: 'npm run preview' };
+const s1 = async base => (await snapshot(base)).sessions.find(s => s.id === 's1');
+const agentTool = { session_id: 's1', hook_event_name: 'PreToolUse', cwd: '/w', agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: { file_path: '/w/x.js' } };
+
+test('a background agent that keeps firing hook events keeps its session working, rests once quiet, and wakes again', async t => {
+  const base = await serve(t, {}, () => {}, bg(1, 0.3));
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(base, '/event', agentTool);
+  await post(base, '/event', stopWith({ id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
+  for (const end = Date.now() + 2500; Date.now() < end; await wait(200)) { // well past the task's 0.3s, the agent busy all along
+    await post(base, '/event', agentTool);
+    assert.strictEqual((await s1(base)).state, 'paused');
+  }
+  const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the quiet session to rest');
+  assert.match(quiet.note, /^1 background task open, quiet for \d+m$/);
+  await post(base, '/event', agentTool);
+  await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
+});
+
+test('a background shell task younger than the threshold keeps its session working', async t => {
+  const base = await serve(t, {}, () => {}, bg(0.1, 60));
+  await post(base, '/event', stopWith(SERVER));
+  await wait(1000); // ten sweeps, the agent threshold long past
+  assert.deepStrictEqual((({ state, note }) => ({ state, note }))(await s1(base)), { state: 'paused', note: 'Waiting on 1 background task' });
+});
+
+test('a background task open past the threshold with no agent activity rests after the sweep, and stays old across turns', async t => {
+  const base = await serve(t, {}, () => {}, bg(0.1, 0.5));
+  await post(base, '/event', stopWith(SERVER));
+  assert.strictEqual((await until(() => s1(base), 'the session')).state, 'paused');
+  const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the session to rest with no new event');
+  assert.match(quiet.note, /^1 background task open, quiet for \d+m$/);
+  // the same server still open at the next turn's end: it's as old as when first seen, so the session rests at once
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'more' });
+  await post(base, '/event', stopWith(SERVER));
+  assert.strictEqual((await s1(base)).state, 'idle');
+});
+
 // What an open page receives after its first load: the SSE blocks sent while `during(blocks)` runs, then 600ms more (the
 // quiet that "nothing else was sent" assertions need; anything that must arrive waits for it inside `during`).
 async function streamed(base, during) {
