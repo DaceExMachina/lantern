@@ -229,6 +229,19 @@ const DRUM = (kit, y, half, height, paper = 0) => {
 // middle, half-width, crown (the rim, at its mean height), bottom (hidden in the pan), the pan's rim, and the eye.
 const PILLAR = { cx: 340, r: 50, rim: 240, bottom: 440, dish: 426 };
 PILLAR.eye = PILLAR.rim - 18; // the flame's core: where the light comes from, and the drawing's eye height
+PILLAR.flame = [PILLAR.cx, PILLAR.rim - 2, 0.8]; // the shared flame, standing on the crown
+// Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
+// tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units.
+const FLAME_DIP = 0.04 * 96 * 1.08;
+// How far a landed moth's wings reach from its perch on screen: the wing point furthest from the joint, at r, swells with
+// perspective to at most r·EYE/√(EYE² − r²) (wing3d), at the largest moth.
+const MOTH_REACH = (r => r * EYE / Math.sqrt(EYE * EYE - r * r))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
+  * Math.max(...Object.values(SIZE));
+const FLAME_CLEARANCE = 10; // the gap kept between a landed moth's wings and the flame at its fullest
+// Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (pickPerch); perchTop is the
+// top a body ending at `bottom` needs for its highest spot to sit at `y`.
+const PERCH_SPREAD = 0.44;
+function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5 + PERCH_SPREAD); }
 LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#8A5E2E', dark: '#553A1B', ink: '#1E1209', line: 1.2,
   lip: [0, '#1E1209'], rim: [0, 0, 0] }; // darker and browner than the Moroccan's brass
 const CANDLE = (() => {
@@ -433,9 +446,11 @@ const STYLES = {
   },
   candle: {
     name: 'Pillar candle', stands: true, paper: false, // a bare flame, standing on the crown
-    flame: [PILLAR.cx, PILLAR.rim - 2, 0.8], light: [PILLAR.cx, PILLAR.eye],
+    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye],
     holder: [PILLAR.rim, PILLAR.r], // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
-    body: { top: PILLAR.rim + 10, bottom: PILLAR.dish - 8, half: () => PILLAR.r }, // the wax alone, a straight cylinder
+    // the wax alone, a straight cylinder, its highest landing spot a moth's reach and the clearance below the flame
+    body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
+      half: () => PILLAR.r },
     back: CANDLE.back, front: CANDLE.front,
   },
 };
@@ -499,7 +514,7 @@ function applyStyle(key) {
 // homes sit in different directions never cross paths.
 function pickPerch(a = Math.random() * 2 * Math.PI, rand = Math.random) {
   const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + rand() * 0.65;
-  const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a) * depth);
+  const y = top + (bottom - top) * (0.5 + PERCH_SPREAD * Math.sin(a) * depth);
   // how far round the side, from the front: never in the middle third of the lantern, where closed wings would point
   // nearly straight at you and thin to a sliver; squeezed rather than clamped so the slices keep their order
   const MIDDLE = 1 / 3; // the share of the lantern's width (centred) that landing spots stay out of
