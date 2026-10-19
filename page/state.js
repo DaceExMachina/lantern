@@ -115,13 +115,12 @@ function hoverArea(m, at) {
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
   // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight
   // to for good. A snoozed moth rests on the lantern without turning it violet.
-  zone.addEventListener('contextmenu', e => {
-    e.preventDefault();
+  areas.get(zone).menu = () => {
     const s = m.session;
     if (!s) return;
     const next = s.forGood ? false : s.state === 'waiting' && !s.snoozed ? true : 'always';
     post('/snooze', { id: s.id, snoozed: next });
-  });
+  };
   return zone;
 }
 function hoverable(m) {
