@@ -25,7 +25,7 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 // light catches it, and deep warm shadow on the right. The highlight is one band shared by three gradients (class
 // sheen, in the lantern's own units, given as [x, colour]): faces, side faces, and the lit edges, chain and finial, whose
 // narrow white peak glints as an edge passes under it. swingLantern slides them all with the lantern's twist (frame.js).
-const TAPERS = [['dome', 244, 154, 154], ['bottom', 434, 486, 486], ['shoulder', 285, 235], ['skirt', 413, 445]];
+const TAPERS = [['dome', 244, 154, 154], ['bottom', 434, 486, 486]];
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
 // The straight and sloping parts (body, frieze, rope and neck bands, shoulder, skirt) are flat polished brass: each face is
@@ -34,13 +34,11 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
-// how strongly the sliding gradients show faintly over the flat faces (?sheen=): see SMOOTH
-const SMOOTH_K = Q.has('sheen') ? +(Q.get('sheen') || 0) : 0.15;
 // How the onions are lit, while Dace compares (?onion=, d by default): d, each gore flat across and curved top to bottom, its
 // tone along its profile; a, each gore lit as its own curved panel with a band across it; b, the side gores flat, darkening
 // toward the tip; c, one sliding band across the whole onion. ponytail: the losers get deleted.
 const ONION = ['a', 'b', 'c', 'd'].includes(Q.get('onion') || '') ? Q.get('onion') : 'd';
-// ?dev: a small panel, top left, to tune the faint sheen and the twist by eye (both apply at once and are kept in the URL),
+// ?dev: a small panel, top left, to tune the twist by eye (applies at once and is kept in the URL),
 // and to switch the onions' lighting (reloads, as the drawing is built from it).
 if (Q.has('dev')) {
   const panel = document.createElement('div'), query = (k, v) => {
@@ -58,12 +56,6 @@ if (Q.has('dev')) {
   const onion = row('onion', { value: ONION });
   onion.replaceWith(Object.assign(document.createElement('select'), { innerHTML: '<option value="d">d: profile</option><option value="a">a: per gore</option><option value="b">b: flat sides</option><option value="c">c: one band</option>',
     value: ONION, onchange: e => { location.search = query('onion', e.target.value); } }));
-  const sheen = row('sheen', { type: 'range', min: 0, max: 1, step: 0.05, value: SMOOTH_K });
-  sheen.style.flex = '1';
-  sheen.oninput = () => {
-    document.querySelectorAll('.smoothOver').forEach(n => n.setAttribute('opacity', sheen.value));
-    history.replaceState(null, '', query('sheen', sheen.value));
-  };
   const on = row('twist', { type: 'checkbox', checked: twistGain > 0 });
   const gain = row('strength', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
   gain.style.flex = '1';
@@ -76,12 +68,10 @@ if (Q.has('dev')) {
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']])
-  // On the tapering parts the band leans in toward the narrow end, as it would on a cone: each part's faces, side faces and
-  // edges get their own gradient (class taper) inheriting the stops by href, leaned each frame so the band runs from where it
-  // sits at the part's wide edge (`base`) to the middle at `apex`, where its slope would meet the middle (on the short
-  // shoulder and skirt, nearer than their true cone's tip, so the lean shows; those two only show faintly, under SMOOTH).
-  // The onions also get a narrow bright ellipse along that band toward their narrow `end` (radial, class taper too).
-  // frame.js sets them.
+  // Onion option c: the band leans in toward the narrow end, as it would on a cone: each onion's faces, side faces and edges
+  // get their own gradient (class taper) inheriting the stops by href, leaned each frame so the band runs from where it sits
+  // at the wide edge (`base`) to the middle at the tip (`apex`), with a narrow bright ellipse along it toward the narrow
+  // `end` (radial, class taper too). frame.js sets them.
   + TAPERS.map(([id, base, apex, end]) => ['F', 'S', 'E'].map(k =>
     `<linearGradient id="sheen-${id}-${k}" class="taper" href="#brass${k}" data-base="${base}" data-apex="${apex}"/>`).join('')
     + (end ? `<radialGradient id="sheen-${id}-R" class="taper" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" data-base="${base}" data-apex="${apex}" data-end="${end}">`
@@ -121,16 +111,11 @@ const SKIRT = 'M277 413H403L380 428H300Z', SKIRT_F = 'M308.5 413H371.5L360 428H3
 const PANEL = (half, front, y, h, band = false, lift = 0) => {
   const r = (x0, x1, more) => `<path ${more} d="M${x0} ${y}H${x1}v${h}H${x0}Z"/>`;
   return (band ? r(340 - half, 340 + half, 'class="band" fill="none"') : '')
-    + r(340 - half, 340 - front, FLAT(-60, lift)) + r(340 - front, 340 + front, FLAT(0, lift)) + r(340 + front, 340 + half, FLAT(60, lift))
-    + (lift ? '' : SMOOTH(r(340 - half, 340 + half, ''), r(340 - front, 340 + front, ''), BRASS.side, BRASS.front));
+    + r(340 - half, 340 - front, FLAT(-60, lift)) + r(340 - front, 340 + front, FLAT(0, lift)) + r(340 + front, 340 + half, FLAT(60, lift));
 };
 // A flat part's paint: one tone by the angle round the lantern it faces and its `lift` (frame.js shades every [data-facet]
 // each frame). A sloping face (shoulder, skirt) also tilts up (or down, below 0) by `tilt` degrees.
 const FLAT = (angle, lift = 0, paint = 'fill', tilt = 0) => `data-facet="${angle}" data-lift="${lift}" data-paint="${paint}"${tilt ? ` data-tilt="${tilt}"` : ''}`;
-// The sliding gradients laid faintly over the flat faces (class smoothOver, at SMOOTH_K): `side` and `front` are the shapes
-// to cover (empty paths whose fill is added here).
-const SMOOTH = (side, front, sideFill, frontFill) =>
-  [[side, sideFill], [front, frontFill]].map(([p, f]) => p.replace('<path ', `<path class="smoothOver" opacity="${SMOOTH_K}" fill="${f}" `)).join('');
 // The shoulder and skirt are flat-faced too (only the onion dome and drop are round): three sloping faces each, tilted up 36
 // degrees and down 57, and their corner edges. `faces` are [path, angle]; strokes are their corner edges, a little lit.
 const SLOPED = (faces, tilt, paint = 'fill') => faces.map(([d, a]) => `<path d="${d}" ${FLAT(a, paint === 'stroke' ? 0.15 : 0, paint, tilt)}/>`).join('');
@@ -329,7 +314,6 @@ const STYLES = {
         ${ONION_FILL('dome', DOME)}
         ${PANEL(45, 22.5, 244, 16)}
         ${SLOPED([['M295 260H317.5L308.5 285H277Z', -60], [SHOULDER_F, 0], ['M362.5 260H385L403 285H371.5Z', 60]], 36)}
-        ${SMOOTH(`<path d="${SHOULDER}"/>`, `<path d="${SHOULDER_F}"/>`, 'url(#sheen-shoulder-S)', 'url(#sheen-shoulder-F)')}
         ${PANEL(63, 31.5, 290, 118)}
         ${ONION === 'c' ? `<path d="${DOME}" fill="url(#sheen-dome-R)"/><path d="${BOTTOM}" fill="url(#sheen-bottom-R)"/>` : ''}
         <path d="M277 290h126v118h-126Z" fill="url(#horizon)"/><path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>
@@ -346,8 +330,7 @@ const STYLES = {
       <path d="M275.5 290h3v118h-3Z" ${FLAT(-90)}/><path d="M401.5 290h3v118h-3Z" ${FLAT(90)}/>
       <path d="M306.5 290h4v118h-4ZM369.5 290h4v118h-4ZM275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="url(#horizon)"/>
       ${ROPE(285)}${ROPE(408)}
-      <g mask="url(#cutouts)">${SLOPED([['M277 413H308.5L320 428H300Z', -60], [SKIRT_F, 0], ['M371.5 413H403L380 428H360Z', 60]], -57)}
-        ${SMOOTH(`<path d="${SKIRT}"/>`, `<path d="${SKIRT_F}"/>`, 'url(#sheen-skirt-S)', 'url(#sheen-skirt-F)')}</g>
+      <g mask="url(#cutouts)">${SLOPED([['M277 413H308.5L320 428H300Z', -60], [SKIRT_F, 0], ['M371.5 413H403L380 428H360Z', 60]], -57)}</g>
       <g stroke-width="1.4">${SLOPED([['M308.5 413L320 428', -30], ['M371.5 413L360 428', 30]], -57, 'stroke')}</g>
       ${PANEL(40, 20, 428, 6, true)}
       ${PANEL(40, 20, 428, 1.2, false, 0.2)}${PANEL(40, 20, 432.8, 1.2, false, 0.2)}
