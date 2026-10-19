@@ -190,33 +190,16 @@ function swingLantern(elapsed, s) {
   // frames that wouldn't show it
   const dx = Math.round(twist * 3.5) / 2 - 6;
   document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', `translate(${dx} 0)`));
-  // a tapering part's band leans by k per unit of height, so it meets the middle (340, 15 right of the stops' 325) at its apex;
-  // a radial one (an onion's) is a narrow ellipse along that band, two thirds of the way to the part's narrow end
-  document.querySelectorAll('.taper').forEach(g => {
-    const { base, apex, end } = /** @type {SVGElement} */ (g).dataset, k = (15 - dx) / (+apex - +base);
-    if (!end) return put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(dx - k * +base).toFixed(2)} 0)`);
-    const cy = +base + 0.65 * (+end - +base), ry = 0.45 * Math.abs(+end - +base), cx = 325 + dx + k * (cy - +base);
-    put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
-  });
   // the flat parts (lanterns.js FLAT): one tone each by the angle they face (facetTone), lifted toward white (an edge) or
   // black (a rim); put() skips any whose rounded colour hasn't changed
   document.querySelectorAll('[data-facet]').forEach(n => {
     const { facet, lift, paint, tilt } = /** @type {SVGElement} */ (n).dataset, tone = facetTone(+facet, +(tilt || 0));
     put(n, paint || 'fill', +lift ? mix(tone, +lift > 0 ? '#ffffff' : '#000000', Math.abs(+lift)) : tone);
   });
-  // the onions' gores (lanterns.js ONION): each a curved panel facing its own way, its tone from facetTone. Option d: down
-  // its profile, each stop the tone of a face at that stop's tilt. Option a: a band that leans toward the tip, sitting across
-  // the gore where its surface faces the light (sin of how far round the light is) and brighter the more the gore faces it;
-  // option b's side gores: their flat tone, darkening toward the tip.
+  // the onions' gores (lanterns.js GORES): down each gore's profile, every stop the tone of a flat face at its angle and tilt
   document.querySelectorAll('.gore').forEach(g => {
-    const { angle, base, tip, tilt, cx, hw, profile } = /** @type {SVGElement} */ (g).dataset, stops = g.children;
-    if (profile) { for (const n of stops) put(n, 'stop-color', facetTone(+angle, +(/** @type {SVGElement} */ (n).dataset.tilt || 0))); return; }
-    const tone = facetTone(+angle, +tilt);
-    if (!cx) { put(stops[0], 'stop-color', tone); put(stops[1], 'stop-color', mix(tone, '#000000', 0.3)); return; }
-    const d = (+angle + 35 - twist) * Math.PI / 180, x = +cx - Math.sin(d) * +hw * 0.8, k = (+cx - x) / (+tip - +base);
-    put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(x - k * +base).toFixed(2)} 0)`);
-    const dark = mix(tone, '#000000', 0.35), lit = mix(tone, '#FFF0C8', 0.45 * Math.max(0, Math.cos(d)));
-    [dark, tone, lit, tone, dark].forEach((c, i) => put(stops[i], 'stop-color', c));
+    const angle = +(/** @type {SVGElement} */ (g).dataset.angle || 0);
+    for (const n of g.children) put(n, 'stop-color', facetTone(angle, +(/** @type {SVGElement} */ (n).dataset.tilt || 0)));
   });
   // the room's horizon (#horizon) stays level with the window, turned back against the lantern's swing
   put($('horizon'), 'gradientTransform', `rotate(${(-swayAngle).toFixed(2)} 340 ${top.toFixed(1)})`);

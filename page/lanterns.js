@@ -18,14 +18,11 @@ const FLAME = paper => `<g id="flame"><g id="fHalo" opacity="0.8">
   <g id="sparks"></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
 const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop class="paperStop" offset="0" stop-opacity=".9"/><stop class="paperStop" offset="1" stop-opacity="0"/></radialGradient></defs>`;
-// The Moroccan: polished brass (the front faces lit, the side faces a step darker), pierced edge to edge with
-// arabesque lace (ids sheen-* are the brass gradients, kept apart from the lace clips' ids). Its lace and openings are one mask (#cutouts): each panel is cut out whole, then a tile of scrolling
-// brass lace is laid back over it, squeezed sideways on the faces that turn away.
-// The brass reads as metal through contrast: dark reflected mid-tones, a tight warm highlight left of centre where a fixed
-// light catches it, and deep warm shadow on the right. The highlight is one band shared by three gradients (class
-// sheen, in the lantern's own units, given as [x, colour]): faces, side faces, and the lit edges, chain and finial, whose
-// narrow white peak glints as an edge passes under it. swingLantern slides them all with the lantern's twist (frame.js).
-const TAPERS = [['dome', 244, 154, 154], ['bottom', 434, 486, 486]];
+// The Moroccan: polished brass, pierced edge to edge with arabesque lace. Its lace and openings are one mask (#cutouts):
+// each panel is cut out whole, then a tile of scrolling brass lace is laid back over it, squeezed sideways on the faces
+// that turn away. Its flat faces and onion gores are lit by the angle they face (FLAT, GORES); the small round brass (chain,
+// finial, burner cup, tassel) by a warm highlight band shared by three gradients (class sheen, in the lantern's own units,
+// given as [x, colour]), which swingLantern slides with the lantern's twist (frame.js).
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
 // The straight and sloping parts (body, frieze, rope and neck bands, shoulder, skirt) are flat polished brass: each face is
@@ -34,12 +31,7 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
-// How the onions are lit, while Dace compares (?onion=, d by default): d, each gore flat across and curved top to bottom, its
-// tone along its profile; a, each gore lit as its own curved panel with a band across it; b, the side gores flat, darkening
-// toward the tip; c, one sliding band across the whole onion. ponytail: the losers get deleted.
-const ONION = ['a', 'b', 'c', 'd'].includes(Q.get('onion') || '') ? Q.get('onion') : 'd';
-// ?dev: a small panel, top left, to tune the twist by eye (applies at once and is kept in the URL),
-// and to switch the onions' lighting (reloads, as the drawing is built from it).
+// ?dev: a small panel, top left, to tune the twist by eye (applies at once and is kept in the URL).
 if (Q.has('dev')) {
   const panel = document.createElement('div'), query = (k, v) => {
     const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
@@ -53,9 +45,6 @@ if (Q.has('dev')) {
     label.append(...(attrs.type === 'range' ? [text, input] : [input, text])); panel.append(label);
     return input;
   };
-  const onion = row('onion', { value: ONION });
-  onion.replaceWith(Object.assign(document.createElement('select'), { innerHTML: '<option value="d">d: profile</option><option value="a">a: per gore</option><option value="b">b: flat sides</option><option value="c">c: one band</option>',
-    value: ONION, onchange: e => { location.search = query('onion', e.target.value); } }));
   const on = row('twist', { type: 'checkbox', checked: twistGain > 0 });
   const gain = row('strength', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
   gain.style.flex = '1';
@@ -67,36 +56,21 @@ if (Q.has('dev')) {
 }
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
-  + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']])
-  // Onion option c: the band leans in toward the narrow end, as it would on a cone: each onion's faces, side faces and edges
-  // get their own gradient (class taper) inheriting the stops by href, leaned each frame so the band runs from where it sits
-  // at the wide edge (`base`) to the middle at the tip (`apex`), with a narrow bright ellipse along it toward the narrow
-  // `end` (radial, class taper too). frame.js sets them.
-  + TAPERS.map(([id, base, apex, end]) => ['F', 'S', 'E'].map(k =>
-    `<linearGradient id="sheen-${id}-${k}" class="taper" href="#brass${k}" data-base="${base}" data-apex="${apex}"/>`).join('')
-    + (end ? `<radialGradient id="sheen-${id}-R" class="taper" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" data-base="${base}" data-apex="${apex}" data-end="${end}">`
-      + `<stop offset="0" stop-color="#E8C88A" stop-opacity=".7"/><stop offset=".5" stop-color="#C9A058" stop-opacity=".25"/><stop offset="1" stop-color="#C9A058" stop-opacity="0"/></radialGradient>` : '')).join('');
-// The onions' gores (frame.js lights them): for each onion its base and tip heights and tilt (up for the dome, down for the
-// drop), and its gores' halves of the outline; `wide` is the front gore's half-width at the base, in its own (HALF_X) units.
-// `profile` is option d's: how far its surface tilts up (degrees) at points from base (0) to tip (1), the dome's bulge
-// turning up to the light above its widest point and steepening again into the tip, the drop turning ever further down.
-const GORES = { dome: { base: 244, tip: 154, tilt: 30, profile: [[0, -10], [0.13, 0], [0.36, 20], [0.51, 30], [0.67, 15], [0.82, 0], [1, -15]], wide: 46, left: 'M340 154L340 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z',
-    right: 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L340 244Z', sides: [305.5, 374.5, 11.5] },
-  bottom: { base: 434, tip: 486, tilt: -30, profile: [[0, 0], [0.2, -15], [0.5, -30], [0.75, -30], [1, -20]], wide: 38, left: 'M302 434C301 452 314 462 326 470C334 475 338 480 340 486L340 434Z',
-    right: 'M340 486C342 480 346 475 354 470C366 462 379 452 378 434L340 434Z', sides: [311.5, 368.5, 9.5] } };
-// a gore's gradient: option d's run down its profile, option a's band (centred on 0, frame.js places and leans it), or a
-// flat side gore's fade toward the tip
-const GORE = (id, angle, part, cx, hw) => ONION === 'd' ? `<linearGradient id="${id}" class="gore" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${part.base}" y2="${part.tip}"
-  data-angle="${angle}" data-profile="1">${part.profile.map(([o, e]) => `<stop offset="${o}" data-tilt="${e}"/>`).join('')}</linearGradient>` : cx ? `<linearGradient id="${id}" class="gore" gradientUnits="userSpaceOnUse" x1="${-2.4 * hw}" x2="${2.4 * hw}"
-  data-angle="${angle}" data-base="${part.base}" data-tip="${part.tip}" data-tilt="${part.tilt}" data-cx="${cx}" data-hw="${hw}">${[0, 0.3, 0.5, 0.7, 1].map(o => `<stop offset="${o}"/>`).join('')}</linearGradient>`
-  : `<linearGradient id="${id}" class="gore" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${part.base}" y2="${part.tip}" data-angle="${angle}" data-tilt="${part.tilt}"><stop offset="0"/><stop offset="1"/></linearGradient>`;
-const GORE_DEFS = ONION === 'c' ? '' : Object.entries(GORES).map(([k, g]) => GORE(`gore-${k}-F`, 0, g, 340, g.wide)
-  + GORE(`gore-${k}-L`, -60, g, ONION === 'a' && g.sides[0], g.sides[2]) + GORE(`gore-${k}-R`, 60, g, ONION === 'a' && g.sides[1], g.sides[2])).join('');
-// an onion's fill: its two side gores and its front gore (squeezed to half width), or option c's one sliding band
-const ONION_FILL = (k, d) => ONION === 'c' ? `<path d="${d}" fill="url(#sheen-${k}-S)"/><path d="${d}" fill="url(#sheen-${k}-F)" transform="${HALF_X}"/>`
-  : `<path d="${GORES[k].left}" fill="url(#gore-${k}-L)"/><path d="${GORES[k].right}" fill="url(#gore-${k}-R)"/><path d="${d}" fill="url(#gore-${k}-F)" transform="${HALF_X}"/>`;
-// an onion's outline and gore edges: the sliding band's (option c), or the front gore's own light
-const ONION_EDGE = (k, which) => ONION === 'c' ? `url(#sheen-${k}-${which})` : `url(#gore-${k}-F)`;
+  + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);
+// The onions' gores (left, front, right), each flat across and curved top to bottom: frame.js gives each stop of a gore's
+// gradient the tone of a flat face at that gore's angle, tilted as its profile is there, so the whole gore brightens and
+// dims with the twist. `profile` is how far the surface tilts up (degrees) at points from the base (0) to the tip (1): the
+// dome's bulge turning up to the light above its widest point and steepening again into the tip, the drop turning ever
+// further down. `left` and `right` are the side gores' halves of the outline; the front gore covers the middle.
+const GORES = { dome: { base: 244, tip: 154, profile: [[0, -25], [0.13, 0], [0.36, 30], [0.51, 45], [0.67, 22], [0.82, -5], [1, -35]],
+    left: 'M340 154L340 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z', right: 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L340 244Z' },
+  bottom: { base: 434, tip: 486, profile: [[0, 0], [0.2, -30], [0.5, -60], [0.75, -60], [1, -45]],
+    left: 'M302 434C301 452 314 462 326 470C334 475 338 480 340 486L340 434Z', right: 'M340 486C342 480 346 475 354 470C366 462 379 452 378 434L340 434Z' } };
+const GORE = (id, angle, part) => `<linearGradient id="${id}" class="gore" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${part.base}" y2="${part.tip}"
+  data-angle="${angle}">${part.profile.map(([o, e]) => `<stop offset="${o}" data-tilt="${e}"/>`).join('')}</linearGradient>`;
+const GORE_DEFS = Object.entries(GORES).map(([k, g]) => GORE(`gore-${k}-F`, 0, g) + GORE(`gore-${k}-L`, -60, g) + GORE(`gore-${k}-R`, 60, g)).join('');
+// an onion: its two side gores and its front gore (squeezed to half width, as the front segment of a six-sided shape is)
+const ONION_FILL = (k, d) => `<path d="${GORES[k].left}" fill="url(#gore-${k}-L)"/><path d="${GORES[k].right}" fill="url(#gore-${k}-R)"/><path d="${d}" fill="url(#gore-${k}-F)" transform="${HALF_X}"/>`;
 const BRASS = { front: 'url(#brassF)', side: 'url(#brassS)', lit: 'url(#brassE)', rim: 'url(#brassS)' };
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
@@ -136,7 +110,7 @@ const ROPE = (y, half = 63, front = half / 2) => {
     const lo = Math.max(-end, u - 2.5), hi = Math.min(end, u); // each stripe leans 2.5 over the rim's 5
     twist += `M${(340 + at(lo)).toFixed(2)} ${y + 5 - (lo - u + 2.5) * 2}L${(340 + at(hi)).toFixed(2)} ${y + (u - hi) * 2}`;
   }
-  return `${PANEL(half, front, y, 5, true)}<path d="${twist}" stroke="#3E3A16" stroke-width="1"/>`;
+  return `${PANEL(half, front, y, 5, true)}<path d="${twist}" stroke="#4A3A16" stroke-width="1"/>`;
 };
 const LACE_TILE = (id, stroke) => `<pattern id="${id}" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="${stroke}" stroke-width="1.3">
     <path d="M0 0C0 3 5 3 5 6C5 9 10 9 10 12M10 0C10 3 5 3 5 6C5 9 0 9 0 12"/><circle cx="0" cy="6" r="1.3"/><circle cx="10" cy="6" r="1.3"/>
@@ -249,11 +223,11 @@ const DRUM = (kit, y, half, height, paper = 0) => {
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
   M306.9 290v118M369.9 290v118M275.9 290v118M277 285.4h126M277 408.4h126M277 413.4h126M300 428.3h80M295 244.4h90"/></g>`;
-// faintly olive darkening in the recesses (inside the frames, under the bands, round the frieze windows),
+// a darker, dulled gold, with a hint of green, in the recesses (inside the frames, under the bands, round the frieze windows),
 // and rivets at the frame corners sunk in a ring of it
-const MOROCCAN_PATINA = `<g fill="none" stroke="#3A3818" stroke-opacity=".6"><path d="M314 295h52v108h-52ZM282 295h22v108h-22ZM376 295h22v108h-22Z" stroke-width="1.4"/>
+const MOROCCAN_PATINA = `<g fill="none" stroke="#4A3B18" stroke-opacity=".6"><path d="M314 295h52v108h-52ZM282 295h22v108h-22ZM376 295h22v108h-22Z" stroke-width="1.4"/>
   <path d="M277 290.8h126M277 407.2h126M277 414h126" stroke-width="1.2"/><path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/></g>
-  ${[312.5, 367.5, 280.5, 305.5, 374.5, 399.5].flatMap(x => [293.5, 404.5].map(y => `<circle cx="${x}" cy="${y}" r="1.9" fill="#3A3818" opacity=".5"/><circle cx="${x}" cy="${y}" r="1" fill="${BRASS.lit}"/>`)).join('')}`;
+  ${[312.5, 367.5, 280.5, 305.5, 374.5, 399.5].flatMap(x => [293.5, 404.5].map(y => `<circle cx="${x}" cy="${y}" r="1.9" fill="#4A3B18" opacity=".5"/><circle cx="${x}" cy="${y}" r="1" fill="${BRASS.lit}"/>`)).join('')}`;
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
@@ -315,13 +289,12 @@ const STYLES = {
         ${PANEL(45, 22.5, 244, 16)}
         ${SLOPED([['M295 260H317.5L308.5 285H277Z', -60], [SHOULDER_F, 0], ['M362.5 260H385L403 285H371.5Z', 60]], 36)}
         ${PANEL(63, 31.5, 290, 118)}
-        ${ONION === 'c' ? `<path d="${DOME}" fill="url(#sheen-dome-R)"/><path d="${BOTTOM}" fill="url(#sheen-bottom-R)"/>` : ''}
         <path d="M277 290h126v118h-126Z" fill="url(#horizon)"/><path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>
       </g>
       <g fill="none" stroke-linejoin="round">
-        <path d="${DOME}" stroke="${ONION_EDGE('dome', 'S')}" stroke-width="2"/><path d="${DOME}" stroke="${ONION_EDGE('dome', 'E')}" stroke-width="2.6" transform="${HALF_X}"/>
+        <path d="${DOME}" stroke="url(#gore-dome-F)" stroke-width="2"/><path d="${DOME}" stroke="url(#gore-dome-F)" stroke-width="2.6" transform="${HALF_X}"/>
         <path d="M317.5 244v16" ${FLAT(-30, 0.15, 'stroke')} stroke-width="1.6"/><path d="M362.5 244v16" ${FLAT(30, 0.15, 'stroke')} stroke-width="1.6"/>
-        <path d="${BOTTOM}" stroke="${ONION_EDGE('bottom', 'S')}" stroke-width="1.6"/><path d="${BOTTOM}" stroke="${ONION_EDGE('bottom', 'E')}" stroke-width="2" transform="${HALF_X}"/>
+        <path d="${BOTTOM}" stroke="url(#gore-bottom-F)" stroke-width="1.6"/><path d="${BOTTOM}" stroke="url(#gore-bottom-F)" stroke-width="2" transform="${HALF_X}"/>
         <g stroke-width="1.6">${SLOPED([['M317.5 260L308.5 285', -30], ['M362.5 260L371.5 285', 30], ['M295 260L277 285', -90], ['M385 260L403 285', 90]], 36, 'stroke')}</g>
         <path d="M312.5 293.5h55v111h-55Z" ${FLAT(0, -0.25, 'stroke')} stroke-width="1.2"/><path d="M280.5 293.5h25v111h-25Z" ${FLAT(-60, -0.25, 'stroke')} stroke-width="1.2"/>
         <path d="M374.5 293.5h25v111h-25Z" ${FLAT(60, -0.25, 'stroke')} stroke-width="1.2"/>
