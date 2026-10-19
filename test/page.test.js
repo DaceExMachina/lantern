@@ -61,6 +61,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     const hang = /id="hang"/.test(els.lantern.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
       assert.deepStrictEqual(sway, [0, 0, 0], `${key} stands still`);
+      assert.strictEqual(attrs.transform, `rotate(0.000 340 ${run('VIEW.top').toFixed(1)})`, `${key} is drawn unturned`);
       assert.deepStrictEqual([...run('rot(300, 400)')], [300, 400], `${key}: nothing attached to it turns`);
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
