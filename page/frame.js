@@ -166,8 +166,9 @@ function swingLantern(elapsed, s) {
   const top = VIEW.top, sl = s - LAG;
   swayAngle = -GUST(sl) * 310 / (330 - top);
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
-  // the brass highlight slides 14 units per degree (lanterns.js SHEEN), in half-unit steps so put() skips frames that wouldn't show it
-  const sheen = `translate(${Math.round(swayAngle * 28) / 2} 0)`;
+  // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
+  // SHEEN), and slides 14 units per degree around that, staying within 291 to 347; half-unit steps so put() skips frames that wouldn't show it
+  const sheen = `translate(${Math.round(swayAngle * 28) / 2 - 6} 0)`;
   document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', sheen));
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
