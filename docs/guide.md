@@ -23,11 +23,13 @@ When a session needs you, its moth lands on the lantern, folds its wings and tur
 
 Landed moths get fidgety. Now and then one takes a slow breath, opening its wings and closing them again. After 15 minutes it gets restless and sometimes hops off the paper.
 
+On the pillar candle, a moth whose PR has failing checks (its red firefly) flies too close to the flame about once a minute. There's a puff and a few sparks as it touches, then it darts about with its wing tips smoking and its wings a little charred, and settles back down. The whole thing takes about 20 seconds, and it keeps at it until the checks pass. Only a session's own moth drifting near home gets scorched, side sessions included. A landed moth, one flying off and a subagent never do, and a moth that lands before it reaches the flame skips it. It needs [GitHub status](setup.md#github-status) on, and quiet hours don't stop it. Every window scorches the same moth at the same moment.
+
 A few smaller things to watch for:
 
 - Threads pulse with a little glow each time a session or one of its agents runs a tool.
 - Each project gets a faint tint, slightly different per session, so you can tell moths apart.
-- A singed moth (grey, with a dark edge) means the turn ended with an API error.
+- A singed moth (grey) means the turn ended with an API error.
 
 The scene stretches to fill any window shape, wide, tall or square, and the lantern stays the same size in the middle.
 
