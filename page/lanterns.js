@@ -497,8 +497,8 @@ const STYLES = {
     name: 'Pillar candle', stands: true, paper: false, scorches: true, // a bare flame, standing on the crown
     flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye],
     holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
-    // the wax alone, a straight cylinder, its highest landing spot a moth's reach and the clearance below the flame
-    body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
+    // the wax alone, a straight cylinder, its highest landing spot a hop, a moth's reach and the clearance below the flame
+    body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + HOP + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
       half: () => PILLAR.r },
     back: CANDLE.back, front: CANDLE.front,
   },
