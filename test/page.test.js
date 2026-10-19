@@ -7,6 +7,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+const { drawn } = require('./lowest');
 
 const row = () => ({ title: 'its own title', dataset: {}, classList: { toggle() {} } }); // a settings row
 const attrs = {}, els = {
@@ -75,7 +76,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
       assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: at most ${Math.max(...sway.map(Math.abs))}`);
-      assert.ok(Math.max(...sway) - Math.min(...sway) > 0.1, `${key} swings to and fro, not one lean: ${Math.min(...sway)} to ${Math.max(...sway)}`);
+      assert.ok(Math.min(...sway) < -0.1 && Math.max(...sway) > 0.1, `${key} swings to and fro, past the middle: ${Math.min(...sway)} to ${Math.max(...sway)}`);
       const off = frames.find(([a, t]) => t !== `rotate(${a.toFixed(3)} 340 ${top})`);
       assert.ok(!off, `${key} is drawn turned by its sway: ${off}`);
       assert.ok(hang, `${key} hangs from a string or chain`);
@@ -203,39 +204,6 @@ test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
   }
 });
 
-// The lowest point an element reaches: a path through its commands (absolute or relative), or a shape's bottom.
-function lowestY(el) {
-  const num = k => +(el.match(new RegExp(`\\s${k}="([-\\d.]+)"`)) || [0, NaN])[1];
-  if (/^<rect/.test(el)) return num('y') + num('height');
-  if (/^<ellipse/.test(el)) return num('cy') + num('ry');
-  if (/^<circle/.test(el)) return num('cy') + num('r');
-  if (/^<use/.test(el)) return num('y') + 5; // a grape, 5 round
-  const d = (el.match(/\sd="([^"]+)"/) || [])[1];
-  if (!d) return -Infinity;
-  let x = 0, y = 0, low = -Infinity;
-  const size = { M: 2, L: 2, T: 2, Q: 4, S: 4, C: 6, A: 7, H: 1, V: 1, Z: 0 };
-  for (const [, c, args] of d.matchAll(/([MLTQSCAHVZ])([^MLTQSCAHVZ]*)/gi)) {
-    const v = (args.match(/-?(?:\d*\.\d+|\d+)/g) || []).map(Number), C = c.toUpperCase(), rel = c !== C, n = size[C];
-    for (let i = 0; n && i + n <= v.length; i += n) {
-      const g = v.slice(i, i + n);
-      if (C === 'H') x = rel ? x + g[0] : g[0];
-      else if (C === 'V') { y = rel ? y + g[0] : g[0]; low = Math.max(low, y); }
-      else {
-        // the curve's own points (a quadratic or cubic sampled along it, the rest at their ends)
-        const ys = [y, ...g.filter((_, j) => j % 2 && (C === 'Q' || C === 'C')).map(v => rel ? y + v : v), rel ? y + g[n - 1] : g[n - 1]];
-        if (C === 'A') low = Math.max(low, Math.max(...ys) + Math.abs(g[1])); // an arc reaches at most its radius past its ends
-        else if (ys.length === 2) low = Math.max(low, ys[1]);
-        else for (let t = 0; t <= 1; t += 0.05) {
-          const bern = ys.length === 3 ? [(1 - t) ** 2, 2 * t * (1 - t), t * t] : [(1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3];
-          low = Math.max(low, bern.reduce((a, k, j) => a + k * ys[j], 0));
-        }
-        [x, y] = rel ? [x + g[n - 2], y + g[n - 1]] : [g[n - 2], g[n - 1]];
-      }
-    }
-  }
-  return low;
-}
-
 test('the candle stands on a marble pedestal tilted as its candlestick is, with no floor under it', () => {
   const c = run('STYLES.candle'), P = run('PEDESTAL'), bow = run('LACQUER.candle.bow'), svg = c.back + c.front;
   const ellipses = [...svg.matchAll(/<ellipse\b[^>]*>/g)].map(([e]) => Object.fromEntries(['cy', 'rx', 'ry'].map(k => [k, +e.match(new RegExp(`\\b${k}="([\\d.]+)"`))[1]])));
@@ -258,11 +226,12 @@ test('the candle stands on a marble pedestal tilted as its candlestick is, with 
   // the candlestick's foot, its lowest bronze band, stands on the slab's top, neither floating over it nor sunk in
   const foot = bands.filter(d => d.fill === run('LACQUER.candle.lit')).sort((a, b) => b.bottom - a.bottom)[0];
   assert.ok(Math.abs(foot.bottom - P.top) <= 3 && foot.half < P.r, `the foot ends at ${foot.bottom}, ${foot.half} either side, on a slab at ${P.top}`);
-  // below the slab's top at its front, only the slab, the column and the vine are drawn: no floor
-  const below = P.top + P.r * bow(P.top) / 2 + 0.5, allowed = /url\(#cd(Col\w+|VineFade)\)|#CFC9D8|#8A8396|#2A2333|#E2DDE8|#968DA4|#4A4424|#5E6B33|#3D4721|#283016|#1A200D|#cdGrape|none/;
-  for (const [el] of svg.matchAll(/<(path|rect|ellipse|circle|polygon|line|use)\b[^>]*>/g)) {
-    const paint = [...el.matchAll(/(?:fill|stroke|href)="([^"]+)"/g)].map(m => m[1]);
-    if (lowestY(el) > below) assert.ok(paint.length && paint.every(v => allowed.test(v)), `drawn below the slab's top, a floor? ${el.slice(0, 120)}`);
+  // below the slab's top at its front, only the pedestal's own group (the slab, the column and the vine on them) draws
+  const below = P.top + P.r * bow(P.top) / 2 + 0.5, all = drawn(svg);
+  const inPedestal = n => { for (; n; n = n.parent) if (n.tag === 'g' && (n.attrs.class || '').split(/\s+/).includes('cdPedestal')) return true; return false; };
+  assert.ok(all.some(d => d.low > below && inPedestal(d.node)), 'the pedestal reaches below its slab\'s top');
+  for (const { node, low } of all) {
+    assert.ok(low <= below || inPedestal(node), `a <${node.tag}> outside the pedestal reaches ${low.toFixed(1)}, below the slab's top at ${below.toFixed(1)}: a floor? ${JSON.stringify(node.attrs).slice(0, 100)}`);
   }
 });
 

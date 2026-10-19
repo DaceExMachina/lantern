@@ -374,7 +374,8 @@ const CANDLE = (() => {
   };
   const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the stem leaves the column for the slab
   const climbAt = pt([cx + climbR * Math.sin(climbEnd), climbTop + sag(climbTop, climbR) * Math.cos(climbEnd)]);
-  const pedestal = `<path d="M${cx - col} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColLit)"/>
+  // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
+  const pedestal = `<g class="cdPedestal"><path d="M${cx - col} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColLit)"/>
     <path d="M${n(cx + K.side * col)} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColDark)"/>
     <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${P.fade[1]}`).join('')}" fill="none" stroke="url(#cdColLine)" stroke-width=".8"/>
     <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
@@ -385,7 +386,7 @@ const CANDLE = (() => {
     <ellipse cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${n(sag(P.top - 5, FOOT))}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
     ${vine(`M${climbAt}Q${left + 4} ${P.top + 49} ${left + 2} ${P.top + 31}Q${left + 2} ${P.top + 13} ${left + 28} ${P.top + 9}Q${left + 56} ${P.top + 5} ${left + 72} ${P.top + 1}`)}
     ${leaf(cx - 40, P.top + 63, 24, -20)}${leaf(cx + 56, P.top + 51, 22, 30)}${leaf(left + 4, P.top + 41, 24, -60)}${leaf(cx + P.r - 6, P.top + 25, 22, 50)}
-    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}<!-- the vine, up the column, over the slab's edge and across it to the foot -->`;
+    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}<!-- the vine, up the column, over the slab's edge and across it to the foot --></g>`;
   // on up the foot and round the baluster to the vine already on the candlestick
   const climb = `${vine(`M${left + 72} ${P.top + 1}Q318 540 330 532Q352 524 352 512Q352 500 334 498Q322 494 330 486Q338 478 352 478`)}
     ${leaf(326, 534, 19, -40)}${leaf(354, 506, 18, 70)}${leaf(330, 490, 17, -70)}`;
