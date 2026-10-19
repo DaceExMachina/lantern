@@ -28,11 +28,11 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
 const SHEENS = SHEEN('brassF', [[270, '#3A2710'], [296, '#6E4C1C'], [312, '#A87A30'], [320, '#E2B75E'], [325, '#FFF3CF'], [329, '#E8C06A'],
-  [338, '#B8893A'], [356, '#8A6226'], [380, '#55391A'], [398, '#4A3418'], [410, '#8E968E']])
+  [338, '#B8893A'], [356, '#8A6226'], [380, '#55391A'], [398, '#3E2A12'], [410, '#4A4232']])
   + SHEEN('brassS', [[270, '#2E1F0C'], [284, '#6A4A1E'], [292, '#8C6828'], [302, '#5E4119'], [320, '#8A6428'], [325, '#C9A050'], [330, '#8A6428'],
-  [360, '#4E3415'], [392, '#3A2810'], [404, '#6F7A78'], [410, '#7E8884']])
+  [360, '#4E3415'], [392, '#33230D'], [404, '#3A2C16'], [410, '#4A4434']])
   + SHEEN('brassE', [[270, '#8A6428'], [310, '#C9A050'], [320, '#E8C46E'], [324, '#FFFBEA'], [326, '#FFFFFF'], [328, '#FFFBEA'], [332, '#E8C46E'],
-  [350, '#C9A050'], [400, '#8A6A34'], [410, '#A8B0A8']]);
+  [350, '#C9A050'], [400, '#7A5A2A'], [410, '#7E7660']]);
 const BRASS = { front: 'url(#brassF)', side: 'url(#brassS)', lit: 'url(#brassE)', rim: 'url(#brassS)' };
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
