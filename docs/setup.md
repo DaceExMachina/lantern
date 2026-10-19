@@ -88,9 +88,9 @@ The screensaver and the page are updated together, so after updating Lantern, ru
 
 GitHub status is optional. Turn it on and fireflies take on the colour of what each PR needs, and [stale PRs](guide.md#fireflies-and-stale-prs) show up.
 
-Open the settings menu (the sliders icon at the bottom right) and click **Connect an account** under GitHub. Lantern shows a code. Enter it at github.com/login/device and approve the Claude Lantern GitHub App.
+Open the settings menu (the compass icon at the bottom right) and click **Connect an account** under GitHub. Lantern shows a code. Enter it at github.com/login/device and approve Lantern's GitHub App, [lantern-pr](https://github.com/apps/lantern-pr).
 
-The app can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed. The panel links to installing it, and an org admin may need to approve. Lantern keeps the token in your macOS Keychain, and you can connect more than one account. Disconnecting deletes the token from the Keychain. To cut Lantern off completely, revoke the app in your GitHub settings.
+The app can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed. [Install it](https://github.com/apps/lantern-pr/installations/new) on your account and any orgs whose PRs you want to see (the settings menu links there too). An org admin may need to approve. Lantern keeps the token in your macOS Keychain, and you can connect more than one account. Disconnecting deletes the token from the Keychain. To cut Lantern off completely, revoke the app in your GitHub settings.
 
 Every two minutes Lantern asks GitHub, once per account, for your open PRs and the reviews requested from you. Merged and closed PRs drop out.
 

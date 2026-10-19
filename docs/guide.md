@@ -79,7 +79,7 @@ Only plain sentences make it onto the paper. Lantern drops anything with code, a
 
 ## Picking a lantern
 
-The settings menu (the sliders icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
+The settings menu (the compass icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
 
 ## Stats, badges and the recap
 
