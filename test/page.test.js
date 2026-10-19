@@ -20,9 +20,12 @@ for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase
   const a = {};
   els[id] = { getAttribute: k => a[k] ?? null, setAttribute: (k, v) => { a[k] = v; } };
 }
+els.fCore.getBBox = () => ({ x: 333, y: 352, width: 14, height: 30 }); // drawLight's flame core, somewhere in the tongue
 const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
 // a plain window, no query string; the Moroccan's far wall counts as baked already (background.js isn't loaded)
-const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {} });
+// background.js isn't loaded: drawBackground only records what drawLight gives it, and there's no dust
+const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {},
+  drawBackground: v => { page.background = v; }, dust: [], farDust: [], dustData: { set() {} } });
 for (const f of ['scene', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
@@ -61,6 +64,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     const hang = /id="hang"/.test(els.lantern.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
       assert.deepStrictEqual(sway, [0, 0, 0], `${key} stands still`);
+      assert.strictEqual(attrs.transform, `rotate(0.000 340 ${run('VIEW.top').toFixed(1)})`, `${key} is drawn unturned`);
       assert.deepStrictEqual([...run('rot(300, 400)')], [300, 400], `${key}: nothing attached to it turns`);
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
@@ -120,6 +124,65 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
   assert.strictEqual(c.caps, undefined, 'no caps: nothing above the flame');
   assert.strictEqual(c.dim, undefined, 'the flame is bare');
   assert.ok(!/class="band"/.test(c.back + c.front), 'no solid bands');
+});
+
+test('the candle\'s fan of shade starts at its rim; every other lantern\'s starts at the light', () => {
+  for (const key of styles) {
+    run(`applyStyle('${key}'); swingLantern(1 / 60, 0.5)`);
+    run(`drawLight(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 })`);
+    // measured along the lantern's own axis, which the shader turns with its sway
+    const c = run(`STYLES.${key}`), from = [...page.background.capFrom];
+    if (key === 'candle') assert.deepStrictEqual(from, [0, c.holder[0] - c.light[1]], 'the fan below starts at the rim');
+    else assert.deepStrictEqual(from, [0, 0], `${key}: its fans start at the light`);
+  }
+});
+
+// The pillar's numbers, changed to untidy ones in a copy of lanterns.js, and the wax drawn there.
+const pageFile = f => fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8');
+test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
+  for (const [r, rim] of [[50, 240], [61, 247]]) {
+    const at = `r ${r}, rim ${rim}`, c = vm.createContext({ URLSearchParams, location: { search: '' } });
+    vm.runInContext(pageFile('scene'), c);
+    const lanterns = pageFile('lanterns').replace(/^const PILLAR = .*$/m, line => `${line} PILLAR.r = ${r}; PILLAR.rim = ${rim};`);
+    assert.notStrictEqual(lanterns, pageFile('lanterns'), 'PILLAR found');
+    vm.runInContext(lanterns, c);
+    const { back, front } = vm.runInContext('STYLES.candle', c), P = vm.runInContext('PILLAR', c), side = vm.runInContext('LACQUER.candle.side', c);
+    const near = (a, b, what) => assert.ok(Math.abs(a - b) < 0.01, `${at}: ${what} at ${a}, not ${b}`);
+    // the pillar's outline, every point it passes through M, Q, L, V and H
+    const pts = [];
+    for (const [, cmd, args] of back.match(/<clipPath id="cdWax"><path d="([^"]+)"/)[1].matchAll(/([MQLVHZ])([^MQLVHZ]*)/g)) {
+      const v = args.trim().split(/[\s,]+/).filter(Boolean).map(Number), [x, y] = pts[pts.length - 1] || [];
+      if (cmd === 'V') pts.push(...v.map(b => [x, b])); else if (cmd === 'H') pts.push(...v.map(a => [a, y]));
+      else for (let i = 0; i + 1 < v.length; i += 2) pts.push([v[i], v[i + 1]]);
+    }
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    near(Math.min(...xs), P.cx - r, 'its left side'); near(Math.max(...xs), P.cx + r, 'its right side');
+    near(Math.max(...ys), P.bottom, 'its bottom');
+    const foot = pts.filter(p => p[1] === P.bottom).map(p => p[0]);
+    near(Math.min(...foot), P.cx - r, 'its bottom left corner'); near(Math.max(...foot), P.cx + r, 'its bottom right corner');
+    const crown = Math.min(...ys);
+    assert.ok(rim - 3 < crown && crown <= rim, `${at}: its crown tops out at ${crown}, off the rim`);
+    // every drip runs down from the rim, its middle on the pillar
+    const drips = [...back.match(/<clipPath id="cdDrips"><path d="([^"]+)"/)[1].matchAll(/M([\d.]+) ([\d.]+)V[\d.]+A[\d.]+ [\d.]+ 0 1 0 ([\d.]+)/g)];
+    assert.ok(drips.length >= 6, `${at}: the drips`);
+    for (const [, x0, y, x1] of drips) {
+      assert.strictEqual(+y, rim, `${at}: a drip starts at ${y}, off the rim`);
+      assert.ok(Math.abs((+x0 + +x1) / 2 - P.cx) <= r, `${at}: a drip at ${x0} to ${x1}, off the pillar`);
+    }
+    // the dark side from K.side of the way out to past the edge, and the glow over the whole pillar under the rim
+    const dark = back.match(/<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"[^>]*clip-path="url\(#cdWax\)"/).slice(1).map(Number);
+    near(dark[0], P.cx + side * r, 'the dark side');
+    assert.ok(dark[0] + dark[2] >= P.cx + r && dark[1] <= crown, `${at}: the dark side [${dark}] misses the pillar's edge or crown`);
+    const glow = back.match(/<rect id="paperGlow" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/).slice(1).map(Number);
+    assert.ok(glow[0] <= P.cx - r && glow[0] + glow[2] >= P.cx + r && glow[1] <= crown, `${at}: the glow [${glow}] misses the pillar`);
+    // the notch the main drip spilled from sits on the rim, over a drip
+    const notch = back.match(/class="paperLit" d="([^"]+)"/)[1].match(/[\d.]+/g).map(Number);
+    notch.forEach((v, i) => assert.ok(i % 2 ? Math.abs(v - rim) < 4 : Math.abs(v - P.cx) < r, `${at}: the notch's ${v}, off the rim`));
+    const mid = (notch[0] + notch[notch.length - 2]) / 2;
+    assert.ok(drips.some(([, x0, , x1]) => Math.abs((+x0 + +x1) / 2 - mid) < 0.01), `${at}: the notch at ${mid} is over no drip`);
+    // the wick stands in the crown's middle
+    assert.ok(front.startsWith(`<path d="M${P.cx} ${rim}V`), `${at}: the wick starts at ${front.slice(9, 25)}`);
+  }
 });
 
 test('the candle\'s wax under the rim takes the flame\'s colour', () => {

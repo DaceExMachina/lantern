@@ -294,8 +294,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
-  // what the flame stands in (holder: its bottom and half-width, a burner cup or a candle's rim) throws a fan straight
-  // down, seen from the flame core's live centre so the fan breathes with it
+  // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup's bottom or a candle's
+  // rim) throws a fan straight down, seen from the flame core's live centre so the fan breathes with it
   const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
@@ -307,6 +307,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
+    // how far above and below the light each fan starts: at the holder's edge with style.shadeFromHolder, else at the light
+    capFrom: style.shadeFromHolder ? [0, style.holder[0] - style.light[1]] : [0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
