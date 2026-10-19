@@ -267,20 +267,24 @@ test('nothing grows: 50 scorches on one moth leave no elements and keep the spar
   assert.ok(!n.scorch && extra(n) === 0, 'switching to the barrel ends it on the next frame');
 });
 
-test('every window scorches a moth at the same moments, whatever its own clocks, with no Math.random', () => {
+test('every window scorches a moth at the same moments, whatever its own clocks and whenever it opened, with no Math.random', () => {
   const a = context(3000), b = context(987654.3), { slot, window, length } = a.SCORCH;
   for (const c of [a, b]) c.run('Math.random = () => { throw new Error("Math.random on the scorch\'s path"); }');
   const ma = sessionMoth('sess-step'), mb = sessionMoth('sess-step');
   a.moths.set(ma.key, ma); b.moths.set(mb.key, mb);
   const pick = sc => sc && { slot: sc.slot, t: sc.t, hit: sc.hit };
-  let starts = 0, was = null;
-  const from = clock.wall;
-  for (let now = from + 100; now <= from + (2 * (slot + window) + length) * 1000; now += 100) {
+  // window b opens 37 s after a, so each one's first frame comes at its own wall time; they're compared from the first
+  // frame after b opens with no episode running in a (b can't join one already under way)
+  let starts = 0, was = null, compare = false;
+  const from = clock.wall, opens = from + 37000;
+  for (let now = from + 100; now <= opens + (2 * (slot + window) + length) * 1000; now += 100) {
     clock.wall = now;
-    for (const [c, m] of [[a, ma], [b, mb]]) {
+    for (const [c, m] of now > opens ? [[a, ma], [b, mb]] : [[a, ma]]) {
       c.perf.t += 100; // each window's own clocks move on with the wall, from their own origins
       c.mothTarget(m.key, m, 0.1, c.perf.t / 1000);
     }
+    compare ||= now > opens && !ma.scorch;
+    if (!compare) continue;
     assert.deepStrictEqual(pick(ma.scorch), pick(mb.scorch), `the two windows agree at ${now}`);
     if (ma.scorch && !was) starts++;
     was = ma.scorch;
