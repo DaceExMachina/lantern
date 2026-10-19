@@ -16,8 +16,8 @@ const attrs = {}, els = {
   ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
 };
 const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
-// a plain window, no query string
-const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, moths: new Map() });
+// a plain window, no query string; the Moroccan's far wall counts as baked already (background.js isn't loaded)
+const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, moths: new Map(), farWallTex: {} });
 for (const f of ['scene', 'lanterns', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
@@ -26,7 +26,7 @@ const across = (key, a, r) => {
   const [x, y] = run(`style = STYLES.${key}; pickPerch(${a}, () => ${r})`);
   return Math.abs(x - 340) / run(`style.body.half(${y})`);
 };
-const styles = run('Object.keys(STYLES)');
+const styles = [...run('Object.keys(STYLES)')]; // an array of this realm, so deepStrictEqual compares its items
 const angles = Array.from({ length: 73 }, (_, i) => -Math.PI + i * Math.PI / 36);
 
 test('landing spots stay out of the middle third of the lantern', () => {
@@ -56,7 +56,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     const hang = /id="hang"/.test(els.lantern.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
       assert.deepStrictEqual(sway, [0, 0, 0], `${key} stands still`);
-      assert.deepStrictEqual(run('rot(300, 400)'), [300, 400], `${key}: nothing attached to it turns`);
+      assert.deepStrictEqual([...run('rot(300, 400)')], [300, 400], `${key}: nothing attached to it turns`);
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
       assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: ${sway}`);
