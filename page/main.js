@@ -99,7 +99,7 @@ setInterval(lanternTick, 16);
 
 setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
-$('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) clickZone(hovered.zone); });
+$('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) clickZone(hovered.zone, e.shiftKey); });
 // every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt)
 const zoneFor = (/** @type {MouseEvent} */ e) => {
   const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('zones').getScreenCTM().inverse());
@@ -107,8 +107,10 @@ const zoneFor = (/** @type {MouseEvent} */ e) => {
 };
 for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => enterZone(zoneFor(e)));
 $('zones').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 700); });
-$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) clickZone(z); });
-$('zones').addEventListener('contextmenu', e => { const menu = areas.get(zoneFor(e))?.menu; if (menu) { e.preventDefault(); menu(); } });
+$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) clickZone(z, e.shiftKey); });
+$('zones').addEventListener('contextmenu', e => areas.get(zoneFor(e))?.menu?.());
+// no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
+addEventListener('contextmenu', e => e.preventDefault());
 $('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 400); });
 
 try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}

@@ -1,10 +1,10 @@
 // Running `claude` processes and the apps around them: finding a session's terminal tab and bringing it to the front.
 import Foundation
 
-/// pids of terminal `claude` processes
+/// pids of running `claude` processes: a terminal's, named plainly, and the Claude app's, named by a full path with spaces in it
 func claudePids() -> [String] {
     run("ps", ["-axo", "pid=,comm="]).out.components(separatedBy: "\n")
-        .map { $0.trim.split(whereSeparator: \.isWhitespace).map(String.init) }.filter { $0.count > 1 && $0[1] == "claude" }.map { $0[0] }
+        .map { $0.trim.split(separator: " ", maxSplits: 1).map(String.init) }.filter { $0.count > 1 && ($0[1] as NSString).lastPathComponent == "claude" }.map { $0[0] }
 }
 
 /// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet.
@@ -93,21 +93,26 @@ func focusElsewhere(_ s: JSON) -> Bool {
     let activate = { !app.isEmpty ? open(["-b", app]) : bundle.map { open(["-a", $0]) } ?? false }
     switch term {
     case "Apple_Terminal": // Terminal.app finds the tab by its tty
+        // Since Sierra, Terminal's tabs are native window tabs. `set index of w to 1` re-orders the tab group and can bring
+        // back whichever tab it had showing, so raise the window with `frontmost` (which also selects it within its group)
+        // before selecting the tab, then activate. `contents of` resolves the loop variables, which are otherwise references
+        // into the list that `set selected tab` can mishandle. It prints "ok" on a match, so no match falls back to activate().
         let tty = run("ps", ["-o", "tty=", "-p", pid]).out.trim
         if Re("^ttys[0-9]+$").test(tty), run("osascript", ["-e", """
             tell application "Terminal"
               repeat with w in windows
-                repeat with t in tabs of w
+                set win to contents of w
+                repeat with t in tabs of win
                   if tty of t is "/dev/\(tty)" then
-                    set selected tab of w to t
-                    set index of w to 1
+                    set frontmost of win to true
+                    set selected tab of win to contents of t
                     activate
-                    return
+                    return "ok"
                   end if
                 end repeat
               end repeat
             end tell
-            """], timeout: 30).ok { return true }
+            """], timeout: 30).out.trim == "ok" { return true }
     case "WezTerm": // its CLI sits next to the app's binary
         if truthy(s["pane"]), let bundle, run(bundle + "/Contents/MacOS/wezterm", ["cli", "activate-pane", "--pane-id", str(s["pane"])]).ok { return activate() }
     case "vscode": // VS Code and its forks bring the window that has this folder open forward (or open one)
@@ -131,7 +136,7 @@ extension LanternServer {
                 if application "iTerm2" is running then
                   tell application "iTerm2"
                     repeat with w in windows
-                      repeat with t in tabs of w
+                      repeat with t in tabs of win
                         repeat with ss in sessions of t
                           set out to out & (unique id of ss) & sep & (name of ss) & linefeed
                         end repeat

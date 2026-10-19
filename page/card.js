@@ -74,7 +74,8 @@ function enterZone(zone) {
   if (hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
   hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
 }
-function clickZone(zone) { areas.get(zone)?.onClick(); clearTimeout(hideTimer); hideCard(); }
+// shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
+function clickZone(zone, shift) { const a = areas.get(zone); (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
 function hideCard() { hovered = null; $('card').classList.remove('show'); }
 
 function renderCard() {
@@ -89,7 +90,7 @@ function renderCard() {
     h.textContent = name;
     chip.textContent = s.reported ? 'reported back' : s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'snoozed' : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
     chip.className = 'chip ' + (s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'idle' : s.state);
-    if ((s.state === 'waiting' || s.state === 'paused') && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
+    if (s.state !== 'working' && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
     if (s.state === 'waiting' && s.forYou) rows.push(...forYouRows(s.forYou));
     if (s.github?.length) rows.push(...prRows(s.github));
     if (s.tasks?.length) rows.push(line(`Running: ${s.tasks.join(', ')}`, 'dim'));

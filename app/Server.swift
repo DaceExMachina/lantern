@@ -10,6 +10,10 @@ let EXPIRE_MS = 20.0 * 60 * 1000 // a session silent this long is assumed dead (
 let WAITING_EXPIRE_MS = 3.0 * 60 * 60 * 1000 // ...unless it's waiting on me, which can quietly take a while
 let SEED_RECENT_MS = 15.0 * 60 * 1000 // on startup, also bring back any session whose transcript moved this recently
 let TITLE_EVERY_MS = 15.0 * 1000
+// A session waiting on background tasks counts as working while one is younger than this, or one of its agents was heard
+// from this recently; past both, it's left open but quiet (a dev server, a stuck agent) and rests like an idle one.
+let TASK_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_TASK_FRESH_SECONDS"] ?? "") ?? 30 * 60) * 1000
+let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_FRESH_SECONDS"] ?? "") ?? 5 * 60) * 1000
 let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "elicitation_dialog", "agent_needs_input"]
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 // Claude Code's config folder: CLAUDE_CONFIG_DIR, or `claudeDir` in Lantern's settings.json (an app opened from the Dock
@@ -210,7 +214,7 @@ final class LanternServer {
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
-        Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
+        Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_SWEEP_SECONDS"] ?? "") ?? 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
         Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_ADOPT_SECONDS"] ?? "") ?? 60, repeats: true) { _ in self.adopt() }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in // quiet hours start or end with nothing else happening
             if self.autoQuiet() { self.settingsChanged() } else { self.observe() }
@@ -232,7 +236,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -283,7 +287,7 @@ final class LanternServer {
 
         var s = sessions[id] ?? ["id": id, "cwd": or(e["cwd"], "")!, "state": "working", "started": now(), "last": 0]
         if agents[id] == nil { agents[id] = Ordered() }
-        defer { sessions[id] = s } // (until the end of this function, s is a copy)
+        defer { settle(&s, id); sessions[id] = s } // (until the end of this function, s is a copy)
         s["last"] = now()
         if ev == "PreToolUse" { s["ticks"] = ((s["ticks"] as? Int) ?? 0) + 1 } // each tool call, its agents' included, sends a pulse down its thread
         // A session (or one of its agents) that runs `gh pr create` claims the PR: its URL is in the command's output.
@@ -335,6 +339,7 @@ final class LanternServer {
         switch ev {
         case "SessionStart":
             s["state"] = "idle"
+            s["resting"] = nil
         case "Stop":
             // Three ways a turn ends: agents still running and nothing to ask (not waiting on me), agents running but
             // it asked me something, or fully stopped. Only the first one leaves me alone.
@@ -342,6 +347,12 @@ final class LanternServer {
             let q = questionIn(e["last_assistant_message"])
             let tasks = running.isEmpty ? "" : "\(running.count) background task\(running.count > 1 ? "s" : "")"
             s["tasks"] = Array(running.map { $0["description"] }.filter(truthy).prefix(4)).map { $0! }
+            // when each task was first seen running (the payload has no start time), kept across turns so a dev server stays old
+            let since = s["taskSince"] as? [String: Double] ?? [:]
+            s["taskSince"] = Dictionary(running.enumerated().map { i, t in
+                let key = str(or(t["id"], or(t["description"], "\(i)")))
+                return (key, since[key] ?? now())
+            }) { a, _ in a }
             s["forYou"] = forYou(e["last_assistant_message"])
             if wordsOn {
                 let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
@@ -369,7 +380,7 @@ final class LanternServer {
             s["note"] = "Wants permission to use \(truthy(e["tool_name"]) ? str(e["tool_name"]) : "a tool")"
         case "Notification":
             // the "idle, waiting for input" nudge also fires while a session waits on its agents; that one doesn't count
-            if str(e["notification_type"]) == "idle_prompt" && str(s["state"]) == "paused" { break }
+            if str(e["notification_type"]) == "idle_prompt" && (str(s["state"]) == "paused" || truthy(s["resting"])) { break }
             if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["state"] = "waiting"; s["note"] = or(e["message"], s["note"]) }
         default: // UserPromptSubmit, PreToolUse, PostToolUse: the session is moving, so it no longer needs me
             s["state"] = "working"
@@ -383,6 +394,22 @@ final class LanternServer {
         }
         // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
         if str(s["state"]) == "waiting" { if !truthy(s["waitingSince"]) { s["waitingSince"] = now() } } else { s["waitingSince"] = 0 }
+        if str(s["state"]) != "idle" { s["resting"] = nil }
+    }
+
+    /// A session waiting on background tasks is paused (working) while one of them is fresh or an agent was heard from
+    /// lately, and otherwise rests as idle, open but quiet. Runs after every event and on the sweep; says if it changed.
+    @discardableResult func settle(_ s: inout JSON, _ id: String) -> Bool {
+        guard str(s["state"]) == "paused" || truthy(s["resting"]) else { return false }
+        let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
+        let heard = (agents[id]?.items.compactMap { $0.1["last"] as? Double } ?? []).max() ?? 0
+        let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS
+        let tasks = "\(since.count) background task\(since.count == 1 ? "" : "s")"
+        let before = (str(s["state"]), str(s["note"]))
+        s["state"] = busy ? "paused" : "idle"
+        s["resting"] = busy ? nil : true
+        s["note"] = busy ? "Waiting on \(tasks)" : "\(tasks) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest opened, or an agent last spoke
+        return before != (str(s["state"]), str(s["note"]))
     }
 
 
@@ -390,7 +417,8 @@ final class LanternServer {
     func sweep() {
         let t = now()
         var changed = false
-        for (id, s) in sessions.items {
+        for (id, var s) in sessions.items {
+            if settle(&s, id) { sessions[id] = s; changed = true }
             // with its process known, only that decides: a closed session goes, an open one stays however quiet it's been
             if truthy(s["pid"]) {
                 let pid = pid_t(str(s["pid"])) ?? 0
@@ -508,7 +536,7 @@ final class LanternServer {
     func gauge() {
         let waiting = sessions.items.filter { str($0.1["state"]) == "waiting" }
         let fireflies = Set(sessions.items.flatMap { ($0.1["github"] as? [JSON] ?? []).filter { !["merged", "closed"].contains(str($0["need"])) }.map { str($0["url"]) } })
-        stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { str($0.1["state"]) == "working" }.count),
+        stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { ["working", "paused"].contains(str($0.1["state"])) }.count),
                      ("waiting", waiting.count), ("snoozed", waiting.filter { truthy($0.1["snoozed"]) || forGood($0.0) }.count),
                      ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("stale", stale.count)])
         stats.award(warmGoal: warmGoal)

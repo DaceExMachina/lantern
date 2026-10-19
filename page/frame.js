@@ -36,8 +36,21 @@ function measureBands() {
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
 // One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
-// with it a moment later (its tassel and knot tail LAG seconds behind).
-const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
+// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds on
+// average (lanterns.js) a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
+// calmer spells, with a faster, fainter flutter on top. Pseudo-random from the clock alone, so every window and the
+// snapshots agree; scaled to the strength of the two steady sines it replaced (an RMS of about 1.17).
+const rnd = x => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+const knot = i => { const u = 2 * rnd(i) - 1; return Math.sign(u) * Math.abs(u) ** 1.5; };
+// the knots sit at whole numbers nudged up to a quarter either way, so a gust lasts half to one and a half times the average
+const knotAt = i => i + (rnd(i + 0.17) - 0.5) * 0.5;
+const noise = x => {
+  let i = Math.floor(x);
+  if (x < knotAt(i)) i--; else if (x >= knotAt(i + 1)) i++;
+  const f = (x - knotAt(i)) / (knotAt(i + 1) - knotAt(i));
+  return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f);
+};
+const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
 // heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
 // short as a frame can be (two timers firing together) turned the constraint fix-ups into huge speeds and flung it about.
@@ -123,7 +136,7 @@ function frame(t) {
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
   const calling = sessions.some(x => x.state === 'waiting' && !x.snoozed);
-  level += (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"
+  level = fakeFlame ?? level + (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"; fakeFlame: lanterns.js, ?flame=
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
   const flame = { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) };
@@ -178,17 +191,20 @@ function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
 }
-// Sway on the string as a damped pendulum the wind (GUST) pushes, with its tassel, ribbon or knot trailing: it answers a
-// gust a moment after the dust does, overshoots a little and settles on its own (about a 4.4s swing, damped 0.35, which
-// lags the main gust about LAG). It swings from the top of the window, with the push scaled so the lantern moves sideways
-// as much as it did hung at y=20 (0.83 offsets the pendulum's own gain at the main gust). A standing lantern (style.stands)
-// holds still at 0, so rot() leaves everything where it's drawn; the pendulum keeps going under it, so a hanging lantern
-// picked afterwards picks up the swing where the wind has it.
-const swing = { a: NaN, v: 0 };
+// Sway on the string as a damped pendulum, with its tassel, ribbon or knot trailing (sway.period and sway.damping,
+// lanterns.js). It's pushed by how the wind (GUST) is changing rather than by the wind itself: GUST less an average that
+// follows it sway.forget seconds behind, so a lean the wind holds fades away and the lantern swings back past the middle
+// before the breeze turns, rocking near its own period instead of hanging out to one side. It swings from the top of the
+// window, with the push scaled so the lantern moves sideways as much as it would hung at y=20. A standing lantern
+// (style.stands) holds still at 0, so rot() leaves everything where it's drawn; the pendulum keeps going under it, so a
+// hanging lantern picked afterwards picks up the swing where the wind has it.
+const swing = { a: NaN, v: 0, wind: 0 };
 function swingLantern(elapsed, s) {
-  const top = VIEW.top, sl = s - LAG, push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
-  if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
-  swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
+  const w = 2 * Math.PI / sway.period, dt = Math.min(0.05, elapsed), top = VIEW.top, sl = s - LAG;
+  if (!(swing.a === swing.a)) { swing.a = swing.v = 0; swing.wind = GUST(s); } // first frame (or a NaN): start hanging still
+  swing.wind += (GUST(s) - swing.wind) * Math.min(1, dt / sway.forget);
+  const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
+  swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
@@ -312,8 +328,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
-    // the way to the flame's colour at five sixths the brightness
-    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, col: mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6) } : null,
+    // the way to the flame's colour at five sixths the brightness, and toward the flame's core as it burns brighter: the
+    // room behind it brightens with the flame too, and a wall that didn't would fade into it at full flame
+    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, col: mix(mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6), pal('core'), 0.65 * strength) } : null,
     bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
 }
@@ -519,9 +536,10 @@ function mothFireflies(m, dt, s) {
 // holds still while the moth wanders or the lantern swings.
 function mothZones(m, needsMe) {
   // a landed moth rides the lantern exactly, so its area follows it and is only moth-sized: neighbours on the paper
-  // no longer overlap and steal each other's card
-  [m.zx, m.zy] = needsMe ? [m.x, m.y] : stretch(m.home);
-  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 22 : 48);
+  // no longer overlap and steal each other's card. It sits on the middle of the wings (m.shade, from the last frame),
+  // not on m.x, m.y, the joint resting on the paper, which lies below it and would hang the area over the moth below.
+  [m.zx, m.zy] = needsMe ? m.shade || [m.x, m.y] : stretch(m.home);
+  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 32 : 56);
   // once it has landed, its fireflies back home get a hover area of their own with the same card
   if (m.flies) {
     m.flyZone ??= hoverArea(m, 'flies');

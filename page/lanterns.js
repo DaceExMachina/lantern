@@ -35,27 +35,58 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
-// ?dev: a small panel, top left, to tune the twist by eye (applies at once and is kept in the URL).
+// ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
+let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
+// the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
+// takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
+// scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
+const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
+const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
+// ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
+// and is kept in the URL).
 if (Q.has('dev')) {
   const panel = document.createElement('div'), query = (k, v) => {
     const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
   };
-  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 190px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
+  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 240px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
     + 'border: 1px solid #4A3B68; border-radius: 10px; color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
-  // each row is one label, its click area the row's full width and height, meeting the next row's
-  const row = (text, attrs) => {
+  // each row is one label, its click area the row's full width and height, meeting the next row's; hovering anywhere on it
+  // shows what it does, and a slider shows its value after it
+  const row = (text, title, attrs) => {
     const label = document.createElement('label'), input = Object.assign(document.createElement('input'), attrs);
     label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
-    label.append(...(attrs.type === 'range' ? [text, input] : [input, text])); panel.append(label);
+    label.title = title;
+    if (attrs.type === 'range') {
+      const value = document.createElement('span');
+      value.style.cssText = 'min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums';
+      const show = () => { value.textContent = input.value; };
+      input.style.flex = '1'; input.addEventListener('input', show); show();
+      label.append(text, input, value);
+    } else label.append(input, text);
+    panel.append(label);
     return input;
   };
-  const on = row('twist', { type: 'checkbox', checked: twistGain > 0 });
-  const gain = row('strength', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
-  gain.style.flex = '1';
+  const on = row('twist', 'Turn the brass to and from the light as the lantern swings', { type: 'checkbox', checked: twistGain > 0 });
+  const gain = row('strength', 'How far the brass turns with the swing. Higher makes its shine move more', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
   on.onchange = gain.oninput = () => {
     twistGain = on.checked ? +gain.value : 0;
     history.replaceState(null, '', query('twist', twistGain === 3 ? null : String(twistGain)));
   };
+  const fake = row('fake flame', 'Hold the flame at a set brightness, whatever your sessions are doing', { type: 'checkbox', checked: fakeFlame !== null });
+  const bright = row('brightness', 'How bright the fake flame burns, from an idle ember to five sessions working', { type: 'range', min: 0, max: 1, step: 0.05, value: fakeFlame ?? 1 });
+  fake.onchange = bright.oninput = () => {
+    fakeFlame = fake.checked ? +bright.value : null;
+    history.replaceState(null, '', query('flame', fakeFlame === null ? null : String(fakeFlame)));
+  };
+  for (const [k, min, max, step, title] of [
+    ['period', 2, 8, 0.1, 'How long one full swing of the lantern takes, in seconds'],
+    ['damping', 0.05, 0.6, 0.01, 'How quickly the swinging dies down. Lower rocks longer'],
+    ['forget', 0.3, 5, 0.1, 'How long a steady lean in the wind keeps pushing the lantern, in seconds. Longer makes it lean with the wind instead of swinging back'],
+    ['gain', 0, 3, 0.05, 'How hard changes in the wind push the lantern'],
+    ['gust', 1, 8, 0.1, 'How long a gust of wind lasts on average, in seconds. Each one runs from half to one and a half times this. The dust, fireflies and moths feel it too']]) {
+    const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
+    r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
+  }
   document.body.append(panel);
 }
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
@@ -458,9 +489,8 @@ const STYLES = {
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
-<!-- its inside is the far wall, drawn by the background (bakeFarWall) -->
-      
-      <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
+<!-- its inside is the far wall, drawn by the background (bakeFarWall); the air's glow kept to half, so the lit wall shows through it -->
+      <g opacity=".5"><ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/></g>`,
     front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
       <path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>
