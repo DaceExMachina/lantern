@@ -62,7 +62,10 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
   let start = 0;
   const check = key => {
     run(`applyStyle('${key}')`);
-    const sway = [...run(`Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, ${start} + i / 60), swayAngle))`)];
+    // each frame's sway, and the turn it gives #lantern
+    const frames = [...run(`Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, ${start} + i / 60),
+      [swayAngle, document.getElementById('lantern').getAttribute('transform')]))`)];
+    const sway = frames.map(f => f[0]), top = run('VIEW.top').toFixed(1);
     start += 30;
     const hang = /id="hang"/.test(els.lantern.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
@@ -72,6 +75,9 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
       assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: at most ${Math.max(...sway.map(Math.abs))}`);
+      assert.ok(Math.max(...sway) - Math.min(...sway) > 0.1, `${key} swings to and fro, not one lean: ${Math.min(...sway)} to ${Math.max(...sway)}`);
+      const off = frames.find(([a, t]) => t !== `rotate(${a.toFixed(3)} 340 ${top})`);
+      assert.ok(!off, `${key} is drawn turned by its sway: ${off}`);
       assert.ok(hang, `${key} hangs from a string or chain`);
     }
   };
