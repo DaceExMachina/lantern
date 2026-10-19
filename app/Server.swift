@@ -408,7 +408,7 @@ final class LanternServer {
         let before = (str(s["state"]), str(s["note"]))
         s["state"] = busy ? "paused" : "idle"
         s["resting"] = busy ? nil : true
-        s["note"] = busy ? "Waiting on \(tasks)" : "\(tasks) open, quiet for \(Int((t - ((s["last"] as? Double) ?? t)) / 60000))m"
+        s["note"] = busy ? "Waiting on \(tasks)" : "\(tasks) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest opened, or an agent last spoke
         return before != (str(s["state"]), str(s["note"]))
     }
 

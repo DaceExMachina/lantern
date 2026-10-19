@@ -120,7 +120,7 @@ test('a background agent that keeps firing hook events keeps its session working
     assert.strictEqual((await s1(base)).state, 'paused');
   }
   const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the quiet session to rest');
-  assert.match(quiet.note, /^1 background task open, quiet for \d+m$/);
+  assert.match(quiet.note, /^1 background task open for \d+m$/);
   await post(base, '/event', agentTool);
   await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
 });
@@ -137,7 +137,7 @@ test('a background task open past the threshold with no agent activity rests aft
   await post(base, '/event', stopWith(SERVER));
   assert.strictEqual((await until(() => s1(base), 'the session')).state, 'paused');
   const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the session to rest with no new event');
-  assert.match(quiet.note, /^1 background task open, quiet for \d+m$/);
+  assert.match(quiet.note, /^1 background task open for \d+m$/);
   // the same server still open at the next turn's end: it's as old as when first seen, so the session rests at once
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'more' });
   await post(base, '/event', stopWith(SERVER));
