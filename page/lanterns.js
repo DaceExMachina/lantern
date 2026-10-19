@@ -31,7 +31,9 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
-// ?dev: a small panel, top left, to tune the twist by eye (applies at once and is kept in the URL).
+// ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
+let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
+// ?dev: a small panel, top left, to tune the twist and fake the flame by eye (applies at once and is kept in the URL).
 if (Q.has('dev')) {
   const panel = document.createElement('div'), query = (k, v) => {
     const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
@@ -51,6 +53,13 @@ if (Q.has('dev')) {
   on.onchange = gain.oninput = () => {
     twistGain = on.checked ? +gain.value : 0;
     history.replaceState(null, '', query('twist', twistGain === 3 ? null : String(twistGain)));
+  };
+  const fake = row('fake flame', { type: 'checkbox', checked: fakeFlame !== null });
+  const bright = row('brightness', { type: 'range', min: 0, max: 1, step: 0.05, value: fakeFlame ?? 1 });
+  bright.style.flex = '1';
+  fake.onchange = bright.oninput = () => {
+    fakeFlame = fake.checked ? +bright.value : null;
+    history.replaceState(null, '', query('flame', fakeFlame === null ? null : String(fakeFlame)));
   };
   document.body.append(panel);
 }
@@ -277,9 +286,8 @@ const STYLES = {
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
-<!-- its inside is the far wall, drawn by the background (bakeFarWall) -->
-      
-      <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
+<!-- its inside is the far wall, drawn by the background (bakeFarWall); the air's glow kept to half, so the lit wall shows through it -->
+      <g opacity=".5"><ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/></g>`,
     front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
       <path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>
