@@ -420,7 +420,7 @@ function mothZones(m, needsMe) {
   // a landed moth rides the lantern exactly, so its area follows it and is only moth-sized: neighbours on the paper
   // no longer overlap and steal each other's card
   [m.zx, m.zy] = needsMe ? [m.x, m.y] : stretch(m.home);
-  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 22 : 48);
+  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 32 : 56);
   // once it has landed, its fireflies back home get a hover area of their own with the same card
   if (m.flies) {
     m.flyZone ??= hoverArea(m, 'flies');

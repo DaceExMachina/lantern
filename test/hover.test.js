@@ -28,3 +28,21 @@ test('a landed moth keeps its own body next to a flying moth\'s wider area', () 
   assert.strictEqual(zoneAt([flying, landed], 16, 0), flying);
   assert.strictEqual(zoneAt([flying, landed], -21, 0), landed, 'its far side is its own');
 });
+
+test('shift+click runs an area\'s snooze menu, a plain click runs its click action', () => {
+  const calls = [];
+  vm.runInContext('globalThis.$ = () => ({ classList: { remove() {} } }); globalThis.clearTimeout = () => {}; globalThis.hideTimer = 0', page);
+  const zone = vm.runInContext('hoverZone', page)({}, {}, () => calls.push('click'));
+  vm.runInContext('areas', page).get(zone).menu = () => calls.push('snooze');
+  const clickZone = vm.runInContext('clickZone', page);
+  clickZone(zone, false);
+  assert.deepStrictEqual(calls, ['click']);
+  clickZone(zone, true);
+  assert.deepStrictEqual(calls, ['click', 'snooze']);
+});
+
+test('landed moths 20 apart (r 32) still split at their midpoint', () => {
+  const a = circle(0, 0, 32), b = circle(20, 0, 32);
+  assert.strictEqual(zoneAt([a, b], 9, 0), a);
+  assert.strictEqual(zoneAt([a, b], 11, 0), b);
+});

@@ -39,7 +39,7 @@ A landed session's card says what it needs from you. You get its "You:" line, an
 
 Click a moth to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. "N need you" in the footer opens whichever session has waited longest, then the next one.
 
-Right-click a waiting moth to snooze it. It rests on the lantern in pale indigo, breathing out the odd z, and stops turning the light violet until the session does something new. Right-click again to snooze it for good, so new activity never wakes it. That's handy for a chat you only drop into now and then. A third right-click wakes it. On a moth that isn't waiting, the first right-click snoozes it for good.
+Right-click a waiting moth, or shift-click it, to snooze it. It rests on the lantern in pale indigo, breathing out the odd z, and stops turning the light violet until the session does something new. Right-click or shift-click again to snooze it for good, so new activity never wakes it. That's handy for a chat you only drop into now and then. A third one wakes it. On a moth that isn't waiting, the first one snoozes it for good.
 
 Forgot what something means? "What's what?" at the bottom of the settings menu has the short version of this page.
 
