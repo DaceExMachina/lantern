@@ -79,7 +79,11 @@ Only plain sentences make it onto the paper. Lantern drops anything with code, a
 
 ## Picking a lantern
 
-The settings menu (the compass icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
+The settings menu (the compass icon at the bottom right) has four lanterns: the book-page barrel, a round chōchin, a brass Moroccan lantern and a pillar candle. The barrel is the default. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together.
+
+The pillar candle is ivory wax on a bronze altar candlestick, wound with a grapevine and purple grapes. It stands on its own foot, so it has no string or chain and doesn't sway in the wind. Moths that need you land on the wax. Its bare flame throws sparks, like the Moroccan's, and the room below the candle's rim sits in its shade. It has no paper, so it shows no session text.
+
+The same menu holds "notify me", the stale PR and session text switches (session text is greyed out on the Moroccan and the candle), the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
 
 ## Stats, badges and the recap
 
