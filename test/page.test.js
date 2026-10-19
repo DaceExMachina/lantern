@@ -15,10 +15,15 @@ const attrs = {}, els = {
   textToggle: { disabled: false, parentElement: row() },
   ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
 };
+// the flame's parts, which drawFlame writes to
+for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase']) {
+  const a = {};
+  els[id] = { getAttribute: k => a[k] ?? null, setAttribute: (k, v) => { a[k] = v; } };
+}
 const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
 // a plain window, no query string; the Moroccan's far wall counts as baked already (background.js isn't loaded)
-const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, moths: new Map(), farWallTex: {} });
-for (const f of ['scene', 'lanterns', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {} });
+for (const f of ['scene', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 // How far round the side a perch sits: 0 at the lantern's middle, 1 at its rim (at that height).
@@ -75,6 +80,37 @@ test('moths land on the candle\'s wax: below its rim, above its dish and within 
     assert.ok(P.rim < y && y < P.dish, `a ${a.toFixed(2)}, rand ${r}: y ${y} is off the wax (${P.rim} to ${P.dish})`);
     assert.ok(Math.abs(x - P.cx) <= P.r, `a ${a.toFixed(2)}, rand ${r}: x ${x} is past the pillar's side`);
   }
+});
+
+test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest', () => {
+  const [fx, fy, k] = run('STYLES.candle.flame'), FLAME_BASE = run('FLAME_BASE'), clear = run('FLAME_CLEARANCE');
+  // the outer tongue's outline at full size as it wobbles, sampled along its curves, in the scene
+  const flame = new Map();
+  for (let s = 0; s < 30; s += 0.05) {
+    run(`drawFlame(${s}, { size: 1, pulse: 1 })`);
+    const n = els.fOuter.getAttribute('d').match(/-?[\d.]+/g).map(Number);
+    for (let i = 2; i + 5 < n.length; i += 6) for (let t = 0; t <= 1; t += 0.05) {
+      const b = (p0, p1, p2, p3) => (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t * t * p2 + t ** 3 * p3;
+      const x = fx + (b(n[i - 2], n[i], n[i + 2], n[i + 4]) - 340) * k, y = fy + (b(n[i - 1], n[i + 1], n[i + 3], n[i + 5]) - FLAME_BASE) * k;
+      flame.set(`${x.toFixed(1)},${y.toFixed(1)}`, [x, y]);
+    }
+  }
+  const tongue = [...flame.values()];
+  // a landed moth's wings as mothWings poses them: standing out along the surface's normal, the body up along it turned by
+  // its landing jitter, from nearly shut to a breath's widest
+  const { wing3d, unit, lerp3, cross, dot, WING_UP, WING_SIDE, SIZE } = run('({ wing3d, unit, lerp3, cross, dot, WING_UP, WING_SIDE, SIZE })');
+  let nearest = Infinity;
+  for (const a of angles) for (const r of [0, 0.5, 1]) {
+    const [px, py, n0] = run(`style = STYLES.candle; pickPerch(${a}, () => ${r})`);
+    for (const jitter of [-15, 0, 15]) for (const open of [0.05, 0.5, 0.91]) {
+      const t0 = unit([n0[1] * n0[0], n0[1] * n0[1] - 1, n0[1] * n0[2]]), T = unit(lerp3(t0, cross(n0, t0), Math.tan(jitter * Math.PI / 180)));
+      const N = unit(lerp3(n0, T, -dot(n0, T)));
+      for (const pts of [wing3d(WING_UP, T, N, open), wing3d(WING_SIDE, T, N, open)]) for (const size of Object.values(SIZE)) for (const [wx, wy] of pts) {
+        for (const [x, y] of tongue) nearest = Math.min(nearest, Math.hypot(px + wx * size - x, py + wy * size - y));
+      }
+    }
+  }
+  assert.ok(nearest >= clear, `a wing tip comes within ${nearest.toFixed(1)} of the flame, under the ${clear} kept clear`);
 });
 
 test('the candle shades the room below its rim, and nothing above its flame', () => {
