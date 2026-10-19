@@ -160,6 +160,14 @@ let swayAngle = 0;
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
 // its own, within about ±18. The drawing itself doesn't turn.
 let twist = 0;
+// A flat face's tone: how squarely it faces a light 35 degrees to the left as the lantern twists (`angle` round the lantern,
+// `tilt` up, the light sitting a little above), squared so the tone moves plainly as it turns, with a low floor so a face
+// turned a little away still lifts off the darkest tone as the twist brings it round; blended along FACET_TONES.
+function facetTone(angle, tilt = 0) {
+  const e = tilt * Math.PI / 180, c = Math.cos((angle + 35 - twist) * Math.PI / 180) * Math.cos(e) + Math.sin(e) * 0.5;
+  const u = Math.max(0, Math.min(1, (c + 0.45) / 1.45)), t = u * u * 4, i = Math.min(3, Math.floor(t));
+  return mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
+}
 /** @returns {[number, number]} */
 function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
@@ -183,25 +191,35 @@ function swingLantern(elapsed, s) {
   const dx = Math.round(twist * 3.5) / 2 - 6;
   document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', `translate(${dx} 0)`));
   // a tapering part's band leans by k per unit of height, so it meets the middle (340, 15 right of the stops' 325) at its apex;
-  // a radial one (?brass=radial) is a narrow ellipse along that band, two thirds of the way to the part's narrow end
+  // a radial one (an onion's) is a narrow ellipse along that band, two thirds of the way to the part's narrow end
   document.querySelectorAll('.taper').forEach(g => {
     const { base, apex, end } = /** @type {SVGElement} */ (g).dataset, k = (15 - dx) / (+apex - +base);
     if (!end) return put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(dx - k * +base).toFixed(2)} 0)`);
     const cy = +base + 0.65 * (+end - +base), ry = 0.45 * Math.abs(+end - +base), cx = 325 + dx + k * (cy - +base);
     put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
   });
-  // the flat parts (lanterns.js FLAT), each facing some angle round the lantern, lit by how squarely they meet a light 35
-  // degrees to the left, as the lantern twists: one flat tone each, blended continuously along FACET_TONES,
-  // then lifted toward white (an edge) or black (a rim); put() skips any whose rounded colour hasn't changed
+  // the flat parts (lanterns.js FLAT): one tone each by the angle they face (facetTone), lifted toward white (an edge) or
+  // black (a rim); put() skips any whose rounded colour hasn't changed
   document.querySelectorAll('[data-facet]').forEach(n => {
-    // a sloping face (data-tilt, degrees up) takes the light, which sits a little above, by its tilt too
-    const { facet, lift, paint, tilt = '0' } = /** @type {SVGElement} */ (n).dataset, e = +tilt * Math.PI / 180;
-    const c = Math.cos((+facet + 35 - twist) * Math.PI / 180) * Math.cos(e) + Math.sin(e) * 0.5;
-    // squared, so a face's tone moves plainly as it turns (polished metal brightens steeply toward the light), and a face
-    // turned a little away still lifts off the darkest tone as the twist brings it round
-    const u = Math.max(0, Math.min(1, (c + 0.45) / 1.45)), t = u * u * 4, i = Math.min(3, Math.floor(t)), tone = mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
+    const { facet, lift, paint, tilt } = /** @type {SVGElement} */ (n).dataset, tone = facetTone(+facet, +(tilt || 0));
     put(n, paint || 'fill', +lift ? mix(tone, +lift > 0 ? '#ffffff' : '#000000', Math.abs(+lift)) : tone);
   });
+  // the onions' gores (lanterns.js ONION): each a curved panel facing its own way, its tone from facetTone. Option d: down
+  // its profile, each stop the tone of a face at that stop's tilt. Option a: a band that leans toward the tip, sitting across
+  // the gore where its surface faces the light (sin of how far round the light is) and brighter the more the gore faces it;
+  // option b's side gores: their flat tone, darkening toward the tip.
+  document.querySelectorAll('.gore').forEach(g => {
+    const { angle, base, tip, tilt, cx, hw, profile } = /** @type {SVGElement} */ (g).dataset, stops = g.children;
+    if (profile) { for (const n of stops) put(n, 'stop-color', facetTone(+angle, +(/** @type {SVGElement} */ (n).dataset.tilt || 0))); return; }
+    const tone = facetTone(+angle, +tilt);
+    if (!cx) { put(stops[0], 'stop-color', tone); put(stops[1], 'stop-color', mix(tone, '#000000', 0.3)); return; }
+    const d = (+angle + 35 - twist) * Math.PI / 180, x = +cx - Math.sin(d) * +hw * 0.8, k = (+cx - x) / (+tip - +base);
+    put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(x - k * +base).toFixed(2)} 0)`);
+    const dark = mix(tone, '#000000', 0.35), lit = mix(tone, '#FFF0C8', 0.45 * Math.max(0, Math.cos(d)));
+    [dark, tone, lit, tone, dark].forEach((c, i) => put(stops[i], 'stop-color', c));
+  });
+  // the room's horizon (#horizon) stays level with the window, turned back against the lantern's swing
+  put($('horizon'), 'gradientTransform', `rotate(${(-swayAngle).toFixed(2)} 340 ${top.toFixed(1)})`);
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
@@ -301,9 +319,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
-    // ?brass=back: the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
+    // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
     // the way to the flame's colour at five sixths the brightness
-    farWall: style.farWall && fx('back') && !AMBIENT ? { shift: twist * 0.2, col: mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6) } : null,
+    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, col: mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6) } : null,
     bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
 }

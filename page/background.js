@@ -202,7 +202,7 @@ function setLight(u, v) {
   if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
 }
 
-// ---- the Moroccan's far wall (?brass=back) ---------------------------------------------------------------------------
+// ---- the Moroccan's far wall ------------------------------------------------------------------------------------------
 // The inside of the pierced lantern's far wall, seen through its front holes. It lives here, not in the SVG, because this
 // canvas is drawn under the SVG: the front lace's real holes reveal it for next to nothing, where the SVG drawing it cost
 // 10 to 20 fps at 2560x1440 in WebKit. lanterns.js bakes the wall once into a texture (red: its brass, green: the
