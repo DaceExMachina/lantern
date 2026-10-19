@@ -117,6 +117,15 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
   assert.ok(nearest >= clear, `a wing tip comes within ${nearest.toFixed(1)} of the flame, under the ${clear} kept clear`);
 });
 
+test('a restless landed moth hops HOP off its spot', () => {
+  // waiting 20 minutes, its dice on a hop, which starts at s = 10 and peaks 0.8s in, measured from the spot it lifts off
+  run(`style = STYLES.candle; hopper = { key: 'hopper', size: 1.4, x: 340, y: 300, home: [150, 170], wasLanded: true, hops: 0, fidgetAt: 10, dice: 0.9,
+    session: { id: 'hopper', state: 'waiting', waitingSince: Date.now() - 20 * 60000 } }; hopper.perch = findPerch(hopper, () => 0.5)`);
+  const rest = run('rot(hopper.perch[0], hopper.perch[1])[1] + 6 * hopper.size'), { ty } = run('mothTarget("hopper", hopper, 1 / 60, 10.8)');
+  assert.strictEqual(run('hopper.fidget'), 'hop');
+  assert.ok(Math.abs(rest - ty - run('HOP')) < 1e-9, `it rises ${rest - ty}, not ${run('HOP')}`);
+});
+
 test('the candle shades the room below its rim, and nothing above its flame', () => {
   const c = run('STYLES.candle'), P = run('PILLAR');
   assert.deepStrictEqual([...c.holder], [P.rim, P.r], 'the fan below is set by the rim, the widest thing under the flame');
