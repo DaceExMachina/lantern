@@ -33,7 +33,12 @@ const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // 
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
 // ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
 let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
-// ?dev: a small panel, top left, to tune the twist and fake the flame by eye (applies at once and is kept in the URL).
+// the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
+// takes to forget a push the wind holds, and how hard the wind's changes push it (?period=, ?damping=, ?forget=, ?gain=)
+const SWAY = { period: 3.8, damping: 0.15, forget: 1, gain: 1.2 };
+const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
+// ?dev: a small panel, top left, to tune the twist and the swing, and fake the flame, by eye (applies at once
+// and is kept in the URL).
 if (Q.has('dev')) {
   const panel = document.createElement('div'), query = (k, v) => {
     const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
@@ -61,6 +66,11 @@ if (Q.has('dev')) {
     fakeFlame = fake.checked ? +bright.value : null;
     history.replaceState(null, '', query('flame', fakeFlame === null ? null : String(fakeFlame)));
   };
+  for (const [k, min, max, step] of [['period', 2, 8, 0.1], ['damping', 0.05, 0.6, 0.01], ['forget', 0.3, 5, 0.1], ['gain', 0, 3, 0.05]]) {
+    const r = row(k, { type: 'range', min, max, step, value: sway[k] });
+    r.style.flex = '1';
+    r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
+  }
   document.body.append(panel);
 }
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])

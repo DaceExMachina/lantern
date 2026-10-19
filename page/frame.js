@@ -173,15 +173,18 @@ function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
 }
-// Sway on the string as a damped pendulum the wind (GUST) pushes, with its tassel, ribbon or knot trailing: it answers a
-// gust a moment after the dust does, overshoots a little and settles on its own (about a 4.4s swing, damped 0.35, which
-// lags the main gust about LAG). It swings from the top of the window, with the push scaled so the lantern moves sideways
-// as much as it did hung at y=20 (0.83 offsets the pendulum's own gain at the main gust).
-const swing = { a: NaN, v: 0 };
+// Sway on the string as a damped pendulum, with its tassel, ribbon or knot trailing (sway.period and sway.damping,
+// lanterns.js). It's pushed by how the wind (GUST) is changing rather than by the wind itself: GUST less an average that
+// follows it sway.forget seconds behind, so a lean the wind holds fades away and the lantern swings back past the middle
+// before the breeze turns, rocking near its own period instead of hanging out to one side. It swings from the top of the
+// window, with the push scaled so the lantern moves sideways as much as it would hung at y=20.
+const swing = { a: NaN, v: 0, wind: 0 };
 function swingLantern(elapsed, s) {
-  const top = VIEW.top, sl = s - LAG, push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
-  if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
-  swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
+  const w = 2 * Math.PI / sway.period, dt = Math.min(0.05, elapsed), top = VIEW.top, sl = s - LAG;
+  if (!(swing.a === swing.a)) { swing.a = swing.v = 0; swing.wind = GUST(s); } // first frame (or a NaN): start hanging still
+  swing.wind += (GUST(s) - swing.wind) * Math.min(1, dt / sway.forget);
+  const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
+  swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
