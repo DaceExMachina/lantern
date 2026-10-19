@@ -148,14 +148,18 @@ test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
     vm.runInContext(lanterns, c);
     const { back, front } = vm.runInContext('STYLES.candle', c), P = vm.runInContext('PILLAR', c), side = vm.runInContext('LACQUER.candle.side', c);
     const near = (a, b, what) => assert.ok(Math.abs(a - b) < 0.01, `${at}: ${what} at ${a}, not ${b}`);
-    // the pillar's outline: its x and y as it runs, through M, Q, L, V and H
-    const xs = [], ys = [];
+    // the pillar's outline, every point it passes through M, Q, L, V and H
+    const pts = [];
     for (const [, cmd, args] of back.match(/<clipPath id="cdWax"><path d="([^"]+)"/)[1].matchAll(/([MQLVHZ])([^MQLVHZ]*)/g)) {
-      const v = args.trim().split(/[\s,]+/).filter(Boolean).map(Number);
-      if (cmd === 'V') ys.push(...v); else if (cmd === 'H') xs.push(...v); else v.forEach((a, i) => (i % 2 ? ys : xs).push(a));
+      const v = args.trim().split(/[\s,]+/).filter(Boolean).map(Number), [x, y] = pts[pts.length - 1] || [];
+      if (cmd === 'V') pts.push(...v.map(b => [x, b])); else if (cmd === 'H') pts.push(...v.map(a => [a, y]));
+      else for (let i = 0; i + 1 < v.length; i += 2) pts.push([v[i], v[i + 1]]);
     }
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
     near(Math.min(...xs), P.cx - r, 'its left side'); near(Math.max(...xs), P.cx + r, 'its right side');
     near(Math.max(...ys), P.bottom, 'its bottom');
+    const foot = pts.filter(p => p[1] === P.bottom).map(p => p[0]);
+    near(Math.min(...foot), P.cx - r, 'its bottom left corner'); near(Math.max(...foot), P.cx + r, 'its bottom right corner');
     const crown = Math.min(...ys);
     assert.ok(rim - 3 < crown && crown <= rim, `${at}: its crown tops out at ${crown}, off the rim`);
     // every drip runs down from the rim, its middle on the pillar
@@ -171,9 +175,11 @@ test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
     assert.ok(dark[0] + dark[2] >= P.cx + r && dark[1] <= crown, `${at}: the dark side [${dark}] misses the pillar's edge or crown`);
     const glow = back.match(/<rect id="paperGlow" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/).slice(1).map(Number);
     assert.ok(glow[0] <= P.cx - r && glow[0] + glow[2] >= P.cx + r && glow[1] <= crown, `${at}: the glow [${glow}] misses the pillar`);
-    // the notch the main drip spilled from sits on the rim, over the pillar
+    // the notch the main drip spilled from sits on the rim, over a drip
     const notch = back.match(/class="paperLit" d="([^"]+)"/)[1].match(/[\d.]+/g).map(Number);
     notch.forEach((v, i) => assert.ok(i % 2 ? Math.abs(v - rim) < 4 : Math.abs(v - P.cx) < r, `${at}: the notch's ${v}, off the rim`));
+    const mid = (notch[0] + notch[notch.length - 2]) / 2;
+    assert.ok(drips.some(([, x0, , x1]) => Math.abs((+x0 + +x1) / 2 - mid) < 0.01), `${at}: the notch at ${mid} is over no drip`);
     // the wick stands in the crown's middle
     assert.ok(front.startsWith(`<path d="M${P.cx} ${rim}V`), `${at}: the wick starts at ${front.slice(9, 25)}`);
   }
