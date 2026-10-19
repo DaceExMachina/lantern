@@ -16,8 +16,17 @@ test('a moth whose target jumps eases off from rest, then glides in without over
   assert.ok(m.x > 0, `it does set off: ${m.x}`);
   assert.ok(m.x < 0.5, `the first frame barely moves it, rather than leaping at full speed: ${m.x}`);
   for (let t = dt; t < 4; t += dt) {
-    mothMove(m, aim, dt, t);
+    mothMove(m, aim, dt, 0); // the clock held at 0, where the wind (GUST) is still, so only the easing moves it
     assert.ok(m.x <= 100, `no overshoot at ${t.toFixed(2)}s: ${m.x}`);
   }
   assert.ok(m.x > 95, `there within four seconds: ${m.x}`);
+});
+
+test('the wind pushes a flying moth a little downwind, never a landed one', () => {
+  const s = 2, gust = vm.runInContext('GUST', page)(s), dt = 1 / 60; // GUST(2) is about 1.6: blowing to the right
+  const fly = (needsMe) => { const m = { x: 100, y: 0, phase: 0 }; for (let i = 0; i < 300; i++) mothMove(m, { tx: 100, ty: 0, ease: 2.4, needsMe }, dt, s); return m.x - 100; };
+  assert.ok(gust > 1, `the test's moment is a real gust: ${gust}`);
+  const pushed = fly(false);
+  assert.ok(pushed > 2 && pushed < 4, `a flying moth gives a few pixels: ${pushed}`);
+  assert.ok(Math.abs(fly(true)) < 0.01, `a landed one holds its spot: ${fly(true)}`);
 });

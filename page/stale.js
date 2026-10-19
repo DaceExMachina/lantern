@@ -131,6 +131,7 @@ function drawStale(dt, s) {
       const r = 22 + d.wob * 16;
       x = moth.x + Math.cos(d.a) * r; y = moth.y + Math.sin(d.a) * r * 0.7;
     }
+    x += GUST(s - 0.03 * d.ph) * 7; // drifting in the wind like the fireflies
     y -= (d.gone || 0) * 70;
     const fade = (1 - back * 0.5) * d.born * (1 - (d.gone || 0));
     const pale = mix(FLY[d.p.need] || FLY.quiet, WISP_TINT, 0.55);
