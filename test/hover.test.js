@@ -46,3 +46,17 @@ test('landed moths 20 apart (r 32) still split at their midpoint', () => {
   assert.strictEqual(zoneAt([a, b], 9, 0), a);
   assert.strictEqual(zoneAt([a, b], 11, 0), b);
 });
+
+test('a landed moth\'s area is centred on its drawn body, so a point on the lower of two close moths picks it', () => {
+  const frame = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
+  for (const f of ['scene', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
+  const mothZones = vm.runInContext('mothZones', frame);
+  const zone = () => { const at = {}; return { setAttribute: (k, v) => at[k] = v, getAttribute: k => at[k], style: {} }; };
+  // a moth folded on flat paper, its body pointing up the screen: the wings the way mothWings draws them, as caster() sums them up
+  const shade = vm.runInContext('(x, y) => caster(x, y, 0, 1, [...wing3d(WING_UP, [0, -1, 0], [0, 0, 1], 0.1), ...wing3d(WING_SIDE, [0, -1, 0], [0, 0, 1], 0.16)])', frame);
+  const landed = y => { const m = { x: 300, y, size: 1, tilt: 0, zone: zone(), shade: shade(300, y) }; mothZones(m, true); return m; };
+  const upper = landed(78), lower = landed(100); // anchors 22 apart; the wings stand about 16 above each anchor
+  // 14 above the lower anchor is the middle of the lower moth's drawn wings (they span roughly 100 - 28 to 100 - 4)
+  assert.strictEqual(zoneAt([upper.zone, lower.zone], 298, 86), lower.zone);
+  assert.strictEqual(zoneAt([upper.zone, lower.zone], 298, 62), upper.zone, 'and the upper moth keeps its own');
+});
