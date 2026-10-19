@@ -36,8 +36,21 @@ function measureBands() {
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
 // One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
-// with it a moment later (its tassel and knot tail LAG seconds behind).
-const GUST = s => Math.sin(s * 0.7) * 1.6 + Math.sin(s * 1.9) * 0.4, LAG = 0.6;
+// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds on
+// average (lanterns.js) a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
+// calmer spells, with a faster, fainter flutter on top. Pseudo-random from the clock alone, so every window and the
+// snapshots agree; scaled to the strength of the two steady sines it replaced (an RMS of about 1.17).
+const rnd = x => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+const knot = i => { const u = 2 * rnd(i) - 1; return Math.sign(u) * Math.abs(u) ** 1.5; };
+// the knots sit at whole numbers nudged up to a quarter either way, so a gust lasts half to one and a half times the average
+const knotAt = i => i + (rnd(i + 0.17) - 0.5) * 0.5;
+const noise = x => {
+  let i = Math.floor(x);
+  if (x < knotAt(i)) i--; else if (x >= knotAt(i + 1)) i++;
+  const f = (x - knotAt(i)) / (knotAt(i + 1) - knotAt(i));
+  return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f);
+};
+const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
 // heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
 // short as a frame can be (two timers firing together) turned the constraint fix-ups into huge speeds and flung it about.
@@ -173,15 +186,18 @@ function rot(px, py) {
   const rad = swayAngle * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
 }
-// Sway on the string as a damped pendulum the wind (GUST) pushes, with its tassel, ribbon or knot trailing: it answers a
-// gust a moment after the dust does, overshoots a little and settles on its own (about a 4.4s swing, damped 0.35, which
-// lags the main gust about LAG). It swings from the top of the window, with the push scaled so the lantern moves sideways
-// as much as it did hung at y=20 (0.83 offsets the pendulum's own gain at the main gust).
-const swing = { a: NaN, v: 0 };
+// Sway on the string as a damped pendulum, with its tassel, ribbon or knot trailing (sway.period and sway.damping,
+// lanterns.js). It's pushed by how the wind (GUST) is changing rather than by the wind itself: GUST less an average that
+// follows it sway.forget seconds behind, so a lean the wind holds fades away and the lantern swings back past the middle
+// before the breeze turns, rocking near its own period instead of hanging out to one side. It swings from the top of the
+// window, with the push scaled so the lantern moves sideways as much as it would hung at y=20.
+const swing = { a: NaN, v: 0, wind: 0 };
 function swingLantern(elapsed, s) {
-  const top = VIEW.top, sl = s - LAG, push = -GUST(s) * 0.83 * 310 / (330 - top), dt = Math.min(0.05, elapsed);
-  if (!(swing.a === swing.a)) swing.a = push; // first frame (or a NaN): start where the wind holds it
-  swing.v += (2.07 * (push - swing.a) - swing.v) * dt; swing.a += swing.v * dt;
+  const w = 2 * Math.PI / sway.period, dt = Math.min(0.05, elapsed), top = VIEW.top, sl = s - LAG;
+  if (!(swing.a === swing.a)) { swing.a = swing.v = 0; swing.wind = GUST(s); } // first frame (or a NaN): start hanging still
+  swing.wind += (GUST(s) - swing.wind) * Math.min(1, dt / sway.forget);
+  const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
+  swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
