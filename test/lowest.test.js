@@ -16,7 +16,11 @@ test('path curves reach their true lowest point, between their ends or at one', 
   near(d('M0 0q50 100 100 0'), 50, 'relative');
   near(d('M0 0h10v10zm0 600h10v10z'), 610, 'a relative move after Z starts from the subpath\'s start');
   near(d('M0 0H10V20L5 7Z'), 20, 'H and V');
-  near(d('M0 0L10 10 20 30'), 30, 'a move\'s or line\'s extra pairs are lines');
+  near(d('M0 0L10 10 20 30'), 30, 'a line\'s extra pairs are lines');
+  near(d('M0 0 10 10 20 30'), 30, 'a move\'s extra pairs are lines');
+  near(d('M0 0H10M0 900'), 0, 'a lone move at the end draws nothing');
+  assert.strictEqual(d('M0 900'), -Infinity, 'nor does a path that only moves');
+  near(d('M0 900z'), 900, 'a closed zero-length subpath draws its caps there');
 });
 
 test('arcs are converted from endpoint form as SVG says', () => {
@@ -25,6 +29,13 @@ test('arcs are converted from endpoint form as SVG says', () => {
   near(d('M0 549A5 5 0 1 0 1 549'), 549 + Math.sqrt(24.75) + 5, 'a large arc reaches round the far side');
   near(d('M0 549A5 5 0 0 0 1 549'), 549 + 5 - Math.sqrt(24.75), 'its small arc stays near the chord');
   near(d('M0 0A10 20 90 0 0 0 40'), 40, 'turned, with its lowest point at an end');
+  // turned a quarter, its 10 radius stands upright: centred on the chord's middle, it sweeps down through (0, 10)
+  near(d('M-5 0A10 5 90 0 0 5 0'), 10, 'turned a quarter, its long radius upright');
+  // turned 30 degrees, from one end of a diameter (θ 0) to the other (θ π) on the side of increasing θ, past the lowest
+  // point at tan θ = (5 cos 30) / (10 sin 30), which is √((10 sin 30)² + (5 cos 30)²) below the centre
+  const r3 = 5 * Math.sqrt(3);
+  near(d(`M${r3} 5A10 5 30 0 1 ${-r3} -5`), Math.sqrt(25 + 18.75), 'turned 30 degrees');
+  near(d(`M${r3} 5A10 5 30 0 0 ${-r3} -5`), 5, 'the other way round it stays above its start');
   near(d('M0 0A20 10 0 1 0 0 0.000001'), 10, 'a near-full ellipse, centred beside its ends', 1e-5);
   assert.throws(() => d('M0 0A5 5 0 2 0 10 0'), /flags/, 'a flag other than 0 or 1');
 });
@@ -34,6 +45,10 @@ test('basic shapes, with missing attributes at their SVG defaults', () => {
   near(lowestY('rect', { width: '10', height: '10', transform: 'translate(0 600)' }), 610, 'a translated rect');
   near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(45)' }), 10 * Math.SQRT2, 'a rect turned on its corner');
   near(lowestY('rect', { width: '10', height: '10', rx: '5', transform: 'rotate(45)' }), 5 * Math.SQRT2 + 5, 'a fully rounded one is a circle');
+  near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(90 10 0)' }), 0, 'turned about (10, 0) it lies above that corner');
+  near(lowestY('rect', { width: '10', height: '10', transform: 'rotate(90 10 5)' }), 5, 'turned about (10, 5): x - 10 + 5 at most');
+  near(lowestY('rect', { width: '10', height: '10', transform: 'skewY(45)' }), 20, 'skewY slides each column down by x');
+  near(lowestY('rect', { width: '10', height: '10', transform: 'skewX(45)' }), 10, 'skewX slides rows sideways only');
   near(lowestY('polygon', { points: '0 560 680 560 680 700 0 700' }), 700, 'a polygon');
   near(lowestY('polyline', { points: '0,1 5,9 9,2' }), 9, 'a polyline');
   near(lowestY('line', { x1: '0', y1: '0', x2: '680', y2: '600' }), 600, 'a line');
@@ -44,12 +59,14 @@ test('basic shapes, with missing attributes at their SVG defaults', () => {
   assert.strictEqual(lowestY('ellipse', { rx: '10' }), -Infinity, 'an ellipse with no ry draws nothing');
   assert.throws(() => lowestY('text', {}), /lowestY knows/, 'an element it doesn\'t know');
   assert.throws(() => lowestY('rect', { width: '1', height: '1', transform: 'perspective(3)' }), /transform/, 'a transform it doesn\'t know');
+  assert.throws(() => lowestY('rect', { width: '1', height: '1', transform: 'toString()' }), /transform/, 'nor an object\'s own method');
   assert.throws(() => lowestY('rect', { width: '1', height: '1', y: '1em' }), /not understood/, 'a length it can\'t read');
 });
 
 test('markup: transforms on groups compose, <use> draws what it refers to, nothing in <defs> draws itself', () => {
   near(lowest('<g transform="translate(0 100)"><g transform="scale(2)"><rect height="5" width="1"/></g></g>'), 110, 'nested groups');
   near(lowest('<defs><g id="dot"><circle r="5"/></g><rect width="1" height="900"/></defs><use href="#dot" x="0" y="20"/>'), 25, '<use>');
+  near(lowest('<defs><g id="dot"><circle r="5"/></g></defs><use xlink:href="#dot" y="30"/>'), 35, '<use> by xlink:href');
   near(lowest('<g transform="rotate(90)"><path d="M0 0H30"/></g><!-- a <rect> in a comment draws nothing -->'), 30, 'a turned group');
   assert.throws(() => lowest('<g><foo/></g>'), /lowestY knows/, 'an element it doesn\'t know');
   assert.throws(() => lowest('<use href="#nothing"/>'), /refers to nothing/, 'a <use> of nothing');
