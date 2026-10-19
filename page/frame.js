@@ -170,11 +170,15 @@ function swingLantern(elapsed, s) {
   // SHEEN), and slides 14 units per degree around that, staying within 291 to 347; half-unit steps so put() skips frames that wouldn't show it
   const dx = Math.round(swayAngle * 28) / 2 - 6;
   document.querySelectorAll('.sheen').forEach(g => put(g, 'gradientTransform', `translate(${dx} 0)`));
-  // a tapering part's band leans by k per unit of height, so it meets the middle (340, 15 right of the stops' 325) at the cone's tip
+  // a tapering part's band leans by k per unit of height, so it meets the middle (340, 15 right of the stops' 325) at its apex;
+  // a radial one (?brass=radial) is a narrow ellipse along that band, two thirds of the way to the part's narrow end
   document.querySelectorAll('.taper').forEach(g => {
-    const { base, apex } = /** @type {SVGElement} */ (g).dataset, k = (15 - dx) / (+apex - +base);
-    put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(dx - k * +base).toFixed(2)} 0)`);
+    const { base, apex, end } = /** @type {SVGElement} */ (g).dataset, k = (15 - dx) / (+apex - +base);
+    if (!end) return put(g, 'gradientTransform', `matrix(1 0 ${k.toFixed(4)} 1 ${(dx - k * +base).toFixed(2)} 0)`);
+    const cy = +base + 0.65 * (+end - +base), ry = 0.45 * Math.abs(+end - +base), cx = 325 + dx + k * (cy - +base);
+    put(g, 'gradientTransform', `matrix(4 0 ${(k * ry).toFixed(3)} ${ry.toFixed(2)} ${cx.toFixed(2)} ${cy.toFixed(2)})`);
   });
+  put($('farWall'), 'transform', `translate(${(-swayAngle * 4).toFixed(1)} 0)`); // ?brass=back: the far wall slides against the sway
   if (style.tassel) put($('tassel'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail

@@ -25,19 +25,25 @@ const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop
 // light catches it, and deep warm shadow on the right. The highlight is one band shared by three gradients (class
 // sheen, in the lantern's own units, given as [x, colour]): faces, side faces, and the lit edges, chain and finial, whose
 // narrow white peak glints as an edge passes under it. swingLantern slides them all with the sway (frame.js).
+const TAPERS = [['dome', 244, 154, 154], ['bottom', 434, 486, 486], ['shoulder', 285, 235, 260], ['skirt', 413, 445, 428]];
 const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientUnits="userSpaceOnUse" x1="270" x2="410">${
   stops.map(([x, c]) => `<stop offset="${((x - 270) / 140).toFixed(3)}" stop-color="${c}"/>`).join('')}</linearGradient>`;
-const SHEENS = SHEEN('brassF', [[270, '#33220D'], [296, '#5E4118'], [312, '#8A6428'], [318, '#B08840'], [325, '#CFA960'], [332, '#B08840'],
-  [340, '#94692C'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
-  + SHEEN('brassS', [[270, '#2A1C0A'], [284, '#5A3F1A'], [292, '#735624'], [302, '#4F3715'], [318, '#735224'], [325, '#A07E40'], [332, '#735224'],
-  [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
-  + SHEEN('brassE', [[270, '#73532A'], [310, '#A07F40'], [318, '#B89650'], [324, '#D9BA78'], [326, '#E4C888'], [328, '#D9BA78'], [334, '#B89650'],
-  [350, '#9E7E40'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']])
-  // On the tapering parts the band leans in toward the narrow end, as it would on a cone: each part's faces and side faces get
-  // their own gradient (class taper) inheriting the stops by href, leaned each frame so the band runs from where it sits at the
-  // part's wide edge (`base`) to the middle at the cone's tip (`apex`, where its slope would meet the middle). frame.js sets it.
-  + [['dome', 244, 154], ['bottom', 434, 486], ['shoulder', 285, 197.5], ['skirt', 413, 454]].map(([id, base, apex]) => ['F', 'S'].map(k =>
-    `<linearGradient id="${id}${k}" class="taper" href="#brass${k}" data-base="${base}" data-apex="${apex}"/>`).join('')).join('');
+// Dace's brass experiments, each off unless named in ?brass= (comma-separated, or all): edges, horizon, glow, patina, radial, back.
+// ponytail: plain flags while he tries them; the keepers lose their flag, the rest get deleted.
+const BRASS_FX = new Set((Q.get('brass') || '').split(','));
+const fx = k => BRASS_FX.has(k) || BRASS_FX.has('all');
+const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
+  + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
+  + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']])
+  // On the tapering parts the band leans in toward the narrow end, as it would on a cone: each part's faces, side faces and
+  // edges get their own gradient (class taper) inheriting the stops by href, leaned each frame so the band runs from where it
+  // sits at the part's wide edge (`base`) to the middle at `apex`, where its slope would meet the middle (on the short
+  // shoulder and skirt, nearer than their true cone's tip, so the lean shows). With ?brass=radial each part also gets a
+  // narrow bright ellipse along that band toward its narrow `end` (radial, class taper too). frame.js sets them.
+  + TAPERS.map(([id, base, apex, end]) => ['F', 'S', 'E'].map(k =>
+    `<linearGradient id="${id}${k}" class="taper" href="#brass${k}" data-base="${base}" data-apex="${apex}"/>`).join('')
+    + (fx('radial') ? `<radialGradient id="${id}R" class="taper" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" data-base="${base}" data-apex="${apex}" data-end="${end}">`
+      + `<stop offset="0" stop-color="#E8C88A" stop-opacity=".7"/><stop offset=".5" stop-color="#C9A058" stop-opacity=".25"/><stop offset="1" stop-color="#C9A058" stop-opacity="0"/></radialGradient>` : '')).join('');
 const BRASS = { front: 'url(#brassF)', side: 'url(#brassS)', lit: 'url(#brassE)', rim: 'url(#brassS)' };
 // a six-sided onion dome rising to the finial, sitting just proud of the frieze
 const DOME = 'M340 154C341.9 174 349.4 184 366.3 198C383.2 212 387.9 227 386 244L294 244C292.1 227 296.8 212 313.7 198C330.6 184 338.1 174 340 154Z';
@@ -62,11 +68,21 @@ const ROPE = (y, half = 63, front = half / 2) => {
     twist += `M${(340 + at(lo)).toFixed(2)} ${y + 5 - (lo - u + 2.5) * 2}L${(340 + at(hi)).toFixed(2)} ${y + (u - hi) * 2}`;
   }
   return `<path class="band" d="M${340 - half} ${y}h${2 * half}v5h-${2 * half}Z" fill="${BRASS.side}"/>
-  <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="${twist}" stroke="#5A3A12" stroke-width="1"/>`;
+  <path d="M${340 - front} ${y}h${2 * front}v5h-${2 * front}Z" fill="${BRASS.front}"/><path d="${twist}" stroke="${fx('patina') ? '#3E3A16' : '#5A3A12'}" stroke-width="1"/>`;
 };
-const MOROCCAN_DEFS = `${SHEENS}<pattern id="lace" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="#fff" stroke-width="1.3">
+const LACE_TILE = (id, stroke) => `<pattern id="${id}" width="10" height="12" patternUnits="userSpaceOnUse" x="0" y="2"><g fill="none" stroke="${stroke}" stroke-width="1.3">
     <path d="M0 0C0 3 5 3 5 6C5 9 10 9 10 12M10 0C10 3 5 3 5 6C5 9 0 9 0 12"/><circle cx="0" cy="6" r="1.3"/><circle cx="10" cy="6" r="1.3"/>
-    <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>
+    <path d="M5 -1.8Q6.3 0 5 1.8Q3.7 0 5 -1.8ZM5 10.2Q6.3 12 5 13.8Q3.7 12 5 10.2Z"/><path d="M2.2 6Q3.4 4.6 2.6 3.4M7.8 6Q6.6 7.4 7.4 8.6"/></g></pattern>`;
+// ?brass=horizon: the room reflected as a darker band across the body's middle; ?brass=glow: the flame's warm bounce on the
+// lace nearest it (class paperLit, so lightPaper colours and flickers it); ?brass=back: the far wall's lit lace, mirrored
+// behind the holes and shifted against the sway (#farWall, frame.js)
+const MOROCCAN_FX_DEFS = (fx('horizon') ? `<linearGradient id="horizon" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="290" y2="408">
+    <stop offset="0" stop-color="#FFE0A0" stop-opacity=".08"/><stop offset=".38" stop-color="#140A02" stop-opacity=".4"/><stop offset=".5" stop-color="#140A02" stop-opacity=".5"/>
+    <stop offset=".62" stop-color="#140A02" stop-opacity=".4"/><stop offset="1" stop-color="#FFE0A0" stop-opacity=".08"/></linearGradient>` : '')
+  + (fx('glow') ? `<radialGradient id="bounce" class="paperLit" gradientUnits="userSpaceOnUse" cx="340" cy="372" r="64"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/>
+    <stop offset=".6" stop-color="currentColor" stop-opacity=".2"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>` : '')
+  + (fx('back') ? `${LACE_TILE('laceBack', '#F2C27A')}<clipPath id="shapeClip">${MOROCCAN_SHAPE}</clipPath>` : '');
+const MOROCCAN_DEFS = `${SHEENS}${MOROCCAN_FX_DEFS}${LACE_TILE('lace', '#fff')}
   <radialGradient id="mg" gradientUnits="userSpaceOnUse" cx="340" cy="348" r="160"><stop class="paperStop" offset="0" stop-opacity=".8"/><stop class="paperStop" offset="1" stop-opacity=".3"/></radialGradient>
   <clipPath id="domeSide"><path d="${DOME}" transform="translate(340 244) scale(.9 .88) translate(-340 -244)"/></clipPath>
   <clipPath id="domeFront"><path d="${DOME}" transform="translate(340 244) scale(.4 .88) translate(-340 -244)"/></clipPath>
@@ -143,6 +159,14 @@ const DRUM = (kit, y, half, height, paper = 0) => {
     + `<path d="${band(y, bottom)}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`
     + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
 };
+// ?brass=edges: a hairline bevel catching the light along the top and left of each frame, pillar and band
+const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
+  M306.9 290v118M369.9 290v118M275.9 290v118M277 285.4h126M277 408.4h126M277 413.4h126M300 428.3h80M295 244.4h90"/></g>`;
+// ?brass=patina: faintly olive darkening in the recesses (inside the frames, under the bands, round the frieze windows),
+// and rivets at the frame corners sunk in a ring of it
+const MOROCCAN_PATINA = `<g fill="none" stroke="#3A3818" stroke-opacity=".6"><path d="M314 295h52v108h-52ZM282 295h22v108h-22ZM376 295h22v108h-22Z" stroke-width="1.4"/>
+  <path d="M277 290.8h126M277 407.2h126M277 414h126" stroke-width="1.2"/><path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/></g>
+  ${[312.5, 367.5, 280.5, 305.5, 374.5, 399.5].flatMap(x => [293.5, 404.5].map(y => `<circle cx="${x}" cy="${y}" r="1.9" fill="#3A3818" opacity=".5"/><circle cx="${x}" cy="${y}" r="1" fill="${BRASS.lit}"/>`)).join('')}`;
 const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
@@ -193,6 +217,7 @@ const STYLES = {
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
       <g fill="#24160A">${MOROCCAN_SHAPE}</g><g fill="url(#mg)">${MOROCCAN_SHAPE}</g>
+      ${fx('back') ? '<g clip-path="url(#shapeClip)"><g id="farWall" class="paperLit"><rect x="250" y="140" width="180" height="360" fill="url(#laceBack)" transform="translate(340 0) scale(-.9 .95) translate(-340 0)"/></g></g>' : ''}
       <ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/>`,
     front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
@@ -203,21 +228,25 @@ const STYLES = {
         <path d="M295 244h90v16h-90Z" fill="${BRASS.side}"/><path d="M317.5 244h45v16h-45Z" fill="${BRASS.front}"/>
         <path d="${SHOULDER}" fill="url(#shoulderS)"/><path d="${SHOULDER_F}" fill="url(#shoulderF)"/>
         <path d="M277 290h126v118h-126Z" fill="${BRASS.side}"/><path d="M308.5 290h63v118h-63Z" fill="${BRASS.front}"/>
+        ${fx('radial') ? `<path d="${DOME}" fill="url(#domeR)"/><path d="${BOTTOM}" fill="url(#bottomR)"/><path d="${SHOULDER}" fill="url(#shoulderR)"/>` : ''}
+        ${fx('horizon') ? '<path d="M277 290h126v118h-126Z" fill="url(#horizon)"/>' : ''}${fx('glow') ? '<path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>' : ''}
       </g>
       <g fill="none" stroke-linejoin="round">
-        <path d="${DOME}" stroke="${BRASS.rim}" stroke-width="2"/><path d="${DOME}" stroke="${BRASS.lit}" stroke-width="2.6" transform="${HALF_X}"/>
+        <path d="${DOME}" stroke="url(#domeS)" stroke-width="2"/><path d="${DOME}" stroke="url(#domeE)" stroke-width="2.6" transform="${HALF_X}"/>
         <path d="M317.5 244v16M362.5 244v16" stroke="${BRASS.lit}" stroke-width="1.6"/>
-        <path d="${BOTTOM}" stroke="${BRASS.rim}" stroke-width="1.6"/><path d="${BOTTOM}" stroke="${BRASS.lit}" stroke-width="2" transform="${HALF_X}"/>
-        <path d="M317.5 260L308.5 285M362.5 260L371.5 285M295 260L277 285M385 260L403 285" stroke="${BRASS.lit}" stroke-width="1.6"/>
+        <path d="${BOTTOM}" stroke="url(#bottomS)" stroke-width="1.6"/><path d="${BOTTOM}" stroke="url(#bottomE)" stroke-width="2" transform="${HALF_X}"/>
+        <path d="M317.5 260L308.5 285M362.5 260L371.5 285M295 260L277 285M385 260L403 285" stroke="url(#shoulderE)" stroke-width="1.6"/>
         <path d="M312.5 293.5h55v111h-55ZM280.5 293.5h25v111h-25ZM374.5 293.5h25v111h-25Z" stroke="${BRASS.rim}" stroke-width="1.2"/>
       </g>
       <path d="M306.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M369.5 290h4v118h-4Z" fill="${BRASS.lit}"/><path d="M275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="${BRASS.rim}"/>
+      ${fx('horizon') ? '<path d="M306.5 290h4v118h-4ZM369.5 290h4v118h-4ZM275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="url(#horizon)"/>' : ''}
       ${ROPE(285)}${ROPE(408)}
-      <g mask="url(#cutouts)"><path d="${SKIRT}" fill="url(#skirtS)"/><path d="${SKIRT_F}" fill="url(#skirtF)"/></g>
-      <path d="M308.5 413L320 428M371.5 413L360 428" stroke="${BRASS.lit}" stroke-width="1.4"/>
+      <g mask="url(#cutouts)"><path d="${SKIRT}" fill="url(#skirtS)"/><path d="${SKIRT_F}" fill="url(#skirtF)"/>${fx('radial') ? `<path d="${SKIRT}" fill="url(#skirtR)"/>` : ''}</g>
+      <path d="M308.5 413L320 428M371.5 413L360 428" stroke="url(#skirtE)" stroke-width="1.4"/>
       <path class="band" d="M300 428h80v6h-80Z" fill="${BRASS.side}"/><path d="M320 428h40v6h-40Z" fill="${BRASS.front}"/>
       <path d="M300 428.6h80M300 433.4h80" stroke="${BRASS.lit}" stroke-width="1.2"/>
       <path class="band" d="M295 243.2h90v2.6h-90Z" fill="${BRASS.lit}"/><path class="band" d="M295 258.2h90v2.6h-90Z" fill="${BRASS.lit}"/>
+      ${fx('patina') ? MOROCCAN_PATINA : ''}${fx('edges') ? MOROCCAN_EDGES : ''}
       <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
