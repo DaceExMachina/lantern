@@ -123,7 +123,7 @@ function frame(t) {
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
   const calling = sessions.some(x => x.state === 'waiting' && !x.snoozed);
-  level += (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"
+  level = fakeFlame ?? level + (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"; fakeFlame: lanterns.js, ?flame=
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
   const flame = { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) };
@@ -303,8 +303,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
-    // the way to the flame's colour at five sixths the brightness
-    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, col: mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6) } : null,
+    // the way to the flame's colour at five sixths the brightness, and toward the flame's core as it burns brighter: the
+    // room behind it brightens with the flame too, and a wall that didn't would fade into it at full flame
+    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, col: mix(mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6), pal('core'), 0.65 * strength) } : null,
     bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
 }
