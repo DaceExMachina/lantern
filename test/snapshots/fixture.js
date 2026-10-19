@@ -74,7 +74,7 @@
       emit('message', sessionsAt(0));
     },
     run(6),
-    ...(Q.has('hover') ? [() => { moths.get('sess-bravo').zone.dispatchEvent(new PointerEvent('pointerenter')); }, snap('hover'), () => { hideCard(); }] : []),
+    ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), () => { hideCard(); }] : []),
     () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
     run(14), snap('t20'),
   ];

@@ -50,12 +50,31 @@ function prRows(prs) {
 
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a
 // click run `onClick` and hide it. `target` is what `hovered` becomes; `cardAt` says which of its areas the card sits beside.
+// One set of pointer handlers on #zones (main.js) serves them all, so overlapping areas can split fairly (zoneAt).
+const areas = new WeakMap();
 function hoverZone(zone, target, onClick, cardAt) {
-  zone.addEventListener('pointerenter', () => { clearTimeout(hideTimer); hovered = target; if (cardAt) target.cardAt = cardAt; renderCard(); });
-  zone.addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 700); });
-  zone.addEventListener('click', () => { onClick(); clearTimeout(hideTimer); hideCard(); });
+  areas.set(zone, { target, onClick, cardAt });
   return zone;
 }
+// Areas can overlap, so a point belongs to the nearest area that contains it: two neighbours split their overlap down the
+// middle, whichever is drawn on top. Plain distance, not weighted by radius: weighting would let a flying moth's wide
+// area swallow a landed neighbour's own body.
+function zoneAt(zones, x, y) {
+  let best = null, near = Infinity;
+  for (const z of zones) {
+    const d = Math.hypot(x - +z.getAttribute('cx'), y - +z.getAttribute('cy'));
+    if (d < +z.getAttribute('r') && d < near) [best, near] = [z, d];
+  }
+  return best;
+}
+function enterZone(zone) {
+  const a = areas.get(zone);
+  if (!a) return;
+  clearTimeout(hideTimer);
+  if (hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
+  hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
+}
+function clickZone(zone) { areas.get(zone)?.onClick(); clearTimeout(hideTimer); hideCard(); }
 function hideCard() { hovered = null; $('card').classList.remove('show'); }
 
 function renderCard() {
