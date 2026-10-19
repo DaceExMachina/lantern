@@ -58,17 +58,20 @@ test('the candle is the fourth lantern in the menu', () => {
 
 test('a standing lantern holds still with nothing to hang from; every hanging one sways on one', () => {
   assert.deepStrictEqual(styles.filter(k => run(`STYLES.${k}.stands`)), ['candle'], 'the candle, and only the candle, stands');
+  // 30 seconds of frames for each style, the clock running on from one style to the next
+  let start = 0;
   const check = key => {
     run(`applyStyle('${key}')`);
-    const sway = [0.5, 2, 7.3].map(s => run(`swingLantern(1 / 60, ${s}); swayAngle`));
+    const sway = [...run(`Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, ${start} + i / 60), swayAngle))`)];
+    start += 30;
     const hang = /id="hang"/.test(els.lantern.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
-      assert.deepStrictEqual(sway, [0, 0, 0], `${key} stands still`);
+      assert.ok(sway.every(a => a === 0), `${key} stands still`);
       assert.strictEqual(attrs.transform, `rotate(0.000 340 ${run('VIEW.top').toFixed(1)})`, `${key} is drawn unturned`);
       assert.deepStrictEqual([...run('rot(300, 400)')], [300, 400], `${key}: nothing attached to it turns`);
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
-      assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: ${sway}`);
+      assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: at most ${Math.max(...sway.map(Math.abs))}`);
       assert.ok(hang, `${key} hangs from a string or chain`);
     }
   };
