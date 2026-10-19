@@ -5,7 +5,7 @@ import Foundation
 
 let GH = [ProcessInfo.processInfo.environment["LANTERN_GH"], HOME + "/.local/bin/gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
     .compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0) } ?? "gh" // an app's PATH is minimal, so look in the usual places
-let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "claude-lantern"
+let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 let PR_GQL = "url number title state isDraft updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
 func prQuery(_ fields: String) -> String {
     """
@@ -88,7 +88,7 @@ extension LanternServer {
             let queries: [() -> JSON?] = tokens.isEmpty
                 ? accountFolders(live.map(\.1)).map { cwd in { ghGraphql(cwd) } }
                 : tokens.map { login, token in {
-                    let r = fetch("https://api.github.com/graphql", method: "POST", headers: ["Authorization": "Bearer \(token)", "User-Agent": "claude-lantern"], body: ["query": prQuery(PR_GQL)])
+                    let r = fetch("https://api.github.com/graphql", method: "POST", headers: ["Authorization": "Bearer \(token)", "User-Agent": "lantern-pr"], body: ["query": prQuery(PR_GQL)])
                     if r.status == 401 { DispatchQueue.main.sync { errors[login] = "expired" }; return nil } // the token was revoked or expired: reconnect
                     let data = r.json?["data"] as? JSON
                     if data != nil { DispatchQueue.main.sync { errors[login] = "" } }
@@ -188,7 +188,7 @@ extension LanternServer {
                 let t = post("https://github.com/login/oauth/access_token", ["device_code": device, "grant_type": "urn:ietf:params:oauth:grant-type:device_code"])
                 if str(t["error"]) == "slow_down" { wait += 5 }
                 else if let token = t["access_token"] as? String, !token.isEmpty {
-                    guard let login = fetch("https://api.github.com/user", headers: ["Authorization": "Bearer \(token)", "User-Agent": "claude-lantern"]).json?["login"] as? String else { break }
+                    guard let login = fetch("https://api.github.com/user", headers: ["Authorization": "Bearer \(token)", "User-Agent": "lantern-pr"]).json?["login"] as? String else { break }
                     _ = security(["add-generic-password", "-U", "-s", KEYCHAIN, "-a", login, "-l", "Claude Lantern GitHub", "-w", token])
                     DispatchQueue.main.async {
                         self.accounts[login] = ["token": token]
