@@ -323,7 +323,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
-    // how far above and below the light each fan starts: at the holder's edge with style.shadeFromHolder, else at the light
+    // how far above and below the light each fan starts, at the holder's edge with style.shadeFromHolder and else at the light
     capFrom: style.shadeFromHolder ? [0, style.holder[0] - style.light[1]] : [0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
@@ -385,7 +385,7 @@ function scorchStep(m, flying, now = Date.now()) {
   }
   return e;
 }
-// A scorch's puff and smoke: circles in #moths behind the moth, made at the hit, gone the first frame its episode is over.
+// A scorch's puff and smoke are circles in #moths behind the moth, made at the hit and gone the first frame its episode is over.
 // The puff swells at the touch and fades from the flame's colour to smoke; six wisps take turns rising off alternate wing
 // tips, one every quarter second while the moth flies.
 function drawScorch(m, upPts, sidePts) {
@@ -420,7 +420,7 @@ function drawScorch(m, upPts, sidePts) {
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
 function mothTarget(k, m, dt, s) {
-  let tx, ty, ease = 2.4, flap = 22.4, flying = false; // radians per second: about 3.6 wingbeats a second
+  let tx, ty, ease = 2.4, flap = 22.4, flying = false; // flap in radians per second, about 3.6 wingbeats a second
   const orbit = m.satellite && moths.get(m.satellite);
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
     const a = m.phase + s * 0.12;
@@ -481,7 +481,7 @@ function mothTarget(k, m, dt, s) {
     tx = hx + Math.sin(s * 0.5 + m.phase) * 24 + Math.sin(s * 1.3 + m.phase * 2) * 8;
     ty = hy + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
   }
-  // a scorch steers only a moth drifting near home: into the flame, off it, then darting about as it settles
+  // a scorch steers only a moth drifting near home, into the flame, off it, then darting about as it settles
   const sc = scorchStep(m, flying);
   if (sc && flying) {
     const { phase, a } = scorchFlight(sc.t), ph = m.phase;

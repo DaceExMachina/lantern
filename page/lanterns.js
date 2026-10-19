@@ -278,7 +278,7 @@ const PERCH_SPREAD = 0.44;
 function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5 + PERCH_SPREAD); }
 LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#8A5E2E', dark: '#553A1B', ink: '#1E1209', line: 1.2,
   lip: [0, '#1E1209'], rim: [0, 0, 0] }; // darker and browner than the Moroccan's brass
-// The marble pedestal the candlestick stands on: a round slab, `depth` deep with its top at `top`, on a fluted column
+// The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
 // `column` either side of the middle that runs down out of the window, fading into the room from fade[0] to fade[1].
 const PEDESTAL = { top: 549, r: 112, depth: 14, column: 85, fade: [590, 740] };
 const CANDLE = (() => {
@@ -325,7 +325,7 @@ const CANDLE = (() => {
     const [lit, dark] = d[0] > side ? DRIP.dark : DRIP.lit, r = 0.65 * d[1];
     return `<path d="${dripD(d)}" fill="${lit}"/><rect x="${n(d[0] + d[1] / 6)}" y="${rim}" width="${n(r + 1 - d[1] / 6)}" height="${d[2] - rim + 1}" fill="${dark}" clip-path="url(#cdDrips)"/>`;
   }).join('');
-  // a grape: purple, its lower right in shadow, a pale bloom where the light catches it
+  // a purple grape, its lower right in shadow, a pale bloom where the light catches it
   const GRAPE = `<g id="cdGrape"><circle r="5" fill="#5E3470"/><path d="M4.7 -1.71A5 5 0 0 1 -2.5 4.33A8 8 0 0 0 4.7 -1.71Z" fill="#3B1F48"/>
     <circle cx="-1.8" cy="-1.8" r="1.5" fill="#A27DBE"/><circle r="5" fill="none" stroke="#1A0E20" stroke-width=".7"/></g>`;
   const grapes = ps => ps.map(([x, y]) => `<use href="#cdGrape" x="${n(x)}" y="${n(y)}"/>`).join('');
