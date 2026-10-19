@@ -9,7 +9,7 @@
 <style>
   html, body { margin: 0; height: 100%; background: #1E1930; color: #C9B8DA; font: 14px/1.4 Georgia, 'Times New Roman', serif; }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
-  #scene { position: relative; min-height: 0; }
+  #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 110px; flex-wrap: wrap; position: relative; }
   /* the settings button in the corner, and the menu that flies up from it */
