@@ -33,13 +33,11 @@
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
   #menu { padding-top: 7px; }
-  #menu:popover-open { display: block; } /* its rows stack as blocks, so each tip below sits right under its row */
-  /* each option's tip: fixed so the menu's scrolling doesn't clip it, and left where it falls in the stack, which is just
-     under the row. It shows after a short hover on the row, or when a control in it has keyboard focus. */
-  .tip { position: fixed; box-sizing: border-box; width: 232px; max-width: calc(100vw - 24px); padding: 8px 10px; background: rgba(30, 24, 46, .98); border: 1px solid #4A3B68; border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0,0,0,.45); color: #D8CCE6; font-size: 12px; line-height: 1.45; pointer-events: none; z-index: 1;
-    opacity: 0; visibility: hidden; transition: opacity .12s, visibility 0s .12s; }
-  #menu > :hover + .tip, #menu > :has(:focus-visible) + .tip { opacity: 1; visibility: visible; transition: opacity .12s .5s, visibility 0s .5s; }
+  #menu:popover-open { gap: 0; }
+  /* each option's tip is a docked card like the recap's, above the menu at its width (main.js docks it). It shows after a
+     short hover on the row, or when a control in it has keyboard focus. */
+  #menu .tip { max-width: none; box-sizing: border-box; z-index: 1; transition-delay: .5s; }
+  #menu .tip.show { opacity: 1; }
   #menu > label { display: flex; padding: 5px 0; }
   #menu .time { justify-content: space-between; white-space: nowrap; }
   /* quiet from and quiet until: their words, an off | on switch built like the time input, then the time (faded while off).
@@ -136,8 +134,7 @@
   #recap .starCard h3 { grid-column: 1 / -1; display: block; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #recap .starCard > div { min-width: 0; }
   #recap .starCard > div + div { margin-top: 0; }
-  #recap .starCard > div:last-child { min-height: calc(8 * 1.45em + 7 * 3px + 1px); } /* the PR heading, six PRs and "and more" (their links sit a hair taller than a line): one height for every session */
-  #recap .starCard .agents:first-child { margin-top: 0; }
+  #recap  #recap .starCard .agents:first-child { margin-top: 0; }
   #recap .star.picked circle:last-child { stroke: #F5E9FF; stroke-width: 1.2; }
   #recap .starCard h3 .link { all: unset; cursor: pointer; border-bottom: 1px solid #5B4A8A; }
   #recap .starCard h3 .link:hover { color: #F0E8FF; border-color: #B9A8FF; }
@@ -207,7 +204,7 @@
   :is(#card, .starCard) a:hover { color: #F0E8FF; border-color: #B9A8FF; }
   :is(#card, .starCard) .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
   select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
-  :is(#card, .starCard) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
+  :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
   #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
