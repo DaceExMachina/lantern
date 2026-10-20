@@ -125,6 +125,50 @@ test('a background agent that keeps firing hook events keeps its session working
   await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
 });
 
+// A subagent whose SubagentStop never came is dropped once it's been quiet past LANTERN_AGENT_EXPIRE_SECONDS, even in a
+// session whose process is alive (the sweep leaves those sessions open), and re-appears if it fires again. One whose
+// transcript ends in a finished turn goes as soon as it's been quiet LANTERN_AGENT_CHECK_SECONDS, long before the expiry.
+const agentEnv = expire => ({ LANTERN_AGENT_EXPIRE_SECONDS: String(expire), LANTERN_AGENT_CHECK_SECONDS: '0.2', LANTERN_SWEEP_SECONDS: '0.1' });
+const agentFire = (base, home, ev) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(process.pid) },
+  body: JSON.stringify({ ...ev, transcript_path: path.join(home, '.claude/projects/-w/s1.jsonl') }) });
+const agentIds = async base => (await s1(base)).subagents.map(a => a.id);
+
+test('a subagent quiet past the expiry is dropped by the sweep, and comes back when it fires again', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(0.5));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, agentTool);
+  assert.deepStrictEqual(await agentIds(base), ['a1']);
+  await until(async () => (await agentIds(base)).length === 0, 'the quiet subagent to be dropped');
+  await agentFire(base, home, agentTool);
+  assert.deepStrictEqual(await agentIds(base), ['a1']);
+});
+
+test('a subagent whose transcript ends in a finished turn is dropped once quiet, long before the expiry', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, agentTool);
+  await wait(500); // quiet past the check threshold, transcript not there yet: still going
+  assert.deepStrictEqual(await agentIds(base), ['a1']);
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), jsonl([user('Audit it'), answer('Done.'), turnEnd]));
+  await until(async () => (await agentIds(base)).length === 0, 'the finished subagent to be dropped');
+});
+
+test('a subagent whose start the hooks missed is found from its transcript by the sweep, while its session is working', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  assert.deepStrictEqual(await agentIds(base), []);
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'agent-a9.jsonl'), jsonl([user('Audit it')]));
+  fs.writeFileSync(path.join(dir, 'agent-a8.jsonl'), jsonl([user('Old'), answer('Done.'), turnEnd])); // finished: not adopted
+  await until(async () => (await agentIds(base)).join() === 'a9', 'the unannounced subagent to be found');
+});
+
 test('a background shell task younger than the threshold keeps its session working', async t => {
   const base = await serve(t, {}, () => {}, bg(0.1, 60));
   await post(base, '/event', stopWith(SERVER));

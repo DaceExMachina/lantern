@@ -274,6 +274,22 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
     })
 }
 
+/// Subagents under a session folder that look like they're still going: transcript touched in the last two minutes and not
+/// finished. Skips (without reading) any in `known`.
+func liveSubagents(_ dir: String, known: Ordered<JSON> = Ordered<JSON>()) -> Ordered<JSON> {
+    var agents = Ordered<JSON>()
+    for f in transcripts(dir + "/subagents") {
+        guard let agent = Re("^agent-([A-Za-z0-9_-]+)\\.jsonl$").match((f as NSString).lastPathComponent)?[1], known[agent] == nil, let mtime = fileTimes(f)?.mtime,
+              now() - mtime <= 2 * 60 * 1000, !lastTurn(tail(f, 64 * 1024)).done else { continue }
+        var a: JSON = ["type": "", "description": "", "activity": "", "tries": 3, "last": mtime]
+        if let data = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(agent).meta.json"), let j = parse(data) as? JSON {
+            a["type"] = or(j["agentType"], ""); a["description"] = or(j["description"], "")
+        }
+        agents[agent] = a
+    }
+    return agents
+}
+
 /// A session rebuilt from its transcript, before it joins the live ones.
 func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON>)? {
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
@@ -287,17 +303,7 @@ func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON
     // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
     if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
-    // subagents that look like they're still going: transcript touched in the last two minutes and not finished
-    var agents = Ordered<JSON>()
-    for f in transcripts(dir + "/subagents") {
-        guard let agent = Re("^agent-([A-Za-z0-9_-]+)\\.jsonl$").match((f as NSString).lastPathComponent)?[1], let mtime = fileTimes(f)?.mtime,
-              now() - mtime <= 2 * 60 * 1000, !lastTurn(tail(f, 64 * 1024)).done else { continue }
-        var a: JSON = ["type": "", "description": "", "activity": "", "tries": 3, "last": mtime]
-        if let data = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(agent).meta.json"), let j = parse(data) as? JSON {
-            a["type"] = or(j["agentType"], ""); a["description"] = or(j["description"], "")
-        }
-        agents[agent] = a
-    }
+    let agents = liveSubagents(dir)
     if str(s["state"]) == "waiting" && agents.count > 0 { s["state"] = "paused"; s["note"] = "Waiting on its agents" }
     if str(s["state"]) == "waiting" { s["waitingSince"] = st.mtime } // it's been waiting since its transcript last changed
     return (s, agents)
@@ -312,6 +318,42 @@ extension LanternServer {
                 guard self.sessions[id] != nil, str(self.sessions[id]!["title"]) != str(title) else { return }
                 self.sessions[id]!["title"] = title
                 self.broadcast()
+            }
+        }
+    }
+    /// Corrects the in-memory state against what's on disk, for the things a lost hook event leaves wrong. Called by the
+    /// sweep; reads happen off the main queue and apply only if nothing changed meanwhile. Today it covers subagents:
+    ///  - tracked ones quiet for AGENT_CHECK_MS go when their transcript's last turn is done, or when neither hooks nor
+    ///    transcript moved for AGENT_EXPIRE_MS (SubagentStop never came);
+    ///  - running ones the hooks never announced are added, for working or paused sessions.
+    /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
+    func reconcile() {
+        struct Look { let id: String, dir: String, tracked: [(String, Double)], known: Ordered<JSON>, adopt: Bool }
+        let looks = sessions.items.compactMap { id, s -> Look? in
+            guard let project = s["project"] as? String else { return nil }
+            let list = agents[id] ?? Ordered<JSON>()
+            let tracked = list.items.compactMap { aid, a -> (String, Double)? in
+                let last = (a["last"] as? Double) ?? 0
+                return now() - last >= AGENT_CHECK_MS && Re("^[A-Za-z0-9_-]+$").test(aid) ? (aid, last) : nil
+            }
+            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", tracked: tracked, known: list, adopt: ["working", "paused"].contains(str(s["state"])))
+        }
+        guard !looks.isEmpty else { return }
+        DispatchQueue.global().async {
+            let results = looks.map { l -> (String, [(String, Double)], Ordered<JSON>) in
+                let gone = l.tracked.filter { aid, last in
+                    let file = "\(l.dir)/subagents/agent-\(aid).jsonl", mtime = fileTimes(file)?.mtime
+                    return (mtime != nil && lastTurn(tail(file, 64 * 1024)).done) || now() - max(last, mtime ?? 0) > AGENT_EXPIRE_MS
+                }
+                return (l.id, gone, l.adopt ? liveSubagents(l.dir, known: l.known) : Ordered<JSON>())
+            }
+            DispatchQueue.main.async {
+                var changed = false
+                for (id, gone, found) in results where self.sessions[id] != nil {
+                    for (aid, last) in gone where (self.agents[id]?[aid]?["last"] as? Double) == last { self.agents[id]![aid] = nil; changed = true } // unless it fired again meanwhile
+                    for (aid, a) in found.items where self.agents[id]?[aid] == nil { self.agents[id, default: Ordered<JSON>()][aid] = a; changed = true }
+                }
+                if changed { self.broadcast() }
             }
         }
     }
