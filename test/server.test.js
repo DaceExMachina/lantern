@@ -486,6 +486,46 @@ test('an old "graveyard" setting is read as "stale"', async t => {
   assert.strictEqual('graveyard' in settings, false);
 });
 
+const sql = (db, q) => JSON.parse(execFileSync('sqlite3', ['-json', db, q], { encoding: 'utf8' }) || '[]');
+
+// A restart: the log already has three PRs on the stale list, and the restarted lantern sees a session whose branch owns
+// one of them, which takes it off the stale list though nobody touched the PR. Only the one someone did touch (updated
+// today) was revived. A stand-in gh answers the PR query.
+test('stats: a session owning a stale PR again after a restart isn\'t a revival, someone touching it is', async t => {
+  const url = n => `https://github.com/o/r/pull/${n}`, iso = t => new Date(t).toISOString().replace(/\.\d+Z$/, 'Z'), old = iso(Date.now() - 30 * 86400000); // GitHub's form, no milliseconds
+  const node = (n, updatedAt, headRefName = `b${n}`) => ({ url: url(n), number: n, title: `PR ${n}`, state: 'OPEN', isDraft: true, updatedAt, headRefName, repository: { name: 'r', nameWithOwner: 'o/r' } });
+  const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), repo = path.join(dir, 'repo'), gh = path.join(dir, 'gh');
+  // 1 is owned by the session's branch and still quiet, 2 stays stale, 3 was touched today
+  fs.writeFileSync(path.join(dir, 'prs.json'), JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: [node(1, old, 'feat'), node(2, old), node(3, iso(Date.now()))] } } }));
+  fs.writeFileSync(gh, `#!/bin/sh\nexec /bin/cat '${path.join(dir, 'prs.json')}'\n`, { mode: 0o755 });
+  fs.mkdirSync(repo);
+  for (const args of [['init', '-q', '-b', 'feat'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], ['remote', 'add', 'origin', 'https://github.com/o/r.git']]) execFileSync('git', ['-C', repo, ...args]);
+  const entered = [1, 2, 3].map(n => `INSERT INTO events (time, kind, data) VALUES (${Date.now() - 86400000}, 'stale', '{"url":"${url(n)}","change":"entered"}');`).join('');
+  let home = '';
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 86400000, Date.now() - 3600000]], entered) }, h => home = h, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const db = path.join(home, 'data/stats.sqlite'), left = () => sql(db, "SELECT json_extract(data, '$.url') AS url, json_extract(data, '$.how') AS how FROM events WHERE kind = 'stale' AND json_extract(data, '$.change') = 'left'");
+  await until(() => left().length, 'the touched PR to leave the stale list'); // the refresh reached the log
+  assert.ok(sql(db, "SELECT 1 FROM events WHERE kind = 'pr' AND json_extract(data, '$.change') = 'appeared'").length, 'the session owned PR 1');
+  assert.deepStrictEqual(left(), [{ url: url(3), how: 'revived' }]);
+  assert.deepStrictEqual(sql(db, "SELECT count(*) AS n FROM events WHERE kind = 'stale' AND json_extract(data, '$.change') = 'entered'"), [{ n: 3 }], 'nothing entered again');
+});
+
+// Séance and Ghostbuster count PRs, not events: one PR revived five times this week is one revival, and one PR leaving the
+// stale list merged five times yesterday is one. Five different PRs closed today do make a Ghostbuster.
+test('stats: Séance and Ghostbuster count each PR once', async t => {
+  const today = Date.now() - 60000, yesterday = +yesterdayFrom(0) + 12 * 3600000;
+  const left = (time, n, how) => `INSERT INTO events (time, kind, data) VALUES (${time}, 'stale', '{"url":"https://github.com/o/r/pull/${n}","change":"left","how":"${how}"}');`;
+  const rows = [...Array(5)].map((_, i) => left(today, 1, 'revived') + left(today, 10 + i, 'closed') + left(yesterday, 2, 'merged')).join('');
+  let home = '';
+  await serve(t, { 'data/stats.sqlite': statsLog([['server', null, yesterday, today]], rows) }, h => home = h);
+  const got = () => sql(path.join(home, 'data/stats.sqlite'), "SELECT id, day FROM achievements WHERE id IN ('seance', 'ghostbuster') ORDER BY day");
+  const ghost = await until(() => got().length && got(), 'today\'s Ghostbuster to be awarded'); // the award pass ran, and judged yesterday first
+  const day = new Date(today), key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  assert.deepStrictEqual(ghost, [{ id: 'ghostbuster', day: key }]);
+});
+
 // The page gets the first word of the name on the Claude Code account (for the candle's pencil, page/pencil.js), the
 // display name if it has one, else the full name. With no CLAUDE_CONFIG_DIR, Claude Code keeps the account in ~/.claude.json.
 const account = oauthAccount => JSON.stringify({ oauthAccount });

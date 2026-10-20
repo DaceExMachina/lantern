@@ -560,7 +560,7 @@ final class LanternServer {
 
     // PR changes, from what the sessions own after a refresh. One no session owns any more was merged or closed, or is
     // still open with no session (a stray), or fell out of the closed search (gone). Stale list changes go in too.
-    func logPRs(open: Set<String>, closed: [String: String]) {
+    func logPRs(open: Set<String>, quiet: Set<String>, closed: [String: String]) {
         var owned: [String: (need: String, session: String, title: Any)] = [:]
         for (id, s) in sessions.items {
             for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
@@ -575,14 +575,16 @@ final class LanternServer {
         }
         ownedPRs = owned.mapValues { ($0.need, $0.session) }
         strays = open.subtracting(owned.keys).count
-        // PRs entering the stale list, and leaving it: merged, closed, or revived (a session took it, or someone touched it)
+        // PRs entering the stale list, and leaving it: merged, closed, or revived (someone touched it). One that's still
+        // quiet stays stale in the log even while a session owns it, since a session coming back (a restart seeding it
+        // again, say) isn't a revival; that session's push or comment would be.
         let dead = Set(stale.map { str($0["url"]) })
         for url in dead.subtracting(buried) { stats.event("stale", nil, ["url": url, "change": "entered"]) }
-        for url in buried.subtracting(dead) {
+        for url in buried.subtracting(dead).subtracting(quiet) {
             let how = open.contains(url) ? "revived" : closed[url].map { $0 == "MERGED" ? "merged" : "closed" } ?? "gone"
             stats.event("stale", nil, ["url": url, "change": "left", "how": how])
         }
-        buried = dead
+        buried = dead.union(buried.intersection(quiet))
     }
 
     func gauge() {
