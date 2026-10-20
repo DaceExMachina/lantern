@@ -101,38 +101,41 @@ test('when a session joins, the others glide to their new homes', () => {
   for (const k of moved) assert.ok(Math.hypot(end[k][0] - spots[k][0], end[k][1] - spots[k][1]) < 1, `${k} is there within four seconds`);
 });
 
-test('the dotted lines from homes to landed moths never cross, as sessions come and go', () => {
+test('no thread or dotted line ever crosses another, flying or landed, as sessions come and go', () => {
   const own = KEYS.filter(k => k !== 'side');
   // one by one up to sixteen, then a few leave from the middle and the ends, then some come back
   const steps = [...own.map((_, i) => own.slice(0, i + 1)), own.filter(k => !['docs', 'site'].includes(k)),
     own.filter(k => !['docs', 'site', 'blog', 'ops'].includes(k)), own.slice(4, 9), own.slice(0, 12)];
+  const resting = own.filter((_, i) => i % 2); // every other one idle, so it lands; the rest are working and fly
   const cross = ([a, b], [c, d]) => { // whether two segments properly intersect
     const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
     return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
   };
-  let lines = 0;
+  let landed = 0, flying = 0;
   for (const key of ['chochin', 'moroccan', 'barrel', 'candle']) for (const kx of [1, 1.6]) {
     const w = open(kx);
     w.run(`style = STYLES.${key}`);
     let s = 0;
     for (const ids of steps) {
-      w.show(ids, ids); // all of them idle, so every moth lands
+      w.show(ids, resting);
       w.run('for (const [k, m] of moths) if (m.leaving) moths.delete(k)'); // the ones that left fly off (frame.js drops them)
-      for (let f = 0; f < 180; f++, s += 1 / 60) { // three seconds: the others glide to their new homes
+      for (let f = 0; f < 180; f++, s += 1 / 60) { // three seconds: the others glide to their new homes, the new ones fly in
         // the lantern swaying to and fro by up to 2.5 degrees, which carries the moths on it
-        w.run(`swayAngle = ${2.5 * Math.sin(s * 1.7)}; for (const [k, m] of moths) if (!m.parentId && !m.satellite) m.wasLanded = mothTarget(k, m, 1 / 60, ${s})?.needsMe`); // mothMove would set wasLanded
+        w.run(`swayAngle = ${2.5 * Math.sin(s * 1.7)};
+          for (const [k, m] of moths) if (!m.parentId && !m.satellite) { const aim = mothTarget(k, m, 1 / 60, ${s}); if (aim) mothMove(m, aim, 1 / 60, ${s}); }`);
         if (f % 15) continue;
-        // each line runs from the home to the landed moth's wing joint, its perch turned with the lantern
-        const segs = w.run(`return [...moths].filter(([k, m]) => ${JSON.stringify(ids)}.includes(k) && m.perch).map(([k, m]) => [k, stretch(m.home), rot(m.perch[0], m.perch[1])])`);
-        assert.strictEqual(segs.length, ids.length, `${key}: all ${ids.length} landed`);
-        lines += segs.length;
+        // every moth's thread, and each landed moth's dotted line from its home to its spot, turned with the lantern
+        const segs = w.run(`return [...moths].filter(([k, m]) => ${JSON.stringify(ids)}.includes(k)).flatMap(([k, m]) => [[k + ' thread', ...threadEnds(m)],
+          ...m.wasLanded ? [[k + ' dotted line', stretch(m.home), rot(m.perch[0], m.perch[1])]] : []])`);
+        for (const [name, [ax, ay], [bx, by]] of segs) if (name.endsWith('thread') && Math.hypot(bx - ax, by - ay) > 20) flying++;
+        landed += segs.filter(([name]) => name.endsWith('line')).length;
         for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
-          assert.ok(!cross(segs[i].slice(1), segs[j].slice(1)), `${key} ${kx}x, ${ids.length} sessions, ${f} frames in: ${segs[i][0]}'s line crosses ${segs[j][0]}'s`);
+          assert.ok(!cross(segs[i].slice(1), segs[j].slice(1)), `${key} ${kx}x, ${ids.length} sessions, ${f} frames in: ${segs[i][0]} crosses ${segs[j][0]}`);
         }
       }
     }
   }
-  assert.ok(lines > 10000, `checked ${lines} lines`);
+  assert.ok(landed > 5000 && flying > 5000, `checked ${landed} dotted lines and ${flying} flying moths' threads`);
 });
 
 test('two windows show the same breaths and hops at the same moments, and hop to the same spots', () => {

@@ -784,8 +784,9 @@ function applyStyle(key) {
 // point toward its home. So the dotted lines from homes to moths on one side all fan out from one point and never cross,
 // and the two sides never meet (no home sits above or below the middle third, ringHome). Spots stay within PERCH_SPREAD
 // of the middle height, and out of the middle third of the lantern, where closed wings would point nearly straight at
-// you and thin to a sliver. Returns [x, y, normal]: where it sits and the surface's outward direction there.
-/** @returns {[number, number, number[]]} */
+// you and thin to a sliver. Returns [x, y, normal, dir]: where it sits, the surface's outward direction there, and the
+// direction its line runs out toward home.
+/** @returns {[number, number, number[], number[]]} */
 function perchAt(home, along) {
   const { top, bottom, half } = style.body, mid = (top + bottom) / 2, side = home[0] < 340 ? -1 : 1, spread = (bottom - top) * PERCH_SPREAD;
   const ox = 340 + side * half(mid) / 3, len = Math.hypot(home[0] - ox, home[1] - mid), ux = (home[0] - ox) / len, uy = (home[1] - mid) / len;
@@ -796,7 +797,7 @@ function perchAt(home, along) {
   // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
   // up or down by how the lantern bulges at this height
   const sin = Math.min(1, Math.abs(x - 340) / half(y)), slope = (half(y + 1) - half(y - 1)) / 2;
-  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)])];
+  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)]), [ux, uy]];
 }
 
 // warm = everyone busy, cool = someone needs me; everything crossfades between the two
