@@ -361,12 +361,20 @@ test('a wing faces the flame on the side its lit face turns to', () => {
   assert.strictEqual(run(`facesFlame([${up}], ${-lift[0]}, ${-lift[1]})`), 1, 'the flame across the body lights its seen face');
 });
 
-test('the candle\'s vine is the same above its split at every window height; only the trunk below grows', () => {
-  const split = run('PEDESTAL.split'), at = bottom => run(`CANDLE.column(${bottom})`);
-  // every point drawn above the split, as "x y" pairs, in drawing order
-  const above = svg => [...svg.matchAll(/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g)].filter(m => +m[2] < split).map(m => `${m[1]} ${m[2]}`);
-  const short = above(at(split + 20)), tall = above(at(split + 900));
-  assert.ok(short.length > 200, `the vine above the split is drawn: ${short.length} points`);
-  assert.deepStrictEqual(tall, short, 'the same vine above the split');
-  assert.ok(at(split + 900).length > at(split + 20).length, 'a taller window draws more trunk below');
+test('the candle\'s vine comes from its seed and the length of its trunk alone: a taller window shows more of the same vine', () => {
+  const { top, split, anchor } = run('PEDESTAL'), at = bottom => run(`CANDLE.column(${bottom})`);
+  // every point the vine and column draw from just over the slab down to `below`, as "x y" pairs, in drawing order
+  const pts = (svg, below) => [...svg.matchAll(/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g)].filter(m => +m[2] > top - 60 && +m[2] < below).map(m => `${m[1]} ${m[2]}`);
+  const leaves = (svg, from, to) => [...svg.matchAll(/class="cdLeaf" data-at="[\d.]+ ([\d.]+)"/g)].filter(m => +m[1] > from && +m[1] < to).length;
+  const bottoms = [anchor + 20, anchor + 400, anchor + 1200], svgs = bottoms.map(at);
+  assert.strictEqual(at(bottoms[1]), svgs[1], 'drawn twice at one height, the same');
+  assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
+  assert.ok(leaves(svgs[0], split, anchor) >= 6, `shoots off the trunk between the split and the anchor: ${leaves(svgs[0], split, anchor)}`);
+  assert.ok(leaves(svgs[2], anchor, bottoms[2]) >= 6, `and on down the trunk below it: ${leaves(svgs[2], anchor, bottoms[2])}`);
+  // over the stretch two heights share (less a shoot's reach, as a shoot shows once its whole stretch of trunk does)
+  for (const [i, j] of [[0, 1], [0, 2], [1, 2]]) {
+    const shared = bottoms[i] - 120;
+    assert.deepStrictEqual(pts(svgs[j], shared), pts(svgs[i], shared), `the same vine down to ${shared} at ${bottoms[i]} and ${bottoms[j]} high`);
+  }
+  assert.ok(svgs[2].length > svgs[1].length && svgs[1].length > svgs[0].length, 'a taller window draws more trunk below');
 });
