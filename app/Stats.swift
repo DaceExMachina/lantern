@@ -222,10 +222,10 @@ final class Stats {
                       (e.kind = 'pr' AND json_extract(e.data, '$.change') = 'merged' AND EXISTS (SELECT 1 FROM events g WHERE g.kind = 'stale'
                         AND json_extract(g.data, '$.how') = 'revived' AND json_extract(g.data, '$.url') = json_extract(e.data, '$.url') AND g.time < e.time)))
                     """) { got.append("revived") }
-                // Séance: five stale PRs revived in a week (touched again, or picked up by a session)
-                if self.run("SELECT count(*) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
+                // Séance: five stale PRs revived in a week (touched again), each PR once however often it came back
+                if self.run("SELECT count(DISTINCT json_extract(data, '$.url')) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
                 // Ghostbuster: five stale PRs merged or closed in a day
-                if yes("SELECT count(*) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
+                if yes("SELECT count(DISTINCT json_extract(data, '$.url')) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
                 if self.lightsOut(f, min(e, t)) { got.append("lights_out") }
                 if over {
                     // Warm all day: an hour or more of sessions, and the lantern warm nine tenths of the time it ran outside quiet hours
