@@ -484,3 +484,50 @@ test('an old "graveyard" setting is read as "stale"', async t => {
   assert.strictEqual(settings.stale, false);
   assert.strictEqual('graveyard' in settings, false);
 });
+
+// npm run preview: hooks only reach the live app, so a preview follows the app's /events and shows its sessions as they
+// change, with their subagents, instead of finding its own.
+test('a preview shows the live app\'s sessions as they change', async t => {
+  const live = await serve(t);
+  const preview = await serve(t, {}, () => {}, { LANTERN_MIRROR: live + '/events' });
+  const shows = async () => (await snapshot(preview)).sessions.map(s => `${s.id} ${s.state} ${s.subagents.map(a => a.id)}`);
+  await post(live, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(live, '/event', agentTool);
+  await until(async () => (await shows()).join() === 's1 working a1', 'the preview to show the live session and its agent');
+  await post(live, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' });
+  await until(async () => (await shows()).join() === 's1 waiting a1', 'the preview to follow its turn ending');
+  await post(live, '/event', { session_id: 's1', hook_event_name: 'SessionEnd' });
+  await until(async () => (await shows()).length === 0, 'the preview to drop the ended session');
+});
+
+// The app's next list would replace anything the preview seeded, but that can be a while, so it seeds none. Here the app
+// never answers, and a server without the mirror seeds the same transcript, to show the seeding had time to happen.
+test('a preview following the app seeds no sessions of its own', async t => {
+  const files = { [`.claude/projects/-w/${UUID(2)}.jsonl`]: jsonl([user('Mine')]) };
+  const [preview, control] = await Promise.all([serve(t, files, () => {}, { LANTERN_MIRROR: 'http://127.0.0.1:9/events' }), serve(t, files)]);
+  await until(async () => (await snapshot(control)).sessions.length, 'the transcript to be seeded without the mirror');
+  await wait(500);
+  assert.deepStrictEqual((await snapshot(preview)).sessions, []);
+});
+
+// The app's stream carries other messages too (the PR lists, settings), each named by an event line; only the unnamed
+// one is the sessions. And when the stream ends, the preview reconnects and takes the list the new stream starts with.
+test('a preview takes only the sessions from the app\'s stream, and reconnects when it ends', async t => {
+  let connections = 0;
+  const app = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    if (++connections === 1) res.end('data: [{"id":"s1","state":"working"}]\n\nevent: reviews\ndata: [{"id":"pr","url":"https://github.com/o/r/pull/1"}]\n\n'); // the PR list last, so taking it would stick until the reconnect
+    else res.write('data: [{"id":"s2","state":"waiting"}]\n\n'); // left open, as the app does
+  });
+  await new Promise(r => app.listen(0, '127.0.0.1', r));
+  t.after(() => { app.closeAllConnections(); app.close(); });
+  const preview = await serve(t, {}, () => {}, { LANTERN_MIRROR: `http://127.0.0.1:${/** @type {import('net').AddressInfo} */ (app.address()).port}/events` });
+  const seen = new Set();
+  await until(async () => {
+    const ids = (await snapshot(preview)).sessions.map(s => s.id).join();
+    seen.add(ids);
+    return ids === 's2';
+  }, 'the preview to show the second stream\'s sessions');
+  assert.ok(connections >= 2, `the preview connected ${connections} time(s)`);
+  assert.ok(![...seen].some(ids => ids.includes('pr')), `the PR list showed up as sessions: ${[...seen].join(' | ')}`);
+});
