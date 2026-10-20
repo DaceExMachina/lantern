@@ -7,20 +7,21 @@ func claudePids() -> [String] {
         .map { $0.trim.split(separator: " ", maxSplits: 1).map(String.init) }.filter { $0.count > 1 && ($0[1] as NSString).lastPathComponent == "claude" }.map { $0[0] }
 }
 
-/// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet.
-func sessionFile(_ pid: String) -> String? {
+/// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet, and
+/// whether it says that session is mid-turn: its own `status`, "busy" or "idle" (nil for anything else, or none).
+func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
     guard let d = FileManager.default.contents(atPath: "\(CLAUDE_DIR)/sessions/\(pid).json"), let j = parse(d) as? JSON,
           let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String else { return nil }
     let f = "\(PROJECTS)/\(cwd.projectName)/\(id).jsonl"
-    return FileManager.default.fileExists(atPath: f) ? f : nil
+    return FileManager.default.fileExists(atPath: f) ? (f, ["busy": true, "idle": false][str(j["status"])]) : nil
 }
 
 // The transcripts of running terminal `claude`s, however long they've been quiet, each with its process when known.
 // Claude Code names a process's session in sessions/<pid>.json. Without that (older versions), each process writes into
 // the project folder named after its working folder, so the newest transcripts there (one per process) stand in.
-func liveTranscripts() -> [(file: String, pid: Int?)] {
-    var live: [(file: String, pid: Int?)] = [], rest: [String] = []
-    for pid in claudePids() { if let f = sessionFile(pid) { live.append((f, Int(pid))) } else { rest.append(pid) } }
+func liveTranscripts() -> [(file: String, pid: Int?, busy: Bool?)] {
+    var live: [(file: String, pid: Int?, busy: Bool?)] = [], rest: [String] = []
+    for pid in claudePids() { if let f = sessionFile(pid) { live.append((f.file, Int(pid), f.busy)) } else { rest.append(pid) } }
     if rest.isEmpty { return live }
     var count = Ordered<Int>()
     for line in run("lsof", ["-a", "-d", "cwd", "-p", rest.joined(separator: ","), "-Fn"]).out.components(separatedBy: "\n") where line.hasPrefix("n") {
@@ -28,7 +29,7 @@ func liveTranscripts() -> [(file: String, pid: Int?)] {
         count[d] = (count[d] ?? 0) + 1
     }
     let named = Set(live.map(\.file))
-    return live + count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).filter { !named.contains($0) }.prefix(n).map { ($0, nil) } }
+    return live + count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).filter { !named.contains($0) }.prefix(n).map { ($0, nil, nil) } }
 }
 
 // The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session

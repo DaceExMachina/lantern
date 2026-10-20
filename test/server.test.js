@@ -425,6 +425,27 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
   assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
 });
 
+// Claude Code's sessions/<pid>.json says whether a running session is busy or idle, and that wins over the transcript;
+// without a status there (older versions, or one it doesn't know), the transcript's last turn decides.
+test('a live session seeds from Claude Code\'s own status when it gives one, and from its transcript when not', async t => {
+  const midTurn = [user('Fix it')], finished = [user('Fix it'), answer('Fixed.'), turnEnd];
+  const cases = [['idle', midTurn, 'waiting'], ['busy', finished, 'working'], [undefined, midTurn, 'working'], ['something-new', midTurn, 'working']];
+  const procs = cases.map(() => spawn('sleep', ['60']));
+  t.after(() => procs.forEach(p => p.kill()));
+  const file = i => `.claude/projects/-work/${UUID(i)}.jsonl`;
+  const base = await serve(t, Object.assign({ 'no-bin/ps': `#!/bin/sh\n${procs.map(p => `echo "${p.pid} claude"`).join('\n')}\n` },
+    ...cases.map(([status, lines], i) => ({
+      [file(i)]: jsonl(lines),
+      [`.claude/sessions/${procs[i].pid}.json`]: JSON.stringify({ pid: procs[i].pid, sessionId: UUID(i), cwd: '/work', ...(status ? { status } : {}) }),
+    }))), home => {
+    fs.chmodSync(path.join(home, 'no-bin/ps'), 0o755);
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000); // too old for the recent-transcript pass: only the live one finds them
+    cases.forEach((_, i) => fs.utimesSync(path.join(home, file(i)), dayAgo, dayAgo));
+  });
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === cases.length && s; }, 'the live sessions to be seeded');
+  assert.deepStrictEqual(cases.map((_, i) => sessions.find(s => s.id === UUID(i)).state), cases.map(c => c[2]));
+});
+
 // The Claude app's Code tab runs `claude` from inside its own folder, so ps names it by a full path with spaces in it.
 // It's as live as a terminal one: a preview, which gets no hooks, has only seeding and adoption to find it by.
 test('a quiet Claude app session is seeded with its process, though ps names it by a path with spaces', async t => {

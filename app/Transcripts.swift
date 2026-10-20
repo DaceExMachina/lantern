@@ -303,11 +303,14 @@ func liveSubagents(_ dir: String, known: Ordered<JSON> = Ordered<JSON>()) -> Ord
     return agents
 }
 
-/// A session rebuilt from its transcript, before it joins the live ones.
-func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON>)? {
+/// A session rebuilt from its transcript, before it joins the live ones. `busy` is what Claude Code itself says about a
+/// running one (sessions/<pid>.json); it wins over reading the transcript, which is only the fallback.
+func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> (JSON, Ordered<JSON>)? {
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
-    let lines = tail(file), turn = lastTurn(lines)
+    let lines = tail(file)
+    var turn = lastTurn(lines)
+    if let busy { turn.done = !busy; turn.compacted = turn.compacted && !busy }
     var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "state": turn.compacted ? "idle" : turn.done ? "waiting" : "working",
                    "note": turn.done && !turn.compacted ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
@@ -419,16 +422,16 @@ extension LanternServer {
         if words { seedProse() }
         DispatchQueue.global().async {
             var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
-            let take = { (f: String, live: Bool, pid: Int?) in
+            let take = { (f: String, live: Bool, pid: Int?, busy: Bool?) in
                 let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
                 if seen.contains(id) { return }
                 // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
-                if var s = seedSession(f, live: live, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
+                if var s = seedSession(f, live: live, busy: busy, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
             }
             if !mirroring {
-                for (f, pid) in liveTranscripts() { take(f, true, pid) }
+                for (f, pid, busy) in liveTranscripts() { take(f, true, pid, busy) }
                 if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
+                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil, nil) } }
                 } else { print("seeding failed: no \(PROJECTS)") }
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
@@ -474,7 +477,7 @@ extension LanternServer {
         let known = Set(sessions.items.compactMap { truthy($0.1["pid"]) ? str($0.1["pid"]) : nil }), words = wordsOn
         DispatchQueue.global().async {
             let found = claudePids().filter { !known.contains($0) }.compactMap { pid in
-                sessionFile(pid).flatMap { seedSession($0, live: true, words: words) }.map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pid"] = Int(pid); return s }
+                sessionFile(pid).flatMap { seedSession($0.file, live: true, busy: $0.busy, words: words) }.map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pid"] = Int(pid); return s }
             }
             if found.isEmpty { return }
             DispatchQueue.main.async {
