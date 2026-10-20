@@ -312,11 +312,21 @@ const CANDLE = (() => {
     const [lit, dark] = d[0] > side ? DRIP.dark : DRIP.lit, r = 0.65 * d[1];
     return `<path d="${dripD(d)}" fill="${lit}"/><rect x="${n(d[0] + d[1] / 6)}" y="${rim}" width="${n(r + 1 - d[1] / 6)}" height="${d[2] - rim + 1}" fill="${dark}" clip-path="url(#cdDrips)"/>`;
   }).join('');
-  // a purple grape, its lower right in shadow, a pale bloom where the light catches it
-  const GRAPE = `<g id="cdGrape"><circle r="5" fill="#5E3470"/><path d="M4.7 -1.71A5 5 0 0 1 -2.5 4.33A8 8 0 0 0 4.7 -1.71Z" fill="#3B1F48"/>
-    <circle cx="-1.8" cy="-1.8" r="1.5" fill="#A27DBE"/><circle r="5" fill="none" stroke="#1A0E20" stroke-width=".7"/></g>`;
-  const GRAPES = /** @type {number[][]} */ ([]); // every grape drawn, for their glints
-  const grapes = ps => ps.map(([x, y]) => (GRAPES.push([n(x), n(y)]), `<use href="#cdGrape" x="${n(x)}" y="${n(y)}"/>`)).join('');
+  // grapes in three shades, light to dark (cdGrape0 to 2): a little oval, rounded by a radial gradient lit from above with
+  // a dark rim, in a soft outline, the lighter two dusted with a faint bloom
+  const GRAPE = [['#8A5AA4', '#5A3274', '#2A1436'], ['#74468E', '#48285E', '#22102C'], ['#5C3474', '#381E4A', '#1A0B22']].map(([lit, mid, rim], i) =>
+    `<radialGradient id="cdGrapeG${i}" cx=".42" cy=".3" r=".75"><stop offset="0" stop-color="${lit}"/><stop offset=".55" stop-color="${mid}"/><stop offset="1" stop-color="${rim}"/></radialGradient>`
+    + `<g id="cdGrape${i}"><ellipse cx="0" cy="0" rx="4.7" ry="5.3" fill="url(#cdGrapeG${i})" stroke="#1A0E20" stroke-width=".5" stroke-opacity=".8"/>`
+    + (i < 2 ? '<ellipse transform="translate(-1.2 -1.8)" cx="0" cy="0" rx="2.6" ry="2" fill="#E8E0F2" opacity=".14"/>' : '') + '</g>').join('');
+  // a bunch's grapes, back to front (the higher first): those at its back and bottom darker, with a little seeded variety,
+  // each 0.9 to 1.1 times the size; `glints` keeps where each is, for their glints
+  const grapeUses = (ps, glints = false) => ps.map(([x, y], i) => {
+    const r = seeded(hash(`${n(x)} ${n(y)}`)), shade = Math.max(0, Math.min(2, Math.floor(3 * i / ps.length + r() - 0.5)));
+    if (glints) GRAPES.push([n(x), n(y)]);
+    return `<use href="#cdGrape${shade}" x="${n(x)}" y="${n(y)}" transform="translate(${n(x)} ${n(y)}) scale(${n(0.9 + 0.2 * r())}) translate(${n(-x)} ${n(-y)})"/>`;
+  }).join('');
+  const GRAPES = /** @type {number[][]} */ ([]); // every grape drawn with a glint, for their glints
+  const grapes = ps => grapeUses(ps, true);
   // the glints on the grapes from the `from`th drawn on, in their order (frame.js drawShine)
   const grapeGlints = from => GRAPES.slice(from).map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1" opacity="0"/>`).join('');
   // a hex-packed bunch, in rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
@@ -404,7 +414,7 @@ const CANDLE = (() => {
       + `<path d="M${pt(p)}Q${pt([p[0] + 3, (p[1] + top[1]) / 2])} ${pt(top)}" fill="none" stroke="${VINE}" stroke-width="1.3" stroke-linecap="round"/>`
       + put(ps.sort((u, v) => u[1] - v[1]));
   };
-  const useGrapes = ps => ps.map(([x, y]) => `<use href="#cdGrape" x="${n(x)}" y="${n(y)}"/>`).join('');
+  const useGrapes = ps => grapeUses(ps);
   // what grows off a shoot's end: a leaf, a tendril, or now and then a bunch
   const tip = (end, a, rand, put) => {
     const k = rand();
