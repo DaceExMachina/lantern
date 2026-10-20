@@ -12,9 +12,9 @@
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
-     so the text slides left and only wraps once all the room left of the buttons (--corners wide) is used */
+     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, main.js) */
   footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: 12px 0; position: relative; }
-  #status { grid-column: 2; text-align: center; padding: 0 12px; } /* keeps the text off the window edge once it has slid all the way left */
+  #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 12px; } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
   /* the quiet, stats and settings buttons: each one's click area runs the bar's full height and meets its neighbours',
      so there's no dead spot between or around them */
@@ -82,13 +82,16 @@
   :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
   :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
+  :is(#stats, #recap) .legend .pair { display: inline-block; min-width: 11em; } /* snoozed / sleeping: one slot for both values */
+  :is(#stats, #recap) .legend .pair [data-v] { min-width: 0; }
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
   :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
-  /* the session states as a 2x2 block, then the strip-level items as the ribbon stacks them: beside the block when
-     three columns fit, under it when not. Columns fit the widest item ("moths flying" and its value slot, 141px at 11px, so 13em; three of them and two gaps need 457px). */
+  /* the session states first, snoozed / sleeping (two swatches, two value slots) across two columns, then the
+     strip-level items as the ribbon stacks them. Columns fit the widest single item ("moths flying" and its value
+     slot, 141px at 11px, so 13em; three of them and two gaps need 457px). */
   :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
-  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(2, minmax(13em, 1fr)); grid-template-areas: "working waiting" "snoozed idle" "flying lamp"; gap: 2px 14px; margin-top: 0; }
-  @container (min-width: 457px) { :is(#stats, #recap) .legend { grid-template-columns: repeat(3, minmax(13em, 1fr)); grid-template-areas: "working waiting flying" "snoozed idle lamp"; } }
+  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(2, minmax(13em, 1fr)); grid-template-areas: "working waiting" "snoozed snoozed" "idle ." "flying lamp"; gap: 2px 14px; margin-top: 0; }
+  @container (min-width: 457px) { :is(#stats, #recap) .legend { grid-template-columns: repeat(3, minmax(13em, 1fr)); grid-template-areas: "working waiting idle" "snoozed snoozed ." "flying lamp ."; } }
   :is(#stats, #recap) .legend span { white-space: nowrap; }
   :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
   :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
@@ -266,7 +269,7 @@
       <summary>What's what?</summary>
       <p><b>Big moths</b> are your sessions and <b>small ones</b> are their agents. The more of them working, the brighter the flame.</p>
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
-      <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>shift-click</b> or <b>right-click</b> to snooze it.</p>
+      <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>shift-click</b> or <b>right-click</b> to snooze it. Do it again and it sleeps, snoozed until you wake it.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
       <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span id="quietUntil">until 8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
       <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>

@@ -491,6 +491,24 @@ test('stats: a snooze is logged as a snoozed span, from the snooze to the end of
   assert.strictEqual(snoozed[0].ended, waiting.ended);
 });
 
+// Snoozed for good, a wait is sleeping: it logs a 'sleeping' span, not a 'snoozed' one, and waking it ends the span
+// while the wait goes on.
+test('stats: a wait snoozed for good is logged as a sleeping span, which waking ends', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  const spans = () => JSON.parse(execFileSync('sqlite3', ['-json', path.join(home, 'data/stats.sqlite'),
+    "SELECT kind, ended FROM spans WHERE session = 's1' AND kind IN ('waiting', 'snoozed', 'sleeping') ORDER BY rowid"], { encoding: 'utf8' }) || '[]');
+  const turn = name => post(base, '/event', { session_id: 's1', hook_event_name: name, cwd: '/work/s1', last_assistant_message: 'Done.' });
+  await turn('UserPromptSubmit');
+  await turn('Stop');
+  await until(() => spans().some(s => s.kind === 'waiting'), 'the wait to be logged');
+  await post(base, '/snooze', { id: 's1', snoozed: 'always' });
+  await until(() => spans().some(s => s.kind === 'sleeping'), 'a sleeping span');
+  await post(base, '/snooze', { id: 's1', snoozed: false });
+  const done = await until(() => { const all = spans(); return all.find(s => s.kind === 'sleeping').ended && all; }, 'waking to end the sleeping span');
+  assert.deepStrictEqual(done.map(s => [s.kind, !!s.ended]), [['waiting', false], ['sleeping', true]]);
+});
+
 // The stale switch used to be saved as "graveyard"; a settings.json from then must still turn the stale PRs off.
 test('an old "graveyard" setting is read as "stale"', async t => {
   const base = await serve(t, { 'data/settings.json': '{"graveyard": false}' });

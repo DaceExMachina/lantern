@@ -2,7 +2,8 @@
 // Three tables, times in ms since 1970:
 //   spans  (kind, session, began, ended, data): stretches of time. kind is server (the app running), alive (a session),
 //          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), snoozed (the part of
-//          a wait it was snoozed, by hand or by quiet hours), violet (the lantern calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
+//          a wait it was snoozed for a while, by hand or by quiet hours), sleeping (the part snoozed for good; before
+//          sleeping spans were written, snoozed spans covered that too), violet (the lantern calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
 //   events (time, kind, session, data): moments. kind is pr (data.change: appeared, need, merged, closed, stray, gone),
 //          stale (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
 //          singed moth) or compact.
@@ -166,7 +167,7 @@ final class Stats {
                 let c = cover[d], answered = waits[d].filter(\.answered).map(\.ms).sorted()
                 let at = { (q: Double) -> Any in answered.isEmpty ? NSNull() : answered[min(answered.count - 1, Int(Double(answered.count) * q))] }
                 let end = lastGauge(day.1), start = lastGauge(day.0)
-                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0, "snoozedMs": c["snoozed"] ?? 0,
+                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0, "snoozedMs": c["snoozed"] ?? 0, "sleepingMs": c["sleeping"] ?? 0,
                         "warmMoths": pct(c["waiting"] ?? 0, c["alive"] ?? 0),
                         // the lantern's warm share of the time it ran outside quiet hours (it's never violet in quiet hours)
                         "warmLantern": pct(c["violet"] ?? 0, (c["server"] ?? 0) - (c["quiet"] ?? 0)),
