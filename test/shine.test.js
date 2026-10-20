@@ -1,5 +1,5 @@
 // The candle's shine (page/frame.js drawShine): what its bare flame lights round it, following the flame's live lean and
-// flicker, the hot air rising over it, and the curl of smoke it lets go every minute or two on a schedule every window
+// flicker, the hot air rising over it, and the plumes of smoke it lets go on a schedule every window
 // shares. The page is plain classic scripts, run here in a vm context in index.html's order, over a stub DOM holding only
 // the shine's elements.
 const test = require('node:test');
@@ -23,7 +23,7 @@ function context() {
   for (const f of ['scene', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle;');
-  for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow', 'cdSmoke']) els[id] = node();
+  for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow']) els[id] = node();
   els.fCore = { getBBox: () => ({ x: 333, y: 352, width: 14, height: 30 }) }; // drawLight's flame core, somewhere in the tongue
   // the glint groups as the candle's markup draws them, each child with its attributes
   const back = run('STYLES.candle.back');
@@ -94,47 +94,39 @@ test('the hot air rises in a column straight above the flame and nowhere else, a
   assert.strictEqual(ctx.run(`heatAt(${x}, ${y - 60})`), 0);
 });
 
-// the start (wall ms) of the next smoke at or after `from`, with the page's own schedule
-const nextSmoke = (ctx, from) => {
-  const scan = ctx.run('(from, slot) => { for (let now = from; now < from + 2 * slot * 1000; now += 500) { const e = scorchClock(\'candle:smoke\', now, SMOKE); if (e && now - e.t * 1000 >= from) return now - e.t * 1000; } return null; }');
-  const at = scan(from, ctx.run('SMOKE.slot'));
-  assert.ok(at !== null, `no smoke within two slots of ${from}`);
-  return at;
+// The flame's plumes at wall time `now` (the shader draws them), burning at `strength`, its tip at `tip`.
+const flamePlumes = (ctx, now, strength = 0, tip = [340, 180]) => [...ctx.run('plumes')(now, strength, tip)].map(q => [...q]);
+// the starts (wall ms) of the flame's plumes over `hours` from BASE, a second apart, at `strength`
+const plumeStarts = (ctx, strength, hours) => {
+  const starts = new Set();
+  for (let now = BASE; now < BASE + hours * 36e5; now += 1000) for (const q of flamePlumes(ctx, now, strength)) starts.add(Math.round((now - q[2] * 1000) / 100) * 100 + ':' + q[4]);
+  return [...starts].map(k => +k.split(':')[0]).sort((x, y) => x - y);
 };
 
-test('a curl of smoke leaves the flame every minute or two, at the same moments in every window', () => {
-  const a = context(), b = context(), plan = a.run('SMOKE'), starts = [];
-  // a week of curls: each one to two minutes after the last
-  for (let from = BASE; from < BASE + 7 * 864e5;) starts.push(nextSmoke(a, from)), from = starts[starts.length - 1] + plan.length * 1000;
+test('a curl of smoke leaves the flame every minute or two even at idle, at the same moments in every window', () => {
+  const a = context(), b = context(), starts = plumeStarts(a, 0, 24);
   const gaps = starts.slice(1).map((t, i) => (t - starts[i]) / 1000);
-  assert.ok(Math.min(...gaps) >= 60 && Math.max(...gaps) <= 120, `between ${Math.min(...gaps)} and ${Math.max(...gaps)} seconds apart`);
-  // two windows with different frame clocks, so their flames lean differently, show it at the same moments
-  for (let t = starts[0] - 3000; t < starts[0] + 9000; t += 700) {
-    clock.wall = t; a.shine(1.3 + t / 1000); b.shine(87.1 + t / 1000);
-    assert.strictEqual(a.els.cdSmoke.getAttribute('opacity'), b.els.cdSmoke.getAttribute('opacity'), `at ${t - starts[0]}ms`);
-  }
+  assert.ok(starts.length > 600 && Math.min(...gaps) >= 60 && Math.max(...gaps) <= 120, `${starts.length} curls, between ${Math.min(...gaps)} and ${Math.max(...gaps)} seconds apart`);
+  for (let t = starts[0] - 3000; t < starts[0] + 9000; t += 700) assert.deepStrictEqual(flamePlumes(a, t), flamePlumes(b, t), `at ${t - starts[0]}ms`);
 });
 
-test('smoke already let go rises steadily from where it left, whatever the flame does after', () => {
-  const ctx = context(), start = nextSmoke(ctx, BASE), [left, right] = leaning(ctx), plan = ctx.run('SMOKE');
-  clock.wall = start + 100; ctx.shine(left); // it leaves while the flame leans left
-  const from = ctx.run('smokeFrom'), pts = d => d.slice(1).split('L').map(p => p.split(' ').map(Number));
-  for (const at of [0.8, 2, 4.5]) {
-    clock.wall = start + at * 1000;
-    // whatever the flame does now, leaning, flickering, growing or shrinking, pulsing
-    const curls = [[left, 1, 1, 1], [right, 1.06, 0.3, 0.7], [left, 0.94, 0.6, 1]].map(([s, flick, size, pulse]) => {
-      Object.assign(ctx.flame, { flick, size, pulse }); ctx.shine(s); return ctx.els.cdSmoke.getAttribute('d');
-    });
-    Object.assign(ctx.flame, { flick: 1, size: 1, pulse: 1 });
-    const [a] = curls;
-    curls.forEach((d, i) => assert.strictEqual(d, a, `${at}s in, flame ${i}: the curl is the same whatever the flame does now`));
-    const ps = pts(a);
-    assert.ok(ps.length > 2, `${at}s in, a curl`);
-    // each bit, let go `k / 30` of the release in, is as high above where the curl left as its age says
-    ps.forEach(([, y], k) => assert.ok(Math.abs(from.y - y - (at - k / 30 * from.shape.release) * from.shape.rise) < 0.1, `${at}s in, bit ${k}`));
-  }
-  clock.wall = start + plan.length * 1000 + 100; ctx.shine(left);
-  assert.strictEqual(ctx.els.cdSmoke.getAttribute('opacity'), '0', 'gone once it has faded');
+test('the harder the flame burns, the more often it smokes, and the denser', () => {
+  const ctx = context(), [idle, busy, full] = [0, 0.6, 1].map(k => plumeStarts(ctx, k, 2).length);
+  assert.ok(idle < busy && busy < full, `curls in two hours: ${idle} idle, ${busy} busy, ${full} at full`);
+  assert.ok(full > 4 * idle, `at full it smokes far more often: ${full} to ${idle}`);
+  const at = plumeStarts(ctx, 1, 0.1)[0] + 500, [weak] = flamePlumes(ctx, at, 0.8), [strong] = flamePlumes(ctx, at, 1);
+  assert.ok(strong[3] > weak[3], `denser: ${strong[3]} to ${weak[3]}`);
+});
+
+test('smoke already let go stays where it left, whatever the flame does after, and each curl has its own shape', () => {
+  const ctx = context(), [start] = plumeStarts(ctx, 0, 0.1);
+  const [first] = flamePlumes(ctx, start + 100, 0, [330, 182]);
+  assert.deepStrictEqual(first.slice(0, 2), [330, 180], 'it leaves from the tip');
+  for (const at of [800, 2500, 5000]) assert.deepStrictEqual(flamePlumes(ctx, start + at, 0, [352, 170]).map(q => q.slice(0, 2)), [[330, 180]], `${at}ms in, still from where it left`);
+  // the next one: from the tip as it is then, curling its own way
+  const next = plumeStarts(ctx, 0, 0.2).find(t => t > start + 10000), [second] = flamePlumes(ctx, next + 100, 0, [352, 170]);
+  assert.deepStrictEqual(second.slice(0, 2), [352, 168]);
+  assert.notDeepStrictEqual(second.slice(6), first.slice(6), 'a different curl and drift');
 });
 
 test('the hot air lifts dust only inside its column, and lets it sink back out of it', () => {
@@ -204,28 +196,3 @@ test('the shader\'s column is HEAT_COLUMN, each number in its place', () => {
   }
 });
 
-test('each curl of smoke has its own shape, the same one in every window, and every bit of it rises steadily', () => {
-  const a = context(), b = context(), shape = slot => a.run(`smokeShape(${slot})`), curl = (sh, at) => [...a.run('smokePoints')(0, 0, at, sh)].map(p => [...p]);
-  const BOUNDS = { sway: [1.2, 3.2], often: [0.6, 1.3], phase: [0, 2 * Math.PI], drift: [-3, 3], rise: [13, 19], release: [1.1, 1.9], wobble: [0, 0.6], wobbleOften: [2.5, 4] };
-  for (let slot = 0; slot < 500; slot++) {
-    const sh = shape(slot);
-    assert.strictEqual(JSON.stringify(b.run(`smokeShape(${slot})`)), JSON.stringify(sh), `slot ${slot}: the same shape in another window`);
-    for (const [k, [lo, hi]] of Object.entries(BOUNDS)) assert.ok(sh[k] >= lo && sh[k] <= hi, `slot ${slot}: ${k} ${sh[k]} within ${lo} to ${hi}`);
-    // two slots in a row draw different curls
-    const now = curl(sh, 3), next = curl(shape(slot + 1), 3);
-    assert.ok(now.some((p, k) => !next[k] || Math.hypot(p[0] - next[k][0], p[1] - next[k][1]) > 0.5), `slots ${slot} and ${slot + 1} differ`);
-    // each bit, once let go, only ever goes up as it ages
-    for (let at = 0.2; at < 6; at += 0.25) {
-      const was = curl(sh, at), then = curl(sh, at + 0.25);
-      was.forEach(([, y], k) => assert.ok(then[k][1] < y, `slot ${slot}: bit ${k} rises from ${at}s on`));
-    }
-  }
-  // in two windows whose flames lean differently, the same slot's curl has the same shape about where it left
-  const start = nextSmoke(a, BASE), [left] = leaning(a), [, right] = leaning(b);
-  clock.wall = start + 100; a.shine(left); b.shine(right);
-  clock.wall = start + 2500; a.shine(left + 2.4); b.shine(right + 2.4);
-  const rel = ctx => { const f = ctx.run('smokeFrom'); return ctx.els.cdSmoke.getAttribute('d').slice(1).split('L').map(p => p.split(' ').map(Number)).map(([x, y]) => [x - f.x, y - f.y]); };
-  const ra = rel(a), rb = rel(b);
-  assert.ok(ra.length > 2 && ra.length === rb.length, `both curls drawn: ${ra.length} and ${rb.length} points`);
-  ra.forEach(([x, y], k) => assert.ok(Math.abs(x - rb[k][0]) < 0.11 && Math.abs(y - rb[k][1]) < 0.11, `bit ${k} sits the same in both windows`));
-});

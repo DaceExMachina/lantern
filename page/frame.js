@@ -158,7 +158,6 @@ function frame(t) {
     if (m.zone) mothZones(m, aim.needsMe);
     mothMove(m, aim, dt, s);
     const [upPts, sidePts] = mothWings(m, aim, dt, s);
-    drawScorch(m, upPts, sidePts);
     mothColour(m, aim.needsMe, upPts, sidePts, dt);
     mothZs(m, s);
     mothThread(m, dt, s);
@@ -289,9 +288,8 @@ function lightPaper({ size, flick, pulse }) {
 // A bare flame lights what's round it (style.shine, the candle's own numbers): glints on the brass that slide as the
 // flame leans (a reflection moves with what it reflects) and brighten as it flickers, its reflection in the molten pool at
 // the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
-// on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background), and every
-// minute or two a thin curl of smoke leaves its tip. All of it follows this frame's flame but the smoke, which keeps only where
-// it left.
+// on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background, and the tip smoke
+// leaves from). All of it follows this frame's flame.
 // The hot air over the flame, set by drawShine (null without one): the outer tongue's tip, how strong, and the time.
 let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
 // How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (state.js HEAT_COLUMN)
@@ -307,35 +305,43 @@ function heatAt(x, y) {
 function liftDust(p, x, y, dt) {
   return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
 }
-// The smoke's schedule, scorch's kind (scorchClock): one 6-second curl in each 90-second slot, keyed on the wall clock alone
-// so every window lets it go at once. Each bit of it is let go from the tip over the curl's first second or two, then rises
-// steadily from where the curl left, curling by its own age only, so the flame's flicker never moves smoke already let go.
-const SMOKE = { slot: 90, window: 30, length: 6 }; // starts in a slot's first 30 seconds: 1 to 2 minutes apart
-const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
-// Slot `slot`'s curl, its own shape seeded from the slot so every window draws the same one: how far it sways for each
-// second of age and how often, where in its sway it starts, a slow drift to one side, how fast it rises, how long the
-// thread takes to let go (all per second), and a smaller, quicker wobble on top.
-function smokeShape(slot) {
-  const rand = seeded(hash(`candle:smoke:${slot}:shape`)), at = (a, b) => a + (b - a) * rand();
-  return { sway: at(1.2, 3.2), often: at(0.6, 1.3), phase: at(0, 2 * Math.PI), drift: at(-3, 3), rise: at(13, 19), release: at(1.1, 1.9),
-    wobble: at(0, 0.6), wobbleOften: at(2.5, 4) };
-}
-/** @typedef {ReturnType<typeof smokeShape>} SmokeShape */
-// the slot, where its curl left the tip, and its shape
-let smokeFrom = /** @type {{ slot: number, x: number, y: number, shape: SmokeShape } | null} */ (null);
-// the curl of `shape` `a` seconds after it started, from (x, y), oldest bit first
-function smokePoints(x, y, a, shape) {
-  const { sway, often, phase, drift, rise, release, wobble, wobbleOften } = shape, pts = [];
-  for (let k = 0; k <= 30; k++) {
-    const age = a - k / 30 * release;
-    if (age <= 0) break;
-    pts.push([x + (Math.sin(age * often + phase) * sway + Math.sin(age * wobbleOften + 2 * phase) * wobble + drift) * age, y - age * rise]);
+// Smoke, drawn by the background shader (background.js plume): thin plumes that rise, widen, curl and bend downwind,
+// each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (lanterns.js,
+// with its size and opacity). The flame lets one go from its tip now and then, on lanes keyed to the wall clock alone
+// (scorch's kind, scorchClock) so every window lets it go at once: one every minute or two however it burns, and more
+// lanes opening as it burns harder (`from`, the strength each opens at), so it smokes more often the busier things get.
+// A scorched moth's singe lets one go from where its wing touched, and as it flies off it trails puffs for TRAIL[0]
+// seconds, one every TRAIL[1], each let go over that long and fainter the later. At most PLUMES at once.
+const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
+const SMOKE_REL = 3, SINGE_REL = 0.8, TRAIL = [3, 0.6];
+// where each lane's plume (`lane:slot`) began, so smoke already let go stays put whatever the flame does after
+let plumeFrom = new Map();
+// The plumes this frame, each [x, y, seconds in, strength, seed, rel, curl, drift]: the scorches' singes first, then the
+// flame's from `tip` (null without a bare flame) at the flame's `strength`. Each of the flame's has its own shape, seeded
+// from its lane and slot so every window draws the same one: how much it curls, and a slow drift to one side.
+function plumes(now, strength, tip) {
+  const out = [], kept = new Map();
+  const trails = [];
+  for (const m of moths.values()) if (m.scorch?.hit) {
+    const sc = m.scorch;
+    out.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0]);
+    for (const [x, y, at] of sc.trail || []) if (sc.t - at < TRAIL[1] + PLUME.life) trails.push([x, y, sc.t - at, 0.6 * (1 - (at - SCORCH.hit) / TRAIL[0]), at * 7 % 97, TRAIL[1], 0.6, 0]);
   }
-  return pts;
+  if (tip) SMOKE.forEach((lane, i) => {
+    const e = strength >= lane.from && scorchClock(`candle:smoke:${i}`, now, { ...lane, length: SMOKE_REL + PLUME.life });
+    if (!e) return;
+    const key = `${i}:${e.slot}`, at = plumeFrom.get(key) || [tip[0], tip[1] - 2];
+    kept.set(key, at);
+    const rand = seeded(hash(`candle:smoke:${key}:shape`));
+    out.push([...at, e.t, 0.5 + 0.5 * strength, 97 * rand(), SMOKE_REL, 0.5 + rand(), 2 * rand() - 1]);
+  });
+  plumeFrom = kept;
+  return [...out, ...trails.reverse()].slice(0, PLUMES); // the newest puffs first, if it comes to that
 }
+const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
 function drawShine(s, { size, flick, pulse }) {
   const shine = style.shine;
-  if (!shine || AMBIENT) { heat = null; smokeFrom = null; return; }
+  if (!shine || AMBIENT) { heat = null; return; }
   const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
   // the flame's lean (its middle tongue's tip, drawFlame) and its outer tongue's tip, in the scene
   const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk;
@@ -357,12 +363,6 @@ function drawShine(s, { size, flick, pulse }) {
   put($('cdWarmG'), 'color', mix(pal('paper'), '#ffffff', 0.6));
   put($('cdWarm'), 'opacity', ((0.4 + 0.15 * flick) * bright).toFixed(2));
   put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
-  const e = scorchClock('candle:smoke', Date.now(), SMOKE), smoke = $('cdSmoke');
-  if (!e) { smokeFrom = null; return put(smoke, 'opacity', 0); }
-  if (smokeFrom?.slot !== e.slot) smokeFrom = { slot: e.slot, x: tip[0], y: tip[1] - 2, shape: smokeShape(e.slot) };
-  const pts = smokePoints(smokeFrom.x, smokeFrom.y, e.t, smokeFrom.shape);
-  put(smoke, 'd', pts.length > 1 ? `M${pts.map(([x, y]) => `${x.toFixed(1)} ${y.toFixed(1)}`).join('L')}` : '');
-  put(smoke, 'opacity', (Math.min(1, e.t * 2) * Math.max(0, 1 - e.t / SMOKE.length)).toFixed(2));
 }
 
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
@@ -408,6 +408,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
+    smoke: AMBIENT ? [] : plumes(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // how far above and below the light each fan starts, at the holder's edge with style.shadeFromHolder and else at the light
@@ -433,7 +434,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
 // ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 10 seconds.
 const SCORCH_DEMO = Q.has('scorch');
 const SCORCH = SCORCH_DEMO ? { slot: 10, window: 1, length: 9, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
-const SCORCH_CHAR = '#5B4636', SCORCH_SMOKE = '#B4A8B4'; // the wings' char, a warm brown; the smoke, a pale warm grey
+const SCORCH_CHAR = '#5B4636', SMOKE_COL = '#B4A8B4'; // the wings' char, a warm brown; smoke, a pale warm grey
 // The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
 let tongue = null;
 // The episode in progress for `key` at wall-clock `now` (ms): its slot and the seconds since it started, or null.
@@ -444,11 +445,11 @@ function scorchClock(key, now, plan = SCORCH) {
   return t >= 0 && t < length ? { slot: n, t } : null;
 }
 // Where an episode is at `t`: approach, recoil (a second after the hit), agitated, then settling over its last 6 seconds;
-// `a` the agitation, `char` the wings' tint toward SCORCH_CHAR, `smoke` how much the tips smoke.
+// `a` the agitation and `char` the wings' tint toward SCORCH_CHAR.
 function scorchFlight(t, { hit, length } = SCORCH) {
   const calm = length - 6, fade = t >= length ? 0 : t < calm ? 1 : (u => u * u * (3 - 2 * u))((length - t) / (length - calm));
   return { phase: t < hit ? 'approach' : t < hit + 1 ? 'recoil' : t < calm ? 'agitated' : 'settling',
-    a: t < hit + 1 ? 0 : fade, smoke: t < hit ? 0 : fade, char: t < hit || t >= length ? 0 : 0.2 * (length - t) / (length - hit) };
+    a: t < hit + 1 ? 0 : fade, char: t < hit || t >= length ? 0 : 0.2 * (length - t) / (length - hit) };
 }
 // One moth's episode, once a frame (mothTarget; `flying` only in its home-drift branch). It starts within `start` of a
 // scheduled start while the moth is eligible; before the hit, losing eligibility (landing, leaving, green checks, GitHub
@@ -475,36 +476,6 @@ function scorchStep(m, flying, now = Date.now()) {
   }
   return e;
 }
-// A scorch's puff and smoke are circles in #moths behind the moth, made at the hit and gone the first frame its episode is over.
-// The puff swells at the touch and fades from the flame's colour to smoke; six wisps take turns rising off alternate wing
-// tips, one every quarter second while the moth flies.
-function drawScorch(m, upPts, sidePts) {
-  const sc = m.scorch;
-  if (!sc?.hit) {
-    if (m.smoke && !sc) { m.smoke.forEach(c => c.remove()); m.smoke = null; }
-    return;
-  }
-  if (!m.smoke) {
-    m.smoke = Array.from({ length: 7 }, () => $('moths').insertBefore(el('circle', { r: 0, opacity: 0, 'pointer-events': 'none' }), m.g));
-    sc.wisps = [];
-  }
-  const age = sc.t - SCORCH.hit, [puff, ...wisps] = m.smoke, p = Math.min(1, age / 0.8);
-  put(puff, 'cx', sc.aim[0].toFixed(1)); put(puff, 'cy', sc.aim[1].toFixed(1)); put(puff, 'r', (3 + 12 * p).toFixed(1));
-  put(puff, 'fill', mix(pal('core'), SCORCH_SMOKE, p)); put(puff, 'opacity', (0.7 * (1 - p)).toFixed(2));
-  const j = Math.floor(age / 0.25), level = scorchFlight(sc.t).smoke;
-  if (sc.flying && j !== sc.born) { // a fresh wisp off a wing tip, mapped through the moth's transform as caster() does
-    sc.born = j;
-    const [tx, ty] = (j % 2 ? sidePts : upPts)[2], a = m.tilt * Math.PI / 180, lx = tx - 2, ly = ty - 6;
-    sc.wisps[j % 6] = { n: j, x: m.x + (lx * Math.cos(a) - ly * Math.sin(a)) * m.size, y: m.y + (lx * Math.sin(a) + ly * Math.cos(a)) * m.size };
-  }
-  wisps.forEach((c, i) => {
-    const w = sc.wisps[i], u = w ? (age - w.n * 0.25) / 1.4 : 1;
-    if (!(u >= 0 && u < 1)) return put(c, 'opacity', 0);
-    put(c, 'cx', (w.x + Math.sin(u * 4 + w.n) * 3).toFixed(1)); put(c, 'cy', (w.y - 16 * u).toFixed(1)); put(c, 'r', (1.2 + 2.8 * u).toFixed(2));
-    put(c, 'fill', SCORCH_SMOKE); put(c, 'opacity', (0.4 * level * Math.sin(Math.PI * u)).toFixed(2));
-  });
-}
-
 // ---- moths -------------------------------------------------------------------
 // Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
@@ -574,6 +545,10 @@ function mothTarget(k, m, dt, s) {
   }
   // a scorch steers only a moth drifting near home. It flies into the flame and off it, then darts about as it settles
   const sc = scorchStep(m, flying);
+  if (sc?.hit && sc.t - SCORCH.hit < TRAIL[0] && sc.t >= (sc.trailAt ?? 0)) { // a puff of smoke trailing off it as it flies away
+    sc.trailAt = sc.t + TRAIL[1];
+    (sc.trail ??= []).push([m.x, m.y, sc.t]);
+  }
   if (sc && flying) {
     const { phase, a } = scorchFlight(sc.t), ph = m.phase;
     if (phase === 'approach') { [tx, ty] = sc.aim; flap = 26; }
@@ -588,7 +563,7 @@ function mothTarget(k, m, dt, s) {
 
 function dropMoth(k, m) {
   m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove();
-  m.flyLine?.remove(); m.zz?.forEach(t => t.remove()); m.smoke?.forEach(c => c.remove());
+  m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
   moths.delete(k);
   if (hovered === m) hideCard();
 }

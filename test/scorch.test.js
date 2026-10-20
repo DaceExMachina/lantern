@@ -131,16 +131,16 @@ test('a moth that turns eligible just after a start waits for the next slot, and
   }
 });
 
-test('smoke, char and agitation are 0 before the hit and after the episode, char peaking just after the hit', () => {
+test('char and agitation are 0 before the hit and after the episode, char peaking just after the hit', () => {
   const ctx = context(), { hit, length } = ctx.SCORCH, flight = ctx.run('scorchFlight');
   for (const t of [0, 1, hit - 0.01, length, length + 1]) {
     const f = flight(t);
-    assert.deepStrictEqual([f.char, f.smoke, f.a], [0, 0, 0], `at ${t}s`);
+    assert.deepStrictEqual([f.char, f.a], [0, 0], `at ${t}s`);
   }
   const peak = flight(hit + 0.01).char;
   assert.ok(peak > 0.15, `tinted at the hit: ${peak}`);
   for (let t = hit + 0.1; t < length; t += 0.1) assert.ok(flight(t).char <= peak, `char at ${t.toFixed(1)}s past its peak`);
-  assert.ok(flight(hit + 2).smoke > 0 && flight(hit + 2).a > 0, 'smoking and agitated after the hit');
+  assert.ok(flight(hit + 2).a > 0, 'agitated after the hit');
 });
 
 // 60 frames a second from a moth's scheduled start, calling `at(t)` once each frame before it runs
@@ -227,44 +227,42 @@ test('a hit throws at most 5 sparks from scorches, from the contact point, count
   }
 });
 
-test('nothing grows: 50 scorches on one moth leave no elements and keep the spark pool', () => {
-  const { els, document } = domStub(), ctx = context(1000, document), { length } = ctx.SCORCH;
+test('nothing grows: 50 scorches on one moth add no elements, keep the spark pool, and smoke only from the hit on', () => {
+  const { els, document } = domStub(), ctx = context(1000, document), { length, hit } = ctx.SCORCH;
   ctx.run('level = 1'); // the flame at full brightness, its own sparks filling the pool
-  const [drawSparks, drawScorch, dropMoth, WING_UP, WING_SIDE] = ctx.run('[drawSparks, drawScorch, dropMoth, WING_UP, WING_SIDE]');
+  const [drawSparks, dropMoth, plumes] = ctx.run('[drawSparks, dropMoth, plumes]');
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
-  const extra = m => els.moths.children.filter(c => c !== m.g).length;
   const live = () => ctx.sparks.filter(p => p.scorch && p.life > 0).length;
   const step = (m, dt = 0.05) => {
     ctx.perf.t += dt * 1000; clock.wall += dt * 1000;
     const s = ctx.perf.t / 1000;
     drawSparks(dt, s, 1);
     ctx.mothTarget(m.key, m, dt, s);
-    drawScorch(m, WING_UP, WING_SIDE, dt);
   };
   const m = make('sess-grow');
-  let episodes = 0, was = null, most = 0;
+  let episodes = 0, was = null, smoked = 0;
   while (episodes < 50) {
     step(m);
     if (m.scorch && !was) episodes++;
     was = m.scorch;
-    most = Math.max(most, extra(m));
-    assert.ok(extra(m) <= 7, `at most 7 scorch elements: ${extra(m)}`);
-    if (!m.scorch) assert.strictEqual(extra(m), 0, 'none between episodes');
+    assert.strictEqual(els.moths.children.length, 1, 'no elements beside the moth');
+    const smoke = plumes(clock.wall, 0, null); // the singe's plume, drawn by the background
+    assert.ok(m.scorch?.hit ? smoke.length >= 1 && smoke.length <= 1 + 5 : smoke.length === 0, `plumes only from the hit to the episode's end, the singe's and its trail's: ${smoke.length} at ${m.scorch?.t}`);
+    if (smoke.length) { smoked++; assert.deepStrictEqual([smoke[0][0], smoke[0][1], smoke[0][2]], [...m.scorch.aim, m.scorch.t - hit], 'from where the wing touched, as old as the hit'); }
     assert.ok(live() <= 5, `at most 5 live scorch sparks: ${live()}`);
     assert.ok(ctx.sparks.length <= 17, `the pool holds: ${ctx.sparks.length}`);
   }
-  assert.strictEqual(most, 7, 'the puff and its smoke did show');
-  // dropped mid-episode
+  assert.ok(smoked > 0, 'the singe did smoke');
+  // dropped mid-episode, its plume goes with it
   while (!m.scorch?.hit || m.scorch.t < length / 2) step(m);
-  assert.ok(extra(m) > 0);
   dropMoth(m.key, m);
-  assert.strictEqual(els.moths.children.length, 0, 'dropMoth takes its smoke with it');
+  assert.strictEqual(plumes(clock.wall, 0, null).length, 0, 'dropMoth takes its smoke with it');
   // the lantern switched mid-episode
   const n = make('sess-switch');
   while (!n.scorch?.hit || n.scorch.t < length / 2) step(n);
   ctx.run('style = STYLES.barrel');
   step(n);
-  assert.ok(!n.scorch && extra(n) === 0, 'switching to the barrel ends it on the next frame');
+  assert.ok(!n.scorch && plumes(clock.wall, 0, null).length === 0, 'switching to the barrel ends it on the next frame');
 });
 
 test('every window scorches a moth at the same moments, whatever its own clocks and whenever it opened, with no Math.random', () => {

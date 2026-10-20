@@ -103,7 +103,25 @@ precision highp float;
 uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
+uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
 ${LIGHT}
+// How thick one plume of smoke (frame.js plumes) is at p: a: where it started, seconds in, its strength; b: its seed, how
+// many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
+// steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
+// plume was being let go, and fades as it ages. The column widens as it rises, curls, and bends downwind the higher it is.
+float plume(vec2 p, vec4 a, vec4 b) {
+  const float RISE = 29.0;
+  float size = uSmoke.x, t = a.z, h = (a.y - p.y) / size, age = max(h, 0.0) / RISE;
+  if (h < -3.0 || h > t * RISE + 12.0) return 0.0;
+  float x = a.x + size * (uSmoke.w * h * h / 600.0 + b.w * h * 0.08 + b.z * (sin(h * 0.06 - t * 1.3 + b.x) * h * 0.1 + sin(h * 0.17 + b.x * 2.0 - t * 2.1) * h * 0.025));
+  float d = (p.x - x) / (size * (1.0 + h * 0.09));
+  float k = exp(-d * d) / (1.0 + h * 0.025) * a.w
+    * smoothstep(t * RISE + 12.0, t * RISE - 6.0, h) // its rising tip
+    * smoothstep(t - b.y - 0.5, t - b.y, age) // let go only over its first b.y seconds
+    * (1.0 - smoothstep(uSmoke.y * 0.4, uSmoke.y, age)) // each bit fading as it ages
+    * smoothstep(-3.0, 3.0, h); // soft where it starts
+  return k * (0.75 + 0.25 * sin(h * 0.23 - t * 3.0 + b.x * 5.0) * sin(d * 2.0 + h * 0.07));
+}
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
   p += heat(p); // seen through the hot air over a bare flame
@@ -123,6 +141,9 @@ void main() {
     float x = clamp(length(p - uLightC) / uLightScale / 700.0, 0.0, 1.0);
     col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit);
   }
+  float smoke = 0.0;
+  for (int i = 0; i < ${PLUMES}; i++) { if (i >= uPlumes) break; smoke += plume(p, uPlume[i], uPlumeB[i]); }
+  col = mix(col, uSmokeCol, min(1.0, smoke) * uSmoke.z);
   gl_FragColor = vec4(mix(col, vec3(0.8, 0.1, 0.1), uDebug * 0.6 * (1.0 - lit)), 1.0);
 }`);
 // dust: soft points, positions worked out in JS each frame. The near specks are lit by the lantern: bright and a little
@@ -275,6 +296,11 @@ function drawBackground(v) {
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
+  gl.uniform1i(u.uPlumes, v.smoke.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL));
+  if (v.smoke.length) {
+    gl.uniform4fv(u['uPlume[0]'], v.smoke.flatMap(q => q.slice(0, 4)));
+    gl.uniform4fv(u['uPlumeB[0]'], v.smoke.flatMap(q => q.slice(4, 8)));
+  }
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

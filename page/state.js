@@ -153,6 +153,7 @@ function makeSubMoth(key, parentId, size) {
 // The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
 // tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
 // fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
+const PLUMES = 8; // plumes of smoke drawn at once (frame.js plumes, background.js plume)
 const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
 // a number as a GLSL float, exactly (a whole number gets its .0; any other already has a point or an exponent)
 const glf = v => Number.isInteger(v) ? v.toFixed(1) : String(v);

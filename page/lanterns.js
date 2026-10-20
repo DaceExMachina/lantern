@@ -45,6 +45,9 @@ const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
 // how far the wind leans a flame (style.flameWind, frame.js windLean): the candle's in the open, the Moroccan's
 // enclosed at about a third of it (?candlewind=, ?moroccanwind=)
+// the smoke's plumes (frame.js plumes, background.js plume): how big, how many seconds each bit lasts, and how dense
+// (?plumesize=, ?plumelife=, ?plumealpha=)
+const PLUME = Object.fromEntries(Object.entries({ size: 1, life: 6, alpha: 0.5 }).map(([k, d]) => [k, Q.has('plume' + k) ? +(Q.get('plume' + k) || d) : d]));
 const FLAME_WIND = Object.fromEntries(Object.entries({ candle: 6, moroccan: 2 }).map(([k, d]) => [k, Q.has(k + 'wind') ? +(Q.get(k + 'wind') || d) : d]));
 // ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
 // and is kept in the URL).
@@ -90,6 +93,11 @@ if (Q.has('dev')) {
     ['gust', 1, 8, 0.1, 'How long a gust of wind lasts on average, in seconds. Each one runs from half to one and a half times this. The dust, fireflies and moths feel it too']]) {
     const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
     r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
+  }
+  for (const [k, min, max, step, title] of [['size', 0.3, 3, 0.05, 'How big the smoke\'s plumes are'],
+    ['life', 1, 10, 0.25, 'How many seconds each bit of smoke lasts as it rises'], ['alpha', 0, 1, 0.05, 'How dense the smoke is']]) {
+    const r = row(`smoke ${k}`, /** @type {string} */ (title), { type: 'range', min, max, step, value: PLUME[k] });
+    r.oninput = () => { PLUME[k] = +r.value; history.replaceState(null, '', query(`plume${k}`, r.value)); };
   }
   for (const k of ['candle', 'moroccan']) {
     const r = row(`${k} wind`, `How far the wind leans the ${k}'s flame`, { type: 'range', min: 0, max: 15, step: 0.5, value: FLAME_WIND[k] });
@@ -462,7 +470,6 @@ const CANDLE = (() => {
       <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
       <radialGradient id="cdGlint"><stop offset="0" stop-color="#E2A66A"/><stop offset=".55" stop-color="#D09050" stop-opacity=".8"/><stop offset="1" stop-color="#D09050" stop-opacity="0"/></radialGradient>
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
-      <linearGradient id="cdSmokeG" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#B9AFC8" stop-opacity=".3"/><stop offset="1" stop-color="#B9AFC8" stop-opacity="0"/></linearGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
       ${fade('cdColLine', '#8E869B', 0.6)}</defs>
     ${pedestal}
@@ -497,8 +504,7 @@ const CANDLE = (() => {
     ${climb}
     <g id="cdGlints">${GLINTS.map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#cdGlint)" opacity="0"/>`).join('')}</g>
     <g id="cdGrapeGlints">${grapeGlints(onPedestal)}</g><!-- the flame's shine (frame.js drawShine) -->
-    <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->
-    <path id="cdSmoke" fill="none" stroke="url(#cdSmokeG)" stroke-width="1.2" stroke-linecap="round" opacity="0"/>`;
+    <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
