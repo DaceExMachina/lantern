@@ -321,7 +321,7 @@ function liftDust(p, x, y, dt) {
 const smokeS = {
   size: devSlider('Smoke', 'smokecurl', 'S size', 0, 60, 1, 24, 'How far the smoke swings aside as it curls into Ss, once it has risen a second or so', v => { smokeS.size = v; }),
   length: devSlider('Smoke', 'smokewave', 'S length', 20, 300, 5, 90, 'How tall each S of the smoke is', v => { smokeS.length = v; }),
-  disperse: devSlider('Smoke', 'disperse', 'disperse', 0, 2, 0.05, 0.6, 'How fast the smoke spreads out as it ages: wider, thinner and more broken up along its curls', v => { smokeS.disperse = v; }),
+  disperse: devSlider('Smoke', 'disperse', 'disperse', 0, 2, 0.05, 0.6, 'How fast the smoke spreads out as it ages, wider and thinner', v => { smokeS.disperse = v; }),
 };
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
 const SMOKE_REL = 3, SINGE_REL = 0.8;
@@ -340,8 +340,8 @@ let flamePlume = null; // the flame's plume going: its key, when it was let go (
 // first, from `tip` (its live tip, null without a bare flame) at the flame's `strength`, then the singes. Each plume's
 // newest smoke rises from its base: the flame's live tip, so its smoke always leaves the flame however it leans. Each of
 // the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where
-// it was left, its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), with an age of -1
-// parting one moth's trail from the next.
+// it was left, its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), each trail's head
+// first, with an age of -1 parting one moth's trail from the next.
 function smoke(now, strength, tip) {
   const plumes = [], trail = [];
   if (!tip) flamePlume = null;
@@ -357,9 +357,9 @@ function smoke(now, strength, tip) {
   for (const m of moths.values()) if (m.scorch?.hit) {
     const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life), now = sc.t + hash(m.key) % 97;
     plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
-    if (sc.t - SCORCH.hit < TRAIL[0] && path.at(-1)?.[2] !== sc.t) path.push([m.x, m.y, sc.t]); // joined to the moth, unless it just left a point there
+    if (!sc.trailDone && path.at(-1)?.[2] !== sc.t) path.push([m.x, m.y, sc.t]); // joined to the moth, unless it just left a point there
     if (trail.length && path.length) trail.push([0, 0, -1, 0]);
-    for (const [x, y, at] of path) trail.push([x, y, sc.t - at, now]);
+    for (const [x, y, at] of path.reverse()) trail.push([x, y, sc.t - at, now]); // its head (the newest) first
   }
   return { plumes, trail };
 }
@@ -591,9 +591,9 @@ function mothTarget(k, m, dt, s) {
   }
   // a scorch steers only a moth drifting near home. It flies into the flame and off it, then darts about as it settles
   const sc = scorchStep(m, flying);
-  if (sc?.hit && sc.t - SCORCH.hit < TRAIL[0] && sc.t >= (sc.trailAt ?? 0)) { // a point on its smoke trail as it flies away
-    sc.trailAt = sc.t + TRAIL[1];
-    (sc.trail ??= []).push([m.x, m.y, sc.t]);
+  if (sc?.hit && !sc.trailDone) { // a point on its smoke trail as it flies away, and the last where it is as the smoke stops following it
+    const done = sc.t - SCORCH.hit >= TRAIL[0];
+    if (done || sc.t >= (sc.trailAt ?? 0)) { sc.trailAt = sc.t + TRAIL[1]; sc.trailDone = done; (sc.trail ??= []).push([m.x, m.y, sc.t]); }
   }
   if (sc && flying) {
     const { phase, a } = scorchFlight(sc.t), ph = m.phase;

@@ -295,14 +295,21 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const step = (ms, dt = 0.05) => { ctx.perf.t += dt * 1000; clock.wall += dt * 1000; for (const m of ms) ctx.mothTarget(m.key, m, dt, ctx.perf.t / 1000); };
   const m = make('sess-trail');
   while (!m.scorch?.hit || m.scorch.t < hit + 1) { if (!m.scorch?.hit) assert.strictEqual(smokeTrail().length, 0, 'no trail before the hit'); step([m]); }
-  const a = smokeTrail(), last = a[a.length - 1];
+  const a = smokeTrail(), head = a[0];
   assert.ok(a.length >= 4, `points all along its path: ${a.length}`);
-  assert.deepStrictEqual([last[0], last[1], last[2]], [m.x, m.y, 0], 'joined to the moth while it smokes');
+  assert.deepStrictEqual([head[0], head[1], head[2]], [m.x, m.y, 0], 'its head first, joined to the moth while it smokes');
   assert.ok(a.every(p => p[2] >= 0 && p[3] === a[0][3]), 'one band, unbroken, on one clock');
-  for (let i = 1; i < a.length; i++) assert.ok(a[i][2] < a[i - 1][2], `older toward its old end, at ${i}`);
-  // once it stops smoking it's left where it was, and fades out PLUME.life later
-  while (m.scorch.t < hit + TRAIL[0] + 0.1) step([m]);
-  assert.notDeepStrictEqual(smokeTrail().at(-1).slice(0, 2), [m.x, m.y], 'no longer joined to the moth');
+  for (let i = 1; i < a.length; i++) assert.ok(a[i][2] > a[i - 1][2], `older toward its old end, at ${i}`);
+  // as it stops following the moth (which moves a unit a frame here), its head stays where the moth was then, no further
+  // back, and is left there to fade out PLUME.life later
+  const fly = () => { m.x += 1; step([m]); };
+  let before = smokeTrail()[0];
+  while (!m.scorch.trailDone) { before = smokeTrail()[0]; fly(); }
+  const after = smokeTrail()[0], jump = Math.hypot(after[0] - before[0], after[1] - before[1]);
+  assert.ok(m.scorch.t - hit >= TRAIL[0] && m.scorch.t - hit < TRAIL[0] + 0.1, `it stopped following ${TRAIL[0]}s after the hit`);
+  assert.ok(jump <= 1, `its head stays where it was as the smoke stops following: it jumped ${jump.toFixed(2)}`);
+  for (let i = 0; i < 5; i++) fly();
+  assert.deepStrictEqual(smokeTrail()[0].slice(0, 2), after.slice(0, 2), 'and stays there as the moth flies on');
   while (m.scorch && m.scorch.t < hit + TRAIL[0] + life) step([m]);
   assert.strictEqual(smokeTrail().length, 0, 'gone');
   // twelve moths due at once: only `smokers` start (the rest wait their turn), each its own band, parted by a point aged
@@ -313,7 +320,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   for (let i = 0; i < 80; i++) step(ms);
   const scorched = ms.filter(n => n.scorch?.hit), c = smokeTrail();
   assert.strictEqual(scorched.length, smokers, `${smokers} smoking, the rest waiting`);
-  const drawn = scorched.reduce((sum, n) => sum + n.scorch.trail.length + (n.scorch.trail.at(-1)[2] === n.scorch.t ? 0 : 1), 0) + smokers - 1; // each trail, joined to its moth, parted from the next
+  const drawn = scorched.reduce((sum, n) => sum + n.scorch.trail.length + (n.scorch.trail.at(-1)[2] === n.scorch.t || n.scorch.trailDone ? 0 : 1), 0) + smokers - 1; // each trail, joined to its moth, parted from the next
   assert.strictEqual(c.length, drawn, 'every point drawn');
   assert.strictEqual(c.filter(p => p[2] === -1).length, smokers - 1, 'parted between moths');
   assert.ok(ctx.run('SMOKERS_MAX * (Math.ceil(TRAIL[0] / TRAIL[1]) + 3) <= TRAIL_POINTS && 1 + SMOKERS_MAX <= PLUMES'), 'the most that can smoke fit the shader');

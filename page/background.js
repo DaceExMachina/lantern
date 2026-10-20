@@ -135,13 +135,9 @@ float smokeBend(float age, float now, float curl) {
   float h = RISE * age, at = now - age, k = 6.2832 * RISE / uSmokeS.y;
   return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * uSmokeS.x * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
 }
-// How much wider smoke age seconds old has spread than when it was let go: thinner to match (its strength over the square
-// root of this), and broken up more along its curls (smokeMottle)
+// How much wider smoke age seconds old has spread than when it was let go, thinner to match (its strength over the
+// square root of this)
 float spread(float age) { return 1.0 + uSmokeS.z * age; }
-// a soft, uneven mottling of smoke at p, deeper the older it is: from a quarter of its strength when new to most of it
-float smokeMottle(vec2 p, float age, float ph) {
-  return 1.0 + min(0.85, 0.25 + 0.3 * uSmokeS.z * age) * sin(p.y * 0.23 + p.x * 0.11 + ph) * sin(p.x * 0.19 - p.y * 0.07 - ph * 0.6);
-}
 // How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
 // steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
@@ -158,28 +154,31 @@ float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
     * smoothstep(t - b.y - 0.5, t - b.y, age) // let go only over its first b.y seconds
     * (1.0 - smoothstep(uSmoke.y * 0.4, uSmoke.y, age)) // each bit fading as it ages
     * smoothstep(-3.0, 3.0, h); // soft where it starts
-  return k * smokeMottle(p, age, b.x * 5.0 - t * 3.0);
+  return k;
 }
 // How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
 // bent and spread as a plume's smoke is (smokeBend, spread), fainter the older it is and gone at the end of its life;
 // width, strength and age eased between them, the thickest of the segments near p so their joins don't double up.
-// Each point is where it was left, its age, and its moth's clock; an age below 0 parts one moth's trail from the next.
+// Each point is where it was left, its age, and its moth's clock, each trail's head (its newest) first; an age below 0
+// parts one moth's trail from the next. Its head narrows to a point over its newest third of a second, and its tail fades
+// out as it ages, so neither end looks cut off.
 float trailSmoke(vec2 p) {
-  float k = 0.0, size = uSmoke.x, aw = 1.0, aAge = 0.0;
+  float k = 0.0, size = uSmoke.x, aw = 1.0, head = 0.0;
   vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, and its strength (-1: none)
   for (int i = 0; i < ${TRAIL_POINTS}; i++) {
     if (i >= uTrailN) break;
     vec4 q = uTrail[i];
-    float sp = spread(q.z), w = size * 2.4 * sp;
+    if (a.z < 0.0) head = q.z; // a new trail: this is its head
+    float sp = spread(q.z), w = size * 2.4 * sp * (0.15 + 0.85 * smoothstep(0.0, 0.35, q.z - head));
     vec3 b = vec3(q.x + size * smokeBend(q.z, q.w, 1.0), q.y - size * RISE * q.z, 0.6 * (1.0 - q.z / uSmoke.y) / sqrt(sp));
     if (q.z < 0.0) b.z = -1.0;
     if (a.z > 0.0 && b.z > 0.0) {
       vec2 ab = b.xy - a.xy;
       float t = clamp(dot(p - a.xy, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0);
       float d = length(p - a.xy - ab * t) / mix(aw, w, t);
-      k = max(k, mix(a.z, b.z, t) * exp(-d * d) * smokeMottle(p, mix(aAge, q.z, t), q.w));
+      k = max(k, mix(a.z, b.z, t) * exp(-d * d));
     }
-    a = b; aw = w; aAge = q.z;
+    a = b; aw = w;
   }
   return k;
 }
