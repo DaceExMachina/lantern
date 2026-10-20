@@ -131,13 +131,13 @@ extension LanternServer {
     func findIterm(_ id: String, _ done: @escaping (String?) -> Void) {
         DispatchQueue.global().async {
             // the separator is set outside the tell block: inside it, the word `tab` means iTerm's tab object, not a character
-            let tabs = run("osascript", ["-e", """
+            let list = run("osascript", ["-e", """
                 set out to ""
                 set sep to character id 9
                 if application "iTerm2" is running then
                   tell application "iTerm2"
                     repeat with w in windows
-                      repeat with t in tabs of win
+                      repeat with t in tabs of w
                         repeat with ss in sessions of t
                           set out to out & (unique id of ss) & sep & (name of ss) & linefeed
                         end repeat
@@ -146,7 +146,9 @@ extension LanternServer {
                   end tell
                 end if
                 return out
-                """]).out.components(separatedBy: "\n").map { $0.components(separatedBy: "\t") }.filter { UUID_RE.test($0[0]) }
+                """])
+            if !list.ok { print("findIterm: osascript failed: \(list.err.trim)") }
+            let tabs = list.out.components(separatedBy: "\n").map { $0.components(separatedBy: "\t") }.filter { UUID_RE.test($0[0]) }
             let pids = claudePids()
             var tabOf: [String: String] = [:], dirOf: [String: String] = [:]
             if !pids.isEmpty {
