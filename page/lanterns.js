@@ -436,21 +436,27 @@ const CANDLE = (() => {
     const rand = seeded(hash('candle:vine:top')), limbs = [], twigs = [];
     // a limb from the split, flared where it leaves what it grows from, `w0` to `w1` wide
     const branch = (pts, w0, w1, shadow = 6, r = rand) => limb(pts, pts.map((_, j) => w1 + (w0 - w1) * (1 - j / (pts.length - 1)) + Math.max(0, 3 - j) * 1.4), r, shadow);
-    // A side branch named `name`, from `p` heading `a`, `steps` long, curling `curl` a step, `w0` wide where it starts, on its
-    // own seeded stream (so adding one reshapes no other). Its `leaves` spread along it by fraction, alternating sides, a
-    // bunch hangs from it `bunch` of the way along (if any), and a tendril curls off its end.
-    const sprout = (name, p, a, steps, curl, w0, leaves, bunch = 0) => {
-      const r = seeded(hash(`candle:vine:${name}`)), { pts, a: end } = shoot(p, a, steps, 3.3, curl, 0.015, r), at = [], last = pts.length - 1;
-      limbs.push(branch(pts, w0, Math.max(1, w0 * 0.28), w0 > 3 ? 6 : 4, r));
+    // `leaves` leaves spread along `pts` by fraction (from 0.3 to 0.95 of the way), alternating sides, angled off its
+    // heading, about `w` across; where they grow
+    const leavesAlong = (pts, leaves, w, r) => {
+      const at = [], last = pts.length - 1;
       for (let j = 0; j < leaves; j++) {
-        const i = Math.round((0.3 + 0.65 * (leaves > 1 ? j / (leaves - 1) : 0.5)) * last), [u, v] = [pts[i - 1], pts[Math.min(last, i + 1)]];
+        const i = Math.max(1, Math.round((0.3 + 0.65 * (leaves > 1 ? j / (leaves - 1) : 0.5)) * last)), [u, v] = [pts[i - 1], pts[Math.min(last, i + 1)]];
         const heading = Math.atan2(v[1] - u[1], v[0] - u[0]) * 180 / Math.PI + 90;
-        twigs.push(leafOn(pts[i], (w0 > 3 ? 15 : 12) + 5 * r(), heading + (j % 2 ? 1 : -1) * (50 + 30 * r())));
+        twigs.push(leafOn(pts[i], w + 5 * r(), heading + (j % 2 ? 1 : -1) * (50 + 30 * r())));
         at.push(pts[i]);
       }
+      return at;
+    };
+    // A side branch named `name`, from `p` heading `a`, `steps` long, curling `curl` a step, `w0` wide where it starts, on its
+    // own seeded stream (so adding one reshapes no other). Its `leaves` spread along it, a bunch hangs from it `bunch` of
+    // the way along (if any), and a tendril curls off its end.
+    const sprout = (name, p, a, steps, curl, w0, leaves, bunch = 0) => {
+      const r = seeded(hash(`candle:vine:${name}`)), { pts, a: end } = shoot(p, a, steps, 3.3, curl, 0.015, r), last = pts.length - 1;
+      limbs.push(branch(pts, w0, Math.max(1, w0 * 0.28), w0 > 3 ? 6 : 4, r));
+      BRANCHES.push({ name, pts, leaves: leavesAlong(pts, leaves, w0 > 3 ? 15 : 12, r) });
       if (bunch) twigs.push(cluster(pts[Math.round(bunch * last)], (r() - 0.5) * 16, [3, 3, 2, 2, 1], useGrapes));
       twigs.push(tendril(pts[last], end, curl > 0 ? 1 : -1, r));
-      BRANCHES.push({ name, pts, leaves: at });
     };
     // up to where the vine climbs over the slab (climbAt), wandering; round the column both ways at the split
     const up = Array.from({ length: 31 }, (_, j) => { const u = j / 30; return [SPLIT[0] + (climbAt[0] - SPLIT[0]) * u + 22 * Math.sin(u * Math.PI) + 6 * Math.sin(u * 10), SPLIT[1] + (climbAt[1] - SPLIT[1]) * u]; });
@@ -459,8 +465,8 @@ const CANDLE = (() => {
     for (let th = th1; Math.cos(th) > -0.05; th -= 0.08) wrap2.push(round(R1, th, P.split - (th1 - th) * 18));
     limbs.push(branch(wrap, 6, 3), branch(wrap2, 5, 2.5), branch(up, 8, 5, 4));
     twigs.push(leafOn(up[3], 18, 60), leafOn(up[7], 22, -40), leafOn(up[15], 18, 50), leafOn(up[23], 16, -30), leafOn(up[27], 14, -50), tendril(up[19], 0.2, 1, rand),
-      leafOn(wrap[Math.min(3, wrap.length - 1)], 17, 150), leafOn(wrap2[Math.min(3, wrap2.length - 1)], 16, -140),
       cluster(wrap[Math.min(5, wrap.length - 1)], -6, [3, 3, 2, 1], useGrapes));
+    BRANCHES.push({ name: 'wrap', pts: wrap, leaves: leavesAlong(wrap, 3, 15, rand) }, { name: 'wrap2', pts: wrap2, leaves: leavesAlong(wrap2, 4, 15, rand) });
     // thin shoots off the trunk below the split
     [[9, 1], [21, -1], [34, 1], [43, -1]].forEach(([i, side], j) => sprout(`stem${j}`, stem[i], side > 0 ? -0.6 : Math.PI + 0.6, 8 + (i % 4), -side * 0.13, 2.6, 2));
     // the branches at the split, and two big ones off the climbing limb, one each way, arcing up and round
@@ -469,7 +475,23 @@ const CANDLE = (() => {
     sprout('high', SPLIT, -1.15, 20, 0.07, 5, 3);
     sprout('upR', up[20], -0.2, 16, -0.11, 4, 3);
     sprout('upL', up[10], Math.PI + 0.15, 22, 0.09, 5, 4, 0.3);
-    sprout('bigR', up[10], -0.3, 22, -0.08, 5, 4, 0.3);
+    // the big right branch, off the climbing limb round the column to the right, behind it, and back round the front,
+    // climbing to just under the slab; only its turns in front show, each with leaves along it, a bunch on the first
+    (() => {
+      const r = seeded(hash('candle:vine:bigR')), R = col + 6, [x0, y0] = up[10], th0 = Math.asin(Math.max(-1, Math.min(1, (x0 - cx) / R)));
+      const turn = 2 * Math.PI * 0.85, base = y0 - R * T * Math.cos(th0), top = P.top + 52, runs = [[]];
+      for (let i = 0; i <= 90; i++) {
+        const u = i / 90, th = th0 + turn * u, p = round(R + 3 * Math.sin(u * 17), th, base + (top - base) * u);
+        if (Math.cos(th) > -0.05) runs[runs.length - 1].push([p, 5 - 3.4 * u]); else if (runs[runs.length - 1].length) runs.push([]);
+      }
+      runs.filter(run => run.length > 3).forEach((run, j) => {
+        const pts = run.map(q => q[0]);
+        limbs.push(limb(pts, run.map(q => q[1]), r, 6));
+        BRANCHES.push({ name: `bigR${j}`, pts, leaves: leavesAlong(pts, Math.max(3, Math.round(pts.length / 9)), 15, r) });
+        if (!j) twigs.push(cluster(pts[Math.round(0.3 * (pts.length - 1))], 0, [3, 3, 2, 2, 1], useGrapes));
+        else twigs.push(tendril(pts[pts.length - 1], -2.6, -1, r));
+      });
+    })();
     return limbs.join('') + twigs.join('');
   })();
   // The trunk as one limb, from the split down through the anchor (the fixed curve, stem) and on down the front of the column
@@ -487,19 +509,19 @@ const CANDLE = (() => {
     return { pts: [...pts, ...below], ws, below };
   };
   const trunk = bottom => {
-    const { pts: line, ws, below: pts } = trunkLine(bottom);
-    if (pts.length < 2) return '';
+    const { pts: line, ws, below: pts } = trunkLine(bottom); // the fixed curve always, however little shows below it
     // now and then a thin leafy shoot off it, one chance in each 60 of trunk, seeded by which 60 it is, so a taller window
     // adds shoots below and never moves one above
     let shoots = '';
     for (let k = 0; (k + 1) * 15 < pts.length; k++) {
       const r = seeded(hash(`candle:vine:shoot:${k}`)), side = k % 2 ? 1 : -1;
+      shoots += leafOn(pts[k * 15 + 7], 14, -side * 70); // a leaf on the trunk itself every stretch
       if (r() > 0.6) continue;
       const s = shoot(pts[k * 15 + 3 + Math.floor(r() * 9)], side > 0 ? -0.7 : Math.PI + 0.7, 6 + Math.floor(r() * 5), 3, -side * 0.12, 0.03, r);
       shoots += limb(s.pts, s.pts.map((_, j) => 2.4 - 1.4 * j / s.pts.length), r, 4) + leafOn(s.pts[3], 12 + 6 * r(), side * (45 + 40 * r()))
         + (r() < 0.5 ? tendril(s.pts[s.pts.length - 1], s.a, -side, r) : leafOn(s.pts[s.pts.length - 1], 10 + 5 * r(), side * 15));
     }
-    return limb(line, ws, seeded(hash('candle:vine:bark')), 5) + shoots;
+    return `<g id="cdTrunk">${limb(line, ws, seeded(hash('candle:vine:bark')), 5)}</g>` + shoots;
   };
   // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws
   // it), the vine up it from below the edge

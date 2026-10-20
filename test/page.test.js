@@ -382,6 +382,12 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
     assert.deepStrictEqual(pts(svgs[j], shared), pts(svgs[i], shared), `the same vine down to ${shared} at ${bottoms[i]} and ${bottoms[j]} high`);
   }
   assert.ok(svgs[2].length > svgs[1].length && svgs[1].length > svgs[0].length, 'a taller window draws more trunk below');
+  // a window too short to show the split, or the anchor, still draws all the vine above it
+  for (const bottom of [split - 50, anchor - 50]) {
+    const svg = at(bottom);
+    assert.ok(/<g id="cdTrunk">(?:<path [^>]*\/>)*?<path d="M[^"]+Z" fill="#5B5129"\/>/.test(svg), `the trunk is drawn, the window's bottom at ${bottom}`);
+    assert.deepStrictEqual(pts(svg, anchor), pts(svgs[1], anchor), `the vine above the anchor, the window's bottom at ${bottom}`);
+  }
 });
 
 test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the bunch below it', () => {
@@ -419,4 +425,30 @@ test('the trunk is one limb through the anchor: no jump in its width or turn in 
   const dir = j => Math.atan2(pts[j + 1][1] - pts[j][1], pts[j + 1][0] - pts[j][0]);
   assert.ok(Math.abs(ws[i] - ws[i - 1]) < 0.5, `its width carries on: ${ws[i - 1]} to ${ws[i]}`);
   assert.ok(Math.abs(dir(i) - dir(i - 1)) < 0.25, `its direction carries on: ${dir(i - 1).toFixed(2)} to ${dir(i).toFixed(2)}`);
+});
+
+test('every limb of the vine drawn, branch, trunk or climber, has leaves all along it', () => {
+  const P = run('PEDESTAL'), MAX_GAP = 100;
+  // the whole vine at a tall window, but the turns hidden behind the candlestick
+  const svg = (run('STYLES.candle.back') + run(`CANDLE.column(${P.anchor + 600})`)).replace(/<\/g><\/g>([\s\S]*?)<!-- the vine's back turns/, '');
+  const leaves = [...svg.matchAll(/class="cdLeaf" data-at="(-?[\d.]+) (-?[\d.]+)"[^>]*data-low/g)].map(m => [+m[1], +m[2]]);
+  // each limb's middle line, from its outline: one side out, the other back (lanterns.js limb)
+  const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => {
+    const o = m[1].split('L').map(q => q.split(' ').map(Number)), n = o.length / 2;
+    return o.slice(0, n).map((q, i) => [(q[0] + o[o.length - 1 - i][0]) / 2, (q[1] + o[o.length - 1 - i][1]) / 2]);
+  });
+  let checked = 0;
+  for (const line of limbs) {
+    const at = [0]; // how far along it each point is
+    for (let i = 1; i < line.length; i++) at.push(at[i - 1] + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]));
+    const length = at[at.length - 1];
+    if (length < 45 || line.every(q => q[1] > P.anchor + 600)) continue; // a tendril-length shoot, or out of the window
+    checked++;
+    // where along it each leaf within 30 of it grows, then the longest bare stretch, its ends included
+    const along = leaves.flatMap(l => { let best = 1e9, k = 0; line.forEach((q, i) => { const d = Math.hypot(q[0] - l[0], q[1] - l[1]); if (d < best) { best = d; k = i; } }); return best < 30 ? [at[k]] : []; })
+      .concat([0, length]).sort((a, b) => a - b);
+    const gap = Math.max(...along.slice(1).map((u, i) => u - along[i]));
+    assert.ok(gap <= MAX_GAP, `the limb from ${line[0].map(Math.round)} to ${line[line.length - 1].map(Math.round)}, ${Math.round(length)} long, is bare for ${Math.round(gap)}`);
+  }
+  assert.ok(checked >= 12, `limbs checked: ${checked}`);
 });
