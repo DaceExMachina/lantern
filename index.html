@@ -11,7 +11,10 @@
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  footer { display: flex; gap: 16px; justify-content: center; align-items: center; padding: 12px 110px; flex-wrap: wrap; position: relative; }
+  /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
+     so the text slides left and only wraps once all the room left of the buttons (--corners wide) is used */
+  footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: 12px 0; position: relative; }
+  #status { grid-column: 2; text-align: center; padding: 0 12px; } /* keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
   /* the quiet, stats and settings buttons: each one's click area runs the bar's full height and meets its neighbours',
      so there's no dead spot between or around them */
@@ -155,7 +158,7 @@
   .panel #status .next { padding: 6px 0; margin: -6px 0; }
   #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
-  .panel footer { font-size: 11px; gap: 4px 10px; padding: 6px 86px; } /* room for the quiet, stats and menu buttons */
+  .panel footer { --corners: 86px; font-size: 11px; padding: 6px 0; } /* room for the quiet, stats and menu buttons */
   .panel .corner { padding: 0 4px; }
   .panel .corner:last-child { padding-right: 6px; }
   .panel .flyup { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
