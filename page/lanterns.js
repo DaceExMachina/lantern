@@ -50,6 +50,9 @@ const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k
 let bronzeTone = devSlider('Temporary', 'bronzetone', 'bronze tone', 0, 1, 0.05, 0.5, 'The candlestick\'s bronze, darker to lighter', v => { bronzeTone = v; });
 let bronzeShine = devSlider('Temporary', 'bronzeshine', 'bronze highlight', 0, 2, 0.05, 1, 'How bright the flame\'s highlight on the bronze gets', v => { bronzeShine = v; });
 let bronzeTint = devSlider('Temporary', 'bronzetint', 'bronze flame tint', 0, 1, 0.05, 0.3, 'How much the highlight on the bronze takes the flame\'s colour', v => { bronzeTint = v; });
+// how big the vine's leaves grow (frame.js drawLeaves): this many times as drawn on the lower vine, 300 and more below its
+// split, tapering to a sixth of the way there above it
+let leafSize = devSlider('Temporary', 'leafsize', 'leaf size', 1, 5, 0.1, 3.5, 'How big the vine\'s leaves are, on the lower vine (the rest in proportion)', v => { leafSize = v; });
 // how far the wind leans a flame (style.flameWind, frame.js windLean): the candle's in the open, the Moroccan's
 // enclosed at about a third of it (?candlewind=, ?moroccanwind=)
 // the smoke's plumes (frame.js plumes, background.js plume): how big, how many seconds each bit lasts, and how dense
@@ -398,13 +401,15 @@ const CANDLE = (() => {
     return { pts, a };
   };
   // something that flutters in the wind about `p` (frame.js drawLeaves), `k` as much as a mid-sized leaf
-  const flutter = (p, k, svg) => `<g class="cdLeaf" data-at="${pt(p)}" data-k="${n(k)}">${svg}</g>`;
+  const flutter = (p, k, svg, low = -1) => `<g class="cdLeaf" data-at="${pt(p)}" data-k="${n(k)}"${low < 0 ? '' : ` data-low="${low}"`}>${svg}</g>`; // low: a leaf's (leafOn)
   // a curling tendril from `p`, heading `a`, coiling `side` (1 or -1)
   const tendril = (p, a, side, rand) => flutter(p, 0.4, `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`);
-  // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up
+  // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up. It's drawn at `w` and grown as it
+  // flutters (frame.js drawLeaves, by leafSize), the more the lower it hangs: `low`, 0 down to the vine's split, 1 from 300 below
   const leafOn = (p, w, deg) => {
     const a = deg * Math.PI / 180, q = [p[0] + Math.sin(a) * w * 0.25, p[1] - Math.cos(a) * w * 0.25];
-    return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`); // smaller leaves more
+    return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`, // smaller leaves more
+      n(Math.min(1, Math.max(0, (p[1] - P.split) / 300))));
   };
   // a tapering bunch hanging (or lying) from its stalk at `p`, its axis `deg` from straight down, rows of grapes from the
   // stalk out; `put` draws the grapes (grapes() for those with glints, or plain uses on the column, which is redrawn)
@@ -451,7 +456,16 @@ const CANDLE = (() => {
     const [R1, th1] = stemAt(1), wrap = [];
     for (let th = th1; Math.cos(th) > -0.05; th += 0.08) wrap.push(round(R1, th, P.split - (th - th1) * 14));
     const right = shoot(SPLIT, -0.35, 22, 3.2, -0.085, 0.01, rand), left = shoot(SPLIT, Math.PI + 0.45, 16, 3.2, 0.11, 0.02, rand);
-    out += branch(wrap, 6, 3) + branch(left.pts, 5, 1.4) + branch(right.pts, 5.5, 1.4) + branch(up, 8, 5, 4);
+    const wrap2 = []; // and round the other way
+    for (let th = th1; Math.cos(th) > -0.05; th -= 0.08) wrap2.push(round(R1, th, P.split - (th1 - th) * 18));
+    const high = shoot(SPLIT, -1.15, 20, 3.2, 0.07, 0.02, rand), upR = shoot(up[20], -0.2, 16, 3.2, -0.11, 0.02, rand);
+    // two big branches off the climbing limb, one each way, arcing up and round; a bunch hangs from each where it still runs level
+    const upL = shoot(up[10], Math.PI + 0.15, 22, 3.4, 0.09, 0.015, rand), bigR = shoot(up[10], -0.15, 22, 3.4, -0.09, 0.015, rand);
+    out += branch(wrap, 6, 3) + branch(wrap2, 5, 2.5) + branch(left.pts, 5, 1.4) + branch(right.pts, 5.5, 1.4) + branch(high.pts, 5, 1.4)
+      + branch(upL.pts, 5, 1.4) + branch(bigR.pts, 5, 1.4) + branch(upR.pts, 4, 1.3) + branch(up, 8, 5, 4);
+    twigs.push(leafOn(high.pts[9], 17, 40), leafOn(upL.pts[8], 15, -60), leafOn(upR.pts[7], 15, 55), leafOn(up[3], 18, 60), leafOn(up[27], 14, -50),
+      leafOn(wrap2[Math.min(3, wrap2.length - 1)], 16, -140),
+      leafOn(bigR.pts[8], 15, 60), cluster(upL.pts[5], 4, [3, 3, 2, 2, 1], useGrapes), cluster(bigR.pts[5], -4, [3, 3, 2, 2, 1], useGrapes));
     twigs.push(cluster(right.pts[right.pts.length - 1], 10, [3, 3, 2, 2, 1], useGrapes), tendril(left.pts[left.pts.length - 1], left.a, 1, rand),
       leafOn(right.pts[8], 20, 35), leafOn(right.pts[15], 15, -20), leafOn(left.pts[7], 18, -70),
       leafOn(up[7], 22, -40), leafOn(up[15], 18, 50), leafOn(up[23], 16, -30), tendril(up[19], 0.2, 1, rand),
@@ -696,7 +710,7 @@ let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
 // its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
 // standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
-let cdLeaves = /** @type {Element[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
+let cdLeaves = /** @type {{ e: Element, x: number, y: number, k: number, low: number, ph: number }[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
 function drawHang() {
   const h = $('hang');
   const column = style.stands && $('cdColumn');

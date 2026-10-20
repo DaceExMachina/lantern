@@ -399,14 +399,17 @@ function drawShine(s, { size, flick, pulse }) {
 }
 
 // The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) flutter in the wind: each turns about its
-// stem with the gust, a little after it, plus a flutter of its own, by its weight (smaller leaves more). Found once
-// after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree.
+// stem with the gust, a little after it, plus a flutter of its own, by its weight (smaller leaves more). A leaf also grows
+// about its stem by leafSize (lanterns.js), fully on the lower vine (`low` 1) and a sixth as much at the top (0). Found and
+// read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
 function drawLeaves(s) {
-  cdLeaves ??= [...document.querySelectorAll('.cdLeaf')];
-  for (const e of cdLeaves) {
-    const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), k = +(e.getAttribute('data-k') || 1), ph = (x * 0.37 + y * 0.11) % 6.283;
-    const a = k * (2.2 * GUST(s - 0.15 - ph * 0.03) + 1.2 * Math.sin(s * (3 + ph * 0.3) + ph));
-    put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})`);
+  cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
+    const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), low = e.getAttribute('data-low');
+    return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, ph: (x * 0.37 + y * 0.11) % 6.283 };
+  });
+  for (const { e, x, y, k, low, ph } of cdLeaves) {
+    const a = k * (2.2 * GUST(s - 0.15 - ph * 0.03) + 1.2 * Math.sin(s * (3 + ph * 0.3) + ph)), g = low < 0 ? 1 : 1 + (leafSize - 1) * (1 + 5 * low) / 6;
+    put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (g === 1 ? '' : ` translate(${x} ${y}) scale(${g.toFixed(2)}) translate(${-x} ${-y})`));
   }
 }
 
