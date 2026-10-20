@@ -306,53 +306,57 @@ function heatAt(x, y) {
 function liftDust(p, x, y, dt) {
   return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
 }
-// Smoke, drawn by the background shader (background.js plume): thin plumes that rise, widen, curl and bend downwind,
+// Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and bend downwind,
 // each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (lanterns.js,
 // with its size and opacity). The flame lets one go from its tip now and then, on lanes keyed to the wall clock alone
 // (scorch's kind, scorchClock) so every window lets it go at once: one every minute or two however it burns, and more
 // lanes opening as it burns harder (`from`, the strength each opens at), so it smokes more often the busier things get.
-// A scorched moth's singe lets one go from where its wing touched; as it flies off it leaves a trail (smokeTrail). At most
-// PLUMES at once.
+// It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
+// scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
+// passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while it's still smoking.
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
 const SMOKE_REL = 3, SINGE_REL = 0.8, TRAIL = [3, 0.2]; // the trail: seconds it's left over, and between points on its path
-// where each lane's plume (`lane:slot`) began, so smoke already let go stays put whatever the flame does after
-let plumeFrom = new Map();
-// The plumes this frame, each [x, y, seconds in, strength, seed, rel, curl, drift]: the scorches' singes first, then the
-// flame's from `tip` (null without a bare flame) at the flame's `strength`. Each of the flame's has its own shape, seeded
-// from its lane and slot so every window draws the same one: how much it curls, and a slow drift to one side.
-function plumes(now, strength, tip) {
-  const out = [], kept = new Map();
-  for (const m of moths.values()) if (m.scorch?.hit) {
-    const sc = m.scorch;
-    out.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0]);
-  }
-  if (tip) SMOKE.forEach((lane, i) => {
+// The flame's plume the lanes let go at `now` (wall ms) burning at `strength`, the earliest begun if two are: its key
+// (lane:slot) and seconds in, or null.
+function smokeAt(now, strength) {
+  let out = null;
+  SMOKE.forEach((lane, i) => {
     const e = strength >= lane.from && scorchClock(`candle:smoke:${i}`, now, { ...lane, length: SMOKE_REL + PLUME.life });
-    if (!e) return;
-    const key = `${i}:${e.slot}`, at = plumeFrom.get(key) || [tip[0], tip[1] - 2];
-    kept.set(key, at);
-    const rand = seeded(hash(`candle:smoke:${key}:shape`));
-    out.push([...at, e.t, 0.5 + 0.5 * strength, 97 * rand(), SMOKE_REL, 0.5 + rand(), 2 * rand() - 1]);
+    if (e && !(out?.t >= e.t)) out = { key: `${i}:${e.slot}`, t: e.t };
   });
-  plumeFrom = kept;
-  return out.slice(0, PLUMES);
+  return out;
 }
-// The smoke a scorched moth trails as it flies off, drawn by the background shader (background.js trailSmoke) as one soft
-// band along its path: the points it passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while
-// it's still smoking, each risen, bent by the wind and curled as a plume's smoke is, and gone PLUME.life after it was left.
-// Each point is where it was left, its age in seconds, and the moth's scorch clock offset by its seed (smokeBend's `now`),
-// with an age of -1 parting one moth's trail from the next. At most TRAIL_POINTS.
-function smokeTrail() {
-  const out = [];
-  for (const m of moths.values()) {
-    const sc = m.scorch, path = (sc?.hit && sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life);
-    if (!path.length) continue;
-    if (sc.t - SCORCH.hit < TRAIL[0]) path.push([m.x, m.y, sc.t]);
-    if (out.length) out.push([0, 0, -1, 0]);
-    const now = sc.t + hash(m.key) % 97;
-    for (const [x, y, at] of path) out.push([x, y, sc.t - at, now]);
+let flamePlume = null; // the flame's plume going: its key, when it was let go (wall ms) and where
+// The smoke this frame. plumes: each [x, y, seconds in, strength, seed, rel, curl, drift, base x, base y], the flame's
+// first, from `tip` (its live tip, null without a bare flame) at the flame's `strength`, then the singes. Each plume's
+// newest smoke rises from its base: the flame's live tip, so its smoke always leaves the flame however it leans. Each of
+// the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where it was
+// left, its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), with an age of -1 parting
+// one moth's trail from the next. At most PLUMES plumes and TRAIL_POINTS points: the newest scorches' smoke goes first,
+// and a moth's that doesn't fit is let go for good, so it never blinks out and back as others come and go.
+function smoke(now, strength, tip) {
+  const plumes = [], trail = [];
+  if (!tip) flamePlume = null;
+  else {
+    if (flamePlume && now < flamePlume.from) flamePlume = null; // the clock went back
+    const e = smokeAt(now, strength), life = (SMOKE_REL + PLUME.life) * 1000, from = e && now - e.t * 1000;
+    if (e && (!flamePlume || from >= flamePlume.from + life)) flamePlume = { key: e.key, from, at: tip }; // not one that began while one was going
+    if (flamePlume && now - flamePlume.from < life) {
+      const rand = seeded(hash(`candle:smoke:${flamePlume.key}:shape`));
+      plumes.push([...flamePlume.at, (now - flamePlume.from) / 1000, 0.5 + 0.5 * strength, 97 * rand(), SMOKE_REL, 0.5 + rand(), 2 * rand() - 1, ...tip]);
+    }
   }
-  return out.slice(0, TRAIL_POINTS);
+  const scorched = [...moths.values()].filter(m => m.scorch?.hit && !m.scorch.smokeGone).sort((a, b) => a.scorch.t - b.scorch.t);
+  for (const m of scorched) {
+    const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life), now = sc.t + hash(m.key) % 97;
+    if (sc.t - SCORCH.hit < TRAIL[0]) path.push([m.x, m.y, sc.t]);
+    const points = path.map(([x, y, at]) => [x, y, sc.t - at, now]);
+    if (trail.length && points.length) points.unshift([0, 0, -1, 0]);
+    if (plumes.length === PLUMES || trail.length + points.length > TRAIL_POINTS) { sc.smokeGone = true; continue; }
+    plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
+    trail.push(...points);
+  }
+  return { plumes, trail };
 }
 // the flame's outer tongue's tip in the scene (drawFlame's), leaning with its wobble and the wind
 function flameTip(s, size) {
@@ -440,7 +444,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
-    smoke: AMBIENT ? [] : plumes(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6, trail: AMBIENT ? [] : smokeTrail(),
+    ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip

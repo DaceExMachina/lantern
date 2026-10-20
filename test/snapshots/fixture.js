@@ -77,7 +77,7 @@
     for (let d = 0; d <= slots * SCORCH.slot * 1000; d += 1000) {
       const e = scorchClock('sess-alpha', u + d), start = e && u + d - e.t * 1000;
       if (!e || start < u) continue;
-      const smoke = st.shine && scorchClock('candle:smoke:0', start + (SCORCH.hit + 0.5) * 1000, { ...SMOKE[0], length: SMOKE_REL + PLUME.life });
+      const smoke = st.shine && smokeAt(start + (SCORCH.hit + 0.5) * 1000, 0); // one the flame lets go however it burns
       if (!st.shine || smoke && smoke.t > 2 && smoke.t < 3.5) { wall += start - u; return; }
     }
     errs.push(`no scorch for sess-alpha within ${slots} slots`);

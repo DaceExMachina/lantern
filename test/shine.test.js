@@ -95,7 +95,7 @@ test('the hot air rises in a column straight above the flame and nowhere else, a
 });
 
 // The flame's plumes at wall time `now` (the shader draws them), burning at `strength`, its tip at `tip`.
-const flamePlumes = (ctx, now, strength = 0, tip = [340, 180]) => [...ctx.run('plumes')(now, strength, tip)].map(q => [...q]);
+const flamePlumes = (ctx, now, strength = 0, tip = [340, 180]) => [...ctx.run('smoke')(now, strength, tip).plumes].map(q => [...q]);
 // the starts (wall ms) of the flame's plumes over `hours` from BASE, a second apart, at `strength`
 const plumeStarts = (ctx, strength, hours) => {
   const starts = new Set();
@@ -121,12 +121,16 @@ test('the harder the flame burns, the more often it smokes, and the denser', () 
 test('smoke already let go stays where it left, whatever the flame does after, and each curl has its own shape', () => {
   const ctx = context(), [start] = plumeStarts(ctx, 0, 0.1);
   const [first] = flamePlumes(ctx, start + 100, 0, [330, 182]);
-  assert.deepStrictEqual(first.slice(0, 2), [330, 180], 'it leaves from the tip');
-  for (const at of [800, 2500, 5000]) assert.deepStrictEqual(flamePlumes(ctx, start + at, 0, [352, 170]).map(q => q.slice(0, 2)), [[330, 180]], `${at}ms in, still from where it left`);
+  assert.deepStrictEqual(first.slice(0, 2), [330, 182], 'it leaves from the tip');
+  for (const at of [800, 2500, 5000]) {
+    const [q] = flamePlumes(ctx, start + at, 0, [352, 170]);
+    assert.deepStrictEqual(q.slice(0, 2), [330, 182], `${at}ms in, still from where it left`);
+    assert.deepStrictEqual(q.slice(8), [352, 170], `${at}ms in, its newest smoke rising from the tip where it is now`);
+  }
   // the next one: from the tip as it is then, curling its own way
   const next = plumeStarts(ctx, 0, 0.2).find(t => t > start + 10000), [second] = flamePlumes(ctx, next + 100, 0, [352, 170]);
-  assert.deepStrictEqual(second.slice(0, 2), [352, 168]);
-  assert.notDeepStrictEqual(second.slice(6), first.slice(6), 'a different curl and drift');
+  assert.deepStrictEqual(second.slice(0, 2), [352, 170]);
+  assert.notDeepStrictEqual(second.slice(6, 8), first.slice(6, 8), 'a different curl and drift');
 });
 
 test('the hot air lifts dust only inside its column, and lets it sink back out of it', () => {

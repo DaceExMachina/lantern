@@ -230,7 +230,7 @@ test('a hit throws at most 5 sparks from scorches, from the contact point, count
 test('nothing grows: 50 scorches on one moth add no elements, keep the spark pool, and smoke only from the hit on', () => {
   const { els, document } = domStub(), ctx = context(1000, document), { length, hit } = ctx.SCORCH;
   ctx.run('level = 1'); // the flame at full brightness, its own sparks filling the pool
-  const [drawSparks, dropMoth, plumes] = ctx.run('[drawSparks, dropMoth, plumes]');
+  const [drawSparks, dropMoth, smoke] = ctx.run('[drawSparks, dropMoth, smoke]'), plumes = now => smoke(now, 0, null).plumes;
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
   const live = () => ctx.sparks.filter(p => p.scorch && p.life > 0).length;
   const step = (m, dt = 0.05) => {
@@ -246,7 +246,7 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
     if (m.scorch && !was) episodes++;
     was = m.scorch;
     assert.strictEqual(els.moths.children.length, 1, 'no elements beside the moth');
-    const smoke = plumes(clock.wall, 0, null); // the singe's plume, drawn by the background
+    const smoke = plumes(clock.wall); // the singe's plume, drawn by the background
     assert.strictEqual(smoke.length, m.scorch?.hit ? 1 : 0, `one plume from the hit to the episode's end, the singe's: ${smoke.length} at ${m.scorch?.t}`);
     if (smoke.length) { smoked++; assert.deepStrictEqual([smoke[0][0], smoke[0][1], smoke[0][2]], [...m.scorch.aim, m.scorch.t - hit], 'from where the wing touched, as old as the hit'); }
     assert.ok(live() <= 5, `at most 5 live scorch sparks: ${live()}`);
@@ -256,13 +256,13 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
   // dropped mid-episode, its plume goes with it
   while (!m.scorch?.hit || m.scorch.t < length / 2) step(m);
   dropMoth(m.key, m);
-  assert.strictEqual(plumes(clock.wall, 0, null).length, 0, 'dropMoth takes its smoke with it');
+  assert.strictEqual(plumes(clock.wall).length, 0, 'dropMoth takes its smoke with it');
   // the lantern switched mid-episode
   const n = make('sess-switch');
   while (!n.scorch?.hit || n.scorch.t < length / 2) step(n);
   ctx.run('style = STYLES.barrel');
   step(n);
-  assert.ok(!n.scorch && plumes(clock.wall, 0, null).length === 0, 'switching to the barrel ends it on the next frame');
+  assert.ok(!n.scorch && plumes(clock.wall).length === 0, 'switching to the barrel ends it on the next frame');
 });
 
 // background.js's smokeBend, run as JS with the wind at `wind`: it's written in scalars, so it reads as JS once typed
@@ -288,7 +288,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const wall = clock.wall;
   t.after(() => { clock.wall = wall; }); // the next test's windows start where they would without this one
   const { els, document } = domStub(), ctx = context(1000, document), { hit } = ctx.SCORCH;
-  const [smokeTrail, TRAIL, TRAIL_POINTS, life] = ctx.run('[smokeTrail, TRAIL, TRAIL_POINTS, PLUME.life]');
+  const [smoke, TRAIL, TRAIL_POINTS, life] = ctx.run('[smoke, TRAIL, TRAIL_POINTS, PLUME.life]'), smokeTrail = () => smoke(clock.wall, 0, null).trail;
   assert.strictEqual(TRAIL[1], TRAIL_STEP);
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
   const step = (ms, dt = 0.05) => { ctx.perf.t += dt * 1000; clock.wall += dt * 1000; for (const m of ms) ctx.mothTarget(m.key, m, dt, ctx.perf.t / 1000); };
@@ -310,7 +310,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   for (let i = 0; i < 400 && !ms.every(n => n.scorch?.hit && n.scorch.t > hit + 2.5); i++) step(ms);
   const c = smokeTrail(), breaks = c.filter(p => p[2] === -1).length;
   assert.ok(ms.every(n => n.scorch?.hit), 'all three scorched');
-  assert.strictEqual(c.length, TRAIL_POINTS, 'filled to the limit and no further');
+  assert.ok(c.length > TRAIL_POINTS / 2 && c.length <= TRAIL_POINTS, `whole trails, up to the limit: ${c.length}`);
   assert.ok(breaks >= 1, `parted between moths: ${breaks}`);
 });
 
@@ -337,4 +337,36 @@ test('every window scorches a moth at the same moments, whatever its own clocks 
     was = ma.scorch;
   }
   assert.ok(starts >= 2, `at least two episodes seen: ${starts}`);
+});
+
+test('the flame lets go one plume at a time, carrying on the one that\'s going', () => {
+  const ctx = context(), smoke = ctx.run('smoke');
+  let was = null;
+  for (let t = 0; t < 3 * 3600; t += 0.25) {
+    const now = BASE + t * 1000, out = smoke(now, 1, [340, 200]).plumes; // burning its hardest, its smoke the most often
+    assert.ok(out.length <= 1, `${out.length} plumes at once, ${t}s in`);
+    if (out[0] && was) assert.ok(out[0][2] > was[2] || out[0][2] < 0.3, `a new plume ${t}s in cut off the one going`);
+    was = out[0];
+  }
+});
+
+test('a scorched moth\'s smoke stays until it fades, however many smoke at once', () => {
+  const { els, document } = domStub(), ctx = context(1000, document), { hit, length } = ctx.SCORCH;
+  const smoke = ctx.run('smoke');
+  // twelve moths scorched a quarter of a second apart, all smoking together
+  ctx.run(`scorchClock = (key, now) => ({ slot: 0, t: (now - ${clock.wall}) / 1000 - Number(key.slice(6)) / 4 })`);
+  const ms = Array.from({ length: 12 }, (_, i) => { const m = sessionMoth(`sess-${i}`, { g: els.moths.appendChild(node('g')), x: 100 + 30 * i }); ctx.moths.set(m.key, m); return m; });
+  const gone = new Set();
+  for (let i = 0; i < 20 * length; i++) {
+    ctx.perf.t += 50; clock.wall += 50;
+    for (const m of ms) ctx.mothTarget(m.key, m, 0.05, ctx.perf.t / 1000);
+    const { plumes, trail } = smoke(clock.wall, 0, null), singes = plumes.map(p => p.slice(0, 2).join());
+    for (const m of ms) {
+      const sc = m.scorch;
+      if (!sc?.hit) continue;
+      const on = singes.includes(sc.aim.join()) || trail.some(p => p[2] >= 0 && sc.trail?.some(q => q[0] === p[0] && q[1] === p[1]));
+      if (on) assert.ok(!gone.has(m.key), `${m.key}'s smoke came back ${(sc.t - hit).toFixed(2)}s after its hit`);
+      else gone.add(m.key);
+    }
+  }
 });

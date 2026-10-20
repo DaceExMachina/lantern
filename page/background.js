@@ -122,7 +122,7 @@ precision highp float;
 uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
-uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
+uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
 uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
 ${LIGHT}
 const float RISE = 29.0; // how fast smoke rises, units a second
@@ -135,14 +135,16 @@ float smokeBend(float age, float now, float curl) {
   float h = RISE * age, at = now - age;
   return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * 6.0 * min(1.0, age / 1.2) * (sin(at * 4.0 - now * 1.3) + 0.4 * sin(at * 2.1 + now * 0.7));
 }
-// How thick one plume of smoke (frame.js plumes) is at p: a: where it started, seconds in, its strength; b: its seed, how
+// How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
 // steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
 // plume was being let go, and fades as it ages. The column widens as it rises, and bends and curls (smokeBend).
-float plume(vec2 p, vec4 a, vec4 b) {
-  float size = uSmoke.x, t = a.z, h = (a.y - p.y) / size, age = max(h, 0.0) / RISE;
+float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
+  // its newest smoke rises from base (the flame's live tip), the rest from where it was let go, eased over its first half second
+  vec2 o = mix(base, a.xy, smoothstep(0.0, 0.5, max(a.y - p.y, 0.0) / (uSmoke.x * RISE)));
+  float size = uSmoke.x, t = a.z, h = (o.y - p.y) / size, age = max(h, 0.0) / RISE;
   if (h < -3.0 || h > t * RISE + 12.0) return 0.0;
-  float x = a.x + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
+  float x = o.x + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
   float d = (p.x - x) / (size * (1.0 + h * 0.09));
   float k = exp(-d * d) / (1.0 + h * 0.025) * a.w
     * smoothstep(t * RISE + 12.0, t * RISE - 6.0, h) // its rising tip
@@ -151,7 +153,7 @@ float plume(vec2 p, vec4 a, vec4 b) {
     * smoothstep(-3.0, 3.0, h); // soft where it starts
   return k * (0.75 + 0.25 * sin(h * 0.23 - t * 3.0 + b.x * 5.0) * sin(d * 2.0 + h * 0.07));
 }
-// How thick a scorched moth's smoke trail (frame.js smokeTrail) is at p: one soft band along its points, each risen and
+// How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
 // bent as a plume's smoke is (smokeBend), thinner and fainter the older it is and gone at the end of its life; width and
 // strength eased between them, the thickest of the segments near p so their joins don't double up, mottled a little.
 // Each point is where it was left, its age, and its moth's clock; an age below 0 parts one moth's trail from the next.
@@ -195,7 +197,7 @@ void main() {
     col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit);
   }
   float smoke = 0.0;
-  for (int i = 0; i < ${PLUMES}; i++) { if (i >= uPlumes) break; smoke += plume(p, uPlume[i], uPlumeB[i]); }
+  for (int i = 0; i < ${PLUMES}; i++) { if (i >= uPlumes) break; smoke += plume(p, uPlume[i], uPlumeB[i], uPlumeBase[i]); }
   if (uTrailN > 1) smoke += trailSmoke(p);
   col = mix(col, uSmokeCol, min(1.0, smoke) * uSmoke.z);
   gl_FragColor = vec4(mix(col, vec3(0.8, 0.1, 0.1), uDebug * 0.6 * (1.0 - lit)), 1.0);
@@ -350,10 +352,11 @@ function drawBackground(v) {
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
-  gl.uniform1i(u.uPlumes, v.smoke.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL));
-  if (v.smoke.length) {
-    gl.uniform4fv(u['uPlume[0]'], v.smoke.flatMap(q => q.slice(0, 4)));
-    gl.uniform4fv(u['uPlumeB[0]'], v.smoke.flatMap(q => q.slice(4, 8)));
+  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL));
+  if (v.plumes.length) {
+    gl.uniform4fv(u['uPlume[0]'], v.plumes.flatMap(q => q.slice(0, 4)));
+    gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));
+    gl.uniform2fv(u['uPlumeBase[0]'], v.plumes.flatMap(q => q.slice(8, 10)));
   }
   gl.uniform1i(u.uTrailN, v.trail.length); if (v.trail.length) gl.uniform4fv(u['uTrail[0]'], v.trail.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
