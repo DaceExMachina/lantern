@@ -583,6 +583,7 @@ const CANDLE = (() => {
     <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
     <path d="M${left + 12} ${P.top + 10}q26 7 42 0t36 7q20 2 26 -2M${left + 158} ${P.top + 16}q16 -2 40 -7" fill="none" stroke="#968DA4" stroke-width=".7" opacity=".6"/><!-- the slab -->
     <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${rimRy(FOOT)}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
+    <g id="cdPencil" transform="translate(${pt(over[17])}) rotate(13) scale(.8)"></g><!-- Jerrett's pencil (pencil.js), under the vine -->
     ${cluster(edgeAt, 8, [4, 4, 3, 3, 2, 1], grapes)}${overVine}${leafOn(edgeAt, 12, 150)}
     <!-- the vine, up the column, over the slab's edge and across it to the foot, a bunch hanging off it at the edge -->
     <g id="cdPedestalGlints">${grapeGlints(0)}</g></g>`;

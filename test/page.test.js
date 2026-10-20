@@ -27,7 +27,7 @@ const document = { getElementById: id => els[id] ?? null, querySelectorAll: () =
 // background.js isn't loaded, so drawBackground only records what drawLight gives it, and there's no dust
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {},
   drawBackground: v => { page.background = v; }, dust: [], farDust: [], dustData: { set() {} } });
-for (const f of ['scene', 'dev', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'pencil', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 // How far round the side a perch sits: 0 at the lantern's middle, 1 at its rim (at that height).
@@ -361,7 +361,7 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   const bottoms = [anchor + 20, anchor + 400, anchor + 1200], svgs = bottoms.map(at);
   assert.strictEqual(at(bottoms[1]), svgs[1], 'drawn twice at one height, the same');
   const again = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document }); // another load of the page
-  for (const f of ['scene', 'dev', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), again);
+  for (const f of ['scene', 'dev', 'lanterns', 'pencil']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), again);
   assert.strictEqual(vm.runInContext(`CANDLE.column(${bottoms[1]})`, again), svgs[1], 'another load draws the same vine');
   assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
   assert.ok(leaves(svgs[0], split, anchor) >= 6, `shoots off the trunk between the split and the anchor: ${leaves(svgs[0], split, anchor)}`);
@@ -460,4 +460,12 @@ test('each of the candlestick\'s parts meets the next exactly: no gap, and the s
     const wide = Math.max(a.bottomHalf, b.topHalf), narrow = Math.min(a.bottomHalf, b.topHalf);
     if (narrow > 0 && wide / narrow < 1.5) assert.ok(wide - narrow < 0.01, `${a.id} (${a.bottomHalf}) and ${b.id} (${b.topHalf}) nearly meet in width, so should be flush`);
   }
+});
+
+// Jerrett made the candle: when his first name comes from the server, its pedestal gets a pencil, and no other lantern has one.
+test('the pencil shows for Jerrett, on the candle only', () => {
+  const shows = name => run(`firstName = ${JSON.stringify(name)}; pencilShows()`);
+  for (const name of ['Jerrett', 'jerrett', 'JERRETT']) assert.strictEqual(shows(name), true, name);
+  for (const name of ['', 'Jeremy', 'Jerret', 'Jerretts']) assert.strictEqual(shows(name), false, name);
+  for (const key of styles) assert.strictEqual(run(`STYLES.${key}.back`).includes('id="cdPencil"'), key === 'candle', key);
 });

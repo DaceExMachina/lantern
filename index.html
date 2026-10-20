@@ -165,6 +165,7 @@
   body.screensaver { background: #2B2440; cursor: none; }
   .screensaver footer, .screensaver #card { display: none; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
+  #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
   .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
   /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
@@ -276,6 +277,7 @@
 <script defer src="page/scene.js"></script>
 <script defer src="page/dev.js"></script>
 <script defer src="page/lanterns.js"></script>
+<script defer src="page/pencil.js"></script>
 <script defer src="page/state.js"></script>
 <script defer src="page/background.js"></script>
 <script defer src="page/github.js"></script>

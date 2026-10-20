@@ -5,6 +5,7 @@ const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
 es.addEventListener('stale', e => { stalePRs = JSON.parse(e.data); });
+es.addEventListener('name', e => { firstName = JSON.parse(e.data); showPencil(); }); // the user's first name, for Jerrett's pencil (pencil.js)
 // a badge just earned (sent once, never on reconnect): the fireflies' flash, except in quiet hours and on the screensavers
 es.addEventListener('badge', e => { if (!quiet() && !document.body.matches('.screensaver, .ambient')) flashBadge(JSON.parse(e.data).id); });
 const PINNED = Q.get('style'); // ?style= previews one lantern, whatever the settings say
