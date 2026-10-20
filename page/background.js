@@ -123,17 +123,17 @@ uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
-uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
+uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN; uniform vec2 uSmokeS; // the Ss' size and length (frame.js smokeS)
 ${LIGHT}
 const float RISE = 29.0; // how fast smoke rises, units a second
 // How far a bit of smoke age seconds old has been carried aside from where it was let go, in PLUME sizes: downwind
-// further the higher it's risen, and curled into Ss, a slow wave along the smoke swelling from nothing to 6 × curl over
-// its first second or so. Its now is the smoke's own clock, offset by its seed so each one curls differently; the bit was
+// further the higher it's risen, and curled into Ss, a slow wave along the smoke swelling from nothing to uSmokeS.x × curl
+// over its first second or so, uSmokeS.y long as it rises. Its now is the smoke's own clock, offset by its seed so each one curls differently; the bit was
 // let go at now - age, so the wave's phase runs along it and the Ss travel as it rises. Every plume and every scorched
 // moth's trail bends by this, so they read as one smoke. Scalars only, so the test can run it as JS.
 float smokeBend(float age, float now, float curl) {
-  float h = RISE * age, at = now - age;
-  return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * 6.0 * min(1.0, age / 1.2) * (sin(at * 4.0 - now * 1.3) + 0.4 * sin(at * 2.1 + now * 0.7));
+  float h = RISE * age, at = now - age, k = 6.2832 * RISE / uSmokeS.y;
+  return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * uSmokeS.x * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
 }
 // How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
@@ -352,7 +352,7 @@ function drawBackground(v) {
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
-  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL));
+  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform2f(u.uSmokeS, smokeS.size, smokeS.length);
   if (v.plumes.length) {
     gl.uniform4fv(u['uPlume[0]'], v.plumes.flatMap(q => q.slice(0, 4)));
     gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));

@@ -270,7 +270,7 @@ const smokeBendAt = wind => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float smokeBend\(float age, float now, float curl\) \{[\s\S]*?\n\}/);
   assert.ok(src, 'background.js has smokeBend');
   const js = src[0].replace('float smokeBend(float age, float now, float curl)', 'return (age, now, curl) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|sin)\(/g, 'Math.$1(');
-  return new Function('uSmoke', 'RISE', js)({ w: wind }, 29);
+  return new Function('uSmoke', 'uSmokeS', 'RISE', js)({ w: wind }, { x: 24, y: 90 }, 29);
 };
 test('smoke bends downwind the higher it has risen, and curls into Ss that swell from nothing as it ages', () => {
   const still = smokeBendAt(0), windy = smokeBendAt(0.6), nows = Array.from({ length: 200 }, (_, i) => i * 0.1);
@@ -278,9 +278,9 @@ test('smoke bends downwind the higher it has risen, and curls into Ss that swell
   assert.strictEqual(windy(1, 3, 0), 0.6 * (29 * 29 / 150 + 29 * 0.3), 'the wind alone, a second up');
   assert.ok(windy(3, 3, 0) > 3 * windy(1, 3, 0), 'bent further the higher it is');
   const swing = age => Math.max(...nows.map(n => Math.abs(still(age, n, 1))));
-  assert.ok(swing(0.1) < 1 && swing(2) > 6, `the curl swells with age: ${swing(0.1).toFixed(2)} then ${swing(2).toFixed(2)}`);
+  assert.ok(swing(0.1) < 3 && swing(2) > 24, `the curl swells with age: ${swing(0.1).toFixed(2)} then ${swing(2).toFixed(2)}`);
   for (const n of nows) for (let age = 0; age < 6; age += 0.2)
-    assert.ok(Math.abs(still(age + 0.2, n, 1) - still(age, n, 1)) < 6, `neighbours ${TRAIL_STEP}s apart stay together, at ${age.toFixed(1)}s`);
+    assert.ok(Math.abs(still(age + 0.2, n, 1) - still(age, n, 1)) < 15, `neighbours ${TRAIL_STEP}s apart stay together, at ${age.toFixed(1)}s`);
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
 });
 const TRAIL_STEP = 0.2;
