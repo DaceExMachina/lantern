@@ -145,15 +145,42 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
   assert.ok(!/class="band"/.test(c.back + c.front), 'no solid bands');
 });
 
-test('the candle\'s fan of shade starts at its rim; every other lantern\'s starts at the light', () => {
+// background.js's rimShade, run as JS on drawLight's uniforms: it's written in scalars, so it reads as JS once typed
+const rimShadeFrom = ({ flame: [fx, fy, tx, ty], rim: [x, y, z] }) => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float rimShade\(float px, float py\) \{[\s\S]*?\n\}/);
+  assert.ok(src, 'background.js has rimShade');
+  const js = src[0].replace('float rimShade(float px, float py)', 'return (px, py) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|max|abs)\(/g, 'Math.$1(');
+  const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  return new Function('uFlame', 'uRim', 'smoothstep', js)({ x: fx, y: fy, z: tx, w: ty }, { x, y, z }, smoothstep);
+};
+test('the candle\'s rim shades the room below from its corners: lit outside the flame\'s base line, dark inside its tip line', () => {
   for (const key of styles) {
     run(`applyStyle('${key}'); swingLantern(1 / 60, 0.5)`);
     run(`drawLight(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 })`);
-    // measured along the lantern's own axis, which the shader turns with its sway
-    const c = run(`STYLES.${key}`), from = [...page.background.capFrom];
-    if (key === 'candle') assert.deepStrictEqual(from, [0, c.holder[0] - c.light[1]], 'the fan below starts at the rim');
-    else assert.deepStrictEqual(from, [0, 0], `${key}: its fans start at the light`);
+    if (key !== 'candle') { assert.deepStrictEqual([...page.background.rim], [0, 0, 0], `${key}: no rim shadow`); continue; }
+    const v = page.background, [bx, by, tx, ty] = v.flame, [cx, half, rimY] = v.rim, shade = rimShadeFrom(v);
+    assert.deepStrictEqual([cx, half, rimY], [run('PILLAR.cx'), run('PILLAR.r'), run('PILLAR.rim')], 'the pillar\'s rim');
+    assert.ok(ty < by - 40, 'the live tip stands well above the base');
+    // along each corner's two lines, 200 below the rim, nudged one unit either side
+    for (const side of [-1, 1]) {
+      const kx = cx + side * half, along = (fx, fy) => kx + (kx - fx) * 200 / (rimY - fy), y = rimY + 200, base = along(bx, by), tip = along(tx, ty);
+      assert.ok(side * (base - tip) > 0, 'the base line runs outside the tip line');
+      assert.strictEqual(shade(base + side, y), 0, `side ${side}: just outside the base line is lit`);
+      assert.ok(shade(base - side, y) > 0, `side ${side}: just inside the base line some shade starts`);
+      assert.ok(shade(tip - side, y) === 1, `side ${side}: just inside the tip line is in full shadow (${shade(tip - side, y)})`);
+      assert.ok(shade(tip + side, y) < 1, `side ${side}: just outside the tip line some light gets in`);
+      const mid = shade(along((bx + tx) / 2, (by + ty) / 2), y); // the line through the flame's middle: half of it hidden
+      assert.ok(Math.abs(mid - 0.5) < 1e-6, `side ${side}: on the line from the flame's middle, half shaded (${mid})`);
+      assert.strictEqual(shade(kx + side * 300, rimY - 1), 0, `side ${side}: above the rim is lit`);
+    }
   }
+  // a still, upright flame shades both sides alike, and a taller one turns the tip line out and widens the fade
+  const still = { flame: [340, 273, 340, 200], rim: [340, 50, 275] }, tall = { flame: [340, 273, 340, 150], rim: [340, 50, 275] };
+  for (const [x, y] of [[420, 300], [500, 400], [600, 500], [395, 290]]) assert.strictEqual(rimShadeFrom(still)(x, y), rimShadeFrom(still)(680 - x, y), `(${x}, ${y}) mirrored`);
+  assert.ok(rimShadeFrom(tall)(500, 400) < rimShadeFrom(still)(500, 400), 'a taller flame lights more of the fade');
+  // one solid shadow under the rim, whichever way the flame leans: no light down the middle
+  for (const lean of [-12, 0, 12]) for (const [x, y] of [[340, 280], [340, 600], [289, 900], [391, 900], [395, 2000]])
+    assert.strictEqual(rimShadeFrom({ flame: [340, 273, 340 + lean, 200], rim: [340, 50, 275] })(x, y), 1, `lean ${lean}: (${x}, ${y}) under the rim is dark`);
 });
 
 // The pillar's numbers, changed to untidy ones in a copy of lanterns.js, and the wax drawn there.

@@ -9,7 +9,7 @@
 // for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
 // burner cup, a candle's rim), as a height and a half-width. `flameWind` is how far the wind leans its flame (none if absent). `stands` is a lantern on its own foot, which doesn't sway
 // and has nothing to hang from; it's the band its stand fills below it, a half-width and the top, from there to the
-// window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` starts the shade below at the holder's edge instead of at the light.
+// window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` shades below from the holder's corners instead, as the live flame's base and tip see them (background.js rimShade).
 // `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
@@ -675,7 +675,7 @@ const STYLES = {
   candle: {
     name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
     flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: FLAME_WIND.candle,
-    holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
+    holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so its corners cast the shadow
     // the wax alone, a straight cylinder, its highest landing spot a hop, a moth's reach and the clearance below the flame
     body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + HOP + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
       half: () => PILLAR.r },

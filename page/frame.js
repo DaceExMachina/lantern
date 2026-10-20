@@ -339,14 +339,18 @@ function plumes(now, strength, tip) {
   plumeFrom = kept;
   return [...out, ...trails.reverse()].slice(0, PLUMES); // the newest puffs first, if it comes to that
 }
+// the flame's outer tongue's tip in the scene (drawFlame's), leaning with its wobble and the wind
+function flameTip(s, size) {
+  const [fx, fy, fk] = style.flame, wind = windLean(s);
+  return [fx + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
+}
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
 function drawShine(s, { size, flick, pulse }) {
   const shine = style.shine;
   if (!shine || AMBIENT) { heat = null; return; }
   const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
   // the flame's lean (its middle tongue's tip, drawFlame) and its outer tongue's tip, in the scene
-  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk;
-  const tip = [fx + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
+  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk, tip = flameTip(s, size);
   heat = { x: tip[0], y: tip[1], k: size, t: s % (2 * Math.PI) };
   [...$('cdGlints').children].forEach((e, i) => {
     const [x] = shine.glints[i];
@@ -424,8 +428,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
     smoke: AMBIENT ? [] : plumes(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6,
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
-    // how far above and below the light each fan starts, at the holder's edge with style.shadeFromHolder and else at the light
-    capFrom: style.shadeFromHolder ? [0, style.holder[0] - style.light[1]] : [0, 0],
+    // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
+    flame: [...style.flame.slice(0, 2), ...flameTip(s, size)],
+    rim: style.shadeFromHolder && !remote ? [style.flame[0], style.holder[1], style.holder[0]] : [0, 0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of

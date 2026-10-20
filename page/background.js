@@ -27,7 +27,8 @@ const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and ag
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.
 const LIGHT = `
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
-uniform vec2 uLightC, uCaps, uCapFrom; uniform float uLightScale, uLightR, uSway;
+uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
+uniform vec4 uFlame; uniform vec3 uRim; // a standing flame's base and tip, and the rim below it that hides it: centre x, half-width, y (none: 0 wide)
 uniform vec2 uGlowC; uniform float uGlowR;
 uniform vec3 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lantern's solid bands: each one's slope from the flame, and its spread
@@ -51,6 +52,25 @@ vec2 heat(vec2 p) {
 float glow(vec2 p) {
   float g = length(p - uGlowC) / uGlowR;
   return g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));
+}
+// How much of a standing flame the rim below it hides from (px, py), 0 to 1: the share of the flame, base (0) to tip (1),
+// whose ray to the point crosses the rim's height between its corners. Above the rim it hides none. Each ray is taken by
+// its slope u (across per unit down), so it crosses the rim at px + u * (py - rim). Outside the line from the flame's base
+// through a corner it's all lit, inside the line from its tip all hidden, and between them it fades: straight edges from
+// each corner, a penumbra that widens with distance, one solid shadow under the rim, and a taller or leaning flame turns
+// them. Scalars only, so the test can run it as JS.
+float rimShade(float px, float py) {
+  float h = py - uRim.z;
+  if (h <= 0.0) return 0.0;
+  float bh = py - uFlame.y, bx = uFlame.x - px, dx = uFlame.z - uFlame.x, dy = uFlame.w - uFlame.y;
+  float uB = bx / bh, uT = (uFlame.z - px) / (py - uFlame.w); // the rays to the base and the tip
+  float lo = max(min(uB, uT), (uRim.x - uRim.y - px) / h), hi = min(max(uB, uT), (uRim.x + uRim.y - px) / h); // the hidden ones
+  if (hi < lo) return 0.0;
+  // back to the flame: the ray with slope u meets it at t = (u * bh - bx) / (dx + u * dy), exactly 0 and 1 for the base's
+  // and the tip's own rays (on the flame's line they're the same ray, and the whole flame is hidden or none of it)
+  float tLo = lo == uB ? 0.0 : lo == uT ? 1.0 : (lo * bh - bx) / (dx + lo * dy);
+  float tHi = hi == uT ? 1.0 : hi == uB ? 0.0 : (hi * bh - bx) / (dx + hi * dy);
+  return smoothstep(0.0, 1.0, abs(tHi - tLo));
 }
 float light(vec2 p) {
   // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this point. Right
@@ -80,12 +100,11 @@ float light(vec2 p) {
   }
   // the solid caps of a paper lantern, or the holder below a flame, let no light out past them, so above and below it a
   // fan stays darker, one shadow about as wide as the cap seen from the flame, with a soft edge, turned with the lantern's
-  // sway.
-  // Each fan starts uCapFrom above and below the light (0: at the light).
+  // sway. A standing flame's rim casts its own shadow instead (rimShade).
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
-  float past = step(lq.y < 0.0 ? uCapFrom.x : uCapFrom.y, abs(lq.y));
-  float open = 1.0 - CAPS * step(0.001, capR) * past * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope); // no cap, no fan
+  float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
+    : step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
   // strongest and narrowest beside the lantern, spreading wider and fading out further away (like a moth's, by distance)
   vec2 bq = p - uBandO;
@@ -236,7 +255,7 @@ function setLight(u, v) {
   gl.uniform1f(u.uDebug, DUST_DEBUG); gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uLightR, v.lightR);
-  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform2f(u.uCapFrom, ...v.capFrom); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
+  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform4f(u.uFlame, ...v.flame); gl.uniform3f(u.uRim, ...v.rim); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
   gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
   const h = v.heat; gl.uniform4f(u.uHeat, h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);
