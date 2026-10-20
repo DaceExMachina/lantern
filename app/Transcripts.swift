@@ -439,6 +439,7 @@ extension LanternServer {
 
     /// Sessions rebuilt from disk join the live ones, unless hooks brought them back first.
     func add(_ seeded: [(JSON, Ordered<JSON>)]) {
+        if mirror != nil { return } // a preview shows the live app's sessions, not its own
         for (s, a) in seeded {
             let id = str(s["id"])
             if sessions[id] != nil { continue }
