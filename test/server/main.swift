@@ -6,5 +6,6 @@ setvbuf(stdout, nil, _IOLBF, 0)
 let env = ProcessInfo.processInfo.environment
 let server = LanternServer(port: UInt16(env["LANTERN_PORT"]!)!, data: env["LANTERN_DATA"]!, web: env["LANTERN_WEB"]!)
 server.screenLocked = { false } // a locked screen pauses adoption, and whoever runs the tests may have stepped away
+server.mirror = env["LANTERN_MIRROR"].flatMap(URL.init(string:)) // npm run preview: the live app's sessions
 server.start()
 RunLoop.main.run()

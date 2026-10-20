@@ -163,6 +163,7 @@ final class LanternServer {
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var refreshing = false
+    var mirror: URL? // a preview's: the live app's /events, whose sessions it shows instead of finding its own (see follow())
     // the test server replaces it, since the machine running the tests may well be locked
     var screenLocked = { (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true }
     var broadcastDue = false, sentReviews = "[]", sentStale = "[]" // see broadcast()
@@ -216,6 +217,41 @@ final class LanternServer {
     }
     func retry() { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.start() } }
 
+    // Claude Code's hooks only reach the live app, so sessions a preview found itself would never change. It shows the
+    // app's instead, each time the app sends them. When the stream ends (the app quitting, say) it keeps the last ones
+    // and tries again every two seconds; a new stream starts with the app's current list.
+    func follow(_ url: URL) {
+        Task {
+            while true {
+                var heard = false
+                if let (lines, _) = try? await URLSession.shared.bytes(from: url) {
+                    var event: String?
+                    do {
+                        for try await line in lines.lines {
+                            if line.hasPrefix("event: ") { event = String(line.dropFirst(7)); continue }
+                            guard line.hasPrefix("data: ") else { continue }
+                            // the sessions are the one message without an event name
+                            if event == nil, let list = parse(Data(line.utf8.dropFirst(6))) as? [JSON] { heard = true; await MainActor.run { self.mirrored(list) } }
+                            event = nil
+                        }
+                    } catch {}
+                }
+                if heard { print("Lost the app at \(url); showing its last sessions until it's back") }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+    func mirrored(_ list: [JSON]) {
+        sessions = Ordered(); agents = [:]
+        for var s in list {
+            let id = str(s["id"])
+            var a = Ordered<JSON>()
+            for var x in s.removeValue(forKey: "subagents") as? [JSON] ?? [] { a[str(x.removeValue(forKey: "id"))] = x }
+            sessions[id] = s; agents[id] = a
+        }
+        broadcast()
+    }
+
     func begin() {
         stats.open()
         stats.begin("server")
@@ -225,8 +261,10 @@ final class LanternServer {
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
-        Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_SWEEP_SECONDS"] ?? "") ?? 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
-        Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_ADOPT_SECONDS"] ?? "") ?? 60, repeats: true) { _ in self.adopt() }
+        if let mirror { follow(mirror) } else {
+            Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_SWEEP_SECONDS"] ?? "") ?? 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
+            Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_ADOPT_SECONDS"] ?? "") ?? 60, repeats: true) { _ in self.adopt() }
+        }
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in // quiet hours start or end with nothing else happening
             if self.autoQuiet() { self.settingsChanged() } else { self.observe() }
         }
