@@ -655,3 +655,17 @@ test('a preview takes only the sessions from the app\'s stream, and reconnects w
   assert.ok(connections >= 2, `the preview connected ${connections} time(s)`);
   assert.ok(![...seen].some(ids => ids.includes('pr')), `the PR list showed up as sessions: ${[...seen].join(' | ')}`);
 });
+
+test('page files always revalidate: Cache-Control no-cache, and a 304 when the ETag still matches', async t => {
+  const base = await serve(t);
+  for (const url of ['/', '/index.html', '/page/pencil.js', '/icon.png']) {
+    const res = await fetch(base + url);
+    assert.strictEqual(res.status, 200, url);
+    assert.strictEqual(res.headers.get('cache-control'), 'no-cache', url);
+    const again = await fetch(base + url, { headers: { 'If-None-Match': res.headers.get('etag') } });
+    assert.strictEqual(again.status, 304, url);
+    assert.strictEqual(again.headers.get('cache-control'), 'no-cache', url);
+    assert.strictEqual((await fetch(base + url, { headers: { 'If-None-Match': '"other"' } })).status, 200, url);
+  }
+  assert.strictEqual((await fetch(base + '/page/nope.js')).status, 404);
+});
