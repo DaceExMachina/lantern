@@ -373,6 +373,8 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   assert.strictEqual(vm.runInContext(`CANDLE.column(${bottoms[1]})`, again), svgs[1], 'another load draws the same vine');
   assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
   assert.ok(leaves(svgs[0], split, anchor) >= 6, `shoots off the trunk between the split and the anchor: ${leaves(svgs[0], split, anchor)}`);
+  assert.ok(leaves(svgs[0], top - 60, anchor) >= 20, `leaves on the vine above the anchor: ${leaves(svgs[0], top - 60, anchor)}`);
+  assert.ok((svgs[0].match(/href="#cdGrape"/g) || []).length >= 40, 'bunches on the branches');
   assert.ok(leaves(svgs[2], anchor, bottoms[2]) >= 6, `and on down the trunk below it: ${leaves(svgs[2], anchor, bottoms[2])}`);
   // over the stretch two heights share (less a shoot's reach, as a shoot shows once its whole stretch of trunk does)
   for (const [i, j] of [[0, 1], [0, 2], [1, 2]]) {
@@ -391,7 +393,7 @@ test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the 
   const bunches = [...svg.matchAll(/<path d="M(-?[\d.]+) (-?[\d.]+)Q[^"]*" fill="none" stroke="#1F1A0C" stroke-width="2.2"[^>]*\/><path[^>]*\/>((?:<use href="#cdGrape"[^>]*\/>)+)/g)]
     .map(m => ({ at: [+m[1], +m[2]], grapes: [...m[3].matchAll(/x="(-?[\d.]+)" y="(-?[\d.]+)"/g)].map(g => [+g[1], +g[2]]) }));
   const hanging = bunches.filter(b => !(b.at[0] === 400 && b.at[1] === P.top - 8)); // but the one lying on the slab by the foot, as asked
-  assert.ok(hanging.length >= 4, `the bunches found: ${hanging.length}`);
+  assert.ok(hanging.length >= 6, `the bunches found: ${hanging.length}`);
   for (const { at, grapes } of hanging) {
     assert.ok(limbs.some(poly => inside(at, poly)), `the bunch at ${at} grows from a limb`);
     assert.ok(grapes.reduce((t, g) => t + g[1], 0) / grapes.length > at[1] + 8, `the bunch at ${at} hangs below its stalk`);
