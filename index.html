@@ -254,9 +254,9 @@
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
   <div id="menu" class="flyup" popover>
     <label class="notify"><input type="checkbox" id="notify" aria-describedby="tip-notify"> notify me when a session needs me</label>
-    <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications. It works with every lantern.</span>
+    <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications.</span>
     <label><input type="checkbox" id="staleToggle" aria-describedby="tip-stale"> show stale PRs</label>
-    <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns and nobody has touched for a week, as pale wisps drifting low in the scene. It needs GitHub status, and it works with every lantern.</span>
+    <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns and nobody has touched for a week, as pale wisps drifting low in the scene. It needs GitHub status.</span>
     <label><input type="checkbox" id="textToggle" aria-describedby="tip-text"> show session text</label>
     <span class="tip" role="tooltip" id="tip-text">Prints lines your sessions wrote onto the lantern's paper, fading in and out. Only the barrel and the round chōchin have paper, so it's greyed out on the Moroccan and the candle.</span>
     <label><select id="style" aria-label="Lantern style" aria-describedby="tip-style"></select></label>
@@ -264,11 +264,11 @@
     <div class="ribbon"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour" aria-describedby="tip-ribbon"></span></div>
     <span class="tip" role="tooltip" id="tip-ribbon">Colours the bookmark ribbon that hangs inside the barrel lantern. The other lanterns have no ribbon, so these are greyed out on them.</span>
     <div class="time switch" id="quietFromRow"><span>quiet from</span><span class="pill" role="group" aria-label="Quiet from" aria-describedby="tip-from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" aria-describedby="tip-from" disabled></label></div>
-    <span class="tip" role="tooltip" id="tip-from">Turns quiet on by itself every night at this time, even with no window open. It snoozes every session until quiet hours end. It works the same on every lantern.</span>
+    <span class="tip" role="tooltip" id="tip-from">Turns quiet on by itself every night at this time, even with no window open. It snoozes every session until quiet hours end.</span>
     <div class="time switch" id="quietEndRow"><span>quiet until</span><span class="pill" role="group" aria-label="Quiet until" aria-describedby="tip-until"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietEnd" value="08:00" aria-label="Quiet until" aria-describedby="tip-until"></label></div>
-    <span class="tip" role="tooltip" id="tip-until">Sets when quiet hours end and moths can call you again. Switch it off and quiet lasts until you press the moon. It works the same on every lantern.</span>
+    <span class="tip" role="tooltip" id="tip-until">Sets when quiet hours end and moths can call you again. Switch it off and quiet lasts until you press the moon.</span>
     <label class="time">day rollover <input type="time" id="dayStart" value="00:00" aria-describedby="tip-day"></label>
-    <span class="tip" role="tooltip" id="tip-day">Sets when one day ends and the next begins in your stats, badges and recap. Set it later than midnight to keep late nights with the day they belong to. It applies to every lantern.</span>
+    <span class="tip" role="tooltip" id="tip-day">Sets when one day ends and the next begins in your stats, badges and recap. Set it later than midnight to keep late nights with the day they belong to.</span>
     <section id="gh" aria-label="GitHub"></section>
     <details id="help">
       <summary>What's what?</summary>
