@@ -121,19 +121,48 @@ const zoneFor = (/** @type {MouseEvent} */ e) => {
   const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('zones').getScreenCTM().inverse());
   return zoneAt([...$('zones').children].filter(z => z instanceof SVGElement && z.style.display !== 'none' && z.style.pointerEvents !== 'none'), p.x, p.y);
 };
-for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => enterZone(zoneFor(e)));
-$('zones').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 700); });
-$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) clickZone(z, e.shiftKey); });
+// Touch has no hover, so a tap stands in: it shows the card (tapZone), and tapping the card then does what a click does.
+// Taps never run a hover area's click action or hide the card on pointerleave, which a finger lifting would trigger at once.
+// A long press reaches snooze through the contextmenu event below.
+const isTouch = (/** @type {PointerEvent} */ e) => e.pointerType === 'touch';
+for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => isTouch(e) || enterZone(zoneFor(e)));
+$('zones').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 700); });
+$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey); });
+// a tap anywhere else puts the card away
+addEventListener('click', e => { if (isTouch(e) && !(/** @type {Element} */ (e.target)).closest('#card, #zones')) hideCard(); });
 $('zones').addEventListener('contextmenu', e => areas.get(zoneFor(e))?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
-$('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 400); });
+$('card').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 400); });
 
 try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
 box.onchange = () => {
   try { localStorage.setItem('lantern-notify', box.checked ? '1' : '0'); } catch {}
   if (box.checked) { audio ??= new AudioContext(); if (Notification.permission === 'default') Notification.requestPermission(); }
 };
+
+// An option's tip (the .tip after its row) docks just above the settings menu at the menu's width, like the recap's session card
+// below its panel; with no room above (a short window) it sits at the window's top edge. A pointer over a row or keyboard focus
+// in it shows its tip; aria-describedby links each control to its tip for screen readers.
+const menu = $('menu');
+let tipped = null;
+function showTip(/** @type {Event} */ e, on = true) {
+  const row = on && e.target instanceof Element ? e.target.closest('#menu > :not(.tip)') : null;
+  const tip = row?.nextElementSibling?.matches('.tip') ? /** @type {HTMLElement} */ (row.nextElementSibling) : null;
+  if (e.type === 'focusin' && !(/** @type {Element} */ (e.target).matches(':focus-visible'))) return;
+  if (tip === tipped) return;
+  tipped?.classList.remove('show'); tipped = tip;
+  if (!tip) return;
+  const r = menu.getBoundingClientRect();
+  tip.style.left = `${r.left}px`; tip.style.width = `${r.width}px`;
+  tip.style.top = `${Math.max(8, r.top - 8 - tip.offsetHeight)}px`;
+  tip.classList.add('show');
+}
+menu.addEventListener('pointerover', showTip);
+menu.addEventListener('focusin', showTip);
+menu.addEventListener('pointerleave', e => showTip(e, false));
+menu.addEventListener('focusout', e => showTip(e, false));
+menu.addEventListener('toggle', e => { if (/** @type {ToggleEvent} */ (e).newState === 'closed') showTip(e, false); });
 
 // the stats panel reads the log when it opens, and again every minute while it stays open
 let statsTimer;

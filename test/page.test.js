@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const row = () => ({ title: 'its own title', dataset: {}, classList: { toggle() {} } }); // a settings row
+const row = () => ({ classList: { toggle() {} } }); // a settings row
 const attrs = {}, els = {
   lantern: { innerHTML: '', getAttribute: k => attrs[k] ?? null, setAttribute: (k, v) => { attrs[k] = v; } },
   style: { value: '' },
@@ -29,25 +29,17 @@ const page = vm.createContext({ URLSearchParams, location: { search: '' }, perfo
 for (const f of ['scene', 'dev', 'lanterns', 'pencil', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
-// How far round the side a perch sits: 0 at the lantern's middle, 1 at its rim (at that height).
-const across = (key, a, r) => {
-  const [x, y] = run(`style = STYLES.${key}; pickPerch(${a}, () => ${r})`);
-  return Math.abs(x - 340) / run(`style.body.half(${y})`);
-};
 const styles = [...run('Object.keys(STYLES)')]; // an array of this realm, so deepStrictEqual compares its items
-const angles = Array.from({ length: 73 }, (_, i) => -Math.PI + i * Math.PI / 36);
+// every home for 3, 7 and 16 sessions, and the same in a window half as wide again (as stretch puts them on screen)
+const homes = [3, 7, 16].flatMap(n => Array.from({ length: n }, (_, i) => run(`ringHome(${i}, ${n})`)))
+  .flatMap(([x, y]) => [[x, y], [340 + (x - 340) * 1.5, y]]);
+// where a moth for the session at home h lands, `along` of the way out its line on the paper
+const perch = (key, [hx, hy], along) => run(`style = STYLES.${key}; perchAt([${hx}, ${hy}], ${along})`);
 
-test('landing spots stay out of the middle third of the lantern', () => {
-  for (const key of styles) for (const a of angles) for (const r of [0, 0.5, 1]) {
-    assert.ok(across(key, a, r) >= 1 / 3 - 1e-9, `${key}: a ${a.toFixed(2)}, rand ${r} lands ${across(key, a, r).toFixed(3)} of the way out`);
-  }
-});
-
-test('landing spots keep their slices in order: a direction nearer the side lands further round', () => {
-  // from straight down (a = pi/2) to straight out (a = 0), with the same random depth, every step lands further round
-  for (const key of styles) for (const r of [0, 0.5, 1]) {
-    const quarter = angles.filter(a => a >= 0 && a <= Math.PI / 2).reverse().map(a => across(key, a, r));
-    for (let i = 1; i < quarter.length; i++) assert.ok(quarter[i] > quarter[i - 1], `${key}, rand ${r}: step ${i} lands at ${quarter[i]}, not past ${quarter[i - 1]}`);
+test('landing spots stay out of the middle third of the lantern, and on it', () => {
+  for (const key of styles) for (const h of homes) for (const r of [0, 0.5, 1]) {
+    const [x, y] = perch(key, h, r), out = Math.abs(x - 340) / run(`style.body.half(${y})`);
+    assert.ok(out >= 1 / 3 - 1e-9 && out <= 1, `${key}: home ${h.map(Math.round)}, along ${r} lands ${out.toFixed(3)} of the way out`);
   }
 });
 
@@ -88,10 +80,10 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
 
 test('moths land on the candle\'s wax: below its rim, above its dish and within the pillar', () => {
   const P = run('STYLES.candle.pillar');
-  for (const a of angles) for (const r of [0, 0.5, 1]) {
-    const [x, y] = run(`style = STYLES.candle; pickPerch(${a}, () => ${r})`);
-    assert.ok(P.rim < y && y < P.dish, `a ${a.toFixed(2)}, rand ${r}: y ${y} is off the wax (${P.rim} to ${P.dish})`);
-    assert.ok(Math.abs(x - P.cx) <= P.r, `a ${a.toFixed(2)}, rand ${r}: x ${x} is past the pillar's side`);
+  for (const h of homes) for (const r of [0, 0.5, 1]) {
+    const [x, y] = perch('candle', h, r);
+    assert.ok(P.rim < y && y < P.dish, `home ${h.map(Math.round)}, along ${r}: y ${y} is off the wax (${P.rim} to ${P.dish})`);
+    assert.ok(Math.abs(x - P.cx) <= P.r, `home ${h.map(Math.round)}, along ${r}: x ${x} is past the pillar's side`);
   }
 });
 
@@ -113,8 +105,8 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
   // its landing jitter, from nearly shut to a breath's widest
   const { wing3d, unit, lerp3, cross, dot, WING_UP, WING_SIDE, SIZE } = run('({ wing3d, unit, lerp3, cross, dot, WING_UP, WING_SIDE, SIZE })');
   let nearest = Infinity;
-  for (const a of angles) for (const r of [0, 0.5, 1]) {
-    const [px, py, n0] = run(`style = STYLES.candle; pickPerch(${a}, () => ${r})`);
+  for (const h of homes) for (const r of [0, 0.5, 1]) {
+    const [px, py, n0] = perch('candle', h, r);
     for (const jitter of [-15, 0, 15]) for (const open of [0.05, 0.5, 0.91]) {
       const t0 = unit([n0[1] * n0[0], n0[1] * n0[1] - 1, n0[1] * n0[2]]), T = unit(lerp3(t0, cross(n0, t0), Math.tan(jitter * Math.PI / 180)));
       const N = unit(lerp3(n0, T, -dot(n0, T)));
@@ -127,10 +119,14 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
 });
 
 test('a restless landed moth hops HOP off its spot', () => {
-  // waiting 20 minutes, its dice on a hop, which starts at s = 10 and peaks 0.8s in, measured from the spot it lifts off
-  run(`style = STYLES.candle; hopper = { key: 'hopper', size: 1.4, x: 340, y: 300, home: [150, 170], wasLanded: true, hops: 0, fidgetAt: 10, dice: 0.9,
-    session: { id: 'hopper', state: 'waiting', waitingSince: Date.now() - 20 * 60000 } }; hopper.perch = findPerch(hopper, () => 0.5)`);
-  const rest = run('rot(hopper.perch[0], hopper.perch[1])[1] + 6 * hopper.size'), { ty } = run('mothTarget("hopper", hopper, 1 / 60, 10.8)');
+  // waiting 20 minutes, the wall clock stopped 0.8s into its next hop, where it peaks, measured from the spot it lifts off
+  const ws = 1.8e12, peak = run(`(() => { let n = Math.floor((${ws} + 20 * 60000) / 1000 / FIDGET.slot);
+    while (fidgetSlot('hopper', n, ${ws}).kind !== 'hop') n++;
+    return fidgetSlot('hopper', n, ${ws}).start + FIDGET.hop / 2; })()`);
+  run(`style = STYLES.candle; hopper = { key: 'hopper', size: 1.4, x: 340, y: 300, home: [150, 170], wasLanded: true, hopSlot: -1,
+    session: { id: 'hopper', state: 'waiting', waitingSince: ${ws} } }; hopper.along = 0.5; realNow = Date.now; Date.now = () => ${peak * 1000}`);
+  const { ty } = run('mothTarget("hopper", hopper, 1 / 60, 10.8)'), rest = run('rot(hopper.perch[0], hopper.perch[1])[1] + 6 * hopper.size'); // the spot it lifted off
+  run('Date.now = realNow');
   assert.strictEqual(run('hopper.fidget'), 'hop');
   assert.ok(Math.abs(rest - ty - run('HOP')) < 1e-9, `it rises ${rest - ty}, not ${run('HOP')}`);
 });
@@ -288,12 +284,9 @@ test('the candle\'s wax under the rim takes the flame\'s colour', () => {
 test('on the candle the session text and ribbon controls grey out', () => {
   run(`applyStyle('candle')`);
   assert.strictEqual(els.textToggle.disabled, true);
-  assert.strictEqual(els.textToggle.parentElement.title, 'Only the paper lanterns show session text');
   assert.ok(els.ribbons.children.every(b => b.disabled), 'every swatch');
-  assert.strictEqual(els.ribbons.parentElement.title, 'Only the barrel has a ribbon');
   run(`applyStyle('barrel')`);
   assert.strictEqual(els.textToggle.disabled, false, 'and come back on the barrel');
-  assert.strictEqual(els.ribbons.parentElement.title, 'its own title');
 });
 
 // flapWing became a view onto the one 3D wing model (wing3d); in flight it has to draw exactly what the old

@@ -176,6 +176,38 @@ test('a subagent whose transcript ends in a hand-back is dropped once quiet, lon
   await until(async () => (await agentIds(base)).length === 0, 'the handed-back subagent to be dropped');
 });
 
+// Claude Code fires no hook on a rename, so the sweep notices the new custom-title.json by itself, in a session that's
+// waiting and sends nothing more.
+test('a rename of a waiting session reaches the page on the next sweep, with no further hook event', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = path.join(home, '.claude/projects/-w/s1');
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  fs.writeFileSync(dir + '.jsonl', jsonl([user('hi'), answer('Done.'), turnEnd]));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' });
+  await wait(300); // a few sweeps pass with the old title
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'custom-title.json'), JSON.stringify({ customTitle: 'Renamed by Dace' }));
+  await until(async () => (await s1(base)).title === 'Renamed by Dace', 'the sweep to pick up the new title');
+});
+
+test('a rename in the Claude app reaches the page on the next sweep, and wins over the transcript\'s title', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = path.join(home, '.claude/projects/-w/s1');
+  fs.mkdirSync(path.dirname(dir), { recursive: true });
+  fs.writeFileSync(dir + '.jsonl', jsonl([user('hi'), answer('Done.'), turnEnd]));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'custom-title.json'), JSON.stringify({ customTitle: 'From Claude Code' }));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' });
+  const file = path.join(home, 'Library/Application Support/Claude/claude-code-sessions/a/b/local_x1.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ sessionId: 'local_x1', cliSessionId: 's1', title: 'From the app' }));
+  await until(async () => (await s1(base)).title === 'From the app', 'the sweep to pick up the app\'s title');
+  fs.writeFileSync(file, JSON.stringify({ sessionId: 'local_x1', cliSessionId: 's1', title: 'Renamed in the app' }));
+  await until(async () => (await s1(base)).title === 'Renamed in the app', 'the sweep to pick up the app rename');
+});
+
 test('a subagent whose start the hooks missed is found from its transcript by the sweep, while its session is working', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, agentEnv(600));
@@ -672,4 +704,18 @@ test('a preview takes only the sessions from the app\'s stream, and reconnects w
   }, 'the preview to show the second stream\'s sessions');
   assert.ok(connections >= 2, `the preview connected ${connections} time(s)`);
   assert.ok(![...seen].some(ids => ids.includes('pr')), `the PR list showed up as sessions: ${[...seen].join(' | ')}`);
+});
+
+test('page files always revalidate: Cache-Control no-cache, and a 304 when the ETag still matches', async t => {
+  const base = await serve(t);
+  for (const url of ['/', '/index.html', '/page/pencil.js', '/icon.png']) {
+    const res = await fetch(base + url);
+    assert.strictEqual(res.status, 200, url);
+    assert.strictEqual(res.headers.get('cache-control'), 'no-cache', url);
+    const again = await fetch(base + url, { headers: { 'If-None-Match': res.headers.get('etag') } });
+    assert.strictEqual(again.status, 304, url);
+    assert.strictEqual(again.headers.get('cache-control'), 'no-cache', url);
+    assert.strictEqual((await fetch(base + url, { headers: { 'If-None-Match': '"other"' } })).status, 200, url);
+  }
+  assert.strictEqual((await fetch(base + '/page/nope.js')).status, 404);
 });

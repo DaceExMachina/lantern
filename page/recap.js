@@ -61,8 +61,8 @@ function constellation(stars, early, gutter, axis) {
 }
 
 // A session's day, as a card like a moth's, docked just below the recap (or above it when a short window has no room
-// below), so it never covers the ribbon or the constellation. Its facts sit on the left and its PRs on the right, with
-// rows reserved for six of them, so it keeps one height from session to session. Hovering a star shows its card, and
+// below), so it never covers the ribbon or the constellation. Its facts sit on the left and its PRs on the right, and it's as
+// tall as they are. Hovering a star shows its card, and
 // moving to another switches it; a click or tap pins it (the star is ringed) so the pointer can go down to its links,
 // until the same star, empty space or Escape unpins it. `ongoing` is today's last moment, so a session still running
 // ends "now".

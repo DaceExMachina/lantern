@@ -67,12 +67,11 @@ const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
 // Session moths' homes (state.js sync hands them out): n spots spread evenly round an oval about the lantern, clear of
 // every lantern's body. It leaves out the arc at the bottom within 150 to either side of the middle, where the candle's
 // stand is, and the one at the top within 60, where the string or chain hangs. The i-th, clockwise from the bottom left;
-// a moth doubling up on a taken spot (`layer` 1, 2...) sits a little further in. Each session wanders around its home.
+// a moth doubling up on a taken spot (`layer` 1, 2...) sits a little further in, and half a spot round. Each session wanders around its home.
 function ringHome(i, n, layer = 0) {
-  const low = Math.asin(150 / 225), high = Math.asin(60 / 225), side = Math.PI - low - high; // the arc each side
-  let a = (i + 0.5) * 2 * side / n;
+  const k = 1 - 0.18 * layer, low = Math.asin(Math.min(1, 150 / 225 / k)), high = Math.asin(60 / 225 / k), side = Math.PI - low - high; // the arc each side
+  let a = (i + 0.5 + layer / 2) * 2 * side / n; // a second layer sits between two spots, so no two share a direction
   if (a > side) a += 2 * high; // over the top
-  const k = 1 - 0.18 * layer;
   return [340 + 225 * k * Math.cos(Math.PI / 2 + low + a), 320 + 235 * k * Math.sin(Math.PI / 2 + low + a)];
 }
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];

@@ -288,7 +288,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -648,17 +648,27 @@ final class LanternServer {
             self.route(req, c)
         }
     }
-    func respond(_ c: NWConnection, _ status: Int, _ type: String? = nil, _ body: Data = Data()) {
-        let reason = [200: "OK", 204: "No Content", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"][status] ?? ""
-        var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\n"
+    func respond(_ c: NWConnection, _ status: Int, _ type: String? = nil, _ body: Data = Data(), headers: String = "") {
+        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"][status] ?? ""
+        var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\n" + headers
         if let type { head += "Content-Type: \(type)\r\n" }
-        if status != 204 { head += "Content-Length: \(body.count)\r\n" }
+        if status != 204 && status != 304 { head += "Content-Length: \(body.count)\r\n" }
         c.send(content: Data((head + "\r\n").utf8) + body, completion: .contentProcessed { _ in c.cancel() })
     }
     func write(_ c: NWConnection, _ text: String) {
         c.send(content: Data(text.utf8), completion: .contentProcessed { error in
             if error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() }
         })
+    }
+
+    // A page file. `no-cache` makes browsers ask every time (heuristic caching kept a phone on old files after updates), and
+    // the ETag (modification time and size) lets that ask end in a 304 with no body when nothing changed.
+    func serveFile(_ c: NWConnection, _ req: Request, _ path: String, _ type: String) {
+        guard let data = FileManager.default.contents(atPath: web + path), let mtime = fileTimes(web + path)?.mtime else { return respond(c, 404) }
+        let etag = "\"\(Int(mtime))-\(data.count)\""
+        let headers = "Cache-Control: no-cache\r\nETag: \(etag)\r\n"
+        if req.headers["if-none-match"] == etag { return respond(c, 304, headers: headers) }
+        respond(c, 200, type, data, headers: headers)
     }
 
     func route(_ req: Request, _ c: NWConnection) {
@@ -825,13 +835,11 @@ final class LanternServer {
         if req.method == "GET" && req.url == "/stats" {
             return stats.report(warmGoal: warmGoal) { self.respond(c, 200, "application/json", Data(jsonText($0).utf8)) }
         }
-        let icons = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
-        if let type = icons[req.url] { return respond(c, 200, type, FileManager.default.contents(atPath: web + req.url) ?? Data()) }
+        let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
-        if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil, let js = FileManager.default.contents(atPath: web + page) {
-            return respond(c, 200, "text/javascript; charset=utf-8", js)
-        }
-        if page == "/" || page == "/index.html" { return respond(c, 200, "text/html; charset=utf-8", FileManager.default.contents(atPath: web + "/index.html") ?? Data()) }
+        if let type = files[page] { return serveFile(c, req, page, type) }
+        if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil { return serveFile(c, req, page, "text/javascript; charset=utf-8") }
+        if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
         respond(c, 404)
     }
 }

@@ -76,6 +76,8 @@ function enterZone(zone) {
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 function clickZone(zone, shift) { const a = areas.get(zone); (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
+// A tap shows the area's card; tapping the same moth again puts it away. (The card's own click runs the action.)
+function tapZone(zone) { if (hovered === areas.get(zone)?.target) hideCard(); else enterZone(zone); }
 function hideCard() { hovered = null; $('card').classList.remove('show'); }
 
 function renderCard() {
