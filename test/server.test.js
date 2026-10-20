@@ -256,7 +256,7 @@ test('the PR lists are sent when they change, not with every snapshot', async t 
 });
 
 // A badge earned live goes out once as `event: badge`, for the page's flash: not again when it's earned again that day,
-// and never in a page's opening burst (a reload or reconnect). Ten agents in one session earn Hive Mind.
+// not when an earlier day had it (see the next test), and never in a page's opening burst (a reload or reconnect). Ten agents in one session earn Hive Mind.
 test('a badge earned live reaches open pages once, and never on reconnect', async t => {
   const base = await serve(t), agent = n => ({ ...toolCall(UUID(1)), agent_id: `agent-${n}` });
   const badges = blocks => blocks.filter(b => b.startsWith('event: badge'));
@@ -268,6 +268,19 @@ test('a badge earned live reaches open pages once, and never on reconnect', asyn
   assert.deepStrictEqual(badges(first), ['event: badge\ndata: {"id":"hive_mind"}']);
   const again = await streamed(base, () => post(base, '/event', agent(11)));
   assert.deepStrictEqual([...badges(again.opening), ...badges(again)], []);
+});
+
+// The swarm is for the first time a badge is ever earned. Hive Mind earned yesterday: earning it again today plays nothing,
+// but it still gets its row and shows in the stats panel's week (/stats) next to yesterday's.
+test('a badge earned on an earlier day gets no flash, but still lands in the stats', async t => {
+  const dayOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const ago = new Date(Date.now() - 86400000);
+  let home;
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, ago.getTime(), ago.getTime() + 1000]],
+    `INSERT INTO achievements (id, day, time) VALUES ('hive_mind', '${dayOf(ago)}', ${ago.getTime()});`) }, h => home = h);
+  const blocks = await streamed(base, () => Promise.all(Array.from({ length: 10 }, (_, n) => post(base, '/event', { ...toolCall(UUID(1)), agent_id: `agent-${n}` }))));
+  assert.deepStrictEqual(blocks.filter(b => b.startsWith('event: badge')), []);
+  await until(async () => (await (await fetch(base + '/stats')).json()).achievements.filter(a => a[0] === 'hive_mind').map(a => a[1]).length === 2, 'both days of Hive Mind in the stats');
 });
 
 // Transcripts on disk, for the seeding cases: one JSON object per line.

@@ -195,7 +195,7 @@ final class LanternServer {
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_CONFIG_DIR = (dir as NSString).expandingTildeInPath }
         stats = Stats(data + "/stats.sqlite")
         stats.dayStart = clockMinutes(settings["dayStart"]) ?? 0
-        // a badge just earned flashes on the open pages; only live, never in a new page's opening burst
+        // a badge earned for the first time ever flashes on the open pages (repeats just land in the stats); only live, never in a new page's opening burst
         stats.onEarn = { [unowned self] id in self.send("event: badge\ndata: \(jsonText(["id": id]))\n\n") }
     }
 
