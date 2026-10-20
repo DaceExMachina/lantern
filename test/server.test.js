@@ -487,12 +487,27 @@ test('an old "graveyard" setting is read as "stale"', async t => {
 });
 
 // The page gets the first word of the name on the Claude Code account (for the candle's pencil, page/pencil.js), the
-// display name if it has one, else the full name.
+// display name if it has one, else the full name. With no CLAUDE_CONFIG_DIR, Claude Code keeps the account in ~/.claude.json.
+const account = oauthAccount => JSON.stringify({ oauthAccount });
 test('the page gets the first name off the Claude Code account', async t => {
-  for (const [account, name] of [[{ displayName: 'jerrett smith', fullName: 'Someone Else' }, 'jerrett'], [{ displayName: ' ', fullName: 'Jerrett Smith' }, 'Jerrett']]) {
-    const base = await serve(t, { '.claude.json': JSON.stringify({ oauthAccount: account }) });
-    assert.strictEqual((await snapshot(base)).name, name, JSON.stringify(account));
+  for (const [names, name] of [[{ displayName: 'jerrett smith', fullName: 'Someone Else' }, 'jerrett'], [{ displayName: ' \n', fullName: 'Jerrett\tSmith' }, 'Jerrett']]) {
+    const base = await serve(t, { '.claude.json': account(names) }, () => {}, { CLAUDE_CONFIG_DIR: undefined });
+    assert.strictEqual((await snapshot(base)).name, name, JSON.stringify(names));
   }
+});
+
+// With CLAUDE_CONFIG_DIR set, Claude Code keeps .claude.json in that folder, and the one in HOME is someone else's.
+test('the first name comes from the .claude.json in CLAUDE_CONFIG_DIR when that\'s set', async t => {
+  const base = await serve(t, { '.claude/.claude.json': account({ displayName: 'Jerrett' }), '.claude.json': account({ displayName: 'Stale' }) });
+  assert.strictEqual((await snapshot(base)).name, 'Jerrett');
+});
+
+// A .claude.json that doesn't parse falls back to the Mac's own name.
+test('a malformed .claude.json gives the Mac\'s first name', async t => {
+  const base = await serve(t, { '.claude/.claude.json': '{"oauthAccount": {"displayName": "Jerrett"' });
+  const mac = execFileSync('id', ['-F'], { encoding: 'utf8' }).trim().split(/\s+/)[0];
+  assert.ok(mac, 'this Mac user has a full name to fall back to');
+  assert.strictEqual((await snapshot(base)).name, mac);
 });
 
 // npm run preview: hooks only reach the live app, so a preview follows the app's /events and shows its sessions as they
