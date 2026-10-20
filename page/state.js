@@ -2,7 +2,7 @@
 
 let sessions = [];
 const moths = new Map(); // key -> moth
-let seenWaiting = new Set(), nextUp = 0;
+let seenWaiting = new Set(), nextUp = {}; // nextUp: where each status bar count's clicks have got to
 // ---- state from server -------------------------------------------------------
 let raw = [], quietUntil = 0, reviews = [];
 // from settings.json: when quiet hours end and the day rollover, when a stats day starts ("HH:MM"), and which agent
@@ -15,6 +15,9 @@ let violetAt = Date.now();
 // quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
 const quiet = () => quietUntil > Date.now();
 const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
+// Which of the status bar's counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
+// waits, snoozed (until it does something new, or for quiet hours) or needing me.
+const restOf = s => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
 
 function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
@@ -62,26 +65,26 @@ function sync() {
 
   // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
   const working = sessions.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length;
-  const waiting = sessions.filter(s => s.state === 'waiting' && !s.snoozed);
-  const snoozed = sessions.filter(s => s.state === 'waiting' && s.snoozed).length;
+  // each count's sessions, longest waiting first (sleeping ones that aren't waiting after, in a fixed order)
+  const of = rest => sessions.filter(s => restOf(s) === rest).sort((a, b) => (a.waitingSince || Infinity) - (b.waitingSince || Infinity) || (a.id < b.id ? -1 : 1));
+  const waiting = of('need'), snoozed = of('snoozed').length, sleeping = of('sleeping').length;
+  // a count that opens its sessions one at a time: each click moves on to the next one
+  const cycler = (rest, text, title) => {
+    const b = document.createElement('button');
+    b.className = 'next'; b.textContent = text; b.title = title;
+    b.onclick = () => { const q = of(rest), s = q[nextUp[rest] = ((nextUp[rest] ?? -1) + 1) % q.length]; if (s) post('/focus', { id: s.id }); };
+    return b;
+  };
   const st = $('status');
   st.className = waiting.length ? 'waiting' : '';
   if (!sessions.length) st.textContent = 'quiet night, no sessions';
   else {
     st.replaceChildren(`${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working`);
-    if (waiting.length) {
-      // "N need you" opens the session that's waited longest; each click moves on to the next one
-      const next = document.createElement('button');
-      next.className = 'next'; next.textContent = `${waiting.length} need${waiting.length > 1 ? '' : 's'} you`;
-      next.title = 'Open the session that has waited longest';
-      next.onclick = () => {
-        const queue = sessions.filter(s => s.state === 'waiting' && !s.snoozed).sort((a, b) => a.waitingSince - b.waitingSince);
-        const s = queue[nextUp++ % queue.length];
-        if (s) post('/focus', { id: s.id });
-      };
-      st.append(' · ', next);
-    }
-    if (snoozed || quiet()) st.append(` · ${snoozed ? `${snoozed} ` : ''}snoozed${quiet() && quietUntil < QUIET_FOREVER ? ` until ${quietEndLabel()}` : ''}`);
+    if (waiting.length) st.append(' · ', cycler('need', `${waiting.length} need${waiting.length > 1 ? '' : 's'} you`, 'Open the session that has waited longest'));
+    const until = quiet() && quietUntil < QUIET_FOREVER ? ` until ${quietEndLabel()}` : '';
+    if (snoozed) st.append(' · ', cycler('snoozed', `${snoozed} snoozed`, 'Open the snoozed sessions one at a time'), until);
+    else if (quiet()) st.append(` · snoozed${until}`);
+    if (sleeping) st.append(' · ', cycler('sleeping', `${sleeping} sleeping`, 'Open the sleeping sessions one at a time'));
     if (waiting.length) violetAt = Date.now();
     else if (!quiet() && Date.now() - violetAt >= 60000) {
       const m = Math.floor((Date.now() - violetAt) / 60000), warm = document.createElement('span');

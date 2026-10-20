@@ -36,6 +36,18 @@ es.addEventListener('settings', e => {
   staleOn = st.stale !== false; $('staleToggle').checked = staleOn;
   sync();
 });
+// The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
+// 9px, and only wraps past that. Text scales with its font size, so one measurement gives the size that fits.
+function fitStatus() {
+  const st = $('status'), cs = getComputedStyle(st), pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  st.style.fontSize = st.style.whiteSpace = '';
+  const fit = (st.clientWidth - pad) / (st.scrollWidth - pad), size = Math.floor(10 * parseFloat(cs.fontSize) * fit) / 10;
+  if (fit >= 1) return;
+  st.style.fontSize = `${Math.max(9, size)}px`;
+  if (size < 9) st.style.whiteSpace = 'normal';
+}
+new MutationObserver(fitStatus).observe($('status'), { childList: true, subtree: true, characterData: true });
+addEventListener('resize', fitStatus);
 setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
 es.onerror = () => {
   $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline';
@@ -109,13 +121,19 @@ const zoneFor = (/** @type {MouseEvent} */ e) => {
   const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('zones').getScreenCTM().inverse());
   return zoneAt([...$('zones').children].filter(z => z instanceof SVGElement && z.style.display !== 'none' && z.style.pointerEvents !== 'none'), p.x, p.y);
 };
-for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => enterZone(zoneFor(e)));
-$('zones').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 700); });
-$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) clickZone(z, e.shiftKey); });
+// Touch has no hover, so a tap stands in: it shows the card (tapZone), and tapping the card then does what a click does.
+// Taps never run a hover area's click action or hide the card on pointerleave, which a finger lifting would trigger at once.
+// A long press reaches snooze through the contextmenu event below.
+const isTouch = (/** @type {PointerEvent} */ e) => e.pointerType === 'touch';
+for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => isTouch(e) || enterZone(zoneFor(e)));
+$('zones').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 700); });
+$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey); });
+// a tap anywhere else puts the card away
+addEventListener('click', e => { if (isTouch(e) && !(/** @type {Element} */ (e.target)).closest('#card, #zones')) hideCard(); });
 $('zones').addEventListener('contextmenu', e => areas.get(zoneFor(e))?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
-$('card').addEventListener('pointerleave', () => { hideTimer = setTimeout(hideCard, 400); });
+$('card').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 400); });
 
 try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
 box.onchange = () => {

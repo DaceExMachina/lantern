@@ -76,6 +76,8 @@ function enterZone(zone) {
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 function clickZone(zone, shift) { const a = areas.get(zone); (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
+// A tap shows the area's card; tapping the same moth again puts it away. (The card's own click runs the action.)
+function tapZone(zone) { if (hovered === areas.get(zone)?.target) hideCard(); else enterZone(zone); }
 function hideCard() { hovered = null; $('card').classList.remove('show'); }
 
 function renderCard() {
@@ -88,7 +90,7 @@ function renderCard() {
   const rows = [h], name = s.title || project(s);
   {
     h.textContent = name;
-    chip.textContent = s.reported ? 'reported back' : s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'snoozed' : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
+    chip.textContent = s.reported ? 'reported back' : s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? (s.forGood ? 'sleeping' : 'snoozed') : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state;
     chip.className = 'chip ' + (s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'idle' : s.state);
     if (s.state !== 'working' && s.note) rows.push(line(s.note, s.state === 'waiting' ? 'note' : ''));
     if (s.state === 'waiting' && s.forYou) rows.push(...forYouRows(s.forYou));
@@ -105,7 +107,7 @@ function renderCard() {
       rows.push(line(`Agents (${s.subagents.length})`, 'agents'));
       for (const a of s.subagents) rows.push(line(a.description || a.type || 'subagent', 'agent'), ...(a.activity ? [line(`Now: ${a.activity}`, 'dim')] : []));
     }
-    if (s.forGood) rows.push(line('Snoozed for good', 'dim'));
+    if (s.forGood) rows.push(line('Sleeping until you wake it', 'dim'));
     else if (s.snoozed && s.state === 'waiting') rows.push(line('Snoozed until it does something new', 'dim'));
     rows.push(line(`${project(s)} · running ${ago(now - s.started)} · active ${ago(now - s.last)} ago`, 'dim'));
   }
