@@ -313,14 +313,16 @@ function liftDust(p, x, y, dt) {
 // lanes opening as it burns harder (`from`, the strength each opens at), so it smokes more often the busier things get.
 // It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
 // scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
-// passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while it's still smoking.
+// passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while it's still smoking. At most `smokers`
+// moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
+// none of it is ever dropped.
 // How big the smoke's Ss are, and how long as it rises, in scene units (background.js smokeBend)
 const smokeS = {
   size: devSlider('Smoke', 'smokecurl', 'S size', 0, 60, 1, 24, 'How far the smoke swings aside as it curls into Ss, once it has risen a second or so', v => { smokeS.size = v; }),
   length: devSlider('Smoke', 'smokewave', 'S length', 20, 300, 5, 90, 'How tall each S of the smoke is', v => { smokeS.length = v; }),
 };
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
-const SMOKE_REL = 3, SINGE_REL = 0.8, TRAIL = [3, 0.2]; // the trail: seconds it's left over, and between points on its path
+const SMOKE_REL = 3, SINGE_REL = 0.8;
 // The flame's plume the lanes let go at `now` (wall ms) burning at `strength`, the earliest begun if two are: its key
 // (lane:slot) and seconds in, or null.
 function smokeAt(now, strength) {
@@ -335,10 +337,9 @@ let flamePlume = null; // the flame's plume going: its key, when it was let go (
 // The smoke this frame. plumes: each [x, y, seconds in, strength, seed, rel, curl, drift, base x, base y], the flame's
 // first, from `tip` (its live tip, null without a bare flame) at the flame's `strength`, then the singes. Each plume's
 // newest smoke rises from its base: the flame's live tip, so its smoke always leaves the flame however it leans. Each of
-// the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where it was
-// left, its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), with an age of -1 parting
-// one moth's trail from the next. At most PLUMES plumes and TRAIL_POINTS points: the newest scorches' smoke goes first,
-// and a moth's that doesn't fit is let go for good, so it never blinks out and back as others come and go.
+// the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where
+// it was left, its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), with an age of -1
+// parting one moth's trail from the next.
 function smoke(now, strength, tip) {
   const plumes = [], trail = [];
   if (!tip) flamePlume = null;
@@ -351,15 +352,12 @@ function smoke(now, strength, tip) {
       plumes.push([...flamePlume.at, (now - flamePlume.from) / 1000, 0.5 + 0.5 * strength, 97 * rand(), SMOKE_REL, 0.5 + rand(), 2 * rand() - 1, ...tip]);
     }
   }
-  const scorched = [...moths.values()].filter(m => m.scorch?.hit && !m.scorch.smokeGone).sort((a, b) => a.scorch.t - b.scorch.t);
-  for (const m of scorched) {
+  for (const m of moths.values()) if (m.scorch?.hit) {
     const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life), now = sc.t + hash(m.key) % 97;
-    if (sc.t - SCORCH.hit < TRAIL[0]) path.push([m.x, m.y, sc.t]);
-    const points = path.map(([x, y, at]) => [x, y, sc.t - at, now]);
-    if (trail.length && points.length) points.unshift([0, 0, -1, 0]);
-    if (plumes.length === PLUMES || trail.length + points.length > TRAIL_POINTS) { sc.smokeGone = true; continue; }
     plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
-    trail.push(...points);
+    if (sc.t - SCORCH.hit < TRAIL[0] && path.at(-1)?.[2] !== sc.t) path.push([m.x, m.y, sc.t]); // joined to the moth, unless it just left a point there
+    if (trail.length && path.length) trail.push([0, 0, -1, 0]);
+    for (const [x, y, at] of path) trail.push([x, y, sc.t - at, now]);
   }
   return { plumes, trail };
 }
@@ -479,9 +477,10 @@ function drawLight(dt, s, { size, flick, pulse }) {
 // starting at a seeded point in the slot's first `window` seconds. A moth must be eligible within `start` of that start,
 // or it waits for the next slot. The flame touches it `hit` seconds in. All in seconds. The schedule reads only the key
 // and the wall clock, so every window (app, panel, screensaver) scorches a moth at the same moments.
-// ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 10 seconds.
-const SCORCH_DEMO = devToggle('Demo', 'scorch', 'scorch demo', false, 'Every moth flies into the candle\'s flame every 10 seconds, failing checks or not (reloads the page)', () => location.reload());
-const SCORCH = SCORCH_DEMO ? { slot: 10, window: 1, length: 9, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
+// ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 15 seconds,
+// as long as its smoke lasts.
+const SCORCH_DEMO = devToggle('Demo', 'scorch', 'scorch demo', false, 'Every moth flies into the candle\'s flame every 15 seconds, failing checks or not (reloads the page)', () => location.reload());
+const SCORCH = SCORCH_DEMO ? { slot: 15, window: 1, length: 13, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
 const SCORCH_CHAR = '#5B4636', SMOKE_COL = '#B4A8B4'; // the wings' char, a warm brown; smoke, a pale warm grey
 // The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
 let tongue = null;
@@ -509,7 +508,7 @@ function scorchStep(m, flying, now = Date.now()) {
   if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
   const at = scorchClock(m.key, now), sc = m.scorch;
   if (!sc) {
-    if (!at || at.t >= SCORCH.start) return null;
+    if (!at || at.t >= SCORCH.start || [...moths.values()].filter(o => o.scorch).length >= smokers) return null; // too many smoking: next time
     const rand = seeded(hash(`${m.key}:scorch:${at.slot}:touch`));
     m.scorch = { slot: at.slot, t: at.t, hit: false, flying, rand, up: 0.25 + 0.25 * rand(), side: stretch(m.home)[0] < tongue.cx ? -1 : 1 };
   } else if (!at || at.slot !== sc.slot || !style.scorches || (!sc.hit && !red())) return m.scorch = null;

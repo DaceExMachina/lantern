@@ -283,7 +283,7 @@ test('smoke bends downwind the higher it has risen, and curls into Ss that swell
     assert.ok(Math.abs(still(age + 0.2, n, 1) - still(age, n, 1)) < 15, `neighbours ${TRAIL_STEP}s apart stay together, at ${age.toFixed(1)}s`);
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
 });
-const TRAIL_STEP = 0.2;
+const TRAIL_STEP = 0.25;
 test('a scorched moth trails one band of smoke along its path, aging toward its old end, and bounded', t => {
   const wall = clock.wall;
   t.after(() => { clock.wall = wall; }); // the next test's windows start where they would without this one
@@ -304,14 +304,18 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   assert.notDeepStrictEqual(smokeTrail().at(-1).slice(0, 2), [m.x, m.y], 'no longer joined to the moth');
   while (m.scorch && m.scorch.t < hit + TRAIL[0] + life) step([m]);
   assert.strictEqual(smokeTrail().length, 0, 'gone');
-  // several moths at once: each its own band, parted by a point aged -1, never past TRAIL_POINTS
-  const ms = ['sess-t1', 'sess-t2', 'sess-t3'].map(make);
-  ctx.run(`scorchClock = (key, now) => ({ slot: 0, t: (now - ${clock.wall}) / 1000 })`); // every moth's episode starting now, to fill the trail
-  for (let i = 0; i < 400 && !ms.every(n => n.scorch?.hit && n.scorch.t > hit + 2.5); i++) step(ms);
-  const c = smokeTrail(), breaks = c.filter(p => p[2] === -1).length;
-  assert.ok(ms.every(n => n.scorch?.hit), 'all three scorched');
-  assert.ok(c.length > TRAIL_POINTS / 2 && c.length <= TRAIL_POINTS, `whole trails, up to the limit: ${c.length}`);
-  assert.ok(breaks >= 1, `parted between moths: ${breaks}`);
+  // twelve moths due at once: only `smokers` start (the rest wait their turn), each its own band, parted by a point aged
+  // -1, every point of every trail drawn, within TRAIL_POINTS
+  ctx.moths.delete(m.key); // its episode still runs, and would take a turn
+  const ms = Array.from({ length: 12 }, (_, i) => make(`sess-t${i}`)), smokers = ctx.run('smokers');
+  ctx.run(`scorchClock = (key, now) => ({ slot: 0, t: (now - ${clock.wall}) / 1000 })`); // every moth's episode starting now
+  for (let i = 0; i < 80; i++) step(ms);
+  const scorched = ms.filter(n => n.scorch?.hit), c = smokeTrail();
+  assert.strictEqual(scorched.length, smokers, `${smokers} smoking, the rest waiting`);
+  const drawn = scorched.reduce((sum, n) => sum + n.scorch.trail.length + (n.scorch.trail.at(-1)[2] === n.scorch.t ? 0 : 1), 0) + smokers - 1; // each trail, joined to its moth, parted from the next
+  assert.strictEqual(c.length, drawn, 'every point drawn');
+  assert.strictEqual(c.filter(p => p[2] === -1).length, smokers - 1, 'parted between moths');
+  assert.ok(ctx.run('SMOKERS_MAX * (Math.ceil(TRAIL[0] / TRAIL[1]) + 3) <= TRAIL_POINTS && 1 + SMOKERS_MAX <= PLUMES'), 'the most that can smoke fit the shader');
 });
 
 test('every window scorches a moth at the same moments, whatever its own clocks and whenever it opened, with no Math.random', () => {

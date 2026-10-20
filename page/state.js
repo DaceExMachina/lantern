@@ -150,11 +150,17 @@ function makeSubMoth(key, parentId, size) {
     phase: rand() * 10, cool: 0, leaving: false });
 }
 
+// A scorched moth's smoke trail (frame.js smoke, background.js trailSmoke): the seconds it's left over, and between points
+// on its path. Up to SMOKERS_MAX moths smoke at once (frame.js smokers), and TRAIL_POINTS holds all their trails: each
+// one's points, one joined to the moth, and one parting it from the next.
+const TRAIL = [3, 0.25], SMOKERS_MAX = 6;
+let smokers = devSlider('Smoke', 'smokers', 'smoking moths', 1, SMOKERS_MAX, 1, 4, 'How many moths can be scorched and smoking at once; another waits for its next turn', v => { smokers = v; });
+const TRAIL_POINTS = SMOKERS_MAX * (Math.ceil(TRAIL[0] / TRAIL[1]) + 3);
+const PLUMES = 1 + SMOKERS_MAX; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
+
 // The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
 // tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
 // fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
-const PLUMES = 8; // plumes of smoke drawn at once (frame.js smoke, background.js plume)
-const TRAIL_POINTS = 32; // points on scorched moths' smoke trails, drawn at once (frame.js smoke, background.js trailSmoke)
 const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
 // a number as a GLSL float, exactly (a whole number gets its .0; any other already has a point or an exponent)
 const glf = v => Number.isInteger(v) ? v.toFixed(1) : String(v);
