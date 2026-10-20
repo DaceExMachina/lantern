@@ -256,15 +256,12 @@ function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5
 LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: 'url(#cdBronze)', dark: 'none', ink: '#160A03', line: 1.2,
   lip: [0, '#160A03'], rim: [0, 0, 0] }; // bronze, shaded across each curve by one gradient lit by the flame (frame.js drawShine)
 // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
-// `column` either side of the middle that runs down to the window's bottom edge, its veins and vine fading into it from
-// fade[0] to fade[1]. The
-// candlestick's foot stands on it, under a stem STEM tall between the pan's neck and the foot's collar.
+// `column` either side of the middle that runs down to the window's bottom edge. The candlestick's foot stands on it, under a stem STEM tall between the pan's neck and the foot's collar.
 // The candlestick is drawn in its own units, its pan at `dish`, its stem from the pan's neck at `neck` down to the foot's
 // collar at `collar` and its foot on a slab at `slab`, and placed from there (CANDLE's stick).
 const DRAWN = { dish: 426, neck: 460, collar: 518, slab: 549 };
 const STEM = 41;
 const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), r: 112, depth: 14, column: 85 };
-PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
 // the vine (CANDLE's vineTop): its trunk is laid out from `anchor` up, curving across the front of the column to `split`,
 // where it divides into its branches; below `anchor` it runs on down as far as the window goes
 // (the split shows 151 below the slab's bottom edge, five times the 30 it first sat)
@@ -279,7 +276,6 @@ const CANDLE = (() => {
   const stick = (/** @type {number[]} */ [x, y]) => /** @type {[number, number]} */ (y <= DRAWN.neck ? [x, y + PILLAR.dish - DRAWN.dish]
     : y >= DRAWN.collar ? [x, y + PEDESTAL.top - DRAWN.slab] : [cx + (x - cx) * k, PILLAR.dish + DRAWN.neck - DRAWN.dish + (y - DRAWN.neck) * k]);
   const Y = y => stick([cx, y])[1];
-  const on = d => d.replace(/(-?[\d.]+) (-?[\d.]+)/g, (_, x, y) => pt(stick([+x, +y]))); // a path of x y pairs, placed
   const WAX = ['#EADBC0', '#CDB894'], DRIP = { lit: ['#F2E6CF', '#CDB690'], dark: ['#D9C6A2', '#B9A27C'] }; // lit, dark side
   // a turned bronze part from its profile, [y, half-width] top to bottom. It closes with its bottom edge's front arc and
   // its top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
@@ -346,15 +342,11 @@ const CANDLE = (() => {
   const VINE = '#5B5129', VINE_INK = '#1F1A0C';
   const thick = d => `<path d="${d}" fill="none" stroke="${VINE_INK}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
     + `<path d="${d}" fill="none" stroke="${VINE}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
-  const knopEdge = x => n(474 + 11 * Math.sqrt(1 - ((x - cx) / 25) ** 2) - 1);
   // the pedestal, by the candlestick's rule, in cool marble lit from the left, its right side in shade as the wax is
   const P = PEDESTAL, left = cx - P.r, slabY = P.top + P.depth, col = P.column, FOOT = 74; // the foot's half-width
   // the domed foot's half-width at drawn height yd, an ogee from the collar's width (20) out to its base ring's (FOOT)
   const dome = yd => 20 + (FOOT - 20) * (u => u * u * (3 - 2 * u))((yd - 523) / 20);
   const MARBLE = { ...K, lit: '#CFC9D8', dark: '#8A8396', ink: '#2A2333' };
-  // a colour fading out down the column
-  const fade = (id, colour, a = 1) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${P.fade[0]}" y2="${P.fade[1]}">`
-    + `<stop offset="0" stop-color="${colour}" stop-opacity="${a}"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></linearGradient>`;
   // every rim of the pedestal is a true ellipse at the slab top's tilt: its depth is T of its width
   const T = sag(P.top, P.r) / P.r, rimRy = r => n(r * T);
   // the point `th` radians round the column from the front (positive to the right), `R` from its middle, at height y
@@ -419,7 +411,7 @@ const CANDLE = (() => {
     return k < 0.45 ? leafOn(end, 15 + 10 * rand(), a * 180 / Math.PI + 90 + (rand() - 0.5) * 50)
       : k < 0.8 ? tendril(end, a, rand() < 0.5 ? 1 : -1, rand) : cluster(end, (rand() - 0.5) * 30, [3, 3, 2, 2, 1], put);
   };
-  const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the trunk leaves the column for the slab
+  const climbEnd = -1.25, climbTop = P.top + 47, climbR = col + 2; // where the trunk leaves the column for the slab
   const climbAt = round(climbR, climbEnd, climbTop);
   // points along a quadratic curve from a (excluded) by c to b
   const quad = (a, c, b, k = 8) => Array.from({ length: k }, (_, i) => { const t = (i + 1) / k, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; });
@@ -464,7 +456,7 @@ const CANDLE = (() => {
     const [R1, th1] = stemAt(1), wrap = [], wrap2 = [];
     for (let th = th1; Math.cos(th) > -0.05; th += 0.08) wrap.push(round(R1, th, P.split - (th - th1) * 14));
     for (let th = th1; Math.cos(th) > -0.05; th -= 0.08) wrap2.push(round(R1, th, P.split - (th1 - th) * 18));
-    limbs.push(branch(wrap, 6, 3), branch(wrap2, 5, 2.5), branch(up, 8, 5, 4));
+    limbs.push(branch(wrap, 6, 3, 0), branch(wrap2, 5, 2.5, 0), branch(up, 8, 5, 4)); // the wraps lie on the stone: no shadow off it
     twigs.push(leafOn(up[3], 18, 60), leafOn(up[7], 22, -40), leafOn(up[15], 18, 50), leafOn(up[23], 16, -30), leafOn(up[27], 14, -50), tendril(up[19], 0.2, 1, rand),
       cluster(wrap[Math.min(5, wrap.length - 1)], -6, [3, 3, 2, 1], useGrapes));
     BRANCHES.push({ name: 'wrap', pts: wrap, leaves: leavesAlong(wrap, 3, 15, rand) }, { name: 'wrap2', pts: wrap2, leaves: leavesAlong(wrap2, 4, 15, rand) });
@@ -488,7 +480,7 @@ const CANDLE = (() => {
       }
       runs.filter(run => run.length > 3).forEach((run, j) => {
         const pts = run.map(q => q[0]);
-        limbs.push(limb(pts, run.map(q => q[1]), r, 6));
+        limbs.push(limb(pts, run.map(q => q[1]), r)); // on the stone, so no shadow off it
         BRANCHES.push({ name: `bigR${j}`, pts, leaves: leavesAlong(pts, Math.max(3, Math.round(pts.length / 9)), 15, r) });
         if (!j) twigs.push(cluster(pts[Math.round(0.3 * (pts.length - 1))], 0, [3, 3, 2, 2, 1], useGrapes));
         else twigs.push(tendril(pts[pts.length - 1], -2.6, -1, r));
@@ -532,7 +524,6 @@ const CANDLE = (() => {
     <path d="M${n(cx + K.side * col)} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.dark}"/>
     <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${bottom}`).join('')}" fill="none" stroke="#8E869B" stroke-opacity=".6" stroke-width=".8"/>
     <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
-    <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
     ${trunk(bottom)}${vineTop}`;
   // the slab: a band between its top rim and its bottom rim's front, lit from the left, in an ink outline
   const slabD = `M${left} ${P.top}V${slabY}A${P.r} ${rimRy(P.r)} 0 0 0 ${cx + P.r} ${slabY}V${P.top}Z`;
@@ -556,7 +547,7 @@ const CANDLE = (() => {
       run = [q];
     }
     runs[run[0].front ? 'front' : 'back'] += limb(run.map(r => r.p), run.map(r => 2.8 - 1.4 * r.i / 120), rand);
-    runs.front += [18, 47, 71, 96].map((i, j) => leafOn(holder[i].p, 15 - j, (j % 2 ? 1 : -1) * 70)).join('') + tendril(holder[120].p, -1.2, 1, rand);
+    runs.front += [18, 47, 71, 96].map((i, j) => leafOn(holder[i].p, 15 - j, (j % 2 ? 1 : -1) * 70)).join('') + tendril(holder.filter(q => q.front).at(-1).p, -1.2, 1, rand); // off its last turn in front
     return runs;
   })();
   // over the slab's edge and across its top to the foot, where it goes on up the candlestick
@@ -567,20 +558,19 @@ const CANDLE = (() => {
     + (s => limb(s.pts, s.pts.map((_, j) => 2.4 - 1.4 * j / s.pts.length), overRand) + tendril(s.pts[s.pts.length - 1], s.a, 1, overRand))(shoot(over[12], -2.2, 9, 3, 0.16, 0.05, overRand))
     + leafOn(over[7], 24, -75) + leafOn(over[17], 19, -20) + leafOn(over[21], 15, 40);
   // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
-  const pedestal = `<g class="cdPedestal"><g id="cdColumn">${column(P.fade[1])}</g>
+  const pedestal = `<g class="cdPedestal"><g id="cdColumn">${column(P.anchor)}</g>
     <clipPath id="cdSlab"><path d="${slabD}"/></clipPath><path d="${slabD}" fill="${MARBLE.lit}"/>
     <rect x="${n(cx + K.side * P.r)}" y="${P.top - 30}" width="${P.r}" height="${P.depth + 60}" fill="${MARBLE.dark}" clip-path="url(#cdSlab)"/>
     <path d="${slabD}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
     <ellipse cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="#E2DDE8" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
     <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
-    <path d="M${left + 12} ${P.top + 10}q26 7 42 0t36 7q20 2 26 -2M${left + 158} ${P.top + 16}q16 -2 40 -7" fill="none" stroke="#968DA4" stroke-width=".7" opacity=".6"/><!-- the slab -->
     <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${rimRy(FOOT)}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
     <g id="cdPencil" transform="translate(${pt(over[17])}) rotate(13) scale(.8)"></g><!-- Jerrett's pencil (pencil.js), under the vine -->
     ${cluster(edgeAt, 8, [4, 4, 3, 3, 2, 1], grapes)}${overVine}${leafOn(edgeAt, 12, 150)}
     <!-- the vine, up the column, over the slab's edge and across it to the foot, a bunch hanging off it at the edge -->
     <g id="cdPedestalGlints">${grapeGlints(0)}</g></g>`;
   const onPedestal = GRAPES.length; // the grapes drawn so far are the pedestal's bunch
-  // the knop, placed in the scene (its gadroons are drawn in DRAWN units and placed with on)
+  // the knop, placed in the scene
   const knop = { cy: Y(474), rx: 25 * k, ry: 11 * k };
   const back = `<defs><clipPath id="cdWax"><path d="${PILLAR_D}"/><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
       <clipPath id="cdDrips"><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
@@ -590,8 +580,7 @@ const CANDLE = (() => {
       <linearGradient id="cdBronze">${[[0, '#21140A'], [0.15, '#3D2412'], [0.34, '#6E4220'], [0.44, '#B7885A'], [0.56, '#6E4220'], [0.78, '#3D2412'], [1, '#21140A']]
         .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient><!-- across each part's curve: dark edges, a highlight the flame lights (frame.js drawShine) -->
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
-      <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      ${fade('cdColLine', '#8E869B', 0.6)}</defs>
+      <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>
     ${pedestal}${holderVine.back}<!-- the vine's back turns, behind the candlestick -->
     ${ring('cdBase', Y(543), FOOT, 8)}
     ${turned('cdFoot', profile(Y(523), Y(543), y => dome(y - Y(523) + 523)))}<!-- the domed foot, an ogee -->
@@ -600,8 +589,7 @@ const CANDLE = (() => {
     ${ring('cdStemRing', Y(485), 10 * k, 4 * k)}
     <ellipse id="cdKnop" cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="${K.lit}"/>
     <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>
-<!-- the knop, carved in gadroons underneath -->
-    <path d="${on([324, 332, 340, 348, 356].map(x => `M${x} 476.5Q${n(x + (x - cx) * 0.08)} ${n((476.5 + knopEdge(x)) / 2)} ${n(x + (x - cx) * 0.04)} ${knopEdge(x)}`).join(''))}" fill="none" stroke="#3C2412" stroke-width=".8"/>
+<!-- the knop -->
     ${ring('cdNeck', Y(452), 14, Y(463) - Y(452))}<!-- down to the knop's top -->
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#24140A"/><!-- the pan, its inside in the pillar's shadow -->
