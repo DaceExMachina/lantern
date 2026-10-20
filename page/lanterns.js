@@ -343,13 +343,13 @@ const CANDLE = (() => {
   // the crown's back wall, ragged and melted round at the shoulders; its front wall runs a unit below (the lip)
   // (each point is across the pillar from -1 to 1, and up from the rim)
   const { r: R, rim } = PILLAR, side = cx + K.side * R; // the pillar's half-width and rim, and where its dark side starts
-  const CROWN = [[-1, 20], [-1, -1], [-0.6, -2.2], [-0.24, -1], [0.24, -0.8], [0.6, -1.6], [1, -1], [1, 20]]
+  const CROWN = [[-1, 9.5], [-1, -1], [-0.6, -2.2], [-0.24, -1], [0.24, -0.8], [0.6, -1.6], [1, -1], [1, 20]] // the left starts where smooth() ends the right's curve, so the shoulders mirror
     .map(([u, dy]) => [cx + u * R, rim + dy]);
   const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H${cx - R}Z`;
   // drips from the crown: [middle, width, where it ends, and where a second bulge sits on the way down], each ending in a
   // bulb 1.3 times its width; the main one runs out of the notch. Each middle is across the pillar from -1 to 1, and the
   // drops are below the rim.
-  const DRIPS = [[-0.88, 6, 76], [-0.58, 4.5, 22], [-0.2, 5.5, 48], [0.18, 4, 16], [0.56, 8, 98, 60], [0.88, 5, 56]]
+  const DRIPS = [[-0.78, 6, 76], [-0.5, 4.5, 22], [-0.2, 5.5, 48], [0.18, 4, 16], [0.56, 8, 98, 60], [0.8, 5, 56]]
     .map(([u, w, e, bulge]) => [cx + u * R, w, rim + e, ...bulge ? [rim + bulge] : []]);
   const NOTCH = DRIPS[4][0]; // the main drip's middle
   const dripD = (/** @type {number[]} */ [c, w, e, bulge]) => {
