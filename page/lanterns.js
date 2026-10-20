@@ -436,7 +436,24 @@ const CANDLE = (() => {
   // every side branch drawn, for the tests: its name, points and where its leaves grow
   const BRANCHES = /** @type {{ name: string, pts: number[][], leaves: number[][] }[]} */ ([]);
   const vineTop = (() => {
-    const rand = seeded(hash('candle:vine:top')), limbs = [], twigs = [];
+    const rand = seeded(hash('candle:vine:top')), limbs = [], twigs = [], behind = [];
+    // A limb winding round the column (points, which are in front, widths): all of it drawn behind the column, which hides
+    // what's behind it so it shows only round its edges, and its turns in front drawn again over the column, so it comes
+    // out from behind the column's edge rather than starting in the air. Its knots are baked into its widths, so the two
+    // layers coincide. Its turns in front, for leaves.
+    const roundAbout = (pts, fronts, ws, r) => {
+      let g = 0;
+      const gw = ws.map(w => { g = 0.7 * g + 0.3 * (2 * r() - 1) + (r() < 0.05 ? 0.7 : 0); return w * Math.max(0.6, 1 + 0.45 * g); }), even = () => 0.5;
+      behind.push(limb(pts, gw, even));
+      const runs = /** @type {number[][]} */ ([]);
+      fronts.forEach((f, i) => { if (f && !fronts[i - 1]) runs.push([]); if (f) runs[runs.length - 1].push(i); });
+      return runs.filter(run => run.length > 3).map(run => {
+        const idx = [...new Set([Math.max(0, run[0] - 1), ...run, Math.min(pts.length - 1, run[run.length - 1] + 1)])]; // meeting the layer behind
+        limbs.push(limb(idx.map(i => pts[i]), idx.map(i => gw[i]), even));
+        return run.map(i => pts[i]);
+      });
+    };
+    const flare = (n, w0, w1) => Array.from({ length: n }, (_, j) => w1 + (w0 - w1) * (1 - j / (n - 1)) + Math.max(0, 3 - j) * 1.4);
     // a limb from the split, flared where it leaves what it grows from, `w0` to `w1` wide
     const branch = (pts, w0, w1, shadow = 6, r = rand) => limb(pts, pts.map((_, j) => w1 + (w0 - w1) * (1 - j / (pts.length - 1)) + Math.max(0, 3 - j) * 1.4), r, shadow);
     // `leaves` leaves spread along `pts` by fraction (from 0.3 to 0.95 of the way), alternating sides, angled off its
@@ -463,10 +480,12 @@ const CANDLE = (() => {
     };
     // up to where the vine climbs over the slab (climbAt), wandering; round the column both ways at the split
     const up = Array.from({ length: 31 }, (_, j) => { const u = j / 30; return [SPLIT[0] + (climbAt[0] - SPLIT[0]) * u + 22 * Math.sin(u * Math.PI) + 6 * Math.sin(u * 10), SPLIT[1] + (climbAt[1] - SPLIT[1]) * u]; });
-    const [R1, th1] = stemAt(1), wrap = [], wrap2 = [];
-    for (let th = th1; Math.cos(th) > -0.05; th += 0.08) wrap.push(round(R1, th, P.split - (th - th1) * 14));
-    for (let th = th1; Math.cos(th) > -0.05; th -= 0.08) wrap2.push(round(R1, th, P.split - (th1 - th) * 18));
-    limbs.push(branch(wrap, 6, 3, 0), branch(wrap2, 5, 2.5, 0), branch(up, 8, 5, 4)); // the wraps lie on the stone: no shadow off it
+    // round the column both ways from the split, on round behind it (lying on the stone, so no shadow off it)
+    const [R1, th1] = stemAt(1), ths = (to, step) => Array.from({ length: Math.floor(Math.abs(to - th1) / 0.08) + 1 }, (_, i) => th1 + step * i);
+    const wrapThs = ths(Math.PI, 0.08), wrap2Ths = ths(-Math.PI, -0.08);
+    const [wrap] = roundAbout(wrapThs.map(th => round(R1, th, P.split - (th - th1) * 14)), wrapThs.map(th => Math.cos(th) > 0), flare(wrapThs.length, 6, 2), rand);
+    const [wrap2] = roundAbout(wrap2Ths.map(th => round(R1, th, P.split - (th1 - th) * 18)), wrap2Ths.map(th => Math.cos(th) > 0), flare(wrap2Ths.length, 5, 2), rand);
+    limbs.push(branch(up, 8, 5, 4));
     twigs.push(leafOn(up[3], 18, 60), leafOn(up[7], 22, -40), leafOn(up[15], 18, 50), leafOn(up[23], 16, -30), leafOn(up[27], 14, -50), tendril(up[19], 0.2, 1, rand),
       cluster(wrap[Math.min(5, wrap.length - 1)], -6, [3, 3, 2, 1], useGrapes));
     BRANCHES.push({ name: 'wrap', pts: wrap, leaves: leavesAlong(wrap, 3, 15, rand) }, { name: 'wrap2', pts: wrap2, leaves: leavesAlong(wrap2, 4, 15, rand) });
@@ -483,20 +502,15 @@ const CANDLE = (() => {
     // a bunch on the first
     (() => {
       const r = seeded(hash('candle:vine:bigR')), R = col + 6, [x0, y0] = up[10], th0 = Math.asin(Math.max(-1, Math.min(1, (x0 - cx) / R)));
-      const turn = 2 * Math.PI * 1.85, base = y0 - R * T * Math.cos(th0), top = P.top + 30, runs = [[]];
-      for (let i = 0; i <= 200; i++) {
-        const u = i / 200, th = th0 + turn * u, p = round(R + 3 * Math.sin(u * 17), th, base + (top - base) * u);
-        if (Math.cos(th) > -0.05) runs[runs.length - 1].push([p, 5 - 3.4 * u]); else if (runs[runs.length - 1].length) runs.push([]);
-      }
-      runs.filter(run => run.length > 3).forEach((run, j) => {
-        const pts = run.map(q => q[0]);
-        limbs.push(limb(pts, run.map(q => q[1]), r)); // on the stone, so no shadow off it
+      const turn = 2 * Math.PI * 1.85, base = y0 - R * T * Math.cos(th0), top = P.top + 30, us = Array.from({ length: 201 }, (_, i) => i / 200);
+      const runs = roundAbout(us.map(u => round(R + 3 * Math.sin(u * 17), th0 + turn * u, base + (top - base) * u)), us.map(u => Math.cos(th0 + turn * u) > 0), us.map(u => 5 - 3.4 * u), r);
+      runs.forEach((pts, j) => {
         BRANCHES.push({ name: `bigR${j}`, pts, leaves: leavesAlong(pts, Math.max(3, Math.round(pts.length / 9)), 15, r) });
         if (!j) twigs.push(cluster(pts[Math.round(0.3 * (pts.length - 1))], 0, [3, 3, 2, 2, 1], useGrapes));
         else twigs.push(tendril(pts[pts.length - 1], -2.6, -1, r));
       });
     })();
-    return limbs.join('') + twigs.join('');
+    return { back: behind.join(''), front: limbs.join('') + twigs.join('') };
   })();
   // The trunk as one limb, from the split down through the anchor (the fixed curve, stem) and on down the front of the column
   // past `bottom`, wandering a little and thickening. Below the anchor it sets off the way the curve was heading. Its
@@ -530,11 +544,12 @@ const CANDLE = (() => {
   // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws
   // it), the vine up it from below the edge
   const column = bottom => `<clipPath id="cdColClip"><path d="M${cx - col} ${slabY}V${bottom}H${cx + col}V${slabY}Z"/></clipPath>
+    ${vineTop.back}<!-- the vine's turns behind the column -->
     <path d="M${cx - col} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.lit}"/>
     <path d="M${n(cx + K.side * col)} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.dark}"/>
     <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${bottom}`).join('')}" fill="none" stroke="#8E869B" stroke-opacity=".6" stroke-width=".8"/>
     <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
-    ${trunk(bottom)}${vineTop}`;
+    ${trunk(bottom)}${vineTop.front}`;
   // the slab: a band between its top rim and its bottom rim's front, lit from the left, in an ink outline
   const slabD = `M${left} ${P.top}V${slabY}A${P.r} ${rimRy(P.r)} 0 0 0 ${cx + P.r} ${slabY}V${P.top}Z`;
   // The vine on the candlestick: the same limb, on from the slab, winding up round the foot, collar, baluster and knop to

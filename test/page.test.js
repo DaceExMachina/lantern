@@ -421,8 +421,9 @@ test('the trunk is one limb through the anchor: no jump in its width or turn in 
 
 test('every limb of the vine drawn, branch, trunk or climber, has leaves all along it', () => {
   const P = run('PEDESTAL'), MAX_GAP = 100;
-  // the whole vine at a tall window, but the turns hidden behind the candlestick
-  const svg = (run('STYLES.candle.back') + run(`CANDLE.column(${P.anchor + 600})`)).replace(/<\/g><\/g>([\s\S]*?)<!-- the vine's back turns/, '');
+  // the whole vine at a tall window, but its turns behind the candlestick and behind the column
+  const svg = run('STYLES.candle.back').replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${run(`CANDLE.column(${P.anchor + 600})`)}</g>`).replace(/<\/g><\/g>([\s\S]*?)<!-- the vine's back turns/, '')
+    .replace(/(<clipPath id="cdColClip">[\s\S]*?<\/clipPath>)[\s\S]*?<!-- the vine's turns behind the column -->/g, '$1');
   const leaves = [...svg.matchAll(/class="cdLeaf" data-at="(-?[\d.]+) (-?[\d.]+)"[^>]*data-low/g)].map(m => [+m[1], +m[2]]);
   // each limb's middle line, from its outline: one side out, the other back (lanterns.js limb)
   const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => {
@@ -468,4 +469,22 @@ test('the pencil shows for Jerrett, on the candle only', () => {
   for (const name of ['Jerrett', 'jerrett', 'JERRETT']) assert.strictEqual(shows(name), true, name);
   for (const name of ['', 'Jeremy', 'Jerret', 'Jerretts']) assert.strictEqual(shows(name), false, name);
   for (const key of styles) assert.strictEqual(run(`STYLES.${key}.back`).includes('id="cdPencil"'), key === 'candle', key);
+});
+
+test('no limb of the vine ends in the air: each end tapers to a tip, joins another limb, or goes behind the column', () => {
+  const P = run('PEDESTAL'), bottom = P.anchor + 600, col = P.column, slabY = P.top + P.depth;
+  // the candle, its column drawn down to `bottom` in place of the one in its markup
+  const svg = run('STYLES.candle.back').replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${run(`CANDLE.column(${bottom})`)}</g>`);
+  const front = svg.indexOf('<!-- the vine\'s turns behind the column -->');
+  const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => {
+    const o = m[1].split('L').map(q => q.split(' ').map(Number)), n = o.length / 2;
+    return { o, behind: m.index < front, ends: [0, n - 1].map(i => ({ at: [(o[i][0] + o[o.length - 1 - i][0]) / 2, (o[i][1] + o[o.length - 1 - i][1]) / 2], width: Math.hypot(o[i][0] - o[o.length - 1 - i][0], o[i][1] - o[o.length - 1 - i][1]) })) };
+  });
+  const inside = ([x, y], poly) => poly.reduce((c, [x1, y1], i) => { const [x2, y2] = poly[(i + 1) % poly.length]; return (y1 > y) !== (y2 > y) && x < x1 + (y - y1) * (x2 - x1) / (y2 - y1) ? !c : c; }, false);
+  const near = (p, poly) => inside(p, poly) || poly.some(q => Math.hypot(q[0] - p[0], q[1] - p[1]) < 2);
+  assert.ok(limbs.length > 20 && limbs.some(l => l.behind), `limbs: ${limbs.length}, some behind the column`);
+  for (const l of limbs) for (const { at, width } of l.ends) {
+    const tip = width <= 2.5, joined = limbs.some(m => m !== l && near(at, m.o)), hidden = l.behind && Math.abs(at[0] - 340) < col && at[1] > slabY, out = at[1] > bottom;
+    assert.ok(tip || joined || hidden || out, `a limb ends in the air at ${at.map(Math.round)}, ${width.toFixed(1)} across`);
+  }
 });
