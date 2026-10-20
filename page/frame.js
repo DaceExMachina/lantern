@@ -6,15 +6,14 @@ const sparks = [];
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
 const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
-// Land in the slice of the lantern facing the moth's home, so its dotted line never crosses another; if a neighbour
-// is closer than 40, nudge around within the slice and keep the roomiest spot.
+// How far along its line toward home a landing moth sits (perchAt), so its dotted line never crosses another; if a
+// neighbour is closer than 40, try further in or out and keep the roomiest spot.
 function findPerch(m, rand, from) {
-  const { top, bottom } = style.body, toward = Math.atan2(m.home[1] - (top + bottom) / 2, m.home[0] - 340);
   const spots = [...moths.values()].filter(o => o !== m && o.wasLanded).map(o => o.perch);
   if (from) spots.push(from); // a hop must go somewhere new, so the spot it left counts as taken
-  const room = p => Math.min(Infinity, ...spots.map(o => Math.hypot(o[0] - p[0], o[1] - p[1])));
-  let best = pickPerch(toward, rand);
-  for (let i = 0; i < 20 && room(best) < 40; i++) { const c = pickPerch(toward + (rand() - 0.5) * 0.5, rand); if (room(c) > room(best)) best = c; }
+  const home = stretch(m.home), room = a => { const p = perchAt(home, a); return Math.min(Infinity, ...spots.map(o => Math.hypot(o[0] - p[0], o[1] - p[1]))); };
+  let best = rand();
+  for (let i = 0; i < 20 && room(best) < 40; i++) { const c = rand(); if (room(c) > room(best)) best = c; }
   return best;
 }
 
@@ -189,8 +188,8 @@ function facetTone(angle, tilt = 0) {
   return mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
 }
 /** @returns {[number, number]} */
-function rot(px, py) {
-  const rad = swayAngle * Math.PI / 180, top = VIEW.top;
+function rot(px, py, by = swayAngle) { // `by` -swayAngle turns a point in the scene back into the lantern's own frame
+  const rad = by * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
 }
 // Sway on the string as a damped pendulum, with its tassel, ribbon or knot trailing (sway.period and sway.damping,
@@ -586,11 +585,15 @@ function mothTarget(k, m, dt, s) {
     // land with the wing joint on the paper (the joint sits 2,6 from the moth's position)
     if (!m.wasLanded) {
       m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
-      m.perch = findPerch(m, m.rand);
+      m.along = findPerch(m, m.rand);
       m.hops = 0;
     }
+    // its spot follows its home round as that glides, and as the lantern sways, so the line between them stays on its own ray
+    m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
     [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 4;
-    m.perchAim = m.perch; // the spot this frame's target came from (a hop below may pick the next one)
+    // which spot this frame's target came from: it rides that one as it moves, and eases over to a new one after a hop,
+    // or when its home glides over to the other side of the lantern
+    m.perchAim = `${m.hops}${Math.sign(m.perch[0] - 340)}`;
     // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
     // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
     // Snoozed ones stay still.
@@ -611,7 +614,7 @@ function mothTarget(k, m, dt, s) {
           // a hop lands on a new spot in its own slice, picked once as it lifts off (seeded by the hop count, so windows agree)
           if (into > dur * 0.35 && m.hoppedAt !== m.fidgetAt) {
             m.hoppedAt = m.fidgetAt;
-            m.perch = findPerch(m, seeded(hash(`${m.key}:${m.session.waitingSince || 0}:${++m.hops}`)), m.perch);
+            m.along = findPerch(m, seeded(hash(`${m.key}:${m.session.waitingSince || 0}:${++m.hops}`)), m.perch);
           }
         }
       }
@@ -666,16 +669,21 @@ function mothFireflies(m, dt, s) {
   }
   const home = stretch(m.home);
   swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt, s);
-  // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits
+  // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
+  // middle of the swarm straight toward its perch, along the line that lies on (perchAt), so no two ever cross
   m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);
   const end = [...m.flies.values()].find(f => f.gone === undefined && f.x !== undefined); // the line ends on one firefly, the oldest
   const tied = m.wasLanded && !!end;
   for (const f of m.flies.values()) f.near = tied && f === end;
   if (tied) {
-    const hx = end.x, hy = end.y;
-    if (m.flyGrad) { put(m.flyGrad, 'x1', hx.toFixed(1)); put(m.flyGrad, 'y1', hy.toFixed(1)); put(m.flyGrad, 'x2', m.x.toFixed(1)); put(m.flyGrad, 'y2', m.y.toFixed(1)); }
-    const dx = m.x - hx, dy = m.y - hy, len = Math.hypot(dx, dy) || 1, bow = 0.12 * len;
-    put(m.flyLine, 'd', `M${hx.toFixed(1)} ${hy.toFixed(1)} Q${(hx + dx / 2 - dy / len * bow).toFixed(1)} ${(hy + dy / 2 + dx / len * bow).toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
+    // it ends level with the wings' joint (2,6 from the moth's position), but on the line to the perch, so a hop or the
+    // flight in doesn't swing it over a neighbour's
+    const [hx, hy] = home, [px, py] = rot(m.perch[0], m.perch[1]), ax = px - hx, ay = py - hy;
+    const t = Math.max(0, Math.min(1, ((m.x - 2 * m.size - hx) * ax + (m.y - 6 * m.size - hy) * ay) / (ax * ax + ay * ay || 1)));
+    const jx = hx + ax * t, jy = hy + ay * t;
+    if (m.flyGrad) { put(m.flyGrad, 'x1', hx.toFixed(1)); put(m.flyGrad, 'y1', hy.toFixed(1)); put(m.flyGrad, 'x2', jx.toFixed(1)); put(m.flyGrad, 'y2', jy.toFixed(1)); }
+    // straight: a bow would carry a long line over a shorter neighbour's
+    put(m.flyLine, 'd', `M${hx.toFixed(1)} ${hy.toFixed(1)} L${jx.toFixed(1)} ${jy.toFixed(1)}`);
   }
   put(m.flyLine, 'opacity', tied ? 0.2 : 0);
 }

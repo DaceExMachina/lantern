@@ -230,7 +230,7 @@ const seeded = seed => () => {
 // the tests draw it at other numbers too: the pillar's half-width `r` and crown `rim`, the stem's height `stem`, and the
 // drawing's neck `neck`.
 const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
-// Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (pickPerch).
+// Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (perchAt).
 const PERCH_SPREAD = 0.44;
 function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) {
   // The pillar's numbers place the flame, the light, the shade and the wax moths land on: its middle, half-width, crown
@@ -616,7 +616,7 @@ function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) 
   // tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units. A landed moth's
   // wings reach from its perch on screen at most w·EYE/√(EYE² − w²) (wing3d), w the wing point furthest from the joint, at
   // the largest moth. So the wax's highest landing spot is a hop, that reach and 10 clear below the flame, and the body
-  // starts where pickPerch's highest spot (0.5 - PERCH_SPREAD of the way down) lands there.
+  // starts where perchAt's highest spot (0.5 - PERCH_SPREAD of the way down) lands there.
   const reach = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
     * Math.max(...Object.values(SIZE));
   const highest = PILLAR.flame[1] + 0.04 * 96 * 1.08 * PILLAR.flame[2] + HOP + reach + 10, waxBottom = PILLAR.dish - 8;
@@ -782,24 +782,25 @@ function applyStyle(key) {
   $('style').value = key;
 }
 
-// Somewhere on the lantern's surface: a random height, and a random way round from near the middle to the edge.
-// The wing points straight out of the surface; seen from the front its sideways part shrinks toward the middle,
-// so moths there show a shorter wing. Returns [x, y, normal]: where it sits and the surface's outward direction there.
-// The spot sits in the slice of pie facing direction `a` (radians, from the lantern's middle), anywhere from a third
-// of the way out to the rim: straight up lands on the upper front, straight out lands toward the edge, so moths whose
-// homes sit in different directions never cross paths.
-function pickPerch(a = Math.random() * 2 * Math.PI, rand = Math.random) {
-  const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + rand() * 0.65;
-  const y = top + (bottom - top) * (0.5 + PERCH_SPREAD * Math.sin(a) * depth);
-  // how far round the side, from the front: never in the middle third of the lantern, where closed wings would point
-  // nearly straight at you and thin to a sliver; squeezed rather than clamped so the slices keep their order
-  const MIDDLE = 1 / 3; // the share of the lantern's width (centred) that landing spots stay out of
-  const sin = MIDDLE + (1 - MIDDLE) * Math.abs(Math.cos(a)) * depth;
-  const slope = (half(y + 1) - half(y - 1)) / 2, len = Math.hypot(1, slope); // how fast the surface bulges at this height
+// Where a moth landed for the session whose home is at `home` (on screen) sits on the lantern: `along` (0 to 1) of the
+// way out the part of its line that's on the paper, from a quarter of the way to the end. Each side of the lantern has a
+// point a third of the way out from the middle, and every moth whose home is on that side lands on the line from that
+// point toward its home. So the dotted lines from homes to moths on one side all fan out from one point and never cross,
+// and the two sides never meet (no home sits above or below the middle third, ringHome). Spots stay within PERCH_SPREAD
+// of the middle height, and out of the middle third of the lantern, where closed wings would point nearly straight at
+// you and thin to a sliver. Returns [x, y, normal]: where it sits and the surface's outward direction there.
+/** @returns {[number, number, number[]]} */
+function perchAt(home, along) {
+  const { top, bottom, half } = style.body, mid = (top + bottom) / 2, side = home[0] < 340 ? -1 : 1, spread = (bottom - top) * PERCH_SPREAD;
+  const ox = 340 + side * half(mid) / 3, len = Math.hypot(home[0] - ox, home[1] - mid), ux = (home[0] - ox) / len, uy = (home[1] - mid) / len;
+  const on = t => { const y = mid + uy * t, out = Math.abs(ox + ux * t - 340); return Math.abs(y - mid) <= spread && out >= half(y) / 3 && out <= half(y); };
+  let end = 0;
+  while (on(end + 1)) end++; // ponytail: walks the line a unit at a time, a few hundred steps at most
+  const t = end * (0.25 + 0.75 * along), x = ox + ux * t, y = mid + uy * t;
   // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
   // up or down by how the lantern bulges at this height
-  const normal = unit([side * sin, -slope, Math.sqrt(1 - sin * sin)]);
-  return [340 + side * half(y) * sin, y, normal];
+  const sin = Math.min(1, Math.abs(x - 340) / half(y)), slope = (half(y + 1) - half(y - 1)) / 2;
+  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)])];
 }
 
 // warm = everyone busy, cool = someone needs me; everything crossfades between the two
