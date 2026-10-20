@@ -426,7 +426,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
 // starting at a seeded point in the slot's first `window` seconds. A moth must be eligible within `start` of that start,
 // or it waits for the next slot. The flame touches it `hit` seconds in. All in seconds. The schedule reads only the key
 // and the wall clock, so every window (app, panel, screensaver) scorches a moth at the same moments.
-const SCORCH = { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
+// ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 10 seconds.
+const SCORCH_DEMO = Q.has('scorch');
+const SCORCH = SCORCH_DEMO ? { slot: 10, window: 1, length: 9, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
 const SCORCH_CHAR = '#5B4636', SCORCH_SMOKE = '#B4A8B4'; // the wings' char, a warm brown; the smoke, a pale warm grey
 // The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
 let tongue = null;
@@ -450,7 +452,7 @@ function scorchFlight(t, { hit, length } = SCORCH) {
 // while flying, unless the lantern changes. At the hit it throws 5 sparks into the flame's pool, less the scorch
 // sparks still alive, so scorches never hold more than 5 of its 12. Touches no DOM; m.scorch exists only during one.
 function scorchStep(m, flying, now = Date.now()) {
-  const red = () => flying && tongue && style.scorches && m.session?.github?.some(p => p.need === 'failing');
+  const red = () => flying && tongue && style.scorches && (SCORCH_DEMO || m.session?.github?.some(p => p.need === 'failing'));
   if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
   const at = scorchClock(m.key, now), sc = m.scorch;
   if (!sc) {
@@ -513,7 +515,8 @@ function mothTarget(k, m, dt, s) {
   const parent = m.parentId && moths.get(m.parentId);
   if (m.parentId && (!parent || parent.leaving)) m.leaving = true;
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
-  const needsMe = !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
+  // (with ?scorch none lands, so there's always a moth in the air to scorch)
+  const needsMe = !SCORCH_DEMO && !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
   if (m.leaving) {
     const ang = Math.atan2(m.y - CY, m.x - CX);
     tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 1.3;
