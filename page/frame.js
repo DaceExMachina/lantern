@@ -7,8 +7,9 @@ const sparks = [];
 const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
 // How far out along its line toward home (perchAt) a moth sits when it lands, or after the hop in fidget slot `slot`.
-// Seeded by the session and the slot alone, so every window puts it in the same spot.
-const alongFor = (key, ws, slot) => seeded(hash(`${key}:${ws}:${slot ?? 'land'}`))();
+// Seeded by the session and the slot alone, so every window puts it in the same spot, and a flying moth's thread
+// already knows where it'll land.
+const alongFor = (key, slot) => seeded(hash(`${key}:${slot ?? 'land'}`))();
 
 // A pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
 /** @type {Element | undefined} */
@@ -586,6 +587,19 @@ function mothTarget(k, m, dt, s) {
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
   // (with ?scorch none lands, so there's always a moth in the air to scorch)
   const needsMe = !SCORCH_DEMO && !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
+  // Where it lands, or would: its spot follows its home round as that glides, and as the lantern sways, so the line
+  // between them (its thread, and its fireflies' dotted line) stays on its own ray. A flying moth would land on the
+  // fresh landing's spot (alongFor).
+  if (!m.parentId && m.home) {
+    if (!needsMe) m.along = alongFor(m.key);
+    else if (!m.wasLanded) {
+      m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
+      // a window that opens on a moth that has already hopped puts it where the others have it
+      m.hopSlot = lastHop(m.key, m.session.waitingSince || 0, Date.now() / 1000);
+      m.along = alongFor(m.key, m.hopSlot);
+    }
+    m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
+  }
   if (m.leaving) {
     const ang = Math.atan2(m.y - CY, m.x - CX);
     tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 1.3;
@@ -599,14 +613,6 @@ function mothTarget(k, m, dt, s) {
   } else if (needsMe) {
     // land with the wing joint on the paper (the joint sits 2,6 from the moth's position)
     const ws = m.session.waitingSince || 0, now = Date.now() / 1000;
-    if (!m.wasLanded) {
-      m.rand = seeded(hash(`${m.key}:${ws}`)); // this landing's dice, the same in every window
-      // a window that opens on a moth that has already hopped puts it where the others have it
-      m.hopSlot = lastHop(m.key, ws, now);
-      m.along = alongFor(m.key, ws, m.hopSlot);
-    }
-    // its spot follows its home round as that glides, and as the lantern sways, so the line between them stays on its own ray
-    m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
     [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 4;
     // which spot this frame's target came from: it rides that one as it moves, and eases over to a new one after a hop,
     // or when its home glides over to the other side of the lantern
@@ -622,7 +628,7 @@ function mothTarget(k, m, dt, s) {
           // a hop lands on a new spot along its line, picked once as it lifts off (seeded by its slot, so windows agree)
           if (into > FIDGET.hop * FIDGET.lift && m.hopSlot !== n) {
             m.hopSlot = n;
-            m.along = alongFor(m.key, ws, n);
+            m.along = alongFor(m.key, n);
           }
         }
       }
@@ -842,16 +848,22 @@ function mothZs(m, s) {
   } else if (m.zz) { m.zz.forEach(t => t.remove()); m.zz = null; m.zStart = undefined; }
 }
 
-// One thread from the light to each session moth, bowing gently. Satellites fly untethered.
+// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its fan
+// line to level with the moth's wing joint. Every thread and dotted line on a side lies on a ray from one point, so none
+// ever crosses another, flying or landed. A landed moth's has no length; a moth behind its spot (flying in from the
+// far side) has none until it comes round.
+function threadEnds(m) {
+  const [px, py] = rot(m.perch[0], m.perch[1]), [rx, ry] = rot(340 + m.perch[3][0], VIEW.top + m.perch[3][1]), ux = rx - 340, uy = ry - VIEW.top;
+  const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
+  return [[px, py], [px + ux * t, py + uy * t]];
+}
+// Each session moth's thread (threadEnds). Satellites fly untethered.
 function mothThread(m, dt, s) {
   const orbit = m.satellite && moths.get(m.satellite);
   if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : '';
-  if (!m.thread || orbit && !orbit.leaving) return;
-  const [ax, ay] = rot(...style.light);
-  const dx = m.x - ax, dy = m.y - ay, len = Math.hypot(dx, dy) || 1;
-  const bow = Math.sin(s * 0.8 + m.phase) * 0.12 * len + 0.08 * len;
-  const qx = ax + dx / 2 - dy / len * bow, qy = ay + dy / 2 + dx / len * bow;
-  put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${qx.toFixed(1)} ${qy.toFixed(1)} ${m.x.toFixed(1)} ${m.y.toFixed(1)}`);
+  if (!m.thread || orbit && !orbit.leaving || !m.perch) return;
+  const [[ax, ay], [bx, by]] = threadEnds(m);
+  put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} L${bx.toFixed(1)} ${by.toFixed(1)}`);
   // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from
   // nowhere. A tool call sends light down it from the moth to the lantern: a bright band in the same gradient
   // travels along, lighting up the dashes as it passes. One pulse at a time, 2.2s each, with at most two waiting.
@@ -870,9 +882,7 @@ function mothThread(m, dt, s) {
   let at = -1, lit = base, glow = 0; // where along the thread the pulse is (0 lantern, 1 moth), its colour and strength
   if (m.pulse) {
     m.pulse.at += dt / 2.2;
-    const t = 1 - Math.min(1, m.pulse.at), u = 1 - t;
-    const x = u * u * ax + 2 * u * t * qx + t * t * m.x, y = u * u * ay + 2 * u * t * qy + t * t * m.y;
-    at = ((x - ax) * dx + (y - ay) * dy) / (len * len);
+    at = 1 - Math.min(1, m.pulse.at);
     glow = Math.sin(Math.PI * Math.min(1, m.pulse.at)); // fades in and out over the trip
     lit = mix(base, pal('core'), glow);
     if (m.pulse.at >= 1) m.pulse = null;
@@ -883,7 +893,7 @@ function mothThread(m, dt, s) {
     document.querySelector('svg defs').append(m.grad);
     put(m.thread, 'stroke', `url(#${m.grad.id})`);
   }
-  put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', m.x.toFixed(1)); put(m.grad, 'y2', m.y.toFixed(1));
+  put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', bx.toFixed(1)); put(m.grad, 'y2', by.toFixed(1));
   [...m.grad.children].forEach((st, i) => {
     const o = i / 16, band = Math.max(0, 1 - Math.abs(o - at) / 0.12), faint = m.leaving ? 0.1 : 0.25;
     put(st, 'stop-color', mix(base, lit, band));
