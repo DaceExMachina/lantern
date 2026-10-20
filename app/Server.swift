@@ -130,19 +130,20 @@ struct Ordered<V> {
 
 
 /// Runs a command (found on PATH unless it's a full path) and returns its output, whatever its exit status.
-func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 10) -> (ok: Bool, out: String) {
-    let p = Process(), out = Pipe()
+func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 10) -> (ok: Bool, out: String, err: String) {
+    let p = Process(), out = Pipe(), err = Pipe()
     p.executableURL = URL(fileURLWithPath: cmd.hasPrefix("/") ? cmd : "/usr/bin/env")
     p.arguments = cmd.hasPrefix("/") ? args : [cmd] + args
     if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
     p.standardInput = FileHandle.nullDevice
     p.standardOutput = out
-    p.standardError = FileHandle.nullDevice
-    guard (try? p.run()) != nil else { return (false, "") }
+    p.standardError = err
+    guard (try? p.run()) != nil else { return (false, "", "") }
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if p.isRunning { p.terminate() } }
     let data = out.fileHandleForReading.readDataToEndOfFile()
     p.waitUntilExit()
-    return (p.terminationStatus == 0 && p.terminationReason == .exit, String(decoding: data, as: UTF8.self))
+    return (p.terminationStatus == 0 && p.terminationReason == .exit, String(decoding: data, as: UTF8.self),
+            String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
 }
 
 
