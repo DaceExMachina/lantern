@@ -76,9 +76,10 @@ extension LanternServer {
     // A session owns the PRs it created, plus its branch's PR, but only if it's the only session in that folder
     // (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
     func refreshGitHub() {
-        if refreshing || (accounts.count == 0 && !truthy(settings["github"])) { return }
+        if accounts.count == 0 && !truthy(settings["github"]) { return }
+        if refreshing { refreshAgain = true; return }
         refreshing = true
-        let list = sessions.items.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
+        let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
         let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }
         DispatchQueue.global().async {
             // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
@@ -141,6 +142,7 @@ extension LanternServer {
                 self.saveGitHubCache()
                 self.refreshing = false
                 self.broadcast()
+                if self.refreshAgain { self.refreshAgain = false; self.refreshGitHub() }
                 // then, in the background, find which old sessions made any dead PRs we haven't looked up yet
                 let missing = self.stale.map { str($0["url"]) }.filter { self.owners[$0] == nil }
                 if !missing.isEmpty {

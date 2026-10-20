@@ -165,7 +165,7 @@ final class LanternServer {
     func staleOut() -> [JSON] { stale.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
-    var refreshing = false
+    var refreshing = false, refreshAgain = false // a refresh asked for while one runs goes once more straight after it
     var mirror: URL? // a preview's: the live app's /events, whose sessions it shows instead of finding its own (see follow())
     // the test server replaces it, since the machine running the tests may well be locked
     var screenLocked = { (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true }
@@ -288,7 +288,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -337,6 +337,7 @@ final class LanternServer {
         let ev = e["hook_event_name"] as? String
         if ev == "SessionEnd" { sessions[id] = nil; agents[id] = nil; return }
 
+        let joining = sessions[id] == nil
         var s = sessions[id] ?? ["id": id, "cwd": or(e["cwd"], "")!, "state": "working", "started": now(), "last": 0]
         if agents[id] == nil { agents[id] = Ordered() }
         defer { settle(&s, id); sessions[id] = s } // (until the end of this function, s is a copy)
@@ -362,6 +363,22 @@ final class LanternServer {
         }
         let dir = sessionDir(e["transcript_path"])
         if let dir { s["project"] = ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent }
+        // A session the hooks bring in (a resume, or a restart where its hooks beat seeding) reads back the PRs it created,
+        // as seeding does. Until then refreshes leave it out, so it doesn't look like it owns none of them.
+        if joining, let dir {
+            s["createdPending"] = true
+            DispatchQueue.global().async {
+                let made = createdPRs(dir + ".jsonl", dir)
+                DispatchQueue.main.async {
+                    guard var s = self.sessions[id] else { return }
+                    let created = s["created"] as? [String] ?? [], all = created + made.filter { !created.contains($0) }
+                    if !all.isEmpty { s["created"] = all }
+                    s["createdPending"] = nil
+                    self.sessions[id] = s
+                    if !made.isEmpty { self.refreshGitHub() }
+                }
+            }
+        }
         if let dir, now() - ((s["titleRead"] as? Double) ?? 0) > TITLE_EVERY_MS {
             s["titleRead"] = now()
             loadTitle(id, dir)
@@ -565,6 +582,9 @@ final class LanternServer {
         for (id, s) in sessions.items {
             for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
         }
+        // A session no refresh has looked at yet (it joined while one ran, or is still reading its transcript) keeps what it
+        // owned: not looked at isn't owning nothing.
+        for (url, was) in ownedPRs where owned[url] == nil && sessions[was.session].map({ $0["github"] == nil }) == true { owned[url] = (was.need, was.session, NSNull()) }
         for (url, p) in owned where ownedPRs[url]?.need != p.need {
             let was = ownedPRs[url]
             stats.event("pr", p.session, ["url": url, "change": was == nil ? "appeared" : "need", "need": p.need, "from": was?.need ?? NSNull(), "title": p.title])
