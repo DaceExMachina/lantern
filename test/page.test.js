@@ -248,19 +248,17 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
     vm.runInContext(src, c);
     const get = code => vm.runInContext(code, c), svg = get('STYLES.candle.back'), P = get('PEDESTAL'), D = get('DRAWN'), STEM = get('STEM');
     const k = STEM / (D.collar - D.neck), lit = get('LACQUER.candle.lit');
-    // each part's top and bottom at its sides: the turned bands (DRUM), the turned parts' profiles and the knop
-    const parts = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="([^"]+)"/g)]
-      .filter(m => m[7] === lit).map(m => ({ top: +m[2], bottom: +m[5] }));
-    for (const id of ['cdBowl', 'cdBaluster', 'cdFoot']) {
+    // each part's top and bottom at its sides: the turned parts' profiles (rings included) and the knop
+    const parts = [];
+    for (const id of ['cdBowl', 'cdNeck', 'cdStemRing', 'cdBaluster', 'cdCollar', 'cdFoot', 'cdBase']) {
       const ys = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/[\d.]+ ([\d.]+)/g)].map(m => +m[1]);
       parts.push({ id, top: Math.min(...ys), bottom: Math.max(...ys) });
     }
     const [, cy, ry] = svg.match(/<ellipse id="cdKnop" cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
     parts.push({ id: 'knop', top: cy - ry, bottom: cy + ry });
     parts.sort((a, b) => a.top - b.top);
-    // top to bottom, and how far below the part above each starts: the neck's band ends at 460 in the drawing and the knop
-    // starts at 463, 3 down the stem's scale (and what's left of the drawing's neck below the band, in the pan's units)
-    const joints = [['the bowl', 0], ['the neck', 0], ['the knop', D.neck - 460 + (463 - D.neck) * k], ['the upper collar', 0], ['the baluster', 0],
+    // top to bottom, each starting where the part above ends
+    const joints = [['the bowl', 0], ['the neck', 0], ['the knop', 0], ['the upper collar', 0], ['the baluster', 0],
       ['the lower collar', 0], ['the foot', 0], ['the foot\'s band', 0]];
     assert.strictEqual(parts.length, joints.length, `${at}: ${parts.length} parts`);
     assert.ok(Math.abs(parts[0].top - get('PILLAR.dish')) < 0.01, `${at}: the bowl hangs from the pan's rim`);
@@ -271,8 +269,8 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
     // the foot's band sinks 2 into the slab, as drawn (551 on a slab at 549)
     assert.ok(Math.abs(parts[parts.length - 1].bottom - P.top - 2) < 0.02, `${at}: the foot's band ends ${parts[parts.length - 1].bottom - P.top} past the slab's top`);
     // the stem, from the neck's band down to the lower collar
-    const stem = parts[4].bottom - parts[1].bottom;
-    assert.ok(Math.abs(stem - (D.neck - 460 + STEM)) < 0.02, `${at}: the stem is ${stem} tall`);
+    const stem = parts[4].bottom - get('PILLAR.dish') - (D.neck - D.dish);
+    assert.ok(Math.abs(stem - STEM) < 0.02, `${at}: the stem is ${stem} tall`);
   }
 });
 
@@ -287,18 +285,12 @@ test('the candle stands on a round marble pedestal, every rim one true ellipse a
   // the column keeps going down into a tall window, below the 600-high view's bottom at 620
   const lowest = Math.max(...[...svg.matchAll(/V([\d.]+)/g)].map(m => +m[1]));
   assert.ok(lowest >= 700, `the column stops at ${lowest}`);
-  // the turned bands (DRUM): each edge's front arc dips by the candlestick's bow
-  const bands = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="([^"]+)"/g)]
-    .map(m => ({ half: (m[4] - m[1]) / 2, top: +m[2], topQ: +m[3], bottom: +m[5], bottomQ: +m[6], fill: m[7] }));
-  for (const d of bands) for (const [y, q] of [[d.top, d.topQ], [d.bottom, d.bottomQ]]) {
-    assert.ok(Math.abs(q - (y + d.half * bow(y))) < 0.01, `a band ${d.half} either side: its edge at ${y} dips to ${q}, not ${y + d.half * bow(y)}`);
-  }
   // the slab's side, P.depth deep under its top, its bottom rim's front the same true ellipse
   const ry = +(P.r * bow(P.top) / 2).toFixed(2);
   assert.ok(svg.includes(`M${340 - P.r} ${P.top}V${P.top + P.depth}A${P.r} ${ry} 0 0 0 ${340 + P.r} ${P.top + P.depth}V${P.top}Z`), `the slab's side, ${P.depth} deep under its top`);
-  // the candlestick's foot, its lowest bronze band, stands on the slab's top, neither floating over it nor sunk in
-  const foot = bands.filter(d => d.fill === run('LACQUER.candle.lit')).sort((a, b) => b.bottom - a.bottom)[0];
-  assert.ok(Math.abs(foot.bottom - P.top) <= 3 && foot.half < P.r, `the foot ends at ${foot.bottom}, ${foot.half} either side, on a slab at ${P.top}`);
+  // the candlestick's foot, its base ring, stands on the slab's top, neither floating over it nor sunk in
+  const [, x, , bottom] = svg.match(/<path id="cdBase" d="M([\d.]+) ([\d.]+)L[\d.]+ ([\d.]+)Q/).map(Number), half = 340 - x;
+  assert.ok(Math.abs(bottom - P.top) <= 3 && half < P.r, `the foot ends at ${bottom}, ${half} either side, on a slab at ${P.top}`);
   // below the slab's top at its front, only the pedestal's own group (the slab, the column and the vine on them) draws
   const below = P.top + P.r * bow(P.top) / 2 + 0.5, all = drawn(svg);
   const inPedestal = n => { for (; n; n = n.parent) if (n.tag === 'g' && (n.attrs.class || '').split(/\s+/).includes('cdPedestal')) return true; return false; };
@@ -451,4 +443,21 @@ test('every limb of the vine drawn, branch, trunk or climber, has leaves all alo
     assert.ok(gap <= MAX_GAP, `the limb from ${line[0].map(Math.round)} to ${line[line.length - 1].map(Math.round)}, ${Math.round(length)} long, is bare for ${Math.round(gap)}`);
   }
   assert.ok(checked >= 12, `limbs checked: ${checked}`);
+});
+
+test('each of the candlestick\'s parts meets the next exactly: no gap, and the same width where they\'re meant to be flush', () => {
+  const svg = run('STYLES.candle.back');
+  // each turned part's profile ends: its top and bottom, and its half-width at each (lanterns.js turned)
+  const parts = ['cdBowl', 'cdNeck', 'cdStemRing', 'cdBaluster', 'cdCollar', 'cdFoot', 'cdBase'].map(id => {
+    const pts = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/([\d.]+) ([\d.]+)/g)].map(m => [340 - +m[1], +m[2]]);
+    return { id, top: pts[0][1], topHalf: pts[0][0], bottom: pts[pts.length - 1][1], bottomHalf: pts[pts.length - 1][0] };
+  });
+  const [, cy, ry] = svg.match(/<ellipse id="cdKnop" cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
+  parts.splice(2, 0, { id: 'knop', top: cy - ry, topHalf: 0, bottom: cy + ry, bottomHalf: 0 }); // a round knop: it meets at a point
+  for (let i = 1; i < parts.length; i++) {
+    const [a, b] = [parts[i - 1], parts[i]];
+    assert.ok(Math.abs(b.top - a.bottom) < 0.01, `${b.id} starts ${(b.top - a.bottom).toFixed(2)} below ${a.id}: a gap or an overlap`);
+    const wide = Math.max(a.bottomHalf, b.topHalf), narrow = Math.min(a.bottomHalf, b.topHalf);
+    if (narrow > 0 && wide / narrow < 1.5) assert.ok(wide - narrow < 0.01, `${a.id} (${a.bottomHalf}) and ${b.id} (${b.topHalf}) nearly meet in width, so should be flush`);
+  }
 });

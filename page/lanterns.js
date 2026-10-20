@@ -295,6 +295,9 @@ const CANDLE = (() => {
       + `L${[...prof].reverse().map(([y, h]) => pt([cx + h, y])).join('L')}Q${cx} ${n(y0 + (bowl ? 2 : -2) * sag(y0, h0))} ${n(cx - h0)} ${n(y0)}Z`;
     return `<path id="${id}" d="${d}" fill="${K.lit}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
   };
+  // a plain ring, `height` tall and `h` either side, its top face showing, with its rim's front edge inked
+  const ring = (id, y, h, height) => turned(id, [[y, h], [y + height, h]])
+    + `<path d="M${n(cx - h)} ${n(y)}Q${cx} ${n(y + 2 * sag(y, h))} ${n(cx + h)} ${n(y)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>`;
   const profile = (y0, y1, half, steps = 12) => Array.from({ length: steps + 1 }, (_, i) => { const y = y0 + (y1 - y0) * i / steps; return [y, half(y)]; });
   // a curve through points, rounding each corner between them
   const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
@@ -351,6 +354,8 @@ const CANDLE = (() => {
   const knopEdge = x => n(474 + 11 * Math.sqrt(1 - ((x - cx) / 25) ** 2) - 1);
   // the pedestal, by the candlestick's rule, in cool marble lit from the left, its right side in shade as the wax is
   const P = PEDESTAL, left = cx - P.r, slabY = P.top + P.depth, col = P.column, FOOT = 74; // the foot's half-width
+  // the domed foot's half-width at drawn height yd, an ogee from the collar's width (20) out to its base ring's (FOOT)
+  const dome = yd => 20 + (FOOT - 20) * (u => u * u * (3 - 2 * u))((yd - 523) / 20);
   const MARBLE = { ...K, lit: '#CFC9D8', dark: '#8A8396', ink: '#2A2333' };
   // a colour fading out down the column
   const fade = (id, colour, a = 1) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${P.fade[0]}" y2="${P.fade[1]}">`
@@ -537,7 +542,7 @@ const CANDLE = (() => {
   // The vine on the candlestick: the same limb, on from the slab, winding up round the foot, collar, baluster and knop to
   // under the pan, just off each part's surface (its half-width at drawn height yd, `girth`). Its back turns are drawn
   // before the candlestick, behind it, and its front ones after, over it.
-  const girth = yd => yd >= 543 ? FOOT : yd >= 523 ? 20 + 50 * (u => u * u * (3 - 2 * u))((yd - 523) / 20) : yd >= 518 ? 18
+  const girth = yd => yd >= 543 ? FOOT : yd >= 523 ? dome(yd) : yd >= 518 ? 20
     : yd >= 489 ? k * (yd < 504 ? 10 + 7 * Math.sin((yd - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((yd - 504) / 14 * Math.PI / 2))
     : yd >= 485 ? 10 * k : yd >= 463 ? Math.max(10, 25 * Math.sqrt(Math.max(0, 1 - ((yd - 474) / 11) ** 2))) * k : 14;
   const holder = Array.from({ length: 121 }, (_, i) => {
@@ -590,16 +595,16 @@ const CANDLE = (() => {
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
       ${fade('cdColLine', '#8E869B', 0.6)}</defs>
     ${pedestal}${holderVine.back}<!-- the vine's back turns, behind the candlestick -->
-    ${DRUM(K, Y(543), FOOT, 8)}
-    ${turned('cdFoot', profile(Y(523), Y(543), y => { const u = (y - Y(523)) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
-    ${DRUM(K, Y(518), 18, 5)}
+    ${ring('cdBase', Y(543), FOOT, 8)}
+    ${turned('cdFoot', profile(Y(523), Y(543), y => dome(y - Y(523) + 523)))}<!-- the domed foot, an ogee -->
+    ${ring('cdCollar', Y(518), 20, 5)}
     ${turned('cdBaluster', profile(489, 518, y => y < 504 ? 10 + 7 * Math.sin((y - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((y - 504) / 14 * Math.PI / 2), 16).map(([y, h]) => [Y(y), h * k]))}
-    ${DRUM(K, Y(485), 10 * k, 4 * k)}
+    ${ring('cdStemRing', Y(485), 10 * k, 4 * k)}
     <ellipse id="cdKnop" cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="${K.lit}"/>
     <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>
 <!-- the knop, carved in gadroons underneath -->
     <path d="${on([324, 332, 340, 348, 356].map(x => `M${x} 476.5Q${n(x + (x - cx) * 0.08)} ${n((476.5 + knopEdge(x)) / 2)} ${n(x + (x - cx) * 0.04)} ${knopEdge(x)}`).join(''))}" fill="none" stroke="#3C2412" stroke-width=".8"/>
-    ${DRUM(K, Y(452), 14, 8)}
+    ${ring('cdNeck', Y(452), 14, Y(463) - Y(452))}<!-- down to the knop's top -->
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#24140A"/><!-- the pan, its inside in the pillar's shadow -->
     <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="${n(side)}" y="${rim - 10}" width="${n(cx + R + 2 - side)}" height="${PILLAR.bottom - rim + 10}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
