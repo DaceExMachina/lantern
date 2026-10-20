@@ -411,18 +411,24 @@ function drawShine(s, { size, flick, pulse }) {
   [deep, dark, base, hi, base, dark, deep].forEach((c, i) => put(bronze.children[i], 'stop-color', c));
 }
 
-// The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) flutter in the wind: each turns about its
-// stem with the gust, a little after it, plus a flutter of its own, by its weight (smaller leaves more). A leaf also grows
+// The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) move in the wind: each turns about its stem
+// toward downwind by how far it points from it (up to twice as far for one pointing into the wind, not at all for one
+// already pointing with it) times the gust's strength, by its weight (smaller leaves more), plus a faint flutter of its
+// own. A gust reaches the vine from its upwind side: each leaf feels it later the further downwind it is. A leaf also grows
 // about its stem by leafSize (lanterns.js), fully on the lower vine (`low` 1) and a sixth as much at the top (0). Found and
 // read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
 function drawLeaves(s) {
   cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
     const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), low = e.getAttribute('data-low');
-    return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, ph: (x * 0.37 + y * 0.11) % 6.283 };
+    return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, deg: +(e.getAttribute('data-deg') || 0), ph: (x * 0.37 + y * 0.11) % 6.283 };
   });
-  for (const { e, x, y, k, low, ph } of cdLeaves) {
-    const a = k * (leafGust * GUST(s - 0.15 - ph * 0.03) + leafFlutter * Math.sin(s * (3 + ph * 0.3) + ph)), g = low < 0 ? 1 : 1 + (leafSize - 1) * (1 + 5 * low) / 6;
-    put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (g === 1 ? '' : ` translate(${x} ${y}) scale(${g.toFixed(2)}) translate(${-x} ${-y})`));
+  const from = Math.sign(GUST(s)) || 1; // the wind's direction this frame: 1 blowing to the right
+  for (const { e, x, y, k, low, deg, ph } of cdLeaves) {
+    const g = GUST(s - 0.15 - ph * 0.03 - from * (x - 340) * 0.004), down = g > 0 ? 90 : -90;
+    let turn = ((down - deg) % 360 + 360) % 360; // how far round to downwind, -180 to 180, over the top when it points straight into the wind
+    if (turn > 180 || (turn === 180 && down < 0)) turn -= 360;
+    const a = k * (leafGust * Math.abs(g) * turn / 90 + leafFlutter * Math.sin(s * (3 + ph * 0.3) + ph)), grow = low < 0 ? 1 : 1 + (leafSize - 1) * (1 + 5 * low) / 6;
+    put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (grow === 1 ? '' : ` translate(${x} ${y}) scale(${grow.toFixed(2)}) translate(${-x} ${-y})`));
   }
 }
 

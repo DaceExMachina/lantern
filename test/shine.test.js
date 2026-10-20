@@ -226,3 +226,18 @@ test('the bronze\'s highlight follows the flame: brighter as it burns and flicke
   assert.ok(at(0.6, 1) > at(0.6, 0.6) + 15, `and it dims as the flame flickers down: ${at(0.6, 1)} to ${at(0.6, 0.6)}`);
 
 });
+
+test('a gust turns each vine leaf toward downwind by how far it points from it', () => {
+  const ctx = context();
+  ctx.run('leafFlutter = 0; leafSize = 1');
+  const leaf = deg => ({ e: node(), x: 340, y: 600, k: 1, low: -1, deg, ph: 0 }), angle = l => +l.e.getAttribute('transform').match(/rotate\((-?[\d.]+)/)[1];
+  for (const sign of [1, -1]) {
+    const s = Array.from({ length: 4000 }, (_, i) => i * 0.05).find(t => sign * ctx.run(`GUST(${t} - 0.15)`) > 1.5 && sign * ctx.run(`GUST(${t})`) > 0);
+    const [up, withIt, against] = [leaf(0), leaf(sign * 90), leaf(-sign * 90)];
+    ctx.run('(l => { cdLeaves = l; })')([up, withIt, against]);
+    ctx.run(`drawLeaves(${s})`);
+    assert.ok(Math.abs(angle(withIt)) < 0.6, `blowing ${sign > 0 ? 'right' : 'left'}, a leaf already pointing downwind barely turns: ${angle(withIt)}`);
+    assert.ok(sign * angle(up) > 2, `one pointing up turns downwind: ${angle(up)}`);
+    assert.ok(sign * angle(against) > sign * angle(up) * 1.5, `one pointing into the wind is pushed over more: ${angle(against)} to ${angle(up)}`);
+  }
+});

@@ -400,7 +400,8 @@ const CANDLE = (() => {
     return { pts, a };
   };
   // something that flutters in the wind about `p` (frame.js drawLeaves), `k` as much as a mid-sized leaf
-  const flutter = (p, k, svg, low = -1) => `<g class="cdLeaf" data-at="${pt(p)}" data-k="${n(k)}"${low < 0 ? '' : ` data-low="${low}"`}>${svg}</g>`; // low: a leaf's (leafOn)
+  // `low` and `deg` (where it points, from straight up) are a leaf's (leafOn)
+  const flutter = (p, k, svg, low = -1, deg = 0) => `<g class="cdLeaf" data-at="${pt(p)}" data-k="${n(k)}" data-deg="${n(deg)}"${low < 0 ? '' : ` data-low="${low}"`}>${svg}</g>`;
   // a curling tendril from `p`, heading `a`, coiling `side` (1 or -1)
   const tendril = (p, a, side, rand) => flutter(p, 0.4, `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`);
   // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up. It's drawn at `w` and grown as it
@@ -408,7 +409,7 @@ const CANDLE = (() => {
   const leafOn = (p, w, deg) => {
     const a = deg * Math.PI / 180, q = [p[0] + Math.sin(a) * w * 0.25, p[1] - Math.cos(a) * w * 0.25];
     return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`, // smaller leaves more
-      n(Math.min(1, Math.max(0, (p[1] - P.split) / 300))));
+      n(Math.min(1, Math.max(0, (p[1] - P.split) / 300))), deg);
   };
   // a tapering bunch hanging (or lying) from its stalk at `p`, its axis `deg` from straight down, rows of grapes from the
   // stalk out; `put` draws the grapes (grapes() for those with glints, or plain uses on the column, which is redrawn)
@@ -745,7 +746,7 @@ let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
 // its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
 // standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
-let cdLeaves = /** @type {{ e: Element, x: number, y: number, k: number, low: number, ph: number }[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
+let cdLeaves = /** @type {{ e: Element, x: number, y: number, k: number, low: number, deg: number, ph: number }[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
 function drawHang() {
   const h = $('hang');
   const column = style.stands && $('cdColumn');
