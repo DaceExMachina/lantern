@@ -421,7 +421,7 @@ final class LanternServer {
     func sweep() {
         let t = now()
         var changed = false
-        pruneAgents()
+        reconcile()
         for (id, var s) in sessions.items {
             if settle(&s, id) { sessions[id] = s; changed = true }
             // with its process known, only that decides: a closed session goes, an open one stays however quiet it's been

@@ -157,6 +157,18 @@ test('a subagent whose transcript ends in a finished turn is dropped once quiet,
   await until(async () => (await agentIds(base)).length === 0, 'the finished subagent to be dropped');
 });
 
+test('a subagent whose start the hooks missed is found from its transcript by the sweep, while its session is working', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  assert.deepStrictEqual(await agentIds(base), []);
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'agent-a9.jsonl'), jsonl([user('Audit it')]));
+  fs.writeFileSync(path.join(dir, 'agent-a8.jsonl'), jsonl([user('Old'), answer('Done.'), turnEnd])); // finished: not adopted
+  await until(async () => (await agentIds(base)).join() === 'a9', 'the unannounced subagent to be found');
+});
+
 test('a background shell task younger than the threshold keeps its session working', async t => {
   const base = await serve(t, {}, () => {}, bg(0.1, 60));
   await post(base, '/event', stopWith(SERVER));
