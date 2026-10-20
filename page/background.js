@@ -330,16 +330,17 @@ function setLight(u, v) {
 // lantern's outline, in the lantern's own units over x 250-430, y 140-500); each frame this draws that rectangle turned
 // with the sway about the lantern's pivot, its brass slid against the sway (shift, in units) and lit by the flame (col,
 // brightest round the flame at 348), kept inside the outline. The hot air filling the lantern (uHeat: how far it bends,
-// and its time) ripples the brass seen through it, as heat() does the room above, fading out below the flame at 398.
+// its time, and the half-width of its column) ripples the brass seen through it, as heat() does the room above: most
+// straight above the flame (x 340, base at 398), fading out below it and toward the sides.
 const FAR_WALL = program(`attribute vec2 a; uniform vec4 uBox; uniform vec2 uRes, uPivot; uniform float uSway; varying vec2 vUv, vP;
 void main() {
   vUv = a; vP = vec2(250.0, 140.0) + a * vec2(180.0, 360.0);
   vec2 d = vP - uPivot, q = uPivot + vec2(cos(uSway) * d.x - sin(uSway) * d.y, sin(uSway) * d.x + cos(uSway) * d.y);
   vec2 c = (q - uBox.xy) / uBox.zw; gl_Position = vec4(c.x * 2.0 - 1.0, 1.0 - c.y * 2.0, 0.0, 1.0);
-}`, `precision mediump float; uniform sampler2D uTex; uniform float uShift; uniform vec2 uHeat; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
+}`, `precision mediump float; uniform sampler2D uTex; uniform float uShift; uniform vec3 uHeat; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
 ${RIPPLE}
 void main() {
-  vec2 warp = uHeat.x * smoothstep(420.0, 390.0, vP.y) * ripple(vP, uHeat.y);
+  vec2 warp = uHeat.x * smoothstep(420.0, 390.0, vP.y) * (1.0 - smoothstep(0.3 * uHeat.z, uHeat.z, abs(vP.x - 340.0))) * ripple(vP, uHeat.y);
   vec4 back = texture2D(uTex, vUv + (vec2(uShift, 0.0) + warp) / vec2(180.0, 360.0));
   // where a big sway slides the far wall past the outline, the side wall fills the strip: solid brass a little darker,
   // seen edge on (ponytail: no lace on it, since the front's frames hide all but a few pixels of the strip)
@@ -355,6 +356,7 @@ function setFarWall(/** @type {HTMLCanvasElement} */ canvas) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 }
 // ponytail: temporary, for dialling in the back wall's shimmer; bake the pick into drawFarWall and drop this
+let wallHeatWide = devSlider('Temporary', 'wallheatwide', 'back wall heat width', 10, 80, 1, 36, 'How far either side of the flame the back wall shimmers', v => { wallHeatWide = v; });
 let wallHeat = devSlider('Temporary', 'wallheat', 'back wall heat', 0, 4, 0.1, 1, 'How far the hot air inside the Moroccan bends its back wall, times its heat', v => { wallHeat = v; });
 function drawFarWall({ shift, col, heat }, w, h, box) {
   if (!farWallTex) return;
@@ -365,7 +367,7 @@ function drawFarWall({ shift, col, heat }, w, h, box) {
   const u = FAR_WALL.u;
   gl.uniform1i(u.uTex, 0); gl.uniform4f(u.uBox, ...box); gl.uniform2f(u.uRes, w, h); gl.uniform2f(u.uPivot, 340, VIEW.top);
   gl.uniform1f(u.uSway, swayAngle * Math.PI / 180); gl.uniform1f(u.uShift, shift);
-  gl.uniform2f(u.uHeat, (heat?.k ?? 0) * HEAT_COLUMN.bend * wallHeat, heat?.t ?? 0); gl.uniform3fv(u.uCol, rgb(col)); gl.uniform3fv(u.uDark, rgb('#24160A'));
+  gl.uniform3f(u.uHeat, (heat?.k ?? 0) * HEAT_COLUMN.bend * wallHeat, heat?.t ?? 0, wallHeatWide); gl.uniform3fv(u.uCol, rgb(col)); gl.uniform3fv(u.uDark, rgb('#24160A'));
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
