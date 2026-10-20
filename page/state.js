@@ -150,6 +150,27 @@ function makeSubMoth(key, parentId, size) {
     phase: rand() * 10, cool: 0, leaving: false });
 }
 
+// A scorched moth's smoke trail (frame.js smoke, background.js trailSmoke): the seconds it's left over, a point on its path
+// every `every` seconds or `apart` units flown, whichever comes first, `most` of them, and the Ss it curls into along its
+// length (their size and length, in scene units). Up to SMOKERS moths smoke at once (frame.js scorchStep), and
+// TRAIL_POINTS holds all their trails: each one's points, the last where the smoke stops following, one joined to the
+// moth, and one parting it from the next.
+const TRAIL = { secs: 1.5, every: 0.25, apart: 12, most: 12, s: 9, length: 70 }, SMOKERS = 6;
+const TRAIL_POINTS = SMOKERS * (TRAIL.most + 3);
+const PLUMES = 1 + SMOKERS; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
+// The smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense, and
+// its colour, a pale warm grey. The flame's lanes (frame.js smokeAt): one plume a `slot` seconds, let go somewhere in its
+// first `window`, once the flame burns at `from`. How many seconds a plume takes to let go: the flame's, and a singe's.
+const PLUME = { size: 1, life: 6, alpha: 0.5 }, SMOKE_COL = '#B4A8B4';
+const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
+const SMOKE_REL = 3, SINGE_REL = 0.8;
+
+// The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
+// tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
+// fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
+const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
+// a number as a GLSL float, exactly (a whole number gets its .0; any other already has a point or an exponent)
+const glf = v => Number.isInteger(v) ? v.toFixed(1) : String(v);
 function flamePath(w, h, lean) {
   const bx = 340, by = FLAME_BASE, tx = bx + lean, ty = by - h, f = n => n.toFixed(1);
   return `M${f(bx - w * 0.55)} ${f(by - h * 0.14)}` +

@@ -7,7 +7,7 @@
 import AppKit
 import WebKit
 
-let SCENES = [("barrel", "style=barrel&hover"), ("chochin", "style=chochin"), ("moroccan", "style=moroccan"), ("ambient", "style=barrel&ambient")]
+let SCENES = [("barrel", "style=barrel&hover"), ("chochin", "style=chochin"), ("moroccan", "style=moroccan"), ("ambient", "style=barrel&ambient"), ("candle", "style=candle")]
 let SIZE = NSSize(width: 720, height: 540), TOLERANCE = 2
 let update = CommandLine.arguments.contains("--update")
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)

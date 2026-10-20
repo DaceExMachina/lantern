@@ -22,8 +22,18 @@ let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "e
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 // Claude Code's config folder: CLAUDE_CONFIG_DIR, or `claudeDir` in Lantern's settings.json (an app opened from the Dock
 // doesn't see your shell's env, so the installer writes it there), or ~/.claude. Settings can override it at startup.
-var CLAUDE_DIR = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"] ?? HOME + "/.claude"
+var CLAUDE_CONFIG_DIR = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
+var CLAUDE_DIR: String { CLAUDE_CONFIG_DIR ?? HOME + "/.claude" }
 var PROJECTS: String { CLAUDE_DIR + "/projects" }
+// The user's first name, for the candle's pencil (page/pencil.js): Claude Code's account name, else the Mac's. Claude
+// Code keeps its account in .claude.json, inside its config folder when that's set and in HOME when not. Only those two
+// fields are used, and the name goes nowhere but the page, once as each page connects. A global outside main.swift is
+// set on first use, which is a page connecting, so after the settings' claudeDir is in.
+let FIRST_NAME: String = {
+    let account = (parse(FileManager.default.contents(atPath: (CLAUDE_CONFIG_DIR ?? HOME) + "/.claude.json") ?? Data()) as? JSON)?["oauthAccount"] as? JSON
+    let name = [account?["displayName"], account?["fullName"]].compactMap { $0 as? String }.first { !$0.trim.isEmpty }
+    return (name ?? NSFullUserName()).split(whereSeparator: \.isWhitespace).first.map(String.init) ?? ""
+}()
 
 typealias JSON = [String: Any]
 
@@ -182,7 +192,7 @@ final class LanternServer {
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
         if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
-        if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_DIR = (dir as NSString).expandingTildeInPath }
+        if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_CONFIG_DIR = (dir as NSString).expandingTildeInPath }
         stats = Stats(data + "/stats.sqlite")
         stats.dayStart = clockMinutes(settings["dayStart"]) ?? 0
         // a badge just earned flashes on the open pages; only live, never in a new page's opening burst
@@ -783,7 +793,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()

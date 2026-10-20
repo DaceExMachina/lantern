@@ -165,6 +165,7 @@
   body.screensaver { background: #2B2440; cursor: none; }
   .screensaver footer, .screensaver #card { display: none; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
+  #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
   .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
   /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
@@ -252,7 +253,7 @@
     <label class="notify" title="Send a notification when a session starts waiting on you"><input type="checkbox" id="notify"> notify me when a session needs me</label>
     <label title="Show open PRs that no session owns and nobody touched for a week, as pale wisps"><input type="checkbox" id="staleToggle"> show stale PRs</label>
     <label title="Print lines your sessions wrote on the paper lanterns"><input type="checkbox" id="textToggle"> show session text</label>
-    <label title="Which lantern hangs in every window, the iTerm2 panel and the screensaver"><select id="style" aria-label="Lantern style"></select></label>
+    <label title="Which lantern shows in every window, the iTerm2 panel and the screensaver"><select id="style" aria-label="Lantern style"></select></label>
     <div class="ribbon" title="The barrel lantern's ribbon colour"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour"></span></div>
     <div class="time switch" id="quietFromRow" title="Every night at this time, quiet turns on by itself and snoozes everything until quiet hours end"><span>quiet from</span><span class="pill" role="group" aria-label="Quiet from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" disabled></label></div>
     <div class="time switch" id="quietEndRow" title="When quiet hours end and moths can call you again. Off: they last until you press the moon"><span>quiet until</span><span class="pill" role="group" aria-label="Quiet until"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietEnd" value="08:00" aria-label="Quiet until"></label></div>
@@ -274,7 +275,9 @@
   <div id="recap" class="flyup" popover aria-label="Recap"></div>
 </footer>
 <script defer src="page/scene.js"></script>
+<script defer src="page/dev.js"></script>
 <script defer src="page/lanterns.js"></script>
+<script defer src="page/pencil.js"></script>
 <script defer src="page/state.js"></script>
 <script defer src="page/background.js"></script>
 <script defer src="page/github.js"></script>

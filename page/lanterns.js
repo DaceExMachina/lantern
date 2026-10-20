@@ -1,11 +1,17 @@
-// The three lanterns, landing spots on them, the warm and cool palettes, and seeded randomness.
+// The lanterns (three that hang and a candle that stands), landing spots on them, the warm and cool palettes, and seeded
+// randomness.
 
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame. `flame` places the flame's base and sets its size,
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
-// for a lantern that holds some back (pierced brass), and `holder` is the burner cup under its flame.
+// for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
+// burner cup, a candle's rim), as a height and a half-width. `flameWind` is how far the wind leans its flame (none if absent). `stands` is a lantern on its own foot, which doesn't sway
+// and has nothing to hang from; it's the band its stand fills below it, a half-width and the top, from there to the
+// window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` shades below from the holder's corners instead, as the live flame's base and tip see them (background.js rimShade).
+// `shine` is a bare flame lighting its holder, and lists the grapes it glints on (frame.js drawShine).
+// `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
@@ -31,60 +37,15 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
-// ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
-let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
+// the dev panel's flame (dev.js): hold it at a brightness, 0 (idle ember) to 1 (five sessions working), whatever is running,
+// and force its colour warm or violet, whatever the sessions say (frame.js)
+let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
+let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
-// ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
-// and is kept in the URL).
-if (Q.has('dev')) {
-  const panel = document.createElement('div'), query = (k, v) => {
-    const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
-  };
-  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 240px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
-    + 'border: 1px solid #4A3B68; border-radius: 10px; color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
-  // each row is one label, its click area the row's full width and height, meeting the next row's; hovering anywhere on it
-  // shows what it does, and a slider shows its value after it
-  const row = (text, title, attrs) => {
-    const label = document.createElement('label'), input = Object.assign(document.createElement('input'), attrs);
-    label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
-    label.title = title;
-    if (attrs.type === 'range') {
-      const value = document.createElement('span');
-      value.style.cssText = 'min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums';
-      const show = () => { value.textContent = input.value; };
-      input.style.flex = '1'; input.addEventListener('input', show); show();
-      label.append(text, input, value);
-    } else label.append(input, text);
-    panel.append(label);
-    return input;
-  };
-  const on = row('twist', 'Turn the brass to and from the light as the lantern swings', { type: 'checkbox', checked: twistGain > 0 });
-  const gain = row('strength', 'How far the brass turns with the swing. Higher makes its shine move more', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
-  on.onchange = gain.oninput = () => {
-    twistGain = on.checked ? +gain.value : 0;
-    history.replaceState(null, '', query('twist', twistGain === 3 ? null : String(twistGain)));
-  };
-  const fake = row('fake flame', 'Hold the flame at a set brightness, whatever your sessions are doing', { type: 'checkbox', checked: fakeFlame !== null });
-  const bright = row('brightness', 'How bright the fake flame burns, from an idle ember to five sessions working', { type: 'range', min: 0, max: 1, step: 0.05, value: fakeFlame ?? 1 });
-  fake.onchange = bright.oninput = () => {
-    fakeFlame = fake.checked ? +bright.value : null;
-    history.replaceState(null, '', query('flame', fakeFlame === null ? null : String(fakeFlame)));
-  };
-  for (const [k, min, max, step, title] of [
-    ['period', 2, 8, 0.1, 'How long one full swing of the lantern takes, in seconds'],
-    ['damping', 0.05, 0.6, 0.01, 'How quickly the swinging dies down. Lower rocks longer'],
-    ['forget', 0.3, 5, 0.1, 'How long a steady lean in the wind keeps pushing the lantern, in seconds. Longer makes it lean with the wind instead of swinging back'],
-    ['gain', 0, 3, 0.05, 'How hard changes in the wind push the lantern'],
-    ['gust', 1, 8, 0.1, 'How long a gust of wind lasts on average, in seconds. Each one runs from half to one and a half times this. The dust, fireflies and moths feel it too']]) {
-    const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
-    r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
-  }
-  document.body.append(panel);
-}
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);
@@ -246,11 +207,427 @@ const DRUM = (kit, y, half, height, paper = 0) => {
   const band = (a, b) => `M${n(cx - half)} ${n(a)}${arc(a, half, 1)}V${n(b)}${arc(b, half, -1)}Z`;
   const on = (y, f) => `${n(cx + f * half)} ${n(y + half * bow(y) * (1 - f * f) / 2)}`; // f of the way out along that arc
   const fs = [0, 1, 2, 3, 4].map(i => kit.side + (1 - kit.side) * i / 4), rimY = paper > 0 ? bottom + gap : y - gap;
-  return `<path d="${band(y, bottom)}" fill="${kit.lit}"/><path d="M${[...fs.map(f => on(y, f)), ...fs.reverse().map(f => on(bottom, f))].join('L')}Z" fill="${kit.dark}"/>`
+  return `<path d="${band(y, bottom)}" fill="${kit.lit}"/>` + (kit.dark === 'none' ? '' : `<path d="M${[...fs.map(f => on(y, f)), ...fs.reverse().map(f => on(bottom, f))].join('L')}Z" fill="${kit.dark}"/>`)
     + (paper ? `<path d="${paper > 0 ? band(bottom - lipH, bottom) : band(y, y + lipH)}" fill="${lipFill}"/>` : '')
     + `<path d="${band(y, bottom)}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`
     + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
 };
+// A string's hash, for seeding.
+const hash = str => [...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+// Random-looking numbers that every window agrees on: seeded from a session's id, so the lantern in the toolbelt,
+// the Dock app and the screensaver all put a moth in the same place, and the candle's vine grows the same (mulberry32).
+const seeded = seed => () => {
+  let t = seed = (seed + 0x6D2B79F5) >>> 0;
+  t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+// The pillar candle is an ivory pillar on a bronze altar candlestick wound with a grapevine. It stands on its own foot
+// instead of hanging (style.stands), and is drawn seen from its light's height by the barrel's rule. An edge d below
+// that sags d / 1350 of its half-width at the front, so the rim, just under the flame, is edge-on and the drip pan and
+// foot are seen from above. makeCandle draws it, and gives its style (STYLES.candle) with the numbers it was drawn from;
+// the tests draw it at other numbers too: the pillar's half-width `r` and crown `rim`, the stem's height `stem`, and the
+// drawing's neck `neck`.
+const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
+// Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (pickPerch).
+const PERCH_SPREAD = 0.44;
+function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) {
+  // The pillar's numbers place the flame, the light, the shade and the wax moths land on: its middle, half-width, crown
+  // (the rim, at its mean height), bottom (hidden in the pan, 200 below the rim), the pan's rim, the eye (the flame's
+  // core: where the light comes from, and the drawing's eye height) and the shared flame, standing on the crown.
+  const PILLAR = { cx: 340, r: R, rim, bottom: rim + 200, dish: rim + 186, eye: rim - 18, flame: [340, rim - 2, 0.8] };
+  // The candlestick is drawn in its own units, its pan at `dish`, its stem from the pan's neck at `neck` down to the foot's
+  // collar at `collar` and its foot on a slab at `slab`, and placed from there (stick, below).
+  const DRAWN = { dish: 426, neck, collar: 518, slab: 549 };
+  // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
+  // `column` either side of the middle that runs down to the window's bottom edge. The candlestick's foot stands on it,
+  // under a stem STEM tall between the pan's neck and the foot's collar.
+  // The vine (vineTop): its trunk is laid out from `anchor` up, curving across the front of the column to `split`, where it
+  // divides into its branches; below `anchor` it runs on down as far as the window goes (the split shows 151 below the
+  // slab's bottom edge, five times the 30 it first sat).
+  const top = PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), split = top + 172;
+  const PEDESTAL = { top, r: 112, depth: 14, column: 85, split, anchor: split + 200 };
+  // bronze, shaded across each curve by one gradient lit by the flame (frame.js drawShine)
+  const K = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: 'url(#cdBronze)', dark: 'none', ink: '#160A03', line: 1.2,
+    lip: [0, '#160A03'], rim: [0, 0, 0] };
+  const cx = PILLAR.cx, n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
+  const GILT = '#B57A40'; // the pan's lip, catching the light
+  const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
+  // The candlestick placed from its drawn units (DRAWN): the pan and all on it under the pillar, the foot and all on it on
+  // the pedestal, and the stem between, scaled about the middle to STEM tall, so a part keeps its shape.
+  const k = STEM / (DRAWN.collar - DRAWN.neck);
+  const stick = (/** @type {number[]} */ [x, y]) => /** @type {[number, number]} */ (y <= DRAWN.neck ? [x, y + PILLAR.dish - DRAWN.dish]
+    : y >= DRAWN.collar ? [x, y + PEDESTAL.top - DRAWN.slab] : [cx + (x - cx) * k, PILLAR.dish + DRAWN.neck - DRAWN.dish + (y - DRAWN.neck) * k]);
+  const Y = y => stick([cx, y])[1];
+  const WAX = ['#EADBC0', '#CDB894'], DRIP = { lit: ['#F2E6CF', '#CDB690'], dark: ['#D9C6A2', '#B9A27C'] }; // lit, dark side
+  // a turned bronze part from its profile, [y, half-width] top to bottom. It closes with its bottom edge's front arc and
+  // its top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
+  // in the bronze (or `fill`), in an ink outline
+  const turned = (id, prof, bowl = false, fill = K.lit) => {
+    const [y0, h0] = prof[0], [y1, h1] = prof[prof.length - 1];
+    const d = `M${prof.map(([y, h]) => pt([cx - h, y])).join('L')}Q${cx} ${n(y1 + 2 * sag(y1, h1))} ${n(cx + h1)} ${n(y1)}`
+      + `L${[...prof].reverse().map(([y, h]) => pt([cx + h, y])).join('L')}Q${cx} ${n(y0 + (bowl ? 2 : -2) * sag(y0, h0))} ${n(cx - h0)} ${n(y0)}Z`;
+    return `<path id="${id}" d="${d}" fill="${fill}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
+  };
+  // a plain ring, `height` tall and `h` either side, its top face showing, with its rim's front edge inked
+  const ring = (id, y, h, height) => turned(id, [[y, h], [y + height, h]])
+    + `<path d="M${n(cx - h)} ${n(y)}Q${cx} ${n(y + 2 * sag(y, h))} ${n(cx + h)} ${n(y)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>`;
+  const profile = (y0, y1, half, steps = 12) => Array.from({ length: steps + 1 }, (_, i) => { const y = y0 + (y1 - y0) * i / steps; return [y, half(y)]; });
+  // a curve through points, rounding each corner between them
+  const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
+  // the crown's back wall, ragged and melted round at the shoulders; its front wall runs a unit below (the lip)
+  // (each point is across the pillar from -1 to 1, and up from the rim)
+  const side = cx + K.side * R; // where the pillar's dark side starts
+  const CROWN = [[-1, 9.5], [-1, -1], [-0.6, -2.2], [-0.24, -1], [0.24, -0.8], [0.6, -1.6], [1, -1], [1, 20]] // the left starts where smooth() ends the right's curve, so the shoulders mirror
+    .map(([u, dy]) => [cx + u * R, rim + dy]);
+  const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H${cx - R}Z`;
+  // drips from the crown: [middle, width, where it ends, and where a second bulge sits on the way down], each ending in a
+  // bulb 1.3 times its width; the main one runs out of the notch. Each middle is across the pillar from -1 to 1, and the
+  // drops are below the rim.
+  const DRIPS = [[-0.78, 6, 76], [-0.5, 4.5, 22], [-0.2, 5.5, 48], [0.18, 4, 16], [0.56, 8, 98, 60], [0.8, 5, 56]]
+    .map(([u, w, e, bulge]) => [cx + u * R, w, rim + e, ...bulge ? [rim + bulge] : []]);
+  const NOTCH = DRIPS[4][0]; // the main drip's middle
+  const dripD = (/** @type {number[]} */ [c, w, e, bulge]) => {
+    const r = 0.65 * w, y = n(e - r - Math.sqrt(r * r - w * w / 4)), b = n(0.6 * w);
+    return `M${n(c - w / 2)} ${rim}V${y}A${n(r)} ${n(r)} 0 1 0 ${n(c + w / 2)} ${y}V${rim}Z` + (bulge ? `M${n(c - b)} ${bulge}a${b} ${b} 0 1 0 ${2 * b} 0a${b} ${b} 0 1 0 ${-2 * b} 0Z` : '');
+  };
+  const drips = DRIPS.map(d => {
+    const [lit, dark] = d[0] > side ? DRIP.dark : DRIP.lit, r = 0.65 * d[1];
+    return `<path d="${dripD(d)}" fill="${lit}"/><rect x="${n(d[0] + d[1] / 6)}" y="${rim}" width="${n(r + 1 - d[1] / 6)}" height="${d[2] - rim + 1}" fill="${dark}" clip-path="url(#cdDrips)"/>`;
+  }).join('');
+  // grapes in three shades, light to dark (cdGrape0 to 2): a little oval, rounded by a radial gradient lit from above with
+  // a dark rim, in a soft outline, the lighter two dusted with a faint bloom
+  const GRAPE = [['#8A5AA4', '#5A3274', '#2A1436'], ['#74468E', '#48285E', '#22102C'], ['#5C3474', '#381E4A', '#1A0B22']].map(([lit, mid, rim], i) =>
+    `<radialGradient id="cdGrapeG${i}" cx=".42" cy=".3" r=".75"><stop offset="0" stop-color="${lit}"/><stop offset=".55" stop-color="${mid}"/><stop offset="1" stop-color="${rim}"/></radialGradient>`
+    + `<g id="cdGrape${i}"><ellipse cx="0" cy="0" rx="4.7" ry="5.3" fill="url(#cdGrapeG${i})" stroke="#1A0E20" stroke-width=".5" stroke-opacity=".8"/>`
+    + (i < 2 ? '<ellipse transform="translate(-1.2 -1.8)" cx="0" cy="0" rx="2.6" ry="2" fill="#E8E0F2" opacity=".14"/>' : '') + '</g>').join('');
+  // a bunch's grapes, back to front (the higher first): those at its back and bottom darker, with a little seeded variety,
+  // each 0.9 to 1.1 times the size; `glints` keeps where each is, for their glints
+  const grapeUses = (ps, glints = false) => ps.map(([x, y], i) => {
+    const r = seeded(hash(`${n(x)} ${n(y)}`)), shade = Math.max(0, Math.min(2, Math.floor(3 * i / ps.length + r() - 0.5)));
+    if (glints) GRAPES.push([n(x), n(y)]);
+    return `<use href="#cdGrape${shade}" x="${n(x)}" y="${n(y)}" transform="translate(${n(x)} ${n(y)}) scale(${n(0.9 + 0.2 * r())}) translate(${n(-x)} ${n(-y)})"/>`;
+  }).join('');
+  const GRAPES = /** @type {number[][]} */ ([]); // every grape drawn with a glint, for their glints
+  // the glints on the grapes from the `from`th drawn on, in their order (frame.js drawShine)
+  const grapeGlints = from => GRAPES.slice(from).map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1" opacity="0"/>`).join('');
+  // a hex-packed bunch, in rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
+  // same parity as the one above shifts half a grape so they nest
+  const bunch = (x, y, rows, lean) => {
+    let shift = -2.4;
+    return rows.flatMap((count, i) => {
+      if (i && count % 2 === rows[i - 1] % 2) shift = -shift;
+      return Array.from({ length: count }, (_, j) => [x + lean * i + shift + 9.6 * (j - (count - 1) / 2), y + 8.4 * i]);
+    });
+  };
+  // a vine leaf of five pointed lobes, the middle longest: stem at (x, y), `w` across, pointing `deg` from straight up;
+  // lit on its left half, three veins from the stem to the main tips
+  const EDGE = [[[0.3, -0.02], [0.5, -0.22]], [[0.3, -0.26], [0.22, -0.36]], [[0.4, -0.44], [0.44, -0.66]], [[0.26, -0.62], [0.14, -0.66]], [[0.14, -0.86], [0, -1]]];
+  const leaf = (x, y, w, deg) => {
+    const a = deg * Math.PI / 180, at = ([u, v]) => pt([x + w * (u * Math.cos(a) - v * Math.sin(a)), y + w * (u * Math.sin(a) + v * Math.cos(a))]);
+    const half = side => `M${at([0, 0])}${EDGE.map(([c, p]) => `Q${at([side * c[0], c[1]])} ${at([side * p[0], p[1]])}`).join('')}Z`;
+    return `<path d="${half(-1)}" fill="#5E6B33"/><path d="${half(1)}" fill="#3D4721"/>`
+      + `<path d="M${at([0, 0])}L${at([0, -0.92])}M${at([0, 0])}L${at([0.38, -0.6])}M${at([0, 0])}L${at([-0.38, -0.6])}" fill="none" stroke="#283016" stroke-width=".7"/>`
+      + `<path d="${half(-1)}${half(1)}" fill="none" stroke="#1A200D" stroke-width=".8" stroke-linejoin="round"/>`;
+  };
+  // the pedestal's old vine, thick, in an ink outline
+  const VINE = '#5B5129', VINE_INK = '#1F1A0C';
+  const thick = d => `<path d="${d}" fill="none" stroke="${VINE_INK}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `<path d="${d}" fill="none" stroke="${VINE}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  // the pedestal, by the candlestick's rule, in cool marble lit from the left, its right side in shade as the wax is
+  const P = PEDESTAL, left = cx - P.r, slabY = P.top + P.depth, col = P.column, FOOT = 74; // the foot's half-width
+  // the domed foot's half-width at drawn height yd, an ogee from the collar's width (20) out to its base ring's (FOOT)
+  const dome = yd => 20 + (FOOT - 20) * (u => u * u * (3 - 2 * u))((yd - 523) / 20);
+  const MARBLE = { ...K, lit: '#CFC9D8', dark: '#8A8396', ink: '#2A2333' };
+  // every rim of the pedestal is a true ellipse at the slab top's tilt: its depth is T of its width
+  const T = sag(P.top, P.r) / P.r, rimRy = r => n(r * T);
+  // the point `th` radians round the column from the front (positive to the right), `R` from its middle, at height y
+  const round = (R, th, y) => /** @type {[number, number]} */ ([cx + R * Math.sin(th), y + R * T * Math.cos(th)]);
+  // ---- the grapevine: an old woody trunk winding up the column and over the slab, branching out in front of the stone
+  // and arcing back, every leaf, tendril and bunch on it. Seeded, so every window grows the same vine.
+  const VINE_LIT = '#80733C';
+  // a woody limb along `pts`, `ws[i]` wide at each, gnarled by `rand` (knots and thin stretches): filled, inked along its
+  // two sides only (so a branch drawn from inside its trunk joins it with no line across), lit along its left. Standing off
+  // the stone, it also lays a soft shadow `shadow` below it on the column.
+  const limb = (pts, ws, rand, shadow = 0) => {
+    let g = 0;
+    const L = [], R = [];
+    pts.forEach((p, i) => {
+      const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy) || 1;
+      g = 0.7 * g + 0.3 * (2 * rand() - 1) + (rand() < 0.05 ? 0.7 : 0); // now and then a knot
+      const w = ws[i] * Math.max(0.6, 1 + 0.45 * g) / 2;
+      L.push([p[0] + dy / d * w, p[1] - dx / d * w]); R.push([p[0] - dy / d * w, p[1] + dx / d * w]);
+    });
+    const left = L[0][0] < R[0][0] ? L : R, // the left as it starts, so a longer limb doesn't change it
+      d = `M${[...L, ...[...R].reverse()].map(pt).join('L')}Z`;
+    return (shadow ? `<path d="${d}" fill="#241C30" opacity=".22" transform="translate(${n(shadow * 0.3)} ${n(shadow)})" clip-path="url(#cdColClip)"/>` : '')
+      + `<path d="${d}" fill="${VINE}"/><path d="M${L.map(pt).join('L')}M${R.map(pt).join('L')}" fill="none" stroke="${VINE_INK}" stroke-width=".9" stroke-linejoin="round" stroke-linecap="round"/>`
+      + (pts.length > 2 ? `<path d="M${left.slice(1, -1).map(pt).join('L')}" fill="none" stroke="${VINE_LIT}" stroke-width=".7" stroke-linecap="round"/>` : '');
+  };
+  // a shoot from `p`, `steps` steps of `len` heading `a` (radians, y down), turning by `curl` a step and more as it goes
+  // (`tighten`), kinked a little by `rand`: its points, start included
+  const shoot = (p, a, steps, len, curl, tighten, rand) => {
+    const pts = [p];
+    for (let i = 0; i < steps; i++) {
+      a += curl * (1 + tighten * i) + (rand() - 0.5) * 0.35;
+      const [x, y] = pts[pts.length - 1];
+      pts.push([x + Math.cos(a) * len, y + Math.sin(a) * len]);
+    }
+    return { pts, a };
+  };
+  // something that flutters in the wind about `p` (frame.js drawLeaves), `k` as much as a mid-sized leaf
+  // `low` and `deg` (where it points, from straight up) are a leaf's (leafOn)
+  const flutter = (p, k, svg, low = -1, deg = 0) => `<g class="cdLeaf" data-at="${pt(p)}" data-k="${n(k)}" data-deg="${n(deg)}"${low < 0 ? '' : ` data-low="${low}"`}>${svg}</g>`;
+  // a curling tendril from `p`, heading `a`, coiling `side` (1 or -1)
+  const tendril = (p, a, side, rand) => flutter(p, 0.4, `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`);
+  // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up. It's drawn at `w` and grown as it
+  // flutters (frame.js drawLeaves), the more the lower it hangs: `low`, 0 down to the vine's split, 1 from 300 below
+  const leafOn = (p, w, deg) => {
+    const a = deg * Math.PI / 180, q = [p[0] + Math.sin(a) * w * 0.25, p[1] - Math.cos(a) * w * 0.25];
+    return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`, // smaller leaves more
+      n(Math.min(1, Math.max(0, (p[1] - P.split) / 300))), deg);
+  };
+  // a tapering bunch hanging (or lying) from its stalk at `p`, its axis `deg` from straight down, rows of grapes from the
+  // stalk out; `glints` for grapes with glints (not on the column, which is redrawn)
+  const cluster = (p, deg, rows, glints = false) => {
+    const a = deg * Math.PI / 180, top = [p[0] - Math.sin(a) * 9, p[1] + Math.cos(a) * 9];
+    const ps = bunch(0, 0, rows, 0).map(([x, y]) => [top[0] + x * Math.cos(a) - y * Math.sin(a), top[1] + x * Math.sin(a) + y * Math.cos(a)]);
+    return `<path d="M${pt(p)}Q${pt([p[0] + 3, (p[1] + top[1]) / 2])} ${pt(top)}" fill="none" stroke="${VINE_INK}" stroke-width="2.2" stroke-linecap="round"/>`
+      + `<path d="M${pt(p)}Q${pt([p[0] + 3, (p[1] + top[1]) / 2])} ${pt(top)}" fill="none" stroke="${VINE}" stroke-width="1.3" stroke-linecap="round"/>`
+      + grapeUses(ps.sort((u, v) => u[1] - v[1]), glints);
+  };
+  const climbEnd = -1.25, climbTop = P.top + 47, climbR = col + 2; // where the trunk leaves the column for the slab
+  const climbAt = round(climbR, climbEnd, climbTop);
+  // points along a quadratic curve from a (excluded) by c to b
+  const quad = (a, c, b, k = 8) => Array.from({ length: k }, (_, i) => { const t = (i + 1) / k, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; });
+  // The vine from PEDESTAL.anchor up is laid out in fixed places, the same at every window size: the trunk curves
+  // gnarled partway round the front of the column, thin shoots with leaves and tendrils coming off it, to the split, where
+  // it divides into a limb up to the slab (on over it to the foot), one round the column and behind it, and two that arc
+  // out in front of the stone and curl back, with leaves, tendrils and bunches. Only the trunk below the anchor depends on
+  // the window: it runs on down the column, drawn top-down, so a taller window adds trunk below.
+  // the trunk's curve, from the anchor (u 0) to the split (u 1): its distance off the column's axis, angle round it, height
+  const stemAt = u => /** @type {[number, number, number]} */ ([climbR + 8 + 5 * Math.sin(u * 9), -0.75 + 1.2 * u + 0.2 * Math.sin(u * 13), P.anchor + (P.split - P.anchor) * u]);
+  const stem = Array.from({ length: 51 }, (_, i) => round(...stemAt(i / 50))), SPLIT = stem[50];
+  // every side branch drawn, for the tests: its name, points and where its leaves grow
+  const BRANCHES = /** @type {{ name: string, pts: number[][], leaves: number[][] }[]} */ ([]);
+  const vineTop = (() => {
+    const rand = seeded(hash('candle:vine:top')), limbs = [], twigs = [], behind = [];
+    // A limb winding round the column (points, which are in front, widths): all of it drawn behind the column, which hides
+    // what's behind it so it shows only round its edges, and its turns in front drawn again over the column, so it comes
+    // out from behind the column's edge rather than starting in the air. Its knots are baked into its widths, so the two
+    // layers coincide. Its turns in front, for leaves.
+    const roundAbout = (pts, fronts, ws, r) => {
+      let g = 0;
+      const gw = ws.map(w => { g = 0.7 * g + 0.3 * (2 * r() - 1) + (r() < 0.05 ? 0.7 : 0); return w * Math.max(0.6, 1 + 0.45 * g); }), even = () => 0.5;
+      behind.push(limb(pts, gw, even));
+      const runs = /** @type {number[][]} */ ([]);
+      fronts.forEach((f, i) => { if (f && !fronts[i - 1]) runs.push([]); if (f) runs[runs.length - 1].push(i); });
+      return runs.filter(run => run.length > 3).map(run => {
+        const idx = [...new Set([Math.max(0, run[0] - 1), ...run, Math.min(pts.length - 1, run[run.length - 1] + 1)])]; // meeting the layer behind
+        limbs.push(limb(idx.map(i => pts[i]), idx.map(i => gw[i]), even));
+        return run.map(i => pts[i]);
+      });
+    };
+    const flare = (n, w0, w1) => Array.from({ length: n }, (_, j) => w1 + (w0 - w1) * (1 - j / (n - 1)) + Math.max(0, 3 - j) * 1.4);
+    // a limb from the split, flared where it leaves what it grows from, `w0` to `w1` wide
+    const branch = (pts, w0, w1, shadow = 6, r = rand) => limb(pts, pts.map((_, j) => w1 + (w0 - w1) * (1 - j / (pts.length - 1)) + Math.max(0, 3 - j) * 1.4), r, shadow);
+    // `leaves` leaves spread along `pts` by fraction (from 0.3 to 0.95 of the way), alternating sides, angled off its
+    // heading, about `w` across; where they grow
+    const leavesAlong = (pts, leaves, w, r) => {
+      const at = [], last = pts.length - 1;
+      for (let j = 0; j < leaves; j++) {
+        const i = Math.max(1, Math.round((0.3 + 0.65 * (leaves > 1 ? j / (leaves - 1) : 0.5)) * last)), [u, v] = [pts[i - 1], pts[Math.min(last, i + 1)]];
+        const heading = Math.atan2(v[1] - u[1], v[0] - u[0]) * 180 / Math.PI + 90;
+        twigs.push(leafOn(pts[i], w + 5 * r(), heading + (j % 2 ? 1 : -1) * (50 + 30 * r())));
+        at.push(pts[i]);
+      }
+      return at;
+    };
+    // A side branch named `name`, from `p` heading `a`, `steps` long, curling `curl` a step, `w0` wide where it starts, on its
+    // own seeded stream (so adding one reshapes no other). Its `leaves` spread along it, a bunch hangs from it `bunch` of
+    // the way along (if any), and a tendril curls off its end.
+    const sprout = (name, p, a, steps, curl, w0, leaves, bunch = 0) => {
+      const r = seeded(hash(`candle:vine:${name}`)), { pts, a: end } = shoot(p, a, steps, 3.3, curl, 0.015, r), last = pts.length - 1;
+      limbs.push(branch(pts, w0, Math.max(1, w0 * 0.28), w0 > 3 ? 6 : 4, r));
+      BRANCHES.push({ name, pts, leaves: leavesAlong(pts, leaves, w0 > 3 ? 15 : 12, r) });
+      if (bunch) twigs.push(cluster(pts[Math.round(bunch * last)], (r() - 0.5) * 16, [3, 3, 2, 2, 1]));
+      twigs.push(tendril(pts[last], end, curl > 0 ? 1 : -1, r));
+    };
+    // up to where the vine climbs over the slab (climbAt), wandering; round the column both ways at the split
+    const up = Array.from({ length: 31 }, (_, j) => { const u = j / 30; return [SPLIT[0] + (climbAt[0] - SPLIT[0]) * u + 22 * Math.sin(u * Math.PI) + 6 * Math.sin(u * 10), SPLIT[1] + (climbAt[1] - SPLIT[1]) * u]; });
+    // round the column both ways from the split, on round behind it (lying on the stone, so no shadow off it)
+    const [R1, th1] = stemAt(1), ths = (to, step) => Array.from({ length: Math.floor(Math.abs(to - th1) / 0.08) + 1 }, (_, i) => th1 + step * i);
+    const wrapThs = ths(Math.PI, 0.08), wrap2Ths = ths(-Math.PI, -0.08);
+    const [wrap] = roundAbout(wrapThs.map(th => round(R1, th, P.split - (th - th1) * 14)), wrapThs.map(th => Math.cos(th) > 0), flare(wrapThs.length, 6, 2), rand);
+    const [wrap2] = roundAbout(wrap2Ths.map(th => round(R1, th, P.split - (th1 - th) * 18)), wrap2Ths.map(th => Math.cos(th) > 0), flare(wrap2Ths.length, 5, 2), rand);
+    limbs.push(branch(up, 8, 5, 4));
+    twigs.push(leafOn(up[3], 18, 60), leafOn(up[7], 22, -40), leafOn(up[15], 18, 50), leafOn(up[23], 16, -30), leafOn(up[27], 14, -50), tendril(up[19], 0.2, 1, rand),
+      cluster(wrap[Math.min(5, wrap.length - 1)], -6, [3, 3, 2, 1]));
+    BRANCHES.push({ name: 'wrap', pts: wrap, leaves: leavesAlong(wrap, 3, 15, rand) }, { name: 'wrap2', pts: wrap2, leaves: leavesAlong(wrap2, 4, 15, rand) });
+    // thin shoots off the trunk below the split
+    [[9, 1], [21, -1], [34, 1], [43, -1]].forEach(([i, side], j) => sprout(`stem${j}`, stem[i], side > 0 ? -0.6 : Math.PI + 0.6, 8 + (i % 4), -side * 0.13, 2.6, 2));
+    // the branches at the split, and two big ones off the climbing limb, one each way, arcing up and round
+    sprout('right', SPLIT, -0.35, 22, -0.085, 5.5, 3, 0.9);
+    sprout('left', SPLIT, Math.PI + 0.45, 18, 0.1, 5, 3);
+    sprout('high', SPLIT, -1.15, 20, 0.07, 5, 3);
+    sprout('upR', up[20], -0.2, 16, -0.11, 4, 3);
+    sprout('upL', up[10], Math.PI + 0.15, 22, 0.09, 5, 4, 0.3);
+    // the big right branch, off the climbing limb round the column to the right and on round it nearly twice, each turn in
+    // front higher than the last, the last just under the slab; only its turns in front show, each with leaves along it,
+    // a bunch on the first
+    (() => {
+      const r = seeded(hash('candle:vine:bigR')), R = col + 6, [x0, y0] = up[10], th0 = Math.asin(Math.max(-1, Math.min(1, (x0 - cx) / R)));
+      const turn = 2 * Math.PI * 1.85, base = y0 - R * T * Math.cos(th0), top = P.top + 30, us = Array.from({ length: 201 }, (_, i) => i / 200);
+      const runs = roundAbout(us.map(u => round(R + 3 * Math.sin(u * 17), th0 + turn * u, base + (top - base) * u)), us.map(u => Math.cos(th0 + turn * u) > 0), us.map(u => 5 - 3.4 * u), r);
+      runs.forEach((pts, j) => {
+        BRANCHES.push({ name: `bigR${j}`, pts, leaves: leavesAlong(pts, Math.max(3, Math.round(pts.length / 9)), 15, r) });
+        if (!j) twigs.push(cluster(pts[Math.round(0.3 * (pts.length - 1))], 0, [3, 3, 2, 2, 1]));
+        else twigs.push(tendril(pts[pts.length - 1], -2.6, -1, r));
+      });
+    })();
+    return { back: behind.join(''), front: limbs.join('') + twigs.join('') };
+  })();
+  // The trunk as one limb, from the split down through the anchor (the fixed curve, stem) and on down the front of the column
+  // past `bottom`, wandering a little and thickening. Below the anchor it sets off the way the curve was heading. Its
+  // knots run from the split down on their own stream, so a longer trunk keeps the ones above.
+  const trunkLine = bottom => {
+    const rand = seeded(hash('candle:vine:trunk')), pts = [...stem].reverse().slice(0, -1), ws = pts.map((_, i) => 10 + 4 * i / 50);
+    const below = [];
+    let [x] = stem[0], dx = (stem[0][0] - stem[1][0]) * 4 / (stem[0][1] - stem[1][1]); // the curve's slope, carried on down
+    for (let y = stem[0][1], i = 0; y < bottom + 20; y += 4, i++) {
+      below.push([x, y]); ws.push(14 + Math.min(4, i * 0.1));
+      x += dx;
+      dx = 0.85 * dx + (rand() - 0.5) * 1.4 + (stem[0][0] - x) * 0.03; // easing back toward where it set off, wandering
+    }
+    return { pts: [...pts, ...below], ws, below };
+  };
+  const trunk = bottom => {
+    const { pts: line, ws, below: pts } = trunkLine(bottom); // the fixed curve always, however little shows below it
+    // now and then a thin leafy shoot off it, one chance in each 60 of trunk, seeded by which 60 it is, so a taller window
+    // adds shoots below and never moves one above
+    let shoots = '';
+    for (let k = 0; (k + 1) * 15 < pts.length; k++) {
+      const r = seeded(hash(`candle:vine:shoot:${k}`)), side = k % 2 ? 1 : -1;
+      shoots += leafOn(pts[k * 15 + 7], 14, -side * 70); // a leaf on the trunk itself every stretch
+      if (r() > 0.6) continue;
+      const s = shoot(pts[k * 15 + 3 + Math.floor(r() * 9)], side > 0 ? -0.7 : Math.PI + 0.7, 6 + Math.floor(r() * 5), 3, -side * 0.12, 0.03, r);
+      shoots += limb(s.pts, s.pts.map((_, j) => 2.4 - 1.4 * j / s.pts.length), r, 4) + leafOn(s.pts[3], 12 + 6 * r(), side * (45 + 40 * r()))
+        + (r() < 0.5 ? tendril(s.pts[s.pts.length - 1], s.a, -side, r) : leafOn(s.pts[s.pts.length - 1], 10 + 5 * r(), side * 15));
+    }
+    return `<g id="cdTrunk">${limb(line, ws, seeded(hash('candle:vine:bark')), 5)}</g>` + shoots;
+  };
+  // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws
+  // it), the vine up it from below the edge
+  const column = bottom => `<clipPath id="cdColClip"><path d="M${cx - col} ${slabY}V${bottom}H${cx + col}V${slabY}Z"/></clipPath>
+    ${vineTop.back}<!-- the vine's turns behind the column -->
+    <path d="M${cx - col} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.lit}"/>
+    <path d="M${n(cx + K.side * col)} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.dark}"/>
+    <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${bottom}`).join('')}" fill="none" stroke="#8E869B" stroke-opacity=".6" stroke-width=".8"/>
+    <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
+    ${trunk(bottom)}${vineTop.front}`;
+  // the slab: a band between its top rim and its bottom rim's front, lit from the left, in an ink outline
+  const slabD = `M${left} ${P.top}V${slabY}A${P.r} ${rimRy(P.r)} 0 0 0 ${cx + P.r} ${slabY}V${P.top}Z`;
+  // The vine on the candlestick: the same limb, on from the slab, winding up round the foot, collar, baluster and knop to
+  // under the pan, just off each part's surface (its half-width at drawn height yd, `girth`). Its back turns are drawn
+  // before the candlestick, behind it, and its front ones after, over it.
+  const girth = yd => yd >= 543 ? FOOT : yd >= 523 ? dome(yd) : yd >= 518 ? 20
+    : yd >= 489 ? k * (yd < 504 ? 10 + 7 * Math.sin((yd - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((yd - 504) / 14 * Math.PI / 2))
+    : yd >= 485 ? 10 * k : yd >= 463 ? Math.max(10, 25 * Math.sqrt(Math.max(0, 1 - ((yd - 474) / 11) ** 2))) * k : 14;
+  const holder = Array.from({ length: 121 }, (_, i) => {
+    const u = i / 120, yd = 547 - 89 * u, th = -0.95 + u * 1.7 * 2 * Math.PI, h = girth(yd) + 1.8;
+    return { p: [cx + h * Math.sin(th), Y(yd) + sag(Y(yd), h) * Math.cos(th)], front: Math.cos(th) > 0, i };
+  });
+  const holderVine = (() => {
+    const rand = seeded(hash('candle:vine:holder')), runs = { back: '', front: '' };
+    let run = [holder[0]];
+    for (const q of holder.slice(1)) {
+      if (q.front === run[0].front) { run.push(q); continue; }
+      run.push(q); // overlapping one point, so the turns meet at the sides
+      runs[run[0].front ? 'front' : 'back'] += limb(run.map(r => r.p), run.map(r => 2.8 - 1.4 * r.i / 120), rand);
+      run = [q];
+    }
+    runs[run[0].front ? 'front' : 'back'] += limb(run.map(r => r.p), run.map(r => 2.8 - 1.4 * r.i / 120), rand);
+    runs.front += [18, 47, 71, 96].map((i, j) => leafOn(holder[i].p, 15 - j, (j % 2 ? 1 : -1) * 70)).join('') + tendril(holder.filter(q => q.front).at(-1).p, -1.2, 1, rand); // off its last turn in front
+    return runs;
+  })();
+  // over the slab's edge and across its top to the foot, where it goes on up the candlestick
+  const edgeAt = [left + 2, P.top + 31], over = [climbAt, ...quad(climbAt, [left + 4, P.top + 49], edgeAt), ...quad(edgeAt, [left + 2, P.top + 13], [left + 28, P.top + 9]),
+    ...quad([left + 28, P.top + 9], [left + 56, P.top + 8], holder[0].p)];
+  const overRand = seeded(hash('candle:vine:over'));
+  const overVine = limb(over, over.map((_, i) => 5 - 3 * i / over.length), overRand)
+    + (s => limb(s.pts, s.pts.map((_, j) => 2.4 - 1.4 * j / s.pts.length), overRand) + tendril(s.pts[s.pts.length - 1], s.a, 1, overRand))(shoot(over[12], -2.2, 9, 3, 0.16, 0.05, overRand))
+    + leafOn(over[7], 24, -75) + leafOn(over[17], 19, -20) + leafOn(over[21], 15, 40);
+  // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
+  const pedestal = `<g class="cdPedestal"><g id="cdColumn">${column(P.anchor)}</g>
+    <clipPath id="cdSlab"><path d="${slabD}"/></clipPath><path d="${slabD}" fill="${MARBLE.lit}"/>
+    <rect x="${n(cx + K.side * P.r)}" y="${P.top - 30}" width="${P.r}" height="${P.depth + 60}" fill="${MARBLE.dark}" clip-path="url(#cdSlab)"/>
+    <path d="${slabD}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
+    <ellipse cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="#E2DDE8" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
+    <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
+    <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${rimRy(FOOT)}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
+    <g id="cdPencil" transform="translate(${pt(over[17])}) rotate(13) scale(.8)"></g><!-- Jerrett's pencil (pencil.js), under the vine -->
+    ${cluster(edgeAt, 8, [4, 4, 3, 3, 2, 1], true)}${overVine}${leafOn(edgeAt, 12, 150)}
+    <!-- the vine, up the column, over the slab's edge and across it to the foot, a bunch hanging off it at the edge -->
+    <g id="cdPedestalGlints">${grapeGlints(0)}</g></g>`;
+  const onPedestal = GRAPES.length; // the grapes drawn so far are the pedestal's bunch
+  // the knop, placed in the scene
+  const knop = { cy: Y(474), rx: 25 * k, ry: 11 * k };
+  const back = `<defs><clipPath id="cdWax"><path d="${PILLAR_D}"/><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
+      <clipPath id="cdDrips"><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
+      <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
+      <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}
+      <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
+      <linearGradient id="cdBronze">${[[0, '#21140A'], [0.15, '#3D2412'], [0.34, '#6E4220'], [0.44, '#B7885A'], [0.56, '#6E4220'], [0.78, '#3D2412'], [1, '#21140A']]
+        .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient><!-- across each part's curve: dark edges, a highlight the flame lights (frame.js drawShine) -->
+      <linearGradient id="cdBronzeDome" href="#cdBronze" gradientUnits="userSpaceOnUse" x1="${cx - FOOT}" y1="${n(Y(523) - 30)}" x2="${cx + FOOT}" y2="${n(Y(543) + 30)}"/><!-- the same, slanting across the domed foot's upturned slope -->
+      <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
+      <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>
+    ${pedestal}${holderVine.back}<!-- the vine's back turns, behind the candlestick -->
+    ${ring('cdBase', Y(543), FOOT, 8)}
+    ${turned('cdFoot', profile(Y(523), Y(543), y => dome(y - Y(523) + 523)), false, 'url(#cdBronzeDome)')}<!-- the domed foot, an ogee -->
+    ${ring('cdCollar', Y(518), 20, 5)}
+    ${turned('cdBaluster', profile(489, 518, y => y < 504 ? 10 + 7 * Math.sin((y - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((y - 504) / 14 * Math.PI / 2), 16).map(([y, h]) => [Y(y), h * k]))}
+    ${ring('cdStemRing', Y(485), 10 * k, 4 * k)}
+    <ellipse id="cdKnop" cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="${K.lit}"/>
+    <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>
+<!-- the knop -->
+    ${ring('cdNeck', Y(452), 14, Y(463) - Y(452))}<!-- down to the knop's top -->
+    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
+    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#24140A"/><!-- the pan, its inside in the pillar's shadow -->
+    <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="${n(side)}" y="${rim - 10}" width="${n(cx + R + 2 - side)}" height="${PILLAR.bottom - rim + 10}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
+    ${drips}
+    <rect id="paperGlow" x="${cx - R - 4}" y="${rim - 4}" width="${2 * R + 8}" height="86" fill="url(#cdGlow)" clip-path="url(#cdWax)"/><!-- lit from within, under the rim -->
+    <path d="${smooth(CROWN.map(([x, y]) => [x, y + 1]))}" fill="none" stroke="#D8C5A2" stroke-width="1"/>
+    ${(notch => `<path class="paperLit" d="${notch(-0.6)}Z" fill="currentColor"/><!-- the notch the main drip spilled from, its far wall lit -->
+    <path d="${notch(0)}" fill="none" stroke="#D8C5A2" stroke-width="1"/>`)(dy => `M${n(NOTCH - 11)} ${n(rim + dy)}C${n(NOTCH - 10.5)} ${n(rim + 3.5)} ${n(NOTCH - 8)} ${n(rim + 3.5)} ${n(NOTCH)} ${n(rim + 3.5)}S${n(NOTCH + 10.5)} ${n(rim + 3.5)} ${n(NOTCH + 11)} ${n(rim + dy)}`)}
+    ${[-1, 1].map(u => { const x = cx + u * (R + 3.5), y = PILLAR.dish, fill = (u < 0 ? DRIP.lit : DRIP.dark)[0]; // a drip pooled in the pan at each side
+      return `<path d="M${x - 5.5} ${y + 10}C${x - 6} ${y + 4} ${x - 3.5} ${y + 1.5} ${x} ${n(y + 1.2)}C${x + 3.5} ${y + 1} ${x + 6} ${y + 4} ${x + 5.5} ${y + 10}Z" fill="${fill}"/>`; }).join('')}
+    ${turned('cdBowl', profile(PILLAR.dish, Y(452), y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}<!-- the drip pan -->
+    <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
+    ${cluster([400, P.top - 8], -72, [4, 4, 3, 3, 2, 1], true)}${leafOn([400, P.top - 8], 14, -35)}<!-- a full bunch lying on the slab by the foot -->
+    ${holderVine.front}<!-- the vine's front turns on the candlestick -->
+    <g id="cdGrapeGlints">${grapeGlints(onPedestal)}</g><!-- the flame's shine (frame.js drawShine) -->
+    <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->`;
+  // the wick, over the flame's base so the flame burns round it, its tip an ember
+  const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
+  // Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
+  // tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units. A landed moth's
+  // wings reach from its perch on screen at most w·EYE/√(EYE² − w²) (wing3d), w the wing point furthest from the joint, at
+  // the largest moth. So the wax's highest landing spot is a hop, that reach and 10 clear below the flame, and the body
+  // starts where pickPerch's highest spot (0.5 - PERCH_SPREAD of the way down) lands there.
+  const reach = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
+    * Math.max(...Object.values(SIZE));
+  const highest = PILLAR.flame[1] + 0.04 * 96 * 1.08 * PILLAR.flame[2] + HOP + reach + 10, waxBottom = PILLAR.dish - 8;
+  return {
+    name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
+    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: 6, // in the open, the wind leans it hard (frame.js windLean)
+    holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so its corners cast the shadow
+    // the wax alone, a straight cylinder
+    body: { top: (highest - (0.5 - PERCH_SPREAD) * waxBottom) / (0.5 + PERCH_SPREAD), bottom: waxBottom, half: () => PILLAR.r },
+    back, front, shine: GRAPES, // its bare flame shines on the brass, the pool, the grapes and the marble (drawShine)
+    column, trunkLine, branches: BRANCHES, pillar: PILLAR, pedestal: PEDESTAL, drawn: DRAWN, stem: STEM, lacquer: K, // the column is redrawn to the window's bottom (drawHang)
+  };
+}
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
   M306.9 290v118M369.9 290v118M275.9 290v118M277 285.4h126M277 408.4h126M277 413.4h126M300 428.3h80M295 244.4h90"/></g>`;
@@ -302,8 +679,9 @@ const STYLES = {
   },
   moroccan: {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
-    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, tassel: [340, 486],
-    holder: [404, 6], // the burner cup under the flame: its bottom and half-width; it throws a narrow fan of shadow straight down
+    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, flameWind: 2, // enclosed, the wind leans it about a third as hard as the candle's
+    tassel: [340, 486],
+    holder: [404, 6], // the burner cup under the flame, the height of its bottom and the half-width of its mouth; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },
@@ -342,6 +720,7 @@ const STYLES = {
       <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
+  candle: makeCandle(),
 };
 // The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
 const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
@@ -356,9 +735,14 @@ function paintRibbon(name) {
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
 let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
-// its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves.
+// its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
+// standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
+let cdLeaves = /** @type {{ e: Element, x: number, y: number, k: number, low: number, deg: number, ph: number }[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
 function drawHang() {
   const h = $('hang');
+  const column = style.stands && $('cdColumn');
+  cdLeaves = null; // drawLeaves finds them again
+  if (column) column.innerHTML = style.column(VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620);
   if (!h) return;
   if (!style.chain) return h.setAttribute('d', `M340 ${VIEW.top - 2}V22`);
   let links = '';
@@ -369,7 +753,8 @@ function drawHang() {
 function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
-  $('lantern').innerHTML = (style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>` : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
+  $('lantern').innerHTML = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
+    : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
     + `<g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>`
     + style.front;
   drawHang();
@@ -401,7 +786,7 @@ function applyStyle(key) {
 // homes sit in different directions never cross paths.
 function pickPerch(a = Math.random() * 2 * Math.PI, rand = Math.random) {
   const { top, bottom, half } = style.body, side = Math.cos(a) < 0 ? -1 : 1, depth = 0.35 + rand() * 0.65;
-  const y = top + (bottom - top) * (0.5 + 0.44 * Math.sin(a) * depth);
+  const y = top + (bottom - top) * (0.5 + PERCH_SPREAD * Math.sin(a) * depth);
   // how far round the side, from the front: never in the middle third of the lantern, where closed wings would point
   // nearly straight at you and thin to a sliver; squeezed rather than clamped so the slices keep their order
   const MIDDLE = 1 / 3; // the share of the lantern's width (centred) that landing spots stay out of
@@ -425,14 +810,6 @@ const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // 
 const MOTH_RESTING = '#8B7FA2';
 
 // A faint tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ.
-const hash = str => [...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
-// Random-looking numbers that every window agrees on: seeded from a session's id, so the lantern in the toolbelt,
-// the Dock app and the screensaver all put a moth in the same place (mulberry32).
-const seeded = seed => () => {
-  let t = seed = (seed + 0x6D2B79F5) >>> 0;
-  t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-  return ((t ^ t >>> 14) >>> 0) / 4294967296;
-};
 function tintFor(s) {
   const hue = (hash(s.cwd.split('/').filter(Boolean).pop()) % 360 + (hash(s.id) % 29) - 14 + 360) % 360;
   const l = 0.72, a = 0.55 * Math.min(l, 1 - l), f = n => { const k = (n + hue / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };

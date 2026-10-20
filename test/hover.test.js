@@ -49,7 +49,7 @@ test('landed moths 20 apart (r 32) still split at their midpoint', () => {
 
 test('a landed moth\'s area is centred on its drawn body, so a point on the lower of two close moths picks it', () => {
   const frame = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-  for (const f of ['scene', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
   const mothZones = vm.runInContext('mothZones', frame);
   const zone = () => { const at = {}; return { setAttribute: (k, v) => at[k] = v, getAttribute: k => at[k], style: {} }; };
   // a moth folded on flat paper, its body pointing up the screen: the wings the way mothWings draws them, as caster() sums them up

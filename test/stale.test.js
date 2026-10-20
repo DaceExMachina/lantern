@@ -40,3 +40,24 @@ test('a long frame lands the glide exactly where many short ones would', () => {
   const [x1, v1] = settle(0, 0.1, 1, 0.5, 3);
   assert.ok(Math.abs(x - x1) < 1e-9 && Math.abs(v - v1) < 1e-9, `3s in one step: ${x1}, ${v1}; in 180: ${x}, ${v}`);
 });
+
+test("with a standing lantern, no loose wisp's spot lands in the band its pedestal fills", () => {
+  const stands = { half: 112, top: 461 }; // the candle's (lanterns.js): the slab's half-width, from the pan down
+  Object.assign(page, { style: { stands }, VIEW: { ky: 1 }, moths: new Map() });
+  for (const ky of [1, 1.6]) { // a square window and a tall one
+    page.VIEW.ky = ky;
+    // crowded past the room there is (living moths and ghosts take slices too), so some fall back to any clear spot
+    const loose = Array.from({ length: 60 }, (_, i) => ({ pref: i * 6.283 / 60, dist: 180 + (i * 37) % 100 }));
+    const at = d => [340 + Math.cos(d.aim) * d.dist, 320 + Math.sin(d.aim) * d.dist * 0.95 * ky]; // as driftTo places it, stretched down
+    const inBand = ([x, y]) => Math.abs(x - 340) < stands.half && y > stands.top;
+    assert.ok(loose.some(d => inBand(at({ ...d, aim: d.pref }))), 'some would start behind the pedestal');
+    vm.runInContext('stalePlannedAt = -1', page);
+    page.planStale(0, loose);
+    for (const d of loose) assert.ok(!inBand(at(d)), `a wisp preferring ${d.pref.toFixed(2)} lands clear at ky ${ky}: ${at(d).map(v => v.toFixed(0))}`);
+  }
+  page.style = { stands: undefined }; // a hanging lantern leaves its spot be
+  const d = { pref: Math.PI / 2, dist: 200 };
+  vm.runInContext('stalePlannedAt = -1', page);
+  page.planStale(0, [d]);
+  assert.strictEqual(d.aim, d.pref);
+});

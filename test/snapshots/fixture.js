@@ -12,8 +12,9 @@
   };
   let T = 1000;
   const BASE = Date.parse('2026-10-18T15:00:00Z'), RealDate = Date, realSetTimeout = setTimeout;
+  let wall = BASE; // the wall clock at T = 0. A scorching lantern's scene moves it (catchScorch); the stale PRs' dates stay on BASE
   performance.now = () => T;
-  window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(BASE + T); } static now() { return BASE + T; } };
+  window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(wall + T); } static now() { return wall + T; } };
   window.requestAnimationFrame = () => 0;
   window.setInterval = () => 0;
   window.setTimeout = () => 0;
@@ -60,13 +61,34 @@
   const stale = drop => Array.from({ length: 34 }, (_, i) => ({ ...pr(100 + i, needs[i % 5]), updatedAt: new RealDate(BASE - (8 + i) * 864e5).toISOString(),
     owner: i % 4 === 0 ? owners[i % 3] : undefined })).filter((_, i) => !drop || i !== 33);
 
-  // frames at 60 a second, with the session text's 250ms timer ticking between them
-  const run = secs => () => { for (let i = Math.round(secs * 60); i--;) { const was = Math.floor(T / 250); T += 1000 / 60; frame(T); if (Math.floor(T / 250) !== was) tickPages(); } };
+  // frames at 60 a second, with the session text's 250ms timer ticking between them; LAST adds up the runs in the steps
+  // below, so it ends as T at the last picture
+  let LAST = T;
+  const run = secs => {
+    LAST += secs * 1000;
+    return () => { for (let i = Math.round(secs * 60); i--;) { const was = Math.floor(T / 250); T += 1000 / 60; frame(T); if (Math.floor(T / 250) !== was) tickPages(); } };
+  };
   // the session text is encoded and decoded off the clock: let the last picture land, draw the current one, let it land
   const settle = async () => { while (busy) await new Promise(r => realSetTimeout(r, 10)); };
   const snap = name => async () => { await settle(); tickPages(); await settle(); await new Promise(r => realSetTimeout(r, 50)); return name; };
+  // On a lantern that scorches, move the wall clock (and nothing else) so sess-alpha's next scorch, found with the page's
+  // own schedule, starts the hit plus 0.5s before the last picture, so it shows the sparks and the singe's first smoke.
+  // On one whose flame smokes too (style.shine), the next such scorch with the flame's idle plume 2 to 3.5s in then.
+  const catchScorch = () => {
+    const st = STYLES[Q.get('style')];
+    if (!st?.scorches) return;
+    const u = wall + LAST - (SCORCH.hit + 0.5) * 1000, slots = st.shine ? 400 : 2;
+    for (let d = 0; d <= slots * SCORCH.slot * 1000; d += 1000) {
+      const e = scorchClock('sess-alpha', u + d), start = e && u + d - e.t * 1000;
+      if (!e || start < u) continue;
+      const smoke = st.shine && smokeAt(start + (SCORCH.hit + 0.5) * 1000, 0); // one the flame lets go however it burns
+      if (!st.shine || smoke && smoke.t > 2 && smoke.t < 3.5) { wall += start - u; return; }
+    }
+    errs.push(`no scorch for sess-alpha within ${slots} slots`);
+  };
   const steps = [
     () => {
+      catchScorch();
       emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
       emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too' }]);
       emit('stale', stale(false));
@@ -76,7 +98,7 @@
     run(6),
     ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), () => { hideCard(); }] : []),
     () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
-    run(14), snap('t20'),
+    run(14), snap('t20'), // T = LAST
   ];
   window.__drive = async () => {
     while (steps.length && !errs.length) { const r = await steps.shift()(); if (r && !errs.length) return r; }

@@ -28,6 +28,7 @@ const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and ag
 const LIGHT = `
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
+uniform vec4 uFlame; uniform vec3 uRim; // a standing flame's base and tip, and the rim below it that hides it: centre x, half-width, y (none: 0 wide)
 uniform vec2 uGlowC; uniform float uGlowR;
 uniform vec3 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
 uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lantern's solid bands: each one's slope from the flame, and its spread
@@ -36,10 +37,40 @@ const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fa
 // the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
+uniform vec4 uHeat; // the hot air over a bare flame (frame.js heat): its tip, how strong (0 for none), and the time
+// How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
+// the column (state.js HEAT_COLUMN) from the flame's tip. frame.js heatAt weighs the same column, so change the two together.
+// The half-width never drops under 1, so smoothstep's edges never meet or cross (undefined in GLSL ES 1.00).
+vec2 heat(vec2 p) {
+  if (uHeat.z <= 0.0) return vec2(0.0);
+  float up = uHeat.y - p.y, wide = max(1.0, ${glf(HEAT_COLUMN.half)} + ${glf(HEAT_COLUMN.widen)} * up), t = uHeat.w; // wide: the column's half-width here
+  float k = uHeat.z * smoothstep(0.0, ${glf(HEAT_COLUMN.start)}, up) * (1.0 - smoothstep(${glf(HEAT_COLUMN.fade[0])}, ${glf(HEAT_COLUMN.fade[1])}, up))
+    * (1.0 - smoothstep(0.7 * wide, wide, abs(p.x - uHeat.x)));
+  return ${glf(HEAT_COLUMN.bend)} * k * vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
+}
 // the soft glow round the lantern: a radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
 float glow(vec2 p) {
   float g = length(p - uGlowC) / uGlowR;
   return g < 0.45 ? mix(0.85, 0.3, g / 0.45) : mix(0.3, 0.0, clamp((g - 0.45) / 0.55, 0.0, 1.0));
+}
+// How much of a standing flame the rim below it hides from (px, py), 0 to 1: the share of the flame, base (0) to tip (1),
+// whose ray to the point crosses the rim's height between its corners. Above the rim it hides none. Each ray is taken by
+// its slope u (across per unit down), so it crosses the rim at px + u * (py - rim). Outside the line from the flame's base
+// through a corner it's all lit, inside the line from its tip all hidden, and between them it fades: straight edges from
+// each corner, a penumbra that widens with distance, one solid shadow under the rim, and a taller or leaning flame turns
+// them. Scalars only, so the test can run it as JS.
+float rimShade(float px, float py) {
+  float h = py - uRim.z;
+  if (h <= 0.0) return 0.0;
+  float bh = py - uFlame.y, bx = uFlame.x - px, dx = uFlame.z - uFlame.x, dy = uFlame.w - uFlame.y;
+  float uB = bx / bh, uT = (uFlame.z - px) / (py - uFlame.w); // the rays to the base and the tip
+  float lo = max(min(uB, uT), (uRim.x - uRim.y - px) / h), hi = min(max(uB, uT), (uRim.x + uRim.y - px) / h); // the hidden ones
+  if (hi < lo) return 0.0;
+  // back to the flame: the ray with slope u meets it at t = (u * bh - bx) / (dx + u * dy), exactly 0 and 1 for the base's
+  // and the tip's own rays (on the flame's line they're the same ray, and the whole flame is hidden or none of it)
+  float tLo = lo == uB ? 0.0 : lo == uT ? 1.0 : (lo * bh - bx) / (dx + lo * dy);
+  float tHi = hi == uT ? 1.0 : hi == uB ? 0.0 : (hi * bh - bx) / (dx + hi * dy);
+  return smoothstep(0.0, 1.0, abs(tHi - tLo));
 }
 float light(vec2 p) {
   // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this point. Right
@@ -67,11 +98,13 @@ float light(vec2 p) {
     float spike = SPIKE * smoothstep(-0.4 * am * close, (0.1 + 0.7 * close) * am, am - al0 - sep) * smoothstep(-0.5 * m.z, 0.5 * m.z, along);
     lit *= 1.0 - mix(shade, spike, close);
   }
-  // the solid caps of a paper lantern: no light leaves through its top or bottom, so above and below it a fan stays
-  // darker: one shadow, about as wide as the cap seen from the flame, with a soft edge; turned with the lantern's sway
+  // the solid caps of a paper lantern, or the holder below a flame, let no light out past them, so above and below it a
+  // fan stays darker, one shadow about as wide as the cap seen from the flame, with a soft edge, turned with the lantern's
+  // sway. A standing flame's rim casts its own shadow instead (rimShade).
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
-  float open = 1.0 - CAPS * step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope); // no cap, no fan
+  float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
+    : step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
   // strongest and narrowest beside the lantern, spreading wider and fading out further away (like a moth's, by distance)
   vec2 bq = p - uBandO;
@@ -89,9 +122,84 @@ precision highp float;
 uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
+uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec3 uSmoke; uniform vec3 uSmokeCol;
+uniform vec3 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
+uniform float uDrift[13]; // how far the wind has carried smoke aside, at ages 0 to PLUME.life in twelfths (frame.js smokeDrift)
 ${LIGHT}
+const float RISE = 29.0; // how fast smoke rises, units a second
+// the smoke's Ss: how far they swing aside and how tall they are, in scene units; and how fast it spreads out, its width
+// growing by this much of itself a second
+const float S_SIZE = 21.0, S_LENGTH = 160.0, DISPERSE = 1.55;
+// How far a bit of smoke age seconds old has curled aside from where it was let go, in PLUME sizes: into Ss, a slow wave
+// along the smoke swelling from nothing to S_SIZE × curl over its first second or so, S_LENGTH tall as it rises. Its now
+// is the smoke's own clock, offset by its seed so each one curls differently; the bit was let go at now - age, so the
+// wave's phase runs along it and the Ss travel as it rises. Every plume and every scorched moth's trail curls by this, so
+// they read as one smoke. Scalars only, so the test can run it as JS.
+float smokeBend(float age, float now, float curl) {
+  float at = now - age, k = 6.2832 * RISE / S_LENGTH;
+  return curl * S_SIZE * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
+}
+// How far the wind has carried smoke age seconds old aside since it was let go, in scene units: as far as it's carried
+// the dust over that time (frame.js smokeDrift), between uDrift's samples
+float smokeDrift(float age) {
+  float u = min(age / uSmoke.y, 1.0) * 12.0, d = 0.0;
+  for (int i = 0; i < 13; i++) d += uDrift[i] * max(0.0, 1.0 - abs(u - float(i)));
+  return d;
+}
+// How much wider smoke age seconds old has spread than when it was let go, thinner to match (its strength over the
+// square root of this)
+float spread(float age) { return 1.0 + DISPERSE * age; }
+// How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
+// many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, and opacity. Every bit rises
+// steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
+// plume was being let go, and fades as it ages. The column widens as it rises, and bends and curls (smokeBend).
+float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
+  // its newest smoke rises from base (the flame's live tip), the rest from where it was let go, eased over its first half second
+  vec2 o = mix(base, a.xy, smoothstep(0.0, 0.5, max(a.y - p.y, 0.0) / (uSmoke.x * RISE)));
+  float size = uSmoke.x, t = a.z, h = (o.y - p.y) / size, age = max(h, 0.0) / RISE;
+  if (h < -3.0 || h > t * RISE + 12.0) return 0.0;
+  float x = o.x + smokeDrift(age) + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
+  float sp = spread(age), d = (p.x - x) / (size * (1.0 + h * 0.09) * sp);
+  float k = exp(-d * d) / ((1.0 + h * 0.025) * sqrt(sp)) * a.w
+    * smoothstep(t * RISE + 12.0, t * RISE - 6.0, h) // its rising tip
+    * smoothstep(t - b.y - 0.5, t - b.y, age) // let go only over its first b.y seconds
+    * (1.0 - smoothstep(uSmoke.y * 0.4, uSmoke.y, age)) // each bit fading as it ages
+    * smoothstep(-3.0, 3.0, h); // soft where it starts
+  return k;
+}
+// How wide a smoke trail is at a point age seconds old, as a share of its spread width, its head's age head: full while
+// its head is on the moth (age 0), and once it has stopped following, narrowing to a point over the head's newest third
+// of a second. Scalars only, so the test can run it as JS.
+float trailTaper(float age, float head) { return 1.0 - 0.85 * smoothstep(0.0, 0.3, head) * (1.0 - smoothstep(head, head + 0.35, age)); }
+// How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
+// spread as a plume's smoke is (spread), fainter the older it is and gone at the end of its life;
+// width, strength and age eased between them, the thickest of the segments near p so their joins don't double up.
+// Each point is where it is (frame.js smoke bends and curls it) and its age, each trail's head (its newest) first; an age below 0
+// parts one moth's trail from the next. Its head tapers once it leaves the moth (trailTaper) and its tail fades out as it
+// ages, so neither end looks cut off.
+float trailSmoke(vec2 p) {
+  float k = 0.0, size = uSmoke.x, aw = 1.0, head = 0.0;
+  vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, and its strength (-1: none)
+  for (int i = 0; i < ${TRAIL_POINTS}; i++) {
+    if (i >= uTrailN) break;
+    vec3 q = uTrail[i];
+    if (a.z < 0.0) head = q.z; // a new trail: this is its head
+    float sp = spread(q.z), w = size * 2.4 * sp * trailTaper(q.z, head);
+    vec3 b = vec3(q.x, q.y - size * RISE * q.z, 0.6 * (1.0 - q.z / uSmoke.y) / sqrt(sp));
+    if (q.z < 0.0) b.z = -1.0;
+    if (a.z > 0.0 && b.z > 0.0) {
+      vec2 ab = b.xy - a.xy;
+      float t = clamp(dot(p - a.xy, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0);
+      float d = length(p - a.xy - ab * t) / mix(aw, w, t);
+      k = max(k, mix(a.z, b.z, t) * exp(-d * d));
+    }
+    a = b; aw = w;
+  }
+  return k;
+}
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
+  p += heat(p); // seen through the hot air over a bare flame
   float px = uBox.z / uRes.x; // scene units per pixel, for soft edges
   float lit = light(p);
   vec3 col = uBg;
@@ -108,6 +216,10 @@ void main() {
     float x = clamp(length(p - uLightC) / uLightScale / 700.0, 0.0, 1.0);
     col = mix(col, uGlowCol, 0.55 * (1.0 - x) * (1.0 - x) * uAirA * lit);
   }
+  float smoke = 0.0;
+  for (int i = 0; i < ${PLUMES}; i++) { if (i >= uPlumes) break; smoke += plume(p, uPlume[i], uPlumeB[i], uPlumeBase[i]); }
+  if (uTrailN > 1) smoke += trailSmoke(p);
+  col = mix(col, uSmokeCol, min(1.0, smoke) * uSmoke.z);
   gl_FragColor = vec4(mix(col, vec3(0.8, 0.1, 0.1), uDebug * 0.6 * (1.0 - lit)), 1.0);
 }`);
 // dust: soft points, positions worked out in JS each frame. The near specks are lit by the lantern: bright and a little
@@ -120,7 +232,8 @@ attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uNear, uCa
 ${LIGHT}
 const float DIM = 0.6, LIT = 6.0; // a near speck's brightness out of the glow (about the far specks'), and how much the glow adds
 void main() {
-  gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
+  vec2 at = a.xy - heat(a.xy); // seen through the hot air, bent the other way to the room behind it
+  gl_Position = vec4((at.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (at.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
   float lit = uNear * glow(a.xy); // the far specks stay a faint, even layer
   gl_PointSize = max(a.z * (1.0 + 2.5 * lit) * uRes.x / uBox.z + 1.0, 1.5 * uDpr); // never under 1.5 CSS px, at any size or scale
   vS = pow(light(a.xy), uCatch); vA = a.w * mix(1.0, DIM + LIT * lit, uNear) * mix(vS, 1.0, uDebug); vD = uDebug;
@@ -171,10 +284,10 @@ const rgb = c => hex(c).map(v => v / 255);
 // lantern, so there both rings fill in to the middle, spread evenly over the area (a square root keeps the centre from crowding)
 const ring = (from, to) => AMBIENT ? to * Math.sqrt(Math.random()) : from + Math.random() * (to - from);
 const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: ring(125, 265), w: (Math.random() - 0.5) * 0.12,
-  ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2 }));
+  ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2, lift: 0 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
 const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: ring(230, 340), w: (Math.random() - 0.5) * 0.08,
-  ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9 }));
+  ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9, lift: 0 }));
 const dustData = new Float32Array((dust.length + farDust.length) * 4);
 
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
@@ -199,9 +312,10 @@ function setLight(u, v) {
   gl.uniform1f(u.uDebug, DUST_DEBUG); gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uLightR, v.lightR);
-  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
+  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform4f(u.uFlame, ...v.flame); gl.uniform3f(u.uRim, ...v.rim); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
   gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
+  const h = v.heat; gl.uniform4f(u.uHeat, h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);
 }
 
 // ---- the Moroccan's far wall ------------------------------------------------------------------------------------------
@@ -258,6 +372,13 @@ function drawBackground(v) {
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
+  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform3f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform1fv(u['uDrift[0]'], v.drift);
+  if (v.plumes.length) {
+    gl.uniform4fv(u['uPlume[0]'], v.plumes.flatMap(q => q.slice(0, 4)));
+    gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));
+    gl.uniform2fv(u['uPlumeBase[0]'], v.plumes.flatMap(q => q.slice(8, 10)));
+  }
+  gl.uniform1i(u.uTrailN, v.trail.length); if (v.trail.length) gl.uniform3fv(u['uTrail[0]'], v.trail.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

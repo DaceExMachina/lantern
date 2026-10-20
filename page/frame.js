@@ -135,7 +135,7 @@ function frame(t) {
   const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
-  const calling = sessions.some(x => x.state === 'waiting' && !x.snoozed);
+  const calling = fakeLamp === 'live' ? sessions.some(x => x.state === 'waiting' && !x.snoozed) : fakeLamp === 'violet'; // fakeLamp: lanterns.js
   level = fakeFlame ?? level + (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"; fakeFlame: lanterns.js, ?flame=
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
@@ -143,8 +143,14 @@ function frame(t) {
 
   swingLantern(elapsed, s);
   drawFlame(s, flame);
+  if (style.scorches) { // the outer tongue in the scene, for scorched moths to aim at (the flame's base is style.flame[1])
+    const b = /** @type {SVGGraphicsElement} */ ($('fOuter')).getBBox(), k = flame.size * style.flame[2];
+    tongue = { cx: style.flame[0] + (b.x + b.width / 2 - 340) * k, half: b.width / 2 * k, height: b.height * k };
+  } else tongue = null;
   drawSparks(dt, s, flame.size);
   lightPaper(flame);
+  drawShine(s, flame);
+  if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), rot(...style.light), [125, 170], dt, s);
   for (const [k, m] of moths) {
     const aim = mothTarget(k, m, dt, s);
@@ -190,7 +196,9 @@ function rot(px, py) {
 // lanterns.js). It's pushed by how the wind (GUST) is changing rather than by the wind itself: GUST less an average that
 // follows it sway.forget seconds behind, so a lean the wind holds fades away and the lantern swings back past the middle
 // before the breeze turns, rocking near its own period instead of hanging out to one side. It swings from the top of the
-// window, with the push scaled so the lantern moves sideways as much as it would hung at y=20.
+// window, with the push scaled so the lantern moves sideways as much as it would hung at y=20. A standing lantern
+// (style.stands) holds still at 0, so rot() leaves everything where it's drawn; the pendulum keeps going under it, so a
+// hanging lantern picked afterwards picks up the swing where the wind has it.
 const swing = { a: NaN, v: 0, wind: 0 };
 function swingLantern(elapsed, s) {
   const w = 2 * Math.PI / sway.period, dt = Math.min(0.05, elapsed), top = VIEW.top, sl = s - LAG;
@@ -198,7 +206,7 @@ function swingLantern(elapsed, s) {
   swing.wind += (GUST(s) - swing.wind) * Math.min(1, dt / sway.forget);
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
-  swayAngle = swing.a;
+  swayAngle = style.stands ? 0 : swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
@@ -224,19 +232,28 @@ function swingLantern(elapsed, s) {
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
 
-// flame: layered tongues that lean and stretch independently, ember-small when idle
-function drawFlame(s, { size, pulse }) {
-  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
+// How far the wind (GUST) leans the flame's outer tongue downwind, in the flame's units, by style.flameWind: it follows
+// the gust a moment late, fluttering while the gust changes. From the clock alone, so every window agrees.
+const windLean = s => style.flameWind ? style.flameWind * (GUST(s - 0.3) + (GUST(s) - GUST(s - 0.3)) * 2 * wobble(s * 3, 7)) : 0;
+// flame: layered tongues that lean and stretch independently, ember-small when idle, the taller ones bent further by the wind
+function drawFlame(s, { size, flick, pulse }) {
+  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]], wind = windLean(s);
   for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
     const n = $(id);
-    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
+    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08 + Math.abs(wind) * 0.004), wobble(s, k) * lean + wind * h / 96));
     put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
-  put($('fBase'), 'fill', pal('base'));
+  // the blue at its root swells and brightens with the flicker, breathes, and leans a little with the wind (a sixth as far
+  // as the outer tongue's tip, since it's the root)
+  const base = $('fBase'), breathe = 1 + 0.05 * Math.sin(s * 1.7);
+  put(base, 'fill', pal('base'));
+  put(base, 'cx', (340 + wobble(s, 5) * 1.2 + wind / 6).toFixed(2));
+  put(base, 'rx', (10 * flick * breathe).toFixed(2)); put(base, 'ry', (5 * flick * (2 - breathe)).toFixed(2));
+  put(base, 'opacity', (0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick).toFixed(3));
   const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
   put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
   // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
-  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-wobble(s, 1) * 6 / (118 * hh)) * 180 / Math.PI;
+  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-(wobble(s, 1) * 6 + wind * 118 / 96) / (118 * hh)) * 180 / Math.PI;
   put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
   put($('fHalo'), 'color', pal('halo'));
   put($('flame'), 'opacity', pulse.toFixed(3));
@@ -247,7 +264,7 @@ function drawSparks(dt, s, size) {
   sparkClock += style.paper ? 0 : dt * (0.4 + 5 * level);
   while (sparkClock > 1) {
     sparkClock--;
-    sparks.push({ x: 340 + wobble(s, 2) * 6 * size, y: FLAME_BASE - 90 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
+    sparks.push({ x: 340 + (wobble(s, 2) * 6 + windLean(s)) * size, y: FLAME_BASE - 90 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
   }
   for (const p of sparks) { p.x += p.vx * dt + Math.sin(s * 4 + p.vy) * 0.3; p.y += p.vy * dt; p.life -= dt * 0.8; }
   while (sparks.length && sparks[0].life <= 0) sparks.shift();
@@ -274,48 +291,194 @@ function lightPaper({ size, flick, pulse }) {
   document.querySelectorAll('.paperLit').forEach(n => { put(n, 'color', pal('paper')); put(n, 'opacity', ((0.35 + 0.55 * size) * flick * pulse).toFixed(3)); });
 }
 
+// ---- the candle's shine -------------------------------------------------------------------------------------------
+// A bare flame lights what's round it (style.shine, where each grape that glints sits): the bronze's highlight, its reflection in
+// the molten pool (sliding as the flame leans, as a reflection moves with what it reflects) at
+// the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
+// on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background, and the tip smoke
+// leaves from). All of it follows this frame's flame.
+// The hot air over the flame, set by drawShine (null without one): the outer tongue's tip, how strong, and the time.
+let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
+// How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (state.js HEAT_COLUMN)
+// rising from the flame's tip. LIGHT's heat() in background.js bends the same column, so change the two together.
+function heatAt(x, y) {
+  if (!heat) return 0;
+  const { half: h0, widen, start, fade } = HEAT_COLUMN, up = heat.y - y, half = Math.max(1, h0 + widen * up);
+  const step = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
+  return heat.k * step(0, start, up) * (1 - step(fade[0], fade[1], up)) * (1 - step(0.7 * half, half, Math.abs(x - heat.x)));
+}
+// A speck at (x, y) on its orbit, `dt` on: over a bare flame the hot air carries it up at HEAT_RISE a second at its
+// strongest, and once out of it it sinks back a third of its lift a second, another offset on the orbit. Its lift, up.
+function liftDust(p, x, y, dt) {
+  return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
+}
+// How far the wind carries a dust speck of radius r aside at s, k for its ring: at once, the lighter the further and the
+// sooner (a heavy one lags a fifth of a second). It's an offset on its orbit, so it drifts back as the gust eases.
+const gustAside = (s, r, k) => GUST(s - 0.12 * r) * k / r;
+// How far the wind has carried smoke `age` seconds old aside since it was let go at s - age: as far as it's carried a
+// middling near speck of dust (radius 1.3, the near dust's 0.7 to 1.9) over that time, so the two drift together.
+const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 14);
+// Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and drift with the wind,
+// each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (state.js,
+// with its size and opacity, the flame's lanes SMOKE and the let-go times). The flame lets one go from its tip now and
+// then, on lanes keyed to the wall clock alone (scorch's kind, scorchClock) so every window lets it go at once: one
+// every minute or two however it burns, and more lanes opening as it burns harder (`from`, the strength each opens at),
+// so it smokes more often the busier things get.
+// It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
+// scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
+// passed over TRAIL.secs after the hit (state.js TRAIL), joined to the moth while it's still smoking. At most SMOKERS
+// moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
+// none of it is ever dropped.
+// The flame's plume the lanes let go at `now` (wall ms) burning at `strength`, the earliest begun if two are: its key
+// (lane:slot) and seconds in, or null.
+function smokeAt(now, strength) {
+  let out = null;
+  SMOKE.forEach((lane, i) => {
+    const e = strength >= lane.from && scorchClock(`candle:smoke:${i}`, now, { ...lane, length: SMOKE_REL + PLUME.life });
+    if (e && !(out?.t >= e.t)) out = { key: `${i}:${e.slot}`, t: e.t };
+  });
+  return out;
+}
+let flamePlume = null; // the flame's plume going: its key, when it was let go (wall ms) and where
+// The smoke this frame. plumes: each [x, y, seconds in, strength, seed, rel, curl, drift, base x, base y], the flame's
+// first, from `tip` (its live tip, null without a bare flame) at the flame's `strength`, then the singes. Each plume's
+// newest smoke rises from its base: the flame's live tip, so its smoke always leaves the flame however it leans. Each of
+// the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where
+// it was left, carried aside by the wind since (smokeDrift) and curled across its path, and its age in seconds, each trail's head
+// first, with an age of -1 parting one moth's trail from the next.
+function smoke(now, s, strength, tip) {
+  const plumes = [], trail = [];
+  if (!tip) flamePlume = null;
+  else {
+    if (flamePlume && now < flamePlume.from) flamePlume = null; // the clock went back
+    const e = smokeAt(now, strength), life = (SMOKE_REL + PLUME.life) * 1000, from = e && now - e.t * 1000;
+    if (e && (!flamePlume || from >= flamePlume.from + life)) flamePlume = { key: e.key, from, at: tip }; // not one that began while one was going
+    if (flamePlume && now - flamePlume.from < life) {
+      const rand = seeded(hash(`candle:smoke:${flamePlume.key}:shape`));
+      plumes.push([...flamePlume.at, (now - flamePlume.from) / 1000, 0.5 + 0.5 * strength, 97 * rand(), SMOKE_REL, 0.5 + rand(), 2 * rand() - 1, ...tip]);
+    }
+  }
+  for (const m of moths.values()) if (m.scorch?.hit) {
+    const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life);
+    plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
+    if (!sc.trailDone) { // joined to the moth where it's drawn now, in place of a point it left this frame before it moved
+      if (path.at(-1)?.[2] === sc.t) path.pop();
+      const last = path.at(-1);
+      path.push([m.x, m.y, sc.t, last ? last[3] + Math.hypot(m.x - last[0], m.y - last[1]) : 0]);
+    }
+    if (trail.length && path.length) trail.push([0, 0, -1]);
+    // each point carried aside by the wind since it was left, and curled into Ss across the path by how far along it it
+    // is, swelling in over its first third of a second and travelling slowly along it; its head (the newest) first
+    const seed = hash(m.key) % 97, head = [];
+    path.forEach(([x, y, at, along], i) => {
+      const [ax, ay] = path[Math.max(0, i - 1)], [bx, by] = path[Math.min(path.length - 1, i + 1)], d = Math.hypot(bx - ax, by - ay) || 1;
+      const curl = TRAIL.s * Math.min(1, (sc.t - at) / 0.3) * Math.sin(along * 2 * Math.PI / TRAIL.length - sc.t * 1.3 + seed);
+      head.unshift([x + smokeDrift(s, sc.t - at) - curl * (by - ay) / d, y + curl * (bx - ax) / d, sc.t - at]);
+    });
+    trail.push(...head);
+  }
+  return { plumes, trail };
+}
+// the flame's outer tongue's tip in the scene (drawFlame's), leaning with its wobble and the wind
+function flameTip(s, size) {
+  const [fx, fy, fk] = style.flame, wind = windLean(s);
+  return [fx + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
+}
+const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
+function drawShine(s, { size, flick, pulse }) {
+  const shine = style.shine;
+  if (!shine || AMBIENT) { heat = null; return; }
+  const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
+  // the flame's lean (its middle tongue's tip, drawFlame) and its outer tongue's tip, in the scene
+  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk, tip = flameTip(s, size);
+  heat = { x: tip[0], y: tip[1], k: size, t: s % (2 * Math.PI) };
+  const pool = $('cdPoolGlint');
+  put(pool, 'cx', (fx + lean * 0.6 + Math.sin(s * 5.3) * 0.6).toFixed(1)); put(pool, 'rx', (2.4 + 0.6 * flick + 0.3 * Math.sin(s * 7)).toFixed(1));
+  put(pool, 'fill', core); put(pool, 'opacity', (0.55 * bright).toFixed(2));
+  [...$('cdPedestalGlints').children, ...$('cdGrapeGlints').children].forEach((c, i) => { // the pedestal's bunch first, as style.shine
+    const [x, y] = shine[i], dx = fx + lean - x, dy = style.light[1] - y, d = Math.hypot(dx, dy), ph = i * 2.39; // spread round the twinkle
+    put(c, 'cx', (x + dx / d * 2.4).toFixed(1)); put(c, 'cy', (y + dy / d * 2.4).toFixed(1)); put(c, 'fill', core);
+    put(c, 'opacity', (0.4 * flick * bright * (0.55 + 0.45 * Math.sin(s * 1.7 + ph) ** 2)).toFixed(2));
+  });
+  put($('cdWarmG'), 'color', mix(pal('paper'), '#ffffff', 0.6));
+  put($('cdWarm'), 'opacity', ((0.4 + 0.15 * flick) * bright).toFixed(2));
+  put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
+  // the bronze (lanterns.js cdBronze), shaded across each part's curve: its highlight, held where the flame above reflects,
+  // takes a little of the flame's colour, and is as bright as the flame burns and flickers
+  const BRONZE = '#6E4220'; // the bronze's middle tone, between its dark edges (lanterns.js cdBronze)
+  put($('cdBronze').children[3], 'stop-color', mix(BRONZE, mix(mix(BRONZE, '#F2C28A', 0.55), core, 0.3), Math.min(1, bright * flick)));
+}
+
+// The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) move in the wind: each turns about its stem
+// toward downwind by how far it points from it (up to twice as far for one pointing into the wind, not at all for one
+// already pointing with it) times the gust's strength and 6 degrees, by its weight (smaller leaves more), plus a faint
+// flutter of its own. A gust reaches the vine from its upwind side: each leaf feels it later the further downwind it is. A
+// leaf also grows about its stem, to 3.5 times as drawn on the lower vine (`low` 1) and a sixth of the way there at the
+// top (0). Found and
+// read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
+function drawLeaves(s) {
+  cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
+    const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), low = e.getAttribute('data-low');
+    return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, deg: +(e.getAttribute('data-deg') || 0), ph: (x * 0.37 + y * 0.11) % 6.283 };
+  });
+  const from = Math.sign(GUST(s)) || 1; // the wind's direction this frame: 1 blowing to the right
+  for (const { e, x, y, k, low, deg, ph } of cdLeaves) {
+    const g = GUST(s - 0.15 - ph * 0.03 - from * (x - 340) * 0.004), down = g > 0 ? 90 : -90;
+    let turn = ((down - deg) % 360 + 360) % 360; // how far round to downwind, -180 to 180, over the top when it points straight into the wind
+    if (turn > 180 || (turn === 180 && down < 0)) turn -= 360;
+    const a = k * (6 * Math.abs(g) * turn / 90 + 0.12 * Math.sin(s * (3 + ph * 0.3) + ph)), grow = low < 0 ? 1 : 1 + 2.5 * (1 + 5 * low) / 6;
+    put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (grow === 1 ? '' : ` translate(${x} ${y}) scale(${grow.toFixed(2)}) translate(${-x} ${-y})`));
+  }
+}
+
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
 // dust, and the moths' shadows.
 function drawLight(dt, s, { size, flick, pulse }) {
   const [gx, gy] = rot(...style.light);
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
-  // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs
+  // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
+  // standing candle's flame instead, since its body runs down below)
   const ringR = [250, 190, 135].map((r, i) => r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9)));
   // dust drifts around the light; the far specks fill the dark out to the edges. A speck stays lit for most of a
   // slow cycle (about 40 seconds) and now and then fades out and back over a few seconds, so its brightness mostly
   // changes as it drifts through light and shadow, not from twinkling
   const fadeOut = (t, ph) => 1 - Math.max(0, Math.sin(t + ph)) ** 6;
-  // The wind carries each speck sideways, at once and further than the lantern swings: the lighter the speck, the further
-  // and the sooner (a heavy one lags a fifth of a second), with a little lift and swirl of its own. It's an offset on the
-  // orbit, so they flow with a gust and drift back as it eases.
-  const blow = (p, k) => { const g = GUST(s - 0.12 * p.r) * k / p.r; return [g, -Math.abs(g) * 0.15 + g * 0.2 * Math.sin(s * 0.9 + p.ph)]; };
+  // The wind carries each speck sideways (gustAside), further than the lantern swings, with a little lift and swirl of its own
+  const blow = (p, k) => { const g = gustAside(s, p.r, k); return [g, -Math.abs(g) * 0.15 + g * 0.2 * Math.sin(s * 0.9 + p.ph)]; };
   dust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18, [wx, wy] = blow(p, 14);
-    dustData.set([gx + wx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, gy + wy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6, p.r,
+    const x = gx + wx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, y = gy + wy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6;
+    dustData.set([x, y - liftDust(p, x, y, dt), p.r,
       (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph))], i * 4); // no fading with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22, [wx, wy] = blow(p, 16);
-    dustData.set([CX + wx + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + wy + Math.cos(s * 0.45 + p.ph) * 10, p.r,
+    const x = CX + wx + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, y = CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + wy + Math.cos(s * 0.45 + p.ph) * 10;
+    dustData.set([x, y - liftDust(p, x, y, dt), p.r,
       (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (dust.length + i) * 4);
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
-  // a burner cup under the flame (holder: its bottom and half-width) throws a narrow fan straight down, seen from the flame
-  // core's live centre so the fan breathes with it
+  // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup or a candle's rim)
+  // throws a fan straight down, seen from the flame core's live centre so the fan breathes with it
   const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
-    ringC: rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
+    ringC: style.stands ? [gx, gy] : rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
     // on a second display the glow centres on the lantern's light off its edge (it's only drawn there as the dust's light)
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
-    airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180,
+    airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
+    ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), s, strength, heat && [heat.x, heat.y]),
+    drift: Array.from({ length: 13 }, (_, i) => smokeDrift(s, i * PLUME.life / 12)), // background.js smokeDrift samples it
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
+    // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
+    flame: [...style.flame.slice(0, 2), ...flameTip(s, size)],
+    rim: style.shadeFromHolder && !remote ? [style.flame[0], style.holder[1], style.holder[0]] : [0, 0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
     bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
@@ -326,12 +489,66 @@ function drawLight(dt, s, { size, flick, pulse }) {
   });
 }
 
+// ---- scorched moths ----------------------------------------------------------
+// On a lantern whose flame is bare and in reach (style.scorches), a session moth whose PR has failing checks flies too
+// close to the flame once a minute until they pass. There's a puff and sparks at the touch, then it darts about with its wing
+// tips smoking and its wings charred a little, until they heal. Each moth's wall-clock time splits into `slot`-second
+// slots, shifted by its own seeded phase so red moths don't scorch in step; each slot holds one episode `length` long,
+// starting at a seeded point in the slot's first `window` seconds. A moth must be eligible within `start` of that start,
+// or it waits for the next slot. The flame touches it `hit` seconds in. All in seconds. The schedule reads only the key
+// and the wall clock, so every window (app, panel, screensaver) scorches a moth at the same moments.
+// ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 15 seconds,
+// as long as its smoke lasts.
+const SCORCH_DEMO = devToggle('Demo', 'scorch', 'scorch demo', false, 'Every moth flies into the candle\'s flame every 15 seconds, failing checks or not (reloads the page)', () => location.reload());
+const SCORCH = SCORCH_DEMO ? { slot: 15, window: 1, length: 13, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
+const SCORCH_CHAR = '#5B4636'; // the wings' char, a warm brown
+// The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
+let tongue = null;
+// The episode in progress for `key` at wall-clock `now` (ms): its slot and the seconds since it started, or null.
+/** @param {string} key @param {number} now @param {{ slot: number, window: number, length: number }} [plan] */
+function scorchClock(key, now, plan = SCORCH) {
+  const { slot, window: span, length } = plan, at = now / 1000 - seeded(hash(key + ':scorch'))() * slot, n = Math.floor(at / slot);
+  const t = at - n * slot - seeded(hash(key + ':scorch:' + n))() * span;
+  return t >= 0 && t < length ? { slot: n, t } : null;
+}
+// Where an episode is at `t`: approach, recoil (a second after the hit), agitated, then settling over its last 6 seconds;
+// `a` the agitation and `char` the wings' tint toward SCORCH_CHAR.
+function scorchFlight(t, { hit, length } = SCORCH) {
+  const calm = length - 6, fade = t >= length ? 0 : t < calm ? 1 : (u => u * u * (3 - 2 * u))((length - t) / (length - calm));
+  return { phase: t < hit ? 'approach' : t < hit + 1 ? 'recoil' : t < calm ? 'agitated' : 'settling',
+    a: t < hit + 1 ? 0 : fade, char: t < hit || t >= length ? 0 : 0.2 * (length - t) / (length - hit) };
+}
+// One moth's episode, once a frame (mothTarget; `flying` only in its home-drift branch). It starts within `start` of a
+// scheduled start while the moth is eligible; before the hit, losing eligibility (landing, leaving, green checks, GitHub
+// off, another lantern) ends it with nothing to show; after the hit it runs out its length, steered and smoking only
+// while flying, unless the lantern changes. At the hit it throws 5 sparks into the flame's pool, less the scorch
+// sparks still alive, so scorches never hold more than 5 of its 12. Touches no DOM; m.scorch exists only during one.
+function scorchStep(m, flying, now = Date.now()) {
+  const red = () => flying && tongue && style.scorches && (SCORCH_DEMO || m.session?.github?.some(p => p.need === 'failing'));
+  if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
+  const at = scorchClock(m.key, now), sc = m.scorch;
+  if (!sc) {
+    if (!at || at.t >= SCORCH.start || [...moths.values()].filter(o => o.scorch).length >= SMOKERS) return null; // too many smoking: next time
+    const rand = seeded(hash(`${m.key}:scorch:${at.slot}:touch`));
+    m.scorch = { slot: at.slot, t: at.t, hit: false, flying, rand, up: 0.25 + 0.25 * rand(), side: stretch(m.home)[0] < tongue.cx ? -1 : 1 };
+  } else if (!at || at.slot !== sc.slot || !style.scorches || (!sc.hit && !red())) return m.scorch = null;
+  else Object.assign(sc, { t: at.t, flying });
+  const e = m.scorch;
+  if (!e.hit) e.aim = [tongue.cx + e.side * (tongue.half + 8 * m.size), style.flame[1] - e.up * tongue.height]; // a wing tip at the edge
+  if (!e.hit && e.t >= SCORCH.hit) {
+    e.hit = true;
+    const [fx, fy, k] = style.flame, live = sparks.filter(p => p.scorch && p.life > 0).length;
+    for (let i = live; i < 5; i++) sparks.push({ x: 340 + (e.aim[0] - fx) / k, y: FLAME_BASE + (e.aim[1] - fy) / k, scorch: true, life: 1,
+      vx: e.side * (8 + 30 * e.rand()) / k, vy: -(15 + 40 * e.rand()) / k });
+  }
+  return e;
+}
 // ---- moths -------------------------------------------------------------------
 // Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
 function mothTarget(k, m, dt, s) {
-  let tx, ty, ease = 2.4, flap = 22.4; // radians per second: about 3.6 wingbeats a second
+  let tx, ty, ease = 2.4, flap = 22.4, flying = false; // flap in radians per second, about 3.6 wingbeats a second
   const orbit = m.satellite && moths.get(m.satellite);
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
     const a = m.phase + s * 0.12;
@@ -340,7 +557,8 @@ function mothTarget(k, m, dt, s) {
   const parent = m.parentId && moths.get(m.parentId);
   if (m.parentId && (!parent || parent.leaving)) m.leaving = true;
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
-  const needsMe = !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
+  // (with ?scorch none lands, so there's always a moth in the air to scorch)
+  const needsMe = !SCORCH_DEMO && !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
   if (m.leaving) {
     const ang = Math.atan2(m.y - CY, m.x - CX);
     tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 1.3;
@@ -376,7 +594,7 @@ function mothTarget(k, m, dt, s) {
       else if (into > 0) {
         m.fidget = kind;
         if (m.fidget === 'hop') {
-          ty -= 16 * Math.sin(Math.PI * into / dur);
+          ty -= HOP * Math.sin(Math.PI * into / dur);
           // a hop lands on a new spot in its own slice, picked once as it lifts off (seeded by the hop count, so windows agree)
           if (into > dur * 0.35 && m.hoppedAt !== m.fidgetAt) {
             m.hoppedAt = m.fidgetAt;
@@ -387,9 +605,27 @@ function mothTarget(k, m, dt, s) {
     }
   } else {
     // stay near home, drifting lazily
+    flying = true;
     const [hx, hy] = stretch(m.home);
     tx = hx + Math.sin(s * 0.5 + m.phase) * 24 + Math.sin(s * 1.3 + m.phase * 2) * 8;
     ty = hy + Math.cos(s * 0.4 + m.phase) * 18 + Math.sin(s * 1.7 + m.phase) * 6;
+  }
+  // a scorch steers only a moth drifting near home. It flies into the flame and off it, then darts about as it settles
+  const sc = scorchStep(m, flying);
+  if (sc?.hit && !sc.trailDone) { // a point on its smoke trail as it flies away, and the last where it is as the smoke stops following it
+    const done = sc.t - SCORCH.hit >= TRAIL.secs, last = sc.trail?.at(-1), flown = last ? Math.hypot(m.x - last[0], m.y - last[1]) : 0;
+    if (done || !last || sc.trail.length < TRAIL.most && (sc.t - last[2] >= TRAIL.every || flown >= TRAIL.apart)) {
+      sc.trailDone = done; (sc.trail ??= []).push([m.x, m.y, sc.t, (last?.[3] ?? 0) + flown]); // with how far along its path it is
+    }
+  }
+  if (sc && flying) {
+    const { phase, a } = scorchFlight(sc.t), ph = m.phase;
+    if (phase === 'approach') { [tx, ty] = sc.aim; flap = 26; }
+    else if (phase === 'recoil') { tx = sc.aim[0] + sc.side * 70; ty = sc.aim[1] - 45; ease = 7; flap = 34; }
+    else { // flustered on its way home: slower than calm, on a lazy weave side to side and a little up and down, with a singed moth's jitter over it
+      tx += a * (34 * Math.sin(1.4 * s + ph) + 7 * Math.sin(5.3 * s + 2 * ph)); ty += a * (14 * Math.cos(1.1 * s + ph) + 4 * Math.sin(4.9 * s + ph));
+      ease = 2.4 - 1.3 * a; flap = 22.4 + 10 * a;
+    }
   }
   return { tx, ty, ease, flap, needsMe };
 }
@@ -520,7 +756,8 @@ function mothWings(m, { tx, ty, flap, needsMe }, dt, s) {
   return [upPts, sidePts];
 }
 
-// Colour: moths near the lantern catch its light; the session that needs me turns violet with a pale outline.
+// Moths near the lantern catch its light, the session that needs me turns violet, and a scorched one is charred a
+// little, healing as its episode runs out.
 // Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
 function mothColour(m, needsMe, upPts, sidePts, dt) {
   const host = m.parentId ? moths.get(m.parentId) : m, calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
@@ -530,7 +767,8 @@ function mothColour(m, needsMe, upPts, sidePts, dt) {
   const singed = needsMe && m.session.error;
   // Landed, the flame is behind the moth: it turns to a darker silhouette against the glowing paper.
   const backlit = m.fold || 0;
-  const wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+  let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+  if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -m.tilt * Math.PI / 180, [lx, ly] = rot(...style.light), fx = lx - m.x, fy = ly - m.y;

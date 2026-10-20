@@ -23,11 +23,13 @@ When a session needs you, its moth lands on the lantern, folds its wings and tur
 
 Landed moths get fidgety. Now and then one takes a slow breath, opening its wings and closing them again. After 15 minutes it gets restless and sometimes hops off the paper.
 
+On the pillar candle, a moth whose PR has failing checks (its red firefly) flies too close to the flame about once a minute. There's a puff and a few sparks as it touches, then it darts about with its wing tips smoking and its wings a little charred, and settles back down. The whole thing takes about 20 seconds, and it keeps at it until the checks pass. Only a session's own moth drifting near home gets scorched, side sessions included. A landed moth, one flying off and a subagent never do, and a moth that lands before it reaches the flame skips it. It needs [GitHub status](setup.md#github-status) on, and quiet hours don't stop it. Every window scorches the same moth at the same moment.
+
 A few smaller things to watch for:
 
 - Threads pulse with a little glow each time a session or one of its agents runs a tool.
 - Each project gets a faint tint, slightly different per session, so you can tell moths apart.
-- A singed moth (grey, with a dark edge) means the turn ended with an API error.
+- A singed moth (grey) means the turn ended with an API error.
 
 The scene stretches to fill any window shape, wide, tall or square, and the lantern stays the same size in the middle.
 
@@ -79,7 +81,11 @@ Only plain sentences make it onto the paper. Lantern drops anything with code, a
 
 ## Picking a lantern
 
-The settings menu (the compass icon at the bottom right) has three lanterns: the book-page barrel, a round chōchin and a brass Moroccan lantern. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together. The same menu holds "notify me", the stale PR and session text switches, the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
+The settings menu (the compass icon at the bottom right) has four lanterns: the book-page barrel, a round chōchin, a brass Moroccan lantern and a pillar candle. The barrel is the default. Every window, the iTerm2 panel and the screensaver share the choice, so they all switch together.
+
+The pillar candle is ivory wax on a bronze altar candlestick, wound with a grapevine and purple grapes, on a marble pedestal the vine climbs. It stands on its own foot, so it has no string or chain and doesn't sway in the wind. Moths that need you land on the wax. Its bare flame throws sparks, like the Moroccan's, and the room below the candle's rim sits in its shade. The flame shines on the candlestick too, with glints on the brass that slide as it leans and brighten as it flickers, a reflection in the molten pool at the crown, a highlight on each grape's near side and a warm patch on the marble round the foot. The air above it shimmers and carries dust up, and every minute or two a thin curl of smoke leaves its tip and fades over about 6 seconds, at the same moment in every window. It has no paper, so it shows no session text.
+
+The same menu holds "notify me", the stale PR and session text switches (session text is greyed out on the Moroccan and the candle), the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
 
 ## Stats, badges and the recap
 
