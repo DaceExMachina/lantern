@@ -290,12 +290,13 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const { els, document } = domStub(), ctx = context(1000, document), { hit } = ctx.SCORCH;
   const [smoke, TRAIL, TRAIL_POINTS, life] = ctx.run('[smoke, TRAIL, TRAIL_POINTS, PLUME.life]'), smokeTrail = () => smoke(clock.wall, 0, null).trail;
   assert.strictEqual(TRAIL[1], TRAIL_STEP);
+  assert.ok(ctx.SCORCH.length >= hit + TRAIL[0] + life, 'the episode lasts as long as its smoke, so it never ends mid-trail');
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
   const step = (ms, dt = 0.05) => { ctx.perf.t += dt * 1000; clock.wall += dt * 1000; for (const m of ms) ctx.mothTarget(m.key, m, dt, ctx.perf.t / 1000); };
   const m = make('sess-trail');
-  while (!m.scorch?.hit || m.scorch.t < hit + 1.5) { if (!m.scorch?.hit) assert.strictEqual(smokeTrail().length, 0, 'no trail before the hit'); step([m]); }
+  while (!m.scorch?.hit || m.scorch.t < hit + 1) { if (!m.scorch?.hit) assert.strictEqual(smokeTrail().length, 0, 'no trail before the hit'); step([m]); }
   const a = smokeTrail(), last = a[a.length - 1];
-  assert.ok(a.length >= 7, `points all along its path: ${a.length}`);
+  assert.ok(a.length >= 4, `points all along its path: ${a.length}`);
   assert.deepStrictEqual([last[0], last[1], last[2]], [m.x, m.y, 0], 'joined to the moth while it smokes');
   assert.ok(a.every(p => p[2] >= 0 && p[3] === a[0][3]), 'one band, unbroken, on one clock');
   for (let i = 1; i < a.length; i++) assert.ok(a[i][2] < a[i - 1][2], `older toward its old end, at ${i}`);

@@ -153,8 +153,8 @@ function makeSubMoth(key, parentId, size) {
 // A scorched moth's smoke trail (frame.js smoke, background.js trailSmoke): the seconds it's left over, and between points
 // on its path. Up to SMOKERS_MAX moths smoke at once (frame.js smokers), and TRAIL_POINTS holds all their trails: each
 // one's points, one joined to the moth, and one parting it from the next.
-const TRAIL = [3, 0.25], SMOKERS_MAX = 6;
-let smokers = devSlider('Smoke', 'smokers', 'smoking moths', 1, SMOKERS_MAX, 1, 4, 'How many moths can be scorched and smoking at once; another waits for its next turn', v => { smokers = v; });
+const TRAIL = [1.5, 0.25], SMOKERS_MAX = 8;
+let smokers = devSlider('Smoke', 'smokers', 'smoking moths', 1, SMOKERS_MAX, 1, 6, 'How many moths can be scorched and smoking at once; another waits for its next turn', v => { smokers = v; });
 const TRAIL_POINTS = SMOKERS_MAX * (Math.ceil(TRAIL[0] / TRAIL[1]) + 3);
 const PLUMES = 1 + SMOKERS_MAX; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
 

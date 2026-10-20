@@ -123,7 +123,7 @@ uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
-uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN; uniform vec2 uSmokeS; // the Ss' size and length (frame.js smokeS)
+uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN; uniform vec3 uSmokeS; // the Ss' size and length, and how fast the smoke disperses (frame.js smokeS)
 ${LIGHT}
 const float RISE = 29.0; // how fast smoke rises, units a second
 // How far a bit of smoke age seconds old has been carried aside from where it was let go, in PLUME sizes: downwind
@@ -135,6 +135,13 @@ float smokeBend(float age, float now, float curl) {
   float h = RISE * age, at = now - age, k = 6.2832 * RISE / uSmokeS.y;
   return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * uSmokeS.x * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
 }
+// How much wider smoke age seconds old has spread than when it was let go: thinner to match (its strength over the square
+// root of this), and broken up more along its curls (smokeMottle)
+float spread(float age) { return 1.0 + uSmokeS.z * age; }
+// a soft, uneven mottling of smoke at p, deeper the older it is: from a quarter of its strength when new to most of it
+float smokeMottle(vec2 p, float age, float ph) {
+  return 1.0 + min(0.85, 0.25 + 0.3 * uSmokeS.z * age) * sin(p.y * 0.23 + p.x * 0.11 + ph) * sin(p.x * 0.19 - p.y * 0.07 - ph * 0.6);
+}
 // How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
 // steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
@@ -145,37 +152,36 @@ float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
   float size = uSmoke.x, t = a.z, h = (o.y - p.y) / size, age = max(h, 0.0) / RISE;
   if (h < -3.0 || h > t * RISE + 12.0) return 0.0;
   float x = o.x + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
-  float d = (p.x - x) / (size * (1.0 + h * 0.09));
-  float k = exp(-d * d) / (1.0 + h * 0.025) * a.w
+  float sp = spread(age), d = (p.x - x) / (size * (1.0 + h * 0.09) * sp);
+  float k = exp(-d * d) / ((1.0 + h * 0.025) * sqrt(sp)) * a.w
     * smoothstep(t * RISE + 12.0, t * RISE - 6.0, h) // its rising tip
     * smoothstep(t - b.y - 0.5, t - b.y, age) // let go only over its first b.y seconds
     * (1.0 - smoothstep(uSmoke.y * 0.4, uSmoke.y, age)) // each bit fading as it ages
     * smoothstep(-3.0, 3.0, h); // soft where it starts
-  return k * (0.75 + 0.25 * sin(h * 0.23 - t * 3.0 + b.x * 5.0) * sin(d * 2.0 + h * 0.07));
+  return k * smokeMottle(p, age, b.x * 5.0 - t * 3.0);
 }
 // How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
-// bent as a plume's smoke is (smokeBend), thinner and fainter the older it is and gone at the end of its life; width and
-// strength eased between them, the thickest of the segments near p so their joins don't double up, mottled a little.
+// bent and spread as a plume's smoke is (smokeBend, spread), fainter the older it is and gone at the end of its life;
+// width, strength and age eased between them, the thickest of the segments near p so their joins don't double up.
 // Each point is where it was left, its age, and its moth's clock; an age below 0 parts one moth's trail from the next.
 float trailSmoke(vec2 p) {
-  float k = 0.0, size = uSmoke.x, aw = 1.0;
-  vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, its half-width and strength (-1: none)
+  float k = 0.0, size = uSmoke.x, aw = 1.0, aAge = 0.0;
+  vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, and its strength (-1: none)
   for (int i = 0; i < ${TRAIL_POINTS}; i++) {
     if (i >= uTrailN) break;
     vec4 q = uTrail[i];
-    float age = q.z / uSmoke.y;
-    vec3 b = vec3(q.x + size * smokeBend(q.z, q.w, 1.0), q.y - size * RISE * q.z, 0.6 * (1.0 - age));
-    float w = size * (3.6 - 2.0 * age);
+    float sp = spread(q.z), w = size * 2.4 * sp;
+    vec3 b = vec3(q.x + size * smokeBend(q.z, q.w, 1.0), q.y - size * RISE * q.z, 0.6 * (1.0 - q.z / uSmoke.y) / sqrt(sp));
     if (q.z < 0.0) b.z = -1.0;
     if (a.z > 0.0 && b.z > 0.0) {
       vec2 ab = b.xy - a.xy;
       float t = clamp(dot(p - a.xy, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0);
       float d = length(p - a.xy - ab * t) / mix(aw, w, t);
-      k = max(k, mix(a.z, b.z, t) * exp(-d * d));
+      k = max(k, mix(a.z, b.z, t) * exp(-d * d) * smokeMottle(p, mix(aAge, q.z, t), q.w));
     }
-    a = b; aw = w;
+    a = b; aw = w; aAge = q.z;
   }
-  return k * (0.75 + 0.25 * sin(p.y * 0.23 + p.x * 0.11) * sin(p.x * 0.19 - p.y * 0.07));
+  return k;
 }
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
@@ -352,7 +358,7 @@ function drawBackground(v) {
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
-  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform2f(u.uSmokeS, smokeS.size, smokeS.length);
+  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform3f(u.uSmokeS, smokeS.size, smokeS.length, smokeS.disperse);
   if (v.plumes.length) {
     gl.uniform4fv(u['uPlume[0]'], v.plumes.flatMap(q => q.slice(0, 4)));
     gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));

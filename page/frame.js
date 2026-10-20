@@ -316,10 +316,12 @@ function liftDust(p, x, y, dt) {
 // passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while it's still smoking. At most `smokers`
 // moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
 // none of it is ever dropped.
-// How big the smoke's Ss are, and how long as it rises, in scene units (background.js smokeBend)
+// How big the smoke's Ss are and how long as it rises, in scene units (background.js smokeBend), and how fast it spreads
+// out, its width growing by this much of itself a second (background.js spread)
 const smokeS = {
   size: devSlider('Smoke', 'smokecurl', 'S size', 0, 60, 1, 24, 'How far the smoke swings aside as it curls into Ss, once it has risen a second or so', v => { smokeS.size = v; }),
   length: devSlider('Smoke', 'smokewave', 'S length', 20, 300, 5, 90, 'How tall each S of the smoke is', v => { smokeS.length = v; }),
+  disperse: devSlider('Smoke', 'disperse', 'disperse', 0, 2, 0.05, 0.6, 'How fast the smoke spreads out as it ages: wider, thinner and more broken up along its curls', v => { smokeS.disperse = v; }),
 };
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
 const SMOKE_REL = 3, SINGE_REL = 0.8;
