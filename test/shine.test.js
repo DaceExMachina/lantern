@@ -38,7 +38,7 @@ function context() {
   els.cdBronze = node(); // the bronze's gradient, its stops as drawn
   els.cdBronze.children = [...back.match(/id="cdBronze">(.*?)<\/linearGradient>/)[1].matchAll(/<stop\b/g)].map(() => node());
   const flame = { size: 1, flick: 1, pulse: 1 };
-  return { els, run, flame, shine: s => run('drawShine')(s, flame), lean: s => run(`(wobble(${s}, 3) * 6 + windLean(${s}) * 70 / 96) * 0.8`) };
+  return { els, run, flame, shine: s => { run('drawShine')(s, flame); run('drawHeat')(s, flame.size); }, lean: s => run(`(wobble(${s}, 3) * 6 + windLean(${s}) * 70 / 96) * 0.8`) };
 }
 // page times (s) where the flame leans well over to the left and to the right
 const leaning = ctx => {
@@ -77,7 +77,7 @@ test('the foot\'s shadow on the marble shifts away from the flame\'s lean', () =
   }
 });
 
-test('the hot air rises in a column straight above the flame and nowhere else, and only over the candle', () => {
+test('the hot air rises in a column straight above the flame and nowhere else, and none over the barrel', () => {
   const ctx = context(), [left] = leaning(ctx);
   ctx.shine(left);
   const { x, y } = ctx.run('heat'), at = (dx, dy) => ctx.run(`heatAt(${x + dx}, ${y + dy})`);
@@ -88,6 +88,16 @@ test('the hot air rises in a column straight above the flame and nowhere else, a
   ctx.shine(left);
   assert.strictEqual(ctx.run('heat'), null, 'the barrel\'s flame is behind paper');
   assert.strictEqual(ctx.run(`heatAt(${x}, ${y - 60})`), 0);
+});
+
+test('the Moroccan\'s hot air leaves its dome, swinging with it, as strong as its flame burns', () => {
+  const ctx = context(), [left] = leaning(ctx);
+  ctx.run('style = STYLES.moroccan; swayAngle = 8');
+  ctx.shine(left);
+  const h = ctx.run('heat'), [x, y] = ctx.run('rot(...STYLES.moroccan.heat.at)'), k = ctx.run('STYLES.moroccan.heat.k');
+  assert.ok(x < 339, `swung off the middle: ${x}`);
+  assert.deepStrictEqual([h.x, h.y, h.k], [x, y, k * ctx.flame.size]);
+  assert.ok(ctx.run('heatAt')(x, y - 60) > 0, 'its column rises above it');
 });
 
 // The flame's plumes at wall time `now` (the shader draws them), burning at `strength`, its tip at `tip`.

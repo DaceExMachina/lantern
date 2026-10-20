@@ -172,7 +172,7 @@ const PLUME = { size: 1, life: 6, alpha: 0.5 }, SMOKE_COL = '#B4A8B4';
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
 const SMOKE_REL = 3, SINGE_REL = 0.8;
 
-// The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
+// The column of hot air rising off a lantern (style.heat; frame.js heatAt, and heat() in background.js's shaders): its half-width at the
 // tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
 // fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
 const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };

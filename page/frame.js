@@ -150,6 +150,7 @@ function frame(t) {
   drawSparks(dt, s, flame.size);
   lightPaper(flame);
   drawShine(s, flame);
+  drawHeat(s, flame.size);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), rot(...style.light), [125, 170], dt, s);
   for (const [k, m] of moths) {
@@ -295,19 +296,18 @@ function lightPaper({ size, flick, pulse }) {
 // A bare flame lights what's round it (style.shine, where each grape that glints sits): the bronze's highlight, its reflection in
 // the molten pool (sliding as the flame leans, as a reflection moves with what it reflects) at
 // the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
-// on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background, and the tip smoke
-// leaves from). All of it follows this frame's flame.
-// The hot air over the flame, set by drawShine (null without one): the outer tongue's tip, how strong, and the time.
+// on it pushed away from the lean. All of it follows this frame's flame.
+// The hot air rising off the lantern, set by drawHeat (null without any): where it leaves, how strong, and the time.
 let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
 // How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (state.js HEAT_COLUMN)
-// rising from the flame's tip. LIGHT's heat() in background.js bends the same column, so change the two together.
+// rising from where it leaves. LIGHT's heat() in background.js bends the same column, so change the two together.
 function heatAt(x, y) {
   if (!heat) return 0;
   const { half: h0, widen, start, fade } = HEAT_COLUMN, up = heat.y - y, half = Math.max(1, h0 + widen * up);
   const step = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
   return heat.k * step(0, start, up) * (1 - step(fade[0], fade[1], up)) * (1 - step(0.7 * half, half, Math.abs(x - heat.x)));
 }
-// A speck at (x, y) on its orbit, `dt` on: over a bare flame the hot air carries it up at HEAT_RISE a second at its
+// A speck at (x, y) on its orbit, `dt` on: in the hot air it carries it up at HEAT_RISE a second at its
 // strongest, and once out of it it sinks back a third of its lift a second, another offset on the orbit. Its lift, up.
 function liftDust(p, x, y, dt) {
   return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
@@ -385,13 +385,20 @@ function flameTip(s, size) {
   return [fx + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
 }
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
+// The hot air rising off the lantern this frame (style.heat), for drawLight, the background and the tip smoke leaves from:
+// from style.heat.at, swinging with the lantern, or its bare flame's outer tongue's tip, as strong as the flame burns.
+function drawHeat(s, size) {
+  const h = style.heat;
+  if (!h || AMBIENT) { heat = null; return; }
+  const [x, y] = h.at ? rot(...h.at) : flameTip(s, size);
+  heat = { x, y, k: h.k * size, t: s % (2 * Math.PI) };
+}
 function drawShine(s, { size, flick, pulse }) {
   const shine = style.shine;
-  if (!shine || AMBIENT) { heat = null; return; }
+  if (!shine || AMBIENT) return;
   const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
-  // the flame's lean (its middle tongue's tip, drawFlame) and its outer tongue's tip, in the scene
-  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk, tip = flameTip(s, size);
-  heat = { x: tip[0], y: tip[1], k: size, t: s % (2 * Math.PI) };
+  // the flame's lean (its middle tongue's tip, drawFlame), in the scene
+  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk;
   const pool = $('cdPoolGlint');
   put(pool, 'cx', (fx + lean * 0.6 + Math.sin(s * 5.3) * 0.6).toFixed(1)); put(pool, 'rx', (2.4 + 0.6 * flick + 0.3 * Math.sin(s * 7)).toFixed(1));
   put(pool, 'fill', core); put(pool, 'opacity', (0.55 * bright).toFixed(2));
@@ -472,7 +479,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
-    ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), s, strength, heat && [heat.x, heat.y]),
+    ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), s, strength, heat && style.shine && [heat.x, heat.y]),
     drift: Array.from({ length: 13 }, (_, i) => smokeDrift(s, i * PLUME.life / 12)), // background.js smokeDrift samples it
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
