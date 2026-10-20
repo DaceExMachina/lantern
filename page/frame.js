@@ -150,6 +150,7 @@ function frame(t) {
   drawSparks(dt, s, flame.size);
   lightPaper(flame);
   drawShine(s, flame);
+  if (style.shine) drawLeaves(s);
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), rot(...style.light), [125, 170], dt, s);
   for (const [k, m] of moths) {
     const aim = mothTarget(k, m, dt, s);
@@ -363,6 +364,18 @@ function drawShine(s, { size, flick, pulse }) {
   put($('cdWarmG'), 'color', mix(pal('paper'), '#ffffff', 0.6));
   put($('cdWarm'), 'opacity', ((0.4 + 0.15 * flick) * bright).toFixed(2));
   put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
+}
+
+// The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) flutter in the wind: each turns about its
+// stem with the gust, a little after it, plus a flutter of its own, by its weight (smaller leaves more). Found once
+// after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree.
+function drawLeaves(s) {
+  cdLeaves ??= [...document.querySelectorAll('.cdLeaf')];
+  for (const e of cdLeaves) {
+    const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), k = +(e.getAttribute('data-k') || 1), ph = (x * 0.37 + y * 0.11) % 6.283;
+    const a = k * (2.2 * GUST(s - 0.15 - ph * 0.03) + 1.2 * Math.sin(s * (3 + ph * 0.3) + ph));
+    put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})`);
+  }
 }
 
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the

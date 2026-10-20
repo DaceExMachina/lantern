@@ -445,12 +445,14 @@ const CANDLE = (() => {
     }
     return { pts, a };
   };
+  // something that flutters in the wind about `p` (frame.js drawLeaves), `k` as much as a mid-sized leaf
+  const flutter = (p, k, svg) => `<g class="cdLeaf" data-at="${pt(p)}" data-k="${n(k)}">${svg}</g>`;
   // a curling tendril from `p`, heading `a`, coiling `side` (1 or -1)
-  const tendril = (p, a, side, rand) => `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`;
+  const tendril = (p, a, side, rand) => flutter(p, 0.4, `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`);
   // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up
   const leafOn = (p, w, deg) => {
     const a = deg * Math.PI / 180, q = [p[0] + Math.sin(a) * w * 0.25, p[1] - Math.cos(a) * w * 0.25];
-    return `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`;
+    return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`); // smaller leaves more
   };
   // a tapering bunch hanging (or lying) from its stalk at `p`, its axis `deg` from straight down, rows of grapes from the
   // stalk out; `put` draws the grapes (grapes() for those with glints, or plain uses on the column, which is redrawn)
@@ -529,7 +531,7 @@ const CANDLE = (() => {
   const onPedestal = GRAPES.length; // the grapes drawn so far are the pedestal's bunch
   // on up the foot and round the baluster to the vine already on the candlestick
   const climb = `${vine(`M${left + 72} ${P.top + 1}${on('Q318 540 330 532Q352 524 352 512Q352 500 334 498Q322 494 330 486Q338 478 352 478')}`)}
-    ${leaf(...stick([326, 534]), 19, -40)}${leaf(...stick([354, 506]), 18, 70)}${leaf(...stick([330, 490]), 17, -70)}`;
+    ${flutter(stick([326, 534]), 0.6, leaf(...stick([326, 534]), 19, -40))}${flutter(stick([354, 506]), 0.6, leaf(...stick([354, 506]), 18, 70))}${flutter(stick([330, 490]), 0.6, leaf(...stick([330, 490]), 17, -70))}`;
   // the knop, placed in the scene (its gadroons are drawn in DRAWN units and placed with on)
   const knop = { cy: Y(474), rx: 25 * k, ry: 11 * k };
   const back = `<defs><clipPath id="cdWax"><path d="${PILLAR_D}"/><path d="${DRIPS.map(dripD).join('')}"/></clipPath>
@@ -567,7 +569,7 @@ const CANDLE = (() => {
     <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
     ${beads(PILLAR.dish, 81, 262, 418, 13, 2.2, 0)}
     ${vine(on('M306 452Q330 470 362 476'))}${vine(on('M326 494Q342 500 354 514'))}<!-- the vine, where it winds across the front -->
-    ${leaf(...stick([318, 472]), 15, -75)}
+    ${flutter(stick([318, 472]), 0.6, leaf(...stick([318, 472]), 15, -75))}
     <path d="${on('M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471')}" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
     ${cluster([400, P.top - 8], -72, [4, 4, 3, 3, 2, 1], grapes)}${leafOn([400, P.top - 8], 14, -35)}<!-- a full bunch lying on the slab by the foot -->
     ${climb}
@@ -695,9 +697,11 @@ let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
 // its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
 // standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
+let cdLeaves = /** @type {Element[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
 function drawHang() {
   const h = $('hang');
   const column = style.stands && $('cdColumn');
+  cdLeaves = null; // drawLeaves finds them again
   if (column) column.innerHTML = CANDLE.column(VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620);
   if (!h) return;
   if (!style.chain) return h.setAttribute('d', `M340 ${VIEW.top - 2}V22`);
