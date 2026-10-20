@@ -360,3 +360,13 @@ test('a wing faces the flame on the side its lit face turns to', () => {
   assert.strictEqual(run(`facesFlame([${up}], ${lift[0]}, ${lift[1]})`), 0, 'the flame on the side the wing opens to is behind its seen face');
   assert.strictEqual(run(`facesFlame([${up}], ${-lift[0]}, ${-lift[1]})`), 1, 'the flame across the body lights its seen face');
 });
+
+test('the candle\'s vine is the same above its split at every window height; only the trunk below grows', () => {
+  const split = run('PEDESTAL.split'), at = bottom => run(`CANDLE.column(${bottom})`);
+  // every point drawn above the split, as "x y" pairs, in drawing order
+  const above = svg => [...svg.matchAll(/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g)].filter(m => +m[2] < split).map(m => `${m[1]} ${m[2]}`);
+  const short = above(at(split + 20)), tall = above(at(split + 900));
+  assert.ok(short.length > 200, `the vine above the split is drawn: ${short.length} points`);
+  assert.deepStrictEqual(tall, short, 'the same vine above the split');
+  assert.ok(at(split + 900).length > at(split + 20).length, 'a taller window draws more trunk below');
+});

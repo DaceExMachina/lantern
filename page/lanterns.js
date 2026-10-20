@@ -262,6 +262,7 @@ const DRAWN = { dish: 426, neck: 460, collar: 518, slab: 549 };
 const STEM = 41;
 const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), r: 112, depth: 14, column: 85 };
 PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
+PEDESTAL.split = PEDESTAL.top + 70; // where the vine's trunk, coming up the front of the column, splits into its branches
 const CANDLE = (() => {
   const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#B57A40', n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
@@ -364,8 +365,9 @@ const CANDLE = (() => {
   // ---- the grapevine: an old woody trunk winding up the column and over the slab, branching out in front of the stone
   // and arcing back, every leaf, tendril and bunch on it. Seeded, so every window grows the same vine.
   const VINE_LIT = '#80733C';
-  // a woody limb along `pts`, `ws[i]` wide at each, gnarled by `rand` (knots and thin stretches): a filled outline in ink
-  // with a lit edge on its left. Standing off the stone, it also lays a soft shadow `shadow` below it on the column.
+  // a woody limb along `pts`, `ws[i]` wide at each, gnarled by `rand` (knots and thin stretches): filled, inked along its
+  // two sides only (so a branch drawn from inside its trunk joins it with no line across), lit along its left. Standing off
+  // the stone, it also lays a soft shadow `shadow` below it on the column.
   const limb = (pts, ws, rand, shadow = 0) => {
     let g = 0;
     const L = [], R = [];
@@ -375,9 +377,10 @@ const CANDLE = (() => {
       const w = ws[i] * Math.max(0.6, 1 + 0.45 * g) / 2;
       L.push([p[0] + dy / d * w, p[1] - dx / d * w]); R.push([p[0] - dy / d * w, p[1] + dx / d * w]);
     });
-    const left = L.reduce((t, p) => t + p[0], 0) < R.reduce((t, p) => t + p[0], 0) ? L : R, d = `M${[...L, ...R.reverse()].map(pt).join('L')}Z`;
+    const left = L[0][0] < R[0][0] ? L : R, // the left as it starts, so a longer limb doesn't change it
+      d = `M${[...L, ...[...R].reverse()].map(pt).join('L')}Z`;
     return (shadow ? `<path d="${d}" fill="#241C30" opacity=".22" transform="translate(${n(shadow * 0.3)} ${n(shadow)})" clip-path="url(#cdColClip)"/>` : '')
-      + `<path d="${d}" fill="${VINE}" stroke="${VINE_INK}" stroke-width=".9" stroke-linejoin="round"/>`
+      + `<path d="${d}" fill="${VINE}"/><path d="M${L.map(pt).join('L')}M${R.map(pt).join('L')}" fill="none" stroke="${VINE_INK}" stroke-width=".9" stroke-linejoin="round" stroke-linecap="round"/>`
       + (pts.length > 2 ? `<path d="M${left.slice(1, -1).map(pt).join('L')}" fill="none" stroke="${VINE_LIT}" stroke-width=".7" stroke-linecap="round"/>` : '');
   };
   // a shoot from `p`, `steps` steps of `len` heading `a` (radians, y down), turning by `curl` a step and more as it goes
@@ -418,30 +421,38 @@ const CANDLE = (() => {
   };
   const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the trunk leaves the column for the slab
   const climbAt = round(climbR, climbEnd, climbTop);
-  // the trunk on the column, from where it leaves for the slab down past `bottom`, winding unevenly, standing off the
-  // stone now and then and thickening toward its root; branches leave it, arc out in front and curl back
-  const trunk = bottom => {
-    const rand = seeded(hash('candle:vine:trunk')), runs = [[]], twigs = [], front = /** @type {[number[], number, number, number][]} */ ([]);
-    let th = climbEnd, off = 0, last = -99;
-    for (let y = climbTop, i = 0; y < bottom + 30; y += 3, i++) {
-      if (i) { th += 2 * Math.PI * 3 / 150 * (0.5 + rand()); off = Math.max(0, Math.min(12, off + (rand() - 0.5) * 2.4)); }
-      const p = round(climbR + off, th, y), w = 5 + Math.min(8, (y - climbTop) / 24);
-      if (Math.cos(th) > -0.05) { runs[runs.length - 1].push([p, w, off]); front.push([p, th, w, i]); } else if (runs[runs.length - 1].length) runs.push([]);
-    }
-    let out = runs.filter(r => r.length > 1).map(r => limb(r.map(q => q[0]), r.map(q => q[1]), rand, 2 + r.reduce((t, q) => t + q[2], 0) / r.length * 0.6)).join('');
-    for (const [p, th, w, i] of front) {
-      if (i - last < 4 || rand() > 0.55) continue;
-      last = i;
-      const side = Math.sin(th) > 0 ? 1 : -1, b = rand();
-      if (b < 0.3) { twigs.push(leafOn(p, 16 + 12 * rand(), side * (40 + 60 * rand()))); continue; }
-      if (b < 0.45) { twigs.push(tendril(p, side > 0 ? 0 : Math.PI, -side, rand)); continue; }
-      const s = shoot(p, side > 0 ? -0.5 : Math.PI + 0.5, 9 + Math.floor(rand() * 16), 3.2, -side * (0.06 + 0.07 * rand()), 0.04, rand);
-      out += limb(s.pts, s.pts.map((_, j) => Math.max(1.3, w * 0.55 * (1 - j / s.pts.length))), rand, 7);
-      twigs.push(tip(s.pts[s.pts.length - 1], s.a, rand, useGrapes));
-      const mid = s.pts[Math.floor(s.pts.length / 2)];
-      if (rand() < 0.6) twigs.push(leafOn(mid, 13 + 9 * rand(), side * (30 + 70 * rand()) - 20));
-    }
+  // points along a quadratic curve from a (excluded) by c to b
+  const quad = (a, c, b, k = 8) => Array.from({ length: k }, (_, i) => { const t = (i + 1) / k, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; });
+  // The vine is laid out from the split (PEDESTAL.split) up in fixed places, the same at every window size: there the
+  // trunk divides into a limb up to the slab (on over it to the foot), one round the column and behind it, and two that arc
+  // out in front of the stone and curl back, with leaves, tendrils and a bunch. Only the trunk below the split depends on
+  // the window: it runs down the front of the column from the split, drawn top-down, so a taller window adds trunk below.
+  const SPLIT = [cx - 8, P.split];
+  const vineTop = (() => {
+    const rand = seeded(hash('candle:vine:top')), twigs = [];
+    // a limb from the split, flared where it leaves the trunk, `w0` to `w1` wide
+    const branch = (pts, w0, w1, shadow = 6) => limb(pts, pts.map((_, j) => w1 + (w0 - w1) * (1 - j / (pts.length - 1)) + Math.max(0, 3 - j) * 1.4), rand, shadow);
+    const up = [SPLIT, ...quad(SPLIT, [cx - 64, P.split - 2], climbAt, 10)];
+    const wrap = [];
+    for (let th = -0.1; Math.cos(th) > -0.05; th += 0.08) wrap.push(round(climbR + 3, th, P.split - (climbR + 3) * T - th * 14));
+    const right = shoot(SPLIT, -0.35, 22, 3.2, -0.085, 0.01, rand), left = shoot(SPLIT, Math.PI + 0.45, 16, 3.2, 0.11, 0.02, rand);
+    const twig = shoot(wrap[9], -0.9, 10, 3, -0.12, 0.03, rand);
+    const out = branch(wrap, 6, 3) + branch(left.pts, 5, 1.4) + branch(right.pts, 5.5, 1.4) + branch(up, 7, 5, 4) + branch(twig.pts, 3, 1.2);
+    twigs.push(cluster(right.pts[right.pts.length - 1], 10, [3, 3, 2, 2, 1], useGrapes), tendril(left.pts[left.pts.length - 1], left.a, 1, rand),
+      tendril(twig.pts[twig.pts.length - 1], twig.a, -1, rand), leafOn(right.pts[8], 20, 35), leafOn(right.pts[15], 15, -20), leafOn(left.pts[7], 18, -70),
+      leafOn(up[4], 22, -40), leafOn(up[8], 16, 20), leafOn(wrap[4], 17, 150), leafOn(wrap[14], 21, 70), leafOn(twig.pts[5], 13, -10),
+      cluster(wrap[6], -6, [3, 3, 2, 1], useGrapes), tendril(wrap[17] || wrap[wrap.length - 1], 0.3, 1, rand));
     return out + twigs.join('');
+  })();
+  // the trunk below the split, wandering a little as it runs down the front of the column past `bottom`, thickening
+  const trunk = bottom => {
+    const rand = seeded(hash('candle:vine:trunk')), pts = [], ws = [];
+    let x = SPLIT[0], dx = 0;
+    for (let y = SPLIT[1], i = 0; y < bottom + 20; y += 4, i++) {
+      pts.push([x, y]); ws.push(9 + Math.min(7, i * 0.2));
+      dx = 0.8 * dx + (rand() - 0.5) * 1.4; x = Math.max(SPLIT[0] - 18, Math.min(SPLIT[0] + 18, x + dx));
+    }
+    return limb(pts, ws, seeded(hash('candle:vine:bark')), 4); // its own stream, so a longer trunk keeps its top's knots
   };
   // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws
   // it), the vine up it from below the edge
@@ -451,11 +462,10 @@ const CANDLE = (() => {
     <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${bottom}`).join('')}" fill="none" stroke="#8E869B" stroke-opacity=".6" stroke-width=".8"/>
     <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
     <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
-    ${trunk(bottom)}`;
+    ${trunk(bottom)}${vineTop}`;
   // the slab: a band between its top rim and its bottom rim's front, lit from the left, in an ink outline
   const slabD = `M${left} ${P.top}V${slabY}A${P.r} ${rimRy(P.r)} 0 0 0 ${cx + P.r} ${slabY}V${P.top}Z`;
   // over the slab's edge and across its top to the foot, where the holder's thin vine takes over
-  const quad = (a, c, b, k = 8) => Array.from({ length: k }, (_, i) => { const t = (i + 1) / k, u = 1 - t; return [u * u * a[0] + 2 * u * t * c[0] + t * t * b[0], u * u * a[1] + 2 * u * t * c[1] + t * t * b[1]]; });
   const edgeAt = [left + 2, P.top + 31], over = [climbAt, ...quad(climbAt, [left + 4, P.top + 49], edgeAt), ...quad(edgeAt, [left + 2, P.top + 13], [left + 28, P.top + 9]),
     ...quad([left + 28, P.top + 9], [left + 56, P.top + 5], [left + 72, P.top + 1])];
   const overRand = seeded(hash('candle:vine:over'));
