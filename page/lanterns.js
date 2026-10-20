@@ -53,6 +53,9 @@ let bronzeTint = devSlider('Temporary', 'bronzetint', 'bronze flame tint', 0, 1,
 // how big the vine's leaves grow (frame.js drawLeaves): this many times as drawn on the lower vine, 300 and more below its
 // split, tapering to a sixth of the way there above it
 let leafSize = devSlider('Temporary', 'leafsize', 'leaf size', 1, 5, 0.1, 3.5, 'How big the vine\'s leaves are, on the lower vine (the rest in proportion)', v => { leafSize = v; });
+// how far the vine's leaves turn with the gusts, and how much they flutter on their own (frame.js drawLeaves), in degrees
+let leafGust = devSlider('Temporary', 'leafgust', 'leaf gust', 0, 12, 0.5, 6, 'How far the vine\'s leaves swing with the gusts', v => { leafGust = v; });
+let leafFlutter = devSlider('Temporary', 'leafflutter', 'leaf flutter', 0, 1.5, 0.02, 0.12, 'How much the vine\'s leaves flutter on their own, between gusts', v => { leafFlutter = v; });
 // how far the wind leans a flame (style.flameWind, frame.js windLean): the candle's in the open, the Moroccan's
 // enclosed at about a third of it (?candlewind=, ?moroccanwind=)
 // the smoke's plumes (frame.js plumes, background.js plume): how big, how many seconds each bit lasts, and how dense

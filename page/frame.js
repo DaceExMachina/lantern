@@ -421,7 +421,7 @@ function drawLeaves(s) {
     return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, ph: (x * 0.37 + y * 0.11) % 6.283 };
   });
   for (const { e, x, y, k, low, ph } of cdLeaves) {
-    const a = k * (2.2 * GUST(s - 0.15 - ph * 0.03) + 1.2 * Math.sin(s * (3 + ph * 0.3) + ph)), g = low < 0 ? 1 : 1 + (leafSize - 1) * (1 + 5 * low) / 6;
+    const a = k * (leafGust * GUST(s - 0.15 - ph * 0.03) + leafFlutter * Math.sin(s * (3 + ph * 0.3) + ph)), g = low < 0 ? 1 : 1 + (leafSize - 1) * (1 + 5 * low) / 6;
     put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (g === 1 ? '' : ` translate(${x} ${y}) scale(${g.toFixed(2)}) translate(${-x} ${-y})`));
   }
 }
