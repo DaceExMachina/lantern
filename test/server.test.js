@@ -509,3 +509,25 @@ test('a preview following the app seeds no sessions of its own', async t => {
   await wait(500);
   assert.deepStrictEqual((await snapshot(preview)).sessions, []);
 });
+
+// The app's stream carries other messages too (the PR lists, settings), each named by an event line; only the unnamed
+// one is the sessions. And when the stream ends, the preview reconnects and takes the list the new stream starts with.
+test('a preview takes only the sessions from the app\'s stream, and reconnects when it ends', async t => {
+  let connections = 0;
+  const app = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    if (++connections === 1) res.end('data: [{"id":"s1","state":"working"}]\n\nevent: reviews\ndata: [{"id":"pr","url":"https://github.com/o/r/pull/1"}]\n\n'); // the PR list last, so taking it would stick until the reconnect
+    else res.write('data: [{"id":"s2","state":"waiting"}]\n\n'); // left open, as the app does
+  });
+  await new Promise(r => app.listen(0, '127.0.0.1', r));
+  t.after(() => { app.closeAllConnections(); app.close(); });
+  const preview = await serve(t, {}, () => {}, { LANTERN_MIRROR: `http://127.0.0.1:${/** @type {import('net').AddressInfo} */ (app.address()).port}/events` });
+  const seen = new Set();
+  await until(async () => {
+    const ids = (await snapshot(preview)).sessions.map(s => s.id).join();
+    seen.add(ids);
+    return ids === 's2';
+  }, 'the preview to show the second stream\'s sessions');
+  assert.ok(connections >= 2, `the preview connected ${connections} time(s)`);
+  assert.ok(![...seen].some(ids => ids.includes('pr')), `the PR list showed up as sessions: ${[...seen].join(' | ')}`);
+});

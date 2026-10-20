@@ -211,11 +211,12 @@ final class LanternServer {
     func retry() { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.start() } }
 
     // Claude Code's hooks only reach the live app, so sessions a preview found itself would never change. It shows the
-    // app's instead, each time the app sends them, and reconnects whenever the stream ends (the app restarting, or
-    // URLSession giving up on a stream quiet for a minute; reconnecting brings a fresh list).
+    // app's instead, each time the app sends them. When the stream ends (the app quitting, say) it keeps the last ones
+    // and tries again every two seconds; a new stream starts with the app's current list.
     func follow(_ url: URL) {
         Task {
             while true {
+                var heard = false
                 if let (lines, _) = try? await URLSession.shared.bytes(from: url) {
                     var event: String?
                     do {
@@ -223,11 +224,12 @@ final class LanternServer {
                             if line.hasPrefix("event: ") { event = String(line.dropFirst(7)); continue }
                             guard line.hasPrefix("data: ") else { continue }
                             // the sessions are the one message without an event name
-                            if event == nil, let list = parse(Data(line.utf8.dropFirst(6))) as? [JSON] { await MainActor.run { self.mirrored(list) } }
+                            if event == nil, let list = parse(Data(line.utf8.dropFirst(6))) as? [JSON] { heard = true; await MainActor.run { self.mirrored(list) } }
                             event = nil
                         }
                     } catch {}
                 }
+                if heard { print("Lost the app at \(url); showing its last sessions until it's back") }
                 try? await Task.sleep(nanoseconds: 2_000_000_000)
             }
         }

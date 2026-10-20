@@ -400,7 +400,7 @@ extension LanternServer {
     // MARK: seeding: rebuild sessions from disk when the server starts, so a restart doesn't forget them
 
     func seed() {
-        let words = wordsOn
+        let words = wordsOn, mirroring = mirror != nil // a preview following the app shows the app's sessions, not its own
         if words { seedProse() }
         DispatchQueue.global().async {
             var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
@@ -410,14 +410,16 @@ extension LanternServer {
                 // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
                 if var s = seedSession(f, live: live, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
             }
-            for (f, pid) in liveTranscripts() { take(f, true, pid) }
-            if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
-            } else { print("seeding failed: no \(PROJECTS)") }
+            if !mirroring {
+                for (f, pid) in liveTranscripts() { take(f, true, pid) }
+                if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
+                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
+                } else { print("seeding failed: no \(PROJECTS)") }
+            }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
                 self.add(seeded)
-                print("Seeded \(self.sessions.count) session(s) from disk")
+                if !mirroring { print("Seeded \(self.sessions.count) session(s) from disk") }
                 self.linkSpawned()
                 // last known PR status, until the first refresh replaces it
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {
@@ -439,7 +441,6 @@ extension LanternServer {
 
     /// Sessions rebuilt from disk join the live ones, unless hooks brought them back first.
     func add(_ seeded: [(JSON, Ordered<JSON>)]) {
-        if mirror != nil { return } // a preview shows the live app's sessions, not its own
         for (s, a) in seeded {
             let id = str(s["id"])
             if sessions[id] != nil { continue }
