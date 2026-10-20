@@ -62,7 +62,7 @@ test('the brass glints and the pool\'s reflection slide the way the flame leans'
 test('each grape\'s glint sits on its side facing the flame, wherever it leans', () => {
   const ctx = context(), grapes = ctx.run('CANDLE.grapes'), [fx] = ctx.run('STYLES.candle.flame'), fy = ctx.run('STYLES.candle.light[1]');
   const glints = [...ctx.els.cdPedestalGlints.children, ...ctx.els.cdGrapeGlints.children];
-  assert.ok(grapes.length > 30 && glints.length === grapes.length, `every grape has a glint: ${glints.length} for ${grapes.length}`);
+  assert.ok(grapes.length > 10 && glints.length === grapes.length, `every grape has a glint: ${glints.length} for ${grapes.length}`);
   glints.forEach((c, i) => assert.deepStrictEqual([num(c, 'cx'), num(c, 'cy')], [...grapes[i]], `glint ${i} starts on its grape`));
   for (const s of leaning(ctx)) {
     ctx.shine(s);

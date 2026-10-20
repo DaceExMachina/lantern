@@ -280,8 +280,8 @@ const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget
 // top a body ending at `bottom` needs for its highest spot to sit at `y`.
 const PERCH_SPREAD = 0.44;
 function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5 + PERCH_SPREAD); }
-LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#8A5E2E', dark: '#553A1B', ink: '#1E1209', line: 1.2,
-  lip: [0, '#1E1209'], rim: [0, 0, 0] }; // darker and browner than the Moroccan's brass
+LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#6E4220', dark: '#40240F', ink: '#160A03', line: 1.2,
+  lip: [0, '#160A03'], rim: [0, 0, 0] }; // a rich dark bronze, browner than the Moroccan's brass
 // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
 // `column` either side of the middle that runs down to the window's bottom edge, its veins and vine fading into it from
 // fade[0] to fade[1]. The
@@ -293,7 +293,7 @@ const STEM = 41;
 const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), r: 112, depth: 14, column: 85 };
 PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
 const CANDLE = (() => {
-  const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#D2A55A', n = v => +v.toFixed(2), pt = ([x, y]) => `${n(x)} ${n(y)}`;
+  const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#B57A40', n = v => +v.toFixed(2), pt = ([x, y]) => `${n(x)} ${n(y)}`;
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
   // The candlestick placed from its drawn units (DRAWN): the pan and all on it under the pillar, the foot and all on it on
   // the pedestal, and the stem between, scaled about the middle to STEM tall, so a part keeps its shape.
@@ -311,8 +311,10 @@ const CANDLE = (() => {
     const d = `M${prof.map(([y, h]) => pt([cx - h, y])).join('L')}Q${cx} ${n(y1 + 2 * sag(y1, h1))} ${n(cx + h1)} ${n(y1)}`
       + `L${[...prof].reverse().map(([y, h]) => pt([cx + h, y])).join('L')}Q${cx} ${n(y0 + (bowl ? 2 : -2) * sag(y0, h0))} ${n(cx - h0)} ${n(y0)}Z`;
     const edge = prof.map(([y, h]) => pt([cx + K.side * h, y + sag(y, h) * (1 - K.side ** 2)]));
+    const shine = prof.map(([y, h]) => pt([cx - 0.6 * h, y + sag(y, h) * 0.64])); // a crisp highlight down the lit side
     return `<clipPath id="${id}"><path d="${d}"/></clipPath><path d="${d}" fill="${K.lit}"/>`
       + `<path d="M${edge.join('L')}L${cx + 100} ${n(y1 + 30)}V${n(y0 - 30)}Z" fill="${K.dark}" clip-path="url(#${id})"/>`
+      + `<path d="M${shine.join('L')}" fill="none" stroke="${GILT}" stroke-width="1.1" stroke-linecap="round" clip-path="url(#${id})"/>`
       + `<path d="${d}" fill="none" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
   };
   const profile = (y0, y1, half, steps = 12) => Array.from({ length: steps + 1 }, (_, i) => { const y = y0 + (y1 - y0) * i / steps; return [y, half(y)]; });
@@ -323,16 +325,16 @@ const CANDLE = (() => {
   }).join('')}</g>`;
   // a curve through points, rounding each corner between them
   const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
-  // the crown's back wall, ragged and melted at the shoulders; its front wall runs a unit below (the lip)
+  // the crown's back wall, ragged and melted round at the shoulders; its front wall runs a unit below (the lip)
   // (each point is across the pillar from -1 to 1, and up from the rim)
   const { r: R, rim } = PILLAR, side = cx + K.side * R; // the pillar's half-width and rim, and where its dark side starts
-  const CROWN = [[-1, 5], [-1, 2], [-0.88, -1.4], [-0.56, -2.2], [-0.24, -1], [0.24, -0.8], [0.56, -1.6], [0.88, -0.8], [1, 2], [1, 5]]
+  const CROWN = [[-1, 20], [-1, -1], [-0.6, -2.2], [-0.24, -1], [0.24, -0.8], [0.6, -1.6], [1, -1], [1, 20]]
     .map(([u, dy]) => [cx + u * R, rim + dy]);
   const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H${cx - R}Z`;
   // drips from the crown: [middle, width, where it ends, and where a second bulge sits on the way down], each ending in a
   // bulb 1.3 times its width; the main one runs out of the notch. Each middle is across the pillar from -1 to 1, and the
   // drops are below the rim.
-  const DRIPS = [[-0.96, 6, 76], [-0.58, 4.5, 22], [-0.2, 5.5, 48], [0.18, 4, 16], [0.56, 8, 98, 60], [0.96, 5, 56]]
+  const DRIPS = [[-0.88, 6, 76], [-0.58, 4.5, 22], [-0.2, 5.5, 48], [0.18, 4, 16], [0.56, 8, 98, 60], [0.88, 5, 56]]
     .map(([u, w, e, bulge]) => [cx + u * R, w, rim + e, ...bulge ? [rim + bulge] : []]);
   const NOTCH = DRIPS[4][0]; // the main drip's middle
   const dripD = (/** @type {number[]} */ [c, w, e, bulge]) => {
@@ -359,10 +361,10 @@ const CANDLE = (() => {
       return Array.from({ length: count }, (_, j) => [x + lean * i + shift + 9.6 * (j - (count - 1) / 2), y + 8.4 * i]);
     });
   };
-  // the bunch lying on the foot, its axis tipped 60 degrees down to the right, nearest grapes drawn last
+  // the bunch lying on the slab beside the foot, its axis tipped 60 degrees down to the right, nearest grapes drawn last
   const lying = (() => {
     const ps = bunch(0, 0, [3, 2, 2], 0), mx = ps.reduce((a, p) => a + p[0], 0) / ps.length, my = ps.reduce((a, p) => a + p[1], 0) / ps.length;
-    return ps.map(([x, y]) => [372 + 0.5 * (x - mx) + 0.866 * (y - my), Y(536) - 0.866 * (x - mx) + 0.5 * (y - my)]).sort((a, b) => a[1] - b[1]);
+    return ps.map(([x, y]) => [420 + 0.5 * (x - mx) + 0.866 * (y - my), PEDESTAL.top + 2 - 0.866 * (x - mx) + 0.5 * (y - my)]).sort((a, b) => a[1] - b[1]);
   })();
   // a vine leaf of five pointed lobes, the middle longest: stem at (x, y), `w` across, pointing `deg` from straight up;
   // lit on its left half, three veins from the stem to the main tips
@@ -374,7 +376,11 @@ const CANDLE = (() => {
       + `<path d="M${at([0, 0])}L${at([0, -0.92])}M${at([0, 0])}L${at([0.38, -0.6])}M${at([0, 0])}L${at([-0.38, -0.6])}" fill="none" stroke="#283016" stroke-width=".7"/>`
       + `<path d="${half(-1)}${half(1)}" fill="none" stroke="#1A200D" stroke-width=".8" stroke-linejoin="round"/>`;
   };
-  const vine = d => `<path d="${d}" fill="none" stroke="#4A4424" stroke-width="2.2" stroke-linecap="round"/>`;
+  const vine = d => `<path d="${d}" fill="none" stroke="#4A4424" stroke-width="1.6" stroke-linecap="round"/>`; // the holder's, thin
+  // the pedestal's old vine, thick, in an ink outline
+  const VINE = '#5B5129', VINE_INK = '#1F1A0C';
+  const thick = d => `<path d="${d}" fill="none" stroke="${VINE_INK}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `<path d="${d}" fill="none" stroke="${VINE}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
   // where the flame glints on the brass while it stands straight: on the pan's rim either side, the knop, the foot and the
   // pan's bead row (x, y, rx, ry)
   const GLINTS = [[300, 431, 16, 3.2], [376, 431, 10, 2.4], [326, 476, 7, 3], [318, 534, 14, 3.4], [366, 437, 8, 1.6]]
@@ -386,36 +392,55 @@ const CANDLE = (() => {
   // a colour fading out down the column
   const fade = (id, colour, a = 1) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="${P.fade[0]}" y2="${P.fade[1]}">`
     + `<stop offset="0" stop-color="${colour}" stop-opacity="${a}"/><stop offset="1" stop-color="${colour}" stop-opacity="0"/></linearGradient>`;
-  // a stem winding `turns` times round the column, `R` from its middle, from y0 up to y1, where it ends `end` radians round
-  // from the front (positive to the right); seen from above, so each turn sags like an edge and only the front ones show
-  const helix = (R, y0, y1, turns, end) => {
+  // every rim of the pedestal is a true ellipse at the slab top's tilt: its depth is T of its width
+  const T = sag(P.top, P.r) / P.r, rimRy = r => n(r * T);
+  // the point `th` radians round the column from the front (positive to the right), `R` from its middle, at height y
+  const round = (R, th, y) => /** @type {[number, number]} */ ([cx + R * Math.sin(th), y + R * T * Math.cos(th)]);
+  // the thick vine winding `turns` times round the column from y0 up to y1, ending `end` radians round; only its front
+  // shows. Leaves sprout from it and bunches hang off it on stalks, all on its front, so none floats free.
+  const winding = (R, y0, y1, turns, end) => {
+    const at = u => { const th = end - (1 - u) * turns * 2 * Math.PI; return [...round(R, th, y0 + (y1 - y0) * u), th]; };
     const runs = [[]];
-    for (let i = 0; i <= 120; i++) {
-      const u = i / 120, th = end - (1 - u) * turns * 2 * Math.PI, y = y0 + (y1 - y0) * u;
-      if (Math.cos(th) > -0.05) runs[runs.length - 1].push(pt([cx + R * Math.sin(th), y + sag(y, R) * Math.cos(th)]));
-      else if (runs[runs.length - 1].length) runs.push([]);
+    for (let i = 0, steps = Math.ceil(60 * turns); i <= steps; i++) {
+      const [x, y, th] = at(i / steps);
+      if (Math.cos(th) > -0.05) runs[runs.length - 1].push(pt([x, y])); else if (runs[runs.length - 1].length) runs.push([]);
     }
-    return runs.filter(r => r.length > 2).map(r => `M${r.join('L')}`).join('');
+    let out = thick(runs.filter(r => r.length > 2).map(r => `M${r.join('L')}`).join(''));
+    for (let j = 1; j * 0.8 < turns * 2 * Math.PI; j++) {
+      const [x, y, th] = at(1 - j * 0.8 / (turns * 2 * Math.PI));
+      if (Math.cos(th) < 0.2) continue;
+      out += j % 4 ? leaf(x, y, 22, (j % 2 ? -1 : 1) * 55)
+        : `<path d="M${pt([x, y])}q-3 7 0 12" fill="none" stroke="${VINE}" stroke-width="1.6"/>${bunch(x, y + 17, [3, 2, 2, 1], 0).map(([gx, gy]) => `<use href="#cdGrape" x="${n(gx)}" y="${n(gy)}"/>`).join('')}`;
+    }
+    return out;
   };
-  const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the stem leaves the column for the slab
-  const climbAt = pt([cx + climbR * Math.sin(climbEnd), climbTop + sag(climbTop, climbR) * Math.cos(climbEnd)]);
-  // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
-  // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws it)
+  const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the vine leaves the column for the slab
+  const climbAt = pt(round(climbR, climbEnd, climbTop));
+  // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws
+  // it), the vine winding up it from below the edge
   const column = bottom => `<path d="M${cx - col} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.lit}"/>
     <path d="M${n(cx + K.side * col)} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.dark}"/>
     <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${bottom}`).join('')}" fill="none" stroke="#8E869B" stroke-opacity=".6" stroke-width=".8"/>
-    <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>`;
+    <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
+    <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
+    ${winding(climbR, bottom + 30, climbTop, Math.max(0.6, (bottom + 30 - climbTop) / 150), climbEnd)}`;
+  // the slab: a band between its top rim and its bottom rim's front, lit from the left, in an ink outline
+  const slabD = `M${left} ${P.top}V${slabY}A${P.r} ${rimRy(P.r)} 0 0 0 ${cx + P.r} ${slabY}V${P.top}Z`;
+  // over the slab's edge and across its top to the foot, where the holder's thin vine takes over
+  const overD = `M${climbAt}Q${left + 4} ${P.top + 49} ${left + 2} ${P.top + 31}Q${left + 2} ${P.top + 13} ${left + 28} ${P.top + 9}Q${left + 56} ${P.top + 5} ${left + 72} ${P.top + 1}`;
   // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
   const pedestal = `<g class="cdPedestal"><g id="cdColumn">${column(P.fade[1])}</g>
-    <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
-    <path d="${helix(climbR, P.fade[1] - 50, climbTop, 1.4, climbEnd)}" fill="none" stroke="url(#cdVineFade)" stroke-width="2.2" stroke-linecap="round"/>
-    ${DRUM(MARBLE, P.top, P.r, P.depth)}<ellipse cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${n(sag(P.top, P.r))}" fill="#E2DDE8" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
-    <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${n(sag(P.top, P.r))}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
+    <clipPath id="cdSlab"><path d="${slabD}"/></clipPath><path d="${slabD}" fill="${MARBLE.lit}"/>
+    <rect x="${n(cx + K.side * P.r)}" y="${P.top - 30}" width="${P.r}" height="${P.depth + 60}" fill="${MARBLE.dark}" clip-path="url(#cdSlab)"/>
+    <path d="${slabD}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
+    <ellipse cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="#E2DDE8" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
+    <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
     <path d="M${left + 12} ${P.top + 10}q26 7 42 0t36 7q20 2 26 -2M${left + 158} ${P.top + 16}q16 -2 40 -7" fill="none" stroke="#968DA4" stroke-width=".7" opacity=".6"/><!-- the slab -->
-    <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${n(sag(P.top - 5, FOOT))}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
-    ${vine(`M${climbAt}Q${left + 4} ${P.top + 49} ${left + 2} ${P.top + 31}Q${left + 2} ${P.top + 13} ${left + 28} ${P.top + 9}Q${left + 56} ${P.top + 5} ${left + 72} ${P.top + 1}`)}
-    ${leaf(cx - 40, P.top + 63, 24, -20)}${leaf(cx + 56, P.top + 51, 22, 30)}${leaf(left + 4, P.top + 41, 24, -60)}${leaf(cx + P.r - 6, P.top + 25, 22, 50)}
-    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}<!-- the vine, up the column, over the slab's edge and across it to the foot -->
+    <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${rimRy(FOOT)}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
+    <path d="M${left + 2} ${P.top + 31}Q${left - 4} ${P.top + 40} ${left} ${P.top + 47}" fill="none" stroke="${VINE}" stroke-width="1.6"/>
+    ${grapes(bunch(left, P.top + 51, [3, 3, 2, 1], 0.6))}${thick(overD)}
+    ${leaf(left + 2, P.top + 31, 24, -70)}${leaf(left + 28, P.top + 9, 20, -25)}${leaf(left + 56, P.top + 4, 17, 35)}
+    <!-- the vine, up the column, over the slab's edge and across it to the foot, a bunch hanging off it -->
     <g id="cdPedestalGlints">${grapeGlints(0)}</g></g>`;
   const onPedestal = GRAPES.length; // the grapes drawn so far are the pedestal's bunch
   // on up the foot and round the baluster to the vine already on the candlestick
@@ -428,11 +453,11 @@ const CANDLE = (() => {
       <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
       <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}
       <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
-      <radialGradient id="cdGlint"><stop offset="0" stop-color="#FFF6DC"/><stop offset=".4" stop-color="#F6D58E" stop-opacity=".7"/><stop offset="1" stop-color="#F6D58E" stop-opacity="0"/></radialGradient>
+      <radialGradient id="cdGlint"><stop offset="0" stop-color="#E2A66A"/><stop offset=".55" stop-color="#D09050" stop-opacity=".8"/><stop offset="1" stop-color="#D09050" stop-opacity="0"/></radialGradient>
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
       <linearGradient id="cdSmokeG" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#B9AFC8" stop-opacity=".3"/><stop offset="1" stop-color="#B9AFC8" stop-opacity="0"/></linearGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      ${fade('cdColLine', '#8E869B', 0.6)}${fade('cdVineFade', '#4A4424')}</defs>
+      ${fade('cdColLine', '#8E869B', 0.6)}</defs>
     ${pedestal}
     ${DRUM(K, Y(543), FOOT, 8)}${beads(Y(551), FOOT, 272, 408, 17, 1.9, -2.6)}
     ${turned('cdFoot', profile(Y(523), Y(543), y => { const u = (y - Y(523)) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
@@ -443,10 +468,10 @@ const CANDLE = (() => {
     <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="${K.lit}"/><rect x="${n(cx + K.side * knop.rx)}" y="${n(Y(462))}" width="30" height="${n(24 * k)}" fill="${K.dark}" clip-path="url(#cdKnop)"/>
     <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>
     <path d="M${pt(stick([316.5, 470.2]))}A${n(knop.rx)} ${n(knop.ry)} 0 0 1 ${pt(stick([331.4, 463.7]))}" fill="none" stroke="${GILT}" stroke-width="1.2" stroke-linecap="round"/><!-- the knop, gadrooned underneath -->
-    <path d="${on([324, 332, 340, 348, 356].map(x => `M${x} 476.5Q${n(x + (x - cx) * 0.08)} ${n((476.5 + knopEdge(x)) / 2)} ${n(x + (x - cx) * 0.04)} ${knopEdge(x)}`).join(''))}" fill="none" stroke="#553A1B" stroke-width=".8"/>
+    <path d="${on([324, 332, 340, 348, 356].map(x => `M${x} 476.5Q${n(x + (x - cx) * 0.08)} ${n((476.5 + knopEdge(x)) / 2)} ${n(x + (x - cx) * 0.04)} ${knopEdge(x)}`).join(''))}" fill="none" stroke="${K.dark}" stroke-width=".8"/>
     ${DRUM(K, Y(452), 14, 8)}
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
-    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#3E2914"/><!-- the pan, its inside in the pillar's shadow -->
+    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#24140A"/><!-- the pan, its inside in the pillar's shadow -->
     <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="${n(side)}" y="${rim - 10}" width="${n(cx + R + 2 - side)}" height="${PILLAR.bottom - rim + 10}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
     ${drips}
     <rect id="paperGlow" x="${cx - R - 4}" y="${rim - 4}" width="${2 * R + 8}" height="86" fill="url(#cdGlow)" clip-path="url(#cdWax)"/><!-- lit from within, under the rim -->
@@ -458,12 +483,9 @@ const CANDLE = (() => {
     ${turned('cdBowl', profile(PILLAR.dish, Y(452), y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}
     <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
     ${beads(PILLAR.dish, 81, 262, 418, 13, 2.2, 0)}
-    ${leaf(282, Y(430), 26, -35)}${leaf(398, Y(430), 24, 30)}
-    ${vine(on('M286 423Q281 424 279 433'))}${grapes(bunch(276, Y(438), [4, 4, 3, 3, 2, 1], -1.4))}
-    ${vine(on('M394 423Q399 424 401 433'))}${grapes(bunch(404, Y(438), [4, 3, 3, 2, 1], 1.2))}
     ${vine(on('M306 452Q330 470 362 476'))}${vine(on('M326 494Q342 500 354 514'))}<!-- the vine, where it winds across the front -->
     ${leaf(...stick([318, 472]), 15, -75)}
-    <path d="${on('M282 432Q268 434 260 440Q252 446 256 449Q260 450 259 446M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471')}" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
+    <path d="${on('M362 476Q370 478 375 474Q378 470 375 468Q372 468 373 471')}" fill="none" stroke="#5E6A34" stroke-width="1" stroke-linecap="round"/>
     ${grapes(lying)}
     ${climb}
     <g id="cdGlints">${GLINTS.map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#cdGlint)" opacity="0"/>`).join('')}</g>

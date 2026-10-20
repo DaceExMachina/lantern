@@ -249,25 +249,26 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
   }
 });
 
-test('the candle stands on a marble pedestal tilted as its candlestick is, with no floor under it', () => {
+test('the candle stands on a round marble pedestal, every rim one true ellipse at its top\'s tilt, with no floor under it', () => {
   const c = run('STYLES.candle'), P = run('PEDESTAL'), bow = run('LACQUER.candle.bow'), svg = c.back + c.front;
   const ellipses = [...svg.matchAll(/<ellipse\b[^>]*>/g)].map(([e]) => Object.fromEntries(['cy', 'rx', 'ry'].map(k => [k, +e.match(new RegExp(`\\b${k}="([\\d.]+)"`))[1]])));
   assert.ok(ellipses.some(e => e.cy === P.top && e.rx === P.r), `the slab's top, ${P.r} wide at ${P.top}`);
   for (const e of ellipses.filter(e => e.cy >= P.top - 10)) {
     assert.ok(e.cy <= P.top, `an ellipse at ${e.cy}, below the slab's top: a floor under it`);
-    assert.ok(Math.abs(e.ry - e.rx * bow(e.cy) / 2) < 0.01, `the ellipse ${e.rx} wide at ${e.cy} is ${e.ry} deep, not ${e.rx * bow(e.cy) / 2}`);
+    assert.ok(Math.abs(e.ry - e.rx * bow(P.top) / 2) < 0.01, `the ellipse ${e.rx} wide at ${e.cy} is ${e.ry} deep, not ${e.rx * bow(P.top) / 2}`);
   }
   // the column keeps going down into a tall window, below the 600-high view's bottom at 620
   const lowest = Math.max(...[...svg.matchAll(/V([\d.]+)/g)].map(m => +m[1]));
   assert.ok(lowest >= 700, `the column stops at ${lowest}`);
-  // the turned bands (DRUM): each edge's front arc dips by the candlestick's bow, the slab's side and the foot's alike
+  // the turned bands (DRUM): each edge's front arc dips by the candlestick's bow
   const bands = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="(#\w+)"/g)]
     .map(m => ({ half: (m[4] - m[1]) / 2, top: +m[2], topQ: +m[3], bottom: +m[5], bottomQ: +m[6], fill: m[7] }));
   for (const d of bands) for (const [y, q] of [[d.top, d.topQ], [d.bottom, d.bottomQ]]) {
     assert.ok(Math.abs(q - (y + d.half * bow(y))) < 0.01, `a band ${d.half} either side: its edge at ${y} dips to ${q}, not ${y + d.half * bow(y)}`);
   }
-  const slab = bands.find(d => d.half === P.r && d.top === P.top);
-  assert.ok(slab && slab.bottom === P.top + P.depth, `the slab's side, ${P.depth} deep under its top`);
+  // the slab's side, P.depth deep under its top, its bottom rim's front the same true ellipse
+  const ry = +(P.r * bow(P.top) / 2).toFixed(2);
+  assert.ok(svg.includes(`M${340 - P.r} ${P.top}V${P.top + P.depth}A${P.r} ${ry} 0 0 0 ${340 + P.r} ${P.top + P.depth}V${P.top}Z`), `the slab's side, ${P.depth} deep under its top`);
   // the candlestick's foot, its lowest bronze band, stands on the slab's top, neither floating over it nor sunk in
   const foot = bands.filter(d => d.fill === run('LACQUER.candle.lit')).sort((a, b) => b.bottom - a.bottom)[0];
   assert.ok(Math.abs(foot.bottom - P.top) <= 3 && foot.half < P.r, `the foot ends at ${foot.bottom}, ${foot.half} either side, on a slab at ${P.top}`);
