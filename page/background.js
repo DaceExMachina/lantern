@@ -235,8 +235,11 @@ void main() {
   vec2 c = (q - uBox.xy) / uBox.zw; gl_Position = vec4(c.x * 2.0 - 1.0, 1.0 - c.y * 2.0, 0.0, 1.0);
 }`, `precision mediump float; uniform sampler2D uTex; uniform float uShift; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
 void main() {
-  float brass = texture2D(uTex, vUv + vec2(uShift / 180.0, 0.0)).r * texture2D(uTex, vUv).g;
-  gl_FragColor = vec4(mix(uDark, uCol, mix(0.8, 0.3, clamp(length(vP - vec2(340.0, 348.0)) / 160.0, 0.0, 1.0))), brass);
+  vec4 back = texture2D(uTex, vUv + vec2(uShift / 180.0, 0.0));
+  // where a big sway slides the far wall past the outline, the side wall fills the strip: solid brass a little darker,
+  // seen edge on (ponytail: no lace on it, since the front's frames hide all but a few pixels of the strip)
+  float side = 1.0 - back.g, brass = (back.r + side) * texture2D(uTex, vUv).g;
+  gl_FragColor = vec4(mix(uDark, uCol, mix(0.8, 0.3, clamp(length(vP - vec2(340.0, 348.0)) / 160.0, 0.0, 1.0))) * (1.0 - 0.25 * side), brass);
 }`);
 const farWallQuad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, farWallQuad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
