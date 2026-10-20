@@ -123,6 +123,7 @@ uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
+uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
 ${LIGHT}
 // How thick one plume of smoke (frame.js plumes) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
@@ -140,6 +141,20 @@ float plume(vec2 p, vec4 a, vec4 b) {
     * (1.0 - smoothstep(uSmoke.y * 0.4, uSmoke.y, age)) // each bit fading as it ages
     * smoothstep(-3.0, 3.0, h); // soft where it starts
   return k * (0.75 + 0.25 * sin(h * 0.23 - t * 3.0 + b.x * 5.0) * sin(d * 2.0 + h * 0.07));
+}
+// How thick a scorched moth's smoke trail (frame.js smokeTrail) is at p: one soft band along its points, its width and
+// strength eased between them, the thickest of the segments near p so their joins don't double up, mottled a little.
+float trailSmoke(vec2 p) {
+  float k = 0.0;
+  for (int i = 1; i < ${TRAIL_POINTS}; i++) {
+    if (i >= uTrailN) break;
+    vec4 a = uTrail[i - 1], b = uTrail[i];
+    if (min(a.w, b.w) <= 0.0) continue; // where one moth's trail ends and the next begins
+    vec2 ab = b.xy - a.xy;
+    float t = clamp(dot(p - a.xy, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0), d = length(p - a.xy - ab * t) / mix(a.z, b.z, t);
+    k = max(k, mix(a.w, b.w, t) * exp(-d * d));
+  }
+  return k * (0.75 + 0.25 * sin(p.y * 0.23 + p.x * 0.11) * sin(p.x * 0.19 - p.y * 0.07));
 }
 void main() {
   vec2 p = uBox.xy + vec2(gl_FragCoord.x, uRes.y - gl_FragCoord.y) / uRes * uBox.zw;
@@ -162,6 +177,7 @@ void main() {
   }
   float smoke = 0.0;
   for (int i = 0; i < ${PLUMES}; i++) { if (i >= uPlumes) break; smoke += plume(p, uPlume[i], uPlumeB[i]); }
+  if (uTrailN > 1) smoke += trailSmoke(p);
   col = mix(col, uSmokeCol, min(1.0, smoke) * uSmoke.z);
   gl_FragColor = vec4(mix(col, vec3(0.8, 0.1, 0.1), uDebug * 0.6 * (1.0 - lit)), 1.0);
 }`);
@@ -320,6 +336,7 @@ function drawBackground(v) {
     gl.uniform4fv(u['uPlume[0]'], v.smoke.flatMap(q => q.slice(0, 4)));
     gl.uniform4fv(u['uPlumeB[0]'], v.smoke.flatMap(q => q.slice(4, 8)));
   }
+  gl.uniform1i(u.uTrailN, v.trail.length); if (v.trail.length) gl.uniform4fv(u['uTrail[0]'], v.trail.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

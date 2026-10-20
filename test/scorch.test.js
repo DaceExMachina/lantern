@@ -247,7 +247,7 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
     was = m.scorch;
     assert.strictEqual(els.moths.children.length, 1, 'no elements beside the moth');
     const smoke = plumes(clock.wall, 0, null); // the singe's plume, drawn by the background
-    assert.ok(m.scorch?.hit ? smoke.length >= 1 && smoke.length <= 1 + 5 : smoke.length === 0, `plumes only from the hit to the episode's end, the singe's and its trail's: ${smoke.length} at ${m.scorch?.t}`);
+    assert.strictEqual(smoke.length, m.scorch?.hit ? 1 : 0, `one plume from the hit to the episode's end, the singe's: ${smoke.length} at ${m.scorch?.t}`);
     if (smoke.length) { smoked++; assert.deepStrictEqual([smoke[0][0], smoke[0][1], smoke[0][2]], [...m.scorch.aim, m.scorch.t - hit], 'from where the wing touched, as old as the hit'); }
     assert.ok(live() <= 5, `at most 5 live scorch sparks: ${live()}`);
     assert.ok(ctx.sparks.length <= 17, `the pool holds: ${ctx.sparks.length}`);
@@ -263,6 +263,39 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
   ctx.run('style = STYLES.barrel');
   step(n);
   assert.ok(!n.scorch && plumes(clock.wall, 0, null).length === 0, 'switching to the barrel ends it on the next frame');
+});
+
+test('a scorched moth trails one band of smoke along its path, rising, fading toward its old end, and bounded', t => {
+  const wall = clock.wall;
+  t.after(() => { clock.wall = wall; }); // the next test's windows start where they would without this one
+  const { els, document } = domStub(), ctx = context(1000, document), { hit } = ctx.SCORCH;
+  const [smokeTrail, TRAIL, TRAIL_POINTS, life] = ctx.run('[smokeTrail, TRAIL, TRAIL_POINTS, PLUME.life]');
+  const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
+  const step = (ms, dt = 0.05) => { ctx.perf.t += dt * 1000; clock.wall += dt * 1000; for (const m of ms) ctx.mothTarget(m.key, m, dt, ctx.perf.t / 1000); };
+  const m = make('sess-trail');
+  while (!m.scorch?.hit || m.scorch.t < hit + 1.5) { if (!m.scorch?.hit) assert.strictEqual(smokeTrail(0).length, 0, 'no trail before the hit'); step([m]); }
+  const a = smokeTrail(0), last = a[a.length - 1];
+  assert.ok(a.length >= 7, `points all along its path: ${a.length}`);
+  assert.deepStrictEqual([last[0], last[1]], [m.x, m.y], 'joined to the moth while it smokes');
+  assert.ok(a.every(p => p[3] > 0), 'one band, unbroken');
+  for (let i = 1; i < a.length; i++) assert.ok(a[i][3] > a[i - 1][3] && a[i][2] > a[i - 1][2], `thinner and fainter toward the old end, at ${i}`);
+  step([m], 0.5);
+  const b = smokeTrail(0);
+  assert.ok(b[0][1] < a[0][1] - 10, `its old end rises: ${a[0][1].toFixed(1)} to ${b[0][1].toFixed(1)}`);
+  assert.ok(smokeTrail(1)[0][0] > b[0][0], 'and drifts downwind');
+  // once it stops smoking it's left where it was, and fades out PLUME.life later
+  while (m.scorch.t < hit + TRAIL[0] + 0.1) step([m]);
+  assert.notDeepStrictEqual(smokeTrail(0).at(-1).slice(0, 2), [m.x, m.y], 'no longer joined to the moth');
+  while (m.scorch && m.scorch.t < hit + TRAIL[0] + life) step([m]);
+  assert.strictEqual(smokeTrail(0).length, 0, 'gone');
+  // several moths at once: each its own band, parted by a point of no strength, never past TRAIL_POINTS
+  const ms = ['sess-t1', 'sess-t2', 'sess-t3'].map(make);
+  ctx.run(`scorchClock = (key, now) => ({ slot: 0, t: (now - ${clock.wall}) / 1000 })`); // every moth's episode starting now, to fill the trail
+  for (let i = 0; i < 400 && !ms.every(n => n.scorch?.hit && n.scorch.t > hit + 2.5); i++) step(ms);
+  const c = smokeTrail(0), breaks = c.filter(p => p[3] === 0).length;
+  assert.ok(ms.every(n => n.scorch?.hit), 'all three scorched');
+  assert.strictEqual(c.length, TRAIL_POINTS, 'filled to the limit and no further');
+  assert.ok(breaks >= 1, `parted between moths: ${breaks}`);
 });
 
 test('every window scorches a moth at the same moments, whatever its own clocks and whenever it opened, with no Math.random', () => {
