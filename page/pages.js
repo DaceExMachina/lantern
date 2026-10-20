@@ -5,7 +5,8 @@
 // inside (mirrored). The words read best where the flame's light is strongest. Besides live sessions' words, the server
 // sends a pool from the newest few transcripts (recentProse), ended sessions too. With no words the paper stays blank.
 // "Show session text" in the settings menu turns it all off (settings.json `lanternText`: "sessions" or "off"): the
-// words fade out and the timer stops, so nothing runs; turned back on, fresh words fade in once the server sends them.
+// words fade out as quickly as a first appearance fades in, then the timer stops so nothing runs; turned back on, a full
+// page comes up the same quick way, from the words it already has.
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
 //
 // Drawn cheaply: the blocks are typeset flat on an offscreen canvas (the paper unrolled), then that page is warped onto
@@ -34,10 +35,10 @@ const STRIPS = 90, TILES_DOWN = 24;
 let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
 // blocks part way through their lives, as if it had been running a while, so a reload doesn't wipe the paper.
-let pagesData = false, primed = false, primeAge = 2 * FADE + HOLD, waitFrom = performance.now(), pagesTimer = 0;
-// that first set comes up together over INTRO, on a quicker timer of its own, rather than appearing at once
-const INTRO = 1200;
-let introAt = 0, introTimer = 0;
+let pagesData = false, primed = false, waitFrom = performance.now(), pagesTimer = 0;
+// the whole set's ink comes up together (or goes out) over INTRO, on a quicker timer of its own, rather than at once
+const INTRO = 1200, PRIME_AGE = 2 * FADE + HOLD;
+let introAt = 0, introTimer = 0, inking = 1; // inking: 1 coming up, -1 going out
 // the unrolled page, the warped one, and what it was last drawn with; `showing` is the picture on the paper, and `busy`
 // while a new one is being encoded and decoded
 let flat, warped, drawn = { scale: 0, cool: -1 }, showing = '', busy = false, dirty = false;
@@ -278,12 +279,11 @@ function tickPages() {
   if (!legible()) return sleepPages(); // a lantern picked in a window too small to read it
   if (paper !== style.surface) { forget(); paper = style.surface; } // another lantern: a fresh set laid out for its paper
   const now = performance.now();
-  if (lanternText === 'off' && !blocks.length) { root.replaceChildren(); stopPages(); return; } // faded out: stop
   if (lanternText !== 'off' && !primed) {
     if (!pagesData && now - waitFrom < 1500) return; // nothing drawn yet
     primed = true;
-    for (let i = 0; i < style.surface.shown; i++) addBlock(now, Math.random() * primeAge);
-    introAt = now; clearInterval(introTimer); introTimer = setInterval(inkOpacity, 40);
+    for (let i = 0; i < style.surface.shown; i++) addBlock(now, Math.random() * PRIME_AGE);
+    fadeInk(1);
     nextBlockAt = now + every(style.surface);
   }
   if (!root.firstChild) drawPages(root);
@@ -303,10 +303,18 @@ function tickPages() {
 }
 // Brighter flame, clearer words, times the first set's quick fade in. INK_OPACITY keeps the words faint on any paper.
 const INK_OPACITY = 0.75;
+const intro = () => { const p = Math.min(1, (performance.now() - introAt) / INTRO); return inking > 0 ? p : 1 - p; };
+// Starts the ink coming up (1) or going out (-1) from wherever it is now, so a toggle flipped mid-fade turns round.
+function fadeInk(dir) {
+  const f = intro(); // how much ink shows now
+  inking = dir; introAt = performance.now() - (dir > 0 ? f : 1 - f) * INTRO;
+  clearInterval(introTimer); introTimer = setInterval(inkOpacity, 40);
+}
 function inkOpacity() {
-  const intro = Math.min(1, (performance.now() - introAt) / INTRO);
-  if (intro >= 1) { clearInterval(introTimer); introTimer = 0; }
-  $('pagesInk')?.setAttribute('opacity', (INK_OPACITY * (0.5 + 0.5 * Math.max(level, cool * 0.45)) * intro).toFixed(3));
+  const fade = intro(), done = fade === (inking > 0 ? 1 : 0);
+  if (done) { clearInterval(introTimer); introTimer = 0; }
+  if (done && inking < 0) { forget(); stopPages(); return; } // faded out: nothing left running
+  $('pagesInk')?.setAttribute('opacity', (INK_OPACITY * (0.5 + 0.5 * Math.max(level, cool * 0.45)) * fade).toFixed(3));
 }
 
 function stopPages() { clearInterval(pagesTimer); clearInterval(introTimer); pagesTimer = introTimer = 0; }
@@ -319,20 +327,22 @@ function wakePages() {
 // Drops every block and the picture, ready to prime a paper already full.
 function forget() {
   blocks = []; $('pages')?.replaceChildren(); URL.revokeObjectURL(showing); showing = '';
-  primed = false; primeAge = 2 * FADE + HOLD;
+  primed = false;
 }
 // A window shrunk too small to read in drops the words and stops everything; grown back, they fade in again.
 function sleepPages() { stopPages(); forget(); waitFrom = performance.now(); }
 addEventListener('resize', () => legible() ? wakePages() : pagesTimer && sleepPages());
 
-// Turning words off fades every block out (then the timer stops); turning them on waits for the server's fresh words
-// and fades a set in. Called by main.js with the shared setting.
+// Turning words off takes the ink out quickly (then the timer stops); turning them on brings a full page in the way the
+// first appearance does, from the words already here. Called by main.js with the shared setting.
 function setLanternText(value) {
   if (value === lanternText) return;
   lanternText = value;
   const now = performance.now();
-  if (value === 'off') { for (const b of blocks) b.leaving ??= now; return; }
-  primed = false; pagesData = false; primeAge = 0; waitFrom = now; // a fresh set, all fading in from nothing
+  if (value === 'off') { if (pagesTimer) fadeInk(-1); return; }
+  if (pagesTimer && primed) return fadeInk(1); // still going out: turn the same page round
+  waitFrom = now;
   wakePages();
+  tickPages(); // prime now, not on the next tick
 }
 wakePages();

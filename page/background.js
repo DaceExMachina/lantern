@@ -25,7 +25,12 @@ function program(vert, frag) {
 const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and agents)
 // How much of the flame's light reaches a point (1 = all of it): moths' shadows, the caps' fans and a pierced lantern's bands. Shared by the
 // background and the dust, so a speck in shadow dims by exactly what the room around it does.
-const LIGHT = `
+// The hot air's ripple at p (scene units) and time t, each part -1 to 1, rising as t goes on: heat() bends the room by it
+// up the column over the lantern, and the Moroccan's far wall by it inside (FAR_WALL), so the two shimmer alike.
+const RIPPLE = `vec2 ripple(vec2 p, float t) {
+  return vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
+}`;
+const LIGHT = `${RIPPLE}
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
 uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
 uniform vec4 uFlame; uniform vec3 uRim; // a standing flame's base and tip, and the rim below it that hides it: centre x, half-width, y (none: 0 wide)
@@ -46,7 +51,7 @@ vec2 heat(vec2 p) {
   float up = uHeat.y - p.y, wide = max(1.0, ${glf(HEAT_COLUMN.half)} + ${glf(HEAT_COLUMN.widen)} * up), t = uHeat.w; // wide: the column's half-width here
   float k = uHeat.z * smoothstep(0.0, ${glf(HEAT_COLUMN.start)}, up) * (1.0 - smoothstep(${glf(HEAT_COLUMN.fade[0])}, ${glf(HEAT_COLUMN.fade[1])}, up))
     * (1.0 - smoothstep(0.7 * wide, wide, abs(p.x - uHeat.x)));
-  return ${glf(HEAT_COLUMN.bend)} * k * vec2(0.7 * sin(p.y * 0.3 + 5.0 * t) + 0.3 * sin(p.y * 0.71 - p.x * 0.2 + 3.0 * t), 0.5 * sin(p.y * 0.45 + p.x * 0.3 + 4.0 * t));
+  return ${glf(HEAT_COLUMN.bend)} * k * ripple(p, t);
 }
 // the soft glow round the lantern: a radial gradient, 0.85 at the centre, 0.3 at 45%, gone at the edge
 float glow(vec2 p) {
@@ -324,15 +329,19 @@ function setLight(u, v) {
 // 10 to 20 fps at 2560x1440 in WebKit. lanterns.js bakes the wall once into a texture (red: its brass, green: the
 // lantern's outline, in the lantern's own units over x 250-430, y 140-500); each frame this draws that rectangle turned
 // with the sway about the lantern's pivot, its brass slid against the sway (shift, in units) and lit by the flame (col,
-// brightest round the flame at 348), kept inside the outline.
+// brightest round the flame at 348), kept inside the outline. The hot air filling the lantern (uHeat: how far it bends,
+// and its time) ripples the brass seen through it, as heat() does the room above: most straight above the flame (x 340,
+// base at 398), fading out below it and toward the sides, gone 53 either side.
 const FAR_WALL = program(`attribute vec2 a; uniform vec4 uBox; uniform vec2 uRes, uPivot; uniform float uSway; varying vec2 vUv, vP;
 void main() {
   vUv = a; vP = vec2(250.0, 140.0) + a * vec2(180.0, 360.0);
   vec2 d = vP - uPivot, q = uPivot + vec2(cos(uSway) * d.x - sin(uSway) * d.y, sin(uSway) * d.x + cos(uSway) * d.y);
   vec2 c = (q - uBox.xy) / uBox.zw; gl_Position = vec4(c.x * 2.0 - 1.0, 1.0 - c.y * 2.0, 0.0, 1.0);
-}`, `precision mediump float; uniform sampler2D uTex; uniform float uShift; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
+}`, `precision mediump float; uniform sampler2D uTex; uniform float uShift; uniform vec2 uHeat; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
+${RIPPLE}
 void main() {
-  vec4 back = texture2D(uTex, vUv + vec2(uShift / 180.0, 0.0));
+  vec2 warp = uHeat.x * smoothstep(420.0, 390.0, vP.y) * (1.0 - smoothstep(16.0, 53.0, abs(vP.x - 340.0))) * ripple(vP, uHeat.y);
+  vec4 back = texture2D(uTex, vUv + (vec2(uShift, 0.0) + warp) / vec2(180.0, 360.0));
   // where a big sway slides the far wall past the outline, the side wall fills the strip: solid brass a little darker,
   // seen edge on (ponytail: no lace on it, since the front's frames hide all but a few pixels of the strip)
   float side = 1.0 - back.g, brass = (back.r + side) * texture2D(uTex, vUv).g;
@@ -346,7 +355,7 @@ function setFarWall(/** @type {HTMLCanvasElement} */ canvas) {
   for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 }
-function drawFarWall({ shift, col }, w, h, box) {
+function drawFarWall({ shift, col, heat }, w, h, box) {
   if (!farWallTex) return;
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(FAR_WALL.p);
@@ -354,7 +363,9 @@ function drawFarWall({ shift, col }, w, h, box) {
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, farWallTex);
   const u = FAR_WALL.u;
   gl.uniform1i(u.uTex, 0); gl.uniform4f(u.uBox, ...box); gl.uniform2f(u.uRes, w, h); gl.uniform2f(u.uPivot, 340, VIEW.top);
-  gl.uniform1f(u.uSway, swayAngle * Math.PI / 180); gl.uniform1f(u.uShift, shift); gl.uniform3fv(u.uCol, rgb(col)); gl.uniform3fv(u.uDark, rgb('#24160A'));
+  gl.uniform1f(u.uSway, swayAngle * Math.PI / 180); gl.uniform1f(u.uShift, shift);
+  gl.uniform2f(u.uHeat, (heat?.k ?? 0) * HEAT_COLUMN.bend * 1.1, heat?.t ?? 0); // a little stronger than the room above
+  gl.uniform3fv(u.uCol, rgb(col)); gl.uniform3fv(u.uDark, rgb('#24160A'));
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 

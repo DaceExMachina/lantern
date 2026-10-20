@@ -256,7 +256,7 @@ test('the PR lists are sent when they change, not with every snapshot', async t 
 });
 
 // A badge earned live goes out once as `event: badge`, for the page's flash: not again when it's earned again that day,
-// and never in a page's opening burst (a reload or reconnect). Ten agents in one session earn Hive Mind.
+// not when an earlier day had it (see the next test), and never in a page's opening burst (a reload or reconnect). Ten agents in one session earn Hive Mind.
 test('a badge earned live reaches open pages once, and never on reconnect', async t => {
   const base = await serve(t), agent = n => ({ ...toolCall(UUID(1)), agent_id: `agent-${n}` });
   const badges = blocks => blocks.filter(b => b.startsWith('event: badge'));
@@ -268,6 +268,19 @@ test('a badge earned live reaches open pages once, and never on reconnect', asyn
   assert.deepStrictEqual(badges(first), ['event: badge\ndata: {"id":"hive_mind"}']);
   const again = await streamed(base, () => post(base, '/event', agent(11)));
   assert.deepStrictEqual([...badges(again.opening), ...badges(again)], []);
+});
+
+// The swarm is for the first time a badge is ever earned. Hive Mind earned yesterday: earning it again today plays nothing,
+// but it still gets its row and shows in the stats panel's week (/stats) next to yesterday's.
+test('a badge earned on an earlier day gets no flash, but still lands in the stats', async t => {
+  const dayOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const ago = new Date(Date.now() - 86400000);
+  let home;
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, ago.getTime(), ago.getTime() + 1000]],
+    `INSERT INTO achievements (id, day, time) VALUES ('hive_mind', '${dayOf(ago)}', ${ago.getTime()});`) }, h => home = h);
+  const blocks = await streamed(base, () => Promise.all(Array.from({ length: 10 }, (_, n) => post(base, '/event', { ...toolCall(UUID(1)), agent_id: `agent-${n}` }))));
+  assert.deepStrictEqual(blocks.filter(b => b.startsWith('event: badge')), []);
+  await until(async () => (await (await fetch(base + '/stats')).json()).achievements.filter(a => a[0] === 'hive_mind').map(a => a[1]).length === 2, 'both days of Hive Mind in the stats');
 });
 
 // Transcripts on disk, for the seeding cases: one JSON object per line.
@@ -484,6 +497,92 @@ test('an old "graveyard" setting is read as "stale"', async t => {
   const { settings } = await snapshot(base);
   assert.strictEqual(settings.stale, false);
   assert.strictEqual('graveyard' in settings, false);
+});
+
+const sql = (db, q) => JSON.parse(execFileSync('sqlite3', ['-json', db, q], { encoding: 'utf8' }) || '[]');
+
+// A restart: the log already has three PRs on the stale list, and the restarted lantern sees a session whose branch owns
+// one of them, which takes it off the stale list though nobody touched the PR. Only the one someone did touch (updated
+// today) was revived. A stand-in gh answers the PR query.
+// PRs on o/r, in GitHub's form, and a stand-in gh that answers the PR query with `mine` as my open PRs, next to a git repo
+// on branch feat whose origin is o/r: a session working there is one the refresh looks at.
+const prUrl = n => `https://github.com/o/r/pull/${n}`, iso = t => new Date(t).toISOString().replace(/\.\d+Z$/, 'Z'); // GitHub's form, no milliseconds
+const prNode = (n, updatedAt, headRefName = `b${n}`) => ({ url: prUrl(n), number: n, title: `PR ${n}`, state: 'OPEN', isDraft: true, updatedAt, headRefName, repository: { name: 'r', nameWithOwner: 'o/r' } });
+function ghRepo(mine) {
+  const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), repo = path.join(dir, 'repo'), gh = path.join(dir, 'gh');
+  fs.writeFileSync(path.join(dir, 'prs.json'), JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: mine } } }));
+  fs.writeFileSync(gh, `#!/bin/sh\nexec /bin/cat '${path.join(dir, 'prs.json')}'\n`, { mode: 0o755 });
+  fs.mkdirSync(repo);
+  for (const args of [['init', '-q', '-b', 'feat'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], ['remote', 'add', 'origin', 'https://github.com/o/r.git']]) execFileSync('git', ['-C', repo, ...args]);
+  return { gh, repo };
+}
+// The log line a refresh writes when a session takes on a PR.
+const appeared = (session, n) => `INSERT INTO events (time, kind, session, data) VALUES (${Date.now() - 3600000}, 'pr', '${session}', '{"url":"${prUrl(n)}","change":"appeared","need":"draft"}');`;
+const prChanges = db => sql(db, "SELECT session, json_extract(data, '$.url') AS url, json_extract(data, '$.change') AS change FROM events WHERE kind = 'pr' ORDER BY rowid");
+
+test('stats: a session owning a stale PR again after a restart isn\'t a revival, someone touching it is', async t => {
+  const url = prUrl, node = prNode, old = iso(Date.now() - 30 * 86400000);
+  // 1 is owned by the session's branch and still quiet, 2 stays stale, 3 was touched today
+  const { gh, repo } = ghRepo([node(1, old, 'feat'), node(2, old), node(3, iso(Date.now()))]);
+  const entered = [1, 2, 3].map(n => `INSERT INTO events (time, kind, data) VALUES (${Date.now() - 86400000}, 'stale', '{"url":"${url(n)}","change":"entered"}');`).join('');
+  let home = '';
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 86400000, Date.now() - 3600000]], entered) }, h => home = h, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const db = path.join(home, 'data/stats.sqlite'), left = () => sql(db, "SELECT json_extract(data, '$.url') AS url, json_extract(data, '$.how') AS how FROM events WHERE kind = 'stale' AND json_extract(data, '$.change') = 'left'");
+  await until(() => left().length, 'the touched PR to leave the stale list'); // the refresh reached the log
+  assert.ok(sql(db, "SELECT 1 FROM events WHERE kind = 'pr' AND json_extract(data, '$.change') = 'appeared'").length, 'the session owned PR 1');
+  assert.deepStrictEqual(left(), [{ url: url(3), how: 'revived' }]);
+  assert.deepStrictEqual(sql(db, "SELECT count(*) AS n FROM events WHERE kind = 'stale' AND json_extract(data, '$.change') = 'entered'"), [{ n: 3 }], 'nothing entered again');
+});
+
+// A restart where the session's hooks reach the lantern before seeding does: the session is made from a hook event, so it
+// reads the PRs it created back from its transcript as seeding would, and keeps owning the one it made. Before, it owned
+// none of them until the next restart, logging each as a stray and then as appeared again hours later.
+test('stats: a session the hooks bring back still owns the PRs it created', async t => {
+  const id = UUID(8), file = `.claude/projects/-work-8/${id}.jsonl`, { gh, repo } = ghRepo([prNode(1, iso(Date.now()))]); // its branch has no PR
+  const made = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --draft --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(1) + '\n' }] } }];
+  let home = '';
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 3600000, Date.now() - 60000]], appeared(id, 1)), [file]: jsonl([user('Fix it'), ...made]) },
+    h => { // too old for seeding to find, so the hook event is what brings it in
+      home = h;
+      const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+      fs.utimesSync(path.join(h, file), dayAgo, dayAgo);
+    }, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github), 'a refresh to look at the session');
+  assert.deepStrictEqual(s.github.map(p => p.url), [prUrl(1)]);
+  assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
+});
+
+// A session that joins while a refresh is out (adopted, say) isn't in that refresh's answer. Until one looks at it, it
+// keeps the PRs it owned rather than dropping them as strays. Here s2 works outside any git repo, so no refresh ever looks
+// at it, while s1 in the repo makes the refreshes run.
+test('stats: a session no refresh has looked at keeps the PRs it owned', async t => {
+  const { gh, repo } = ghRepo([prNode(1, iso(Date.now()))]);
+  let home = '';
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 3600000, Date.now() - 60000]], appeared('s2', 1)) }, h => home = h, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's2', hook_event_name: 'UserPromptSubmit', cwd: path.join(home, 'elsewhere'), prompt: 'go' });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  await until(async () => (await snapshot(base)).sessions.find(x => x.id === 's1' && x.github), 'a refresh to reach the log'); // the log is written as the answer lands
+  assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: 's2', url: prUrl(1), change: 'appeared' }], 'no stray');
+});
+
+// Séance and Ghostbuster count PRs, not events: one PR revived five times this week is one revival, and one PR leaving the
+// stale list merged five times yesterday is one. Five different PRs closed today do make a Ghostbuster.
+test('stats: Séance and Ghostbuster count each PR once', async t => {
+  const today = Date.now() - 60000, yesterday = +yesterdayFrom(0) + 12 * 3600000;
+  const left = (time, n, how) => `INSERT INTO events (time, kind, data) VALUES (${time}, 'stale', '{"url":"https://github.com/o/r/pull/${n}","change":"left","how":"${how}"}');`;
+  const rows = [...Array(5)].map((_, i) => left(today, 1, 'revived') + left(today, 10 + i, 'closed') + left(yesterday, 2, 'merged')).join('');
+  let home = '';
+  await serve(t, { 'data/stats.sqlite': statsLog([['server', null, yesterday, today]], rows) }, h => home = h);
+  const got = () => sql(path.join(home, 'data/stats.sqlite'), "SELECT id, day FROM achievements WHERE id IN ('seance', 'ghostbuster') ORDER BY day");
+  const ghost = await until(() => got().length && got(), 'today\'s Ghostbuster to be awarded'); // the award pass ran, and judged yesterday first
+  const day = new Date(today), key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+  assert.deepStrictEqual(ghost, [{ id: 'ghostbuster', day: key }]);
 });
 
 // The page gets the first word of the name on the Claude Code account (for the candle's pencil, page/pencil.js), the

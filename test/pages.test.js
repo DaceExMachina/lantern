@@ -8,8 +8,8 @@ const vm = require('vm');
 
 // #pages's on-screen scale is `screen` CSS pixels to a paper unit: a 229-unit drum is 229 px tall at 1, too small to read
 const page = vm.createContext({
-  URLSearchParams, location: { search: '' }, performance, addEventListener: () => {}, setInterval: () => 7, clearInterval: () => {}, screen: 0.6,
-  document: { getElementById: id => id === 'pages' ? { getScreenCTM: () => ({ a: page.screen, b: 0 }) } : null },
+  URLSearchParams, URL, location: { search: '' }, performance, addEventListener: () => {}, setInterval: () => 7, clearInterval: () => {}, screen: 0.6,
+  document: { getElementById: id => id === 'pages' ? { getScreenCTM: () => ({ a: page.screen, b: 0 }), replaceChildren: () => {} } : null },
 });
 for (const f of ['scene', 'dev', 'lanterns', 'pages']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
@@ -19,6 +19,21 @@ test('the text sleeps in a window too small to read it, and wakes when it grows'
   page.screen = 2;
   run('wakePages()');
   assert.strictEqual(run('pagesTimer'), 7, 'a 458 px drum starts it');
+  run('stopPages()');
+});
+
+test('turning the text off takes the ink out in the intro\'s time, then stops the timer; on again brings it back at once', () => {
+  page.screen = 2;
+  run("lanternText = 'sessions'; wakePages(); primed = true");
+  run("setLanternText('off')");
+  assert.strictEqual(run('pagesTimer'), 7, 'still running while the ink goes out');
+  run('introAt = performance.now() - INTRO / 2; inkOpacity()');
+  assert.strictEqual(run('pagesTimer'), 7, 'half way, still going');
+  assert.ok(Math.abs(run('intro()') - 0.5) < 0.05, 'half the ink left');
+  run("setLanternText('sessions')");
+  assert.ok(Math.abs(run('intro()') - 0.5) < 0.05, 'turned round from where it was, not restarted');
+  run("setLanternText('off'); introAt = performance.now() - INTRO; inkOpacity()");
+  assert.strictEqual(run('pagesTimer'), 0, 'INTRO later the timer has stopped');
   run('stopPages()');
 });
 
