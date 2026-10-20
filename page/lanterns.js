@@ -484,13 +484,14 @@ const CANDLE = (() => {
     sprout('high', SPLIT, -1.15, 20, 0.07, 5, 3);
     sprout('upR', up[20], -0.2, 16, -0.11, 4, 3);
     sprout('upL', up[10], Math.PI + 0.15, 22, 0.09, 5, 4, 0.3);
-    // the big right branch, off the climbing limb round the column to the right, behind it, and back round the front,
-    // climbing to just under the slab; only its turns in front show, each with leaves along it, a bunch on the first
+    // the big right branch, off the climbing limb round the column to the right and on round it nearly twice, each turn in
+    // front higher than the last, the last just under the slab; only its turns in front show, each with leaves along it,
+    // a bunch on the first
     (() => {
       const r = seeded(hash('candle:vine:bigR')), R = col + 6, [x0, y0] = up[10], th0 = Math.asin(Math.max(-1, Math.min(1, (x0 - cx) / R)));
-      const turn = 2 * Math.PI * 0.85, base = y0 - R * T * Math.cos(th0), top = P.top + 52, runs = [[]];
-      for (let i = 0; i <= 90; i++) {
-        const u = i / 90, th = th0 + turn * u, p = round(R + 3 * Math.sin(u * 17), th, base + (top - base) * u);
+      const turn = 2 * Math.PI * 1.85, base = y0 - R * T * Math.cos(th0), top = P.top + 30, runs = [[]];
+      for (let i = 0; i <= 200; i++) {
+        const u = i / 200, th = th0 + turn * u, p = round(R + 3 * Math.sin(u * 17), th, base + (top - base) * u);
         if (Math.cos(th) > -0.05) runs[runs.length - 1].push([p, 5 - 3.4 * u]); else if (runs[runs.length - 1].length) runs.push([]);
       }
       runs.filter(run => run.length > 3).forEach((run, j) => {
