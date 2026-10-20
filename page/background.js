@@ -125,15 +125,24 @@ uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
 uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
 ${LIGHT}
+const float RISE = 29.0; // how fast smoke rises, units a second
+// How far a bit of smoke age seconds old has been carried aside from where it was let go, in PLUME sizes: downwind
+// further the higher it's risen, and curled into Ss, a slow wave along the smoke swelling from nothing to 6 × curl over
+// its first second or so. Its now is the smoke's own clock, offset by its seed so each one curls differently; the bit was
+// let go at now - age, so the wave's phase runs along it and the Ss travel as it rises. Every plume and every scorched
+// moth's trail bends by this, so they read as one smoke. Scalars only, so the test can run it as JS.
+float smokeBend(float age, float now, float curl) {
+  float h = RISE * age, at = now - age;
+  return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * 6.0 * min(1.0, age / 1.2) * (sin(at * 4.0 - now * 1.3) + 0.4 * sin(at * 2.1 + now * 0.7));
+}
 // How thick one plume of smoke (frame.js plumes) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
 // steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
-// plume was being let go, and fades as it ages. The column widens as it rises, curls, and bends downwind the higher it is.
+// plume was being let go, and fades as it ages. The column widens as it rises, and bends and curls (smokeBend).
 float plume(vec2 p, vec4 a, vec4 b) {
-  const float RISE = 29.0;
   float size = uSmoke.x, t = a.z, h = (a.y - p.y) / size, age = max(h, 0.0) / RISE;
   if (h < -3.0 || h > t * RISE + 12.0) return 0.0;
-  float x = a.x + size * (uSmoke.w * h * h / 600.0 + b.w * h * 0.08 + b.z * (sin(h * 0.06 - t * 1.3 + b.x) * h * 0.1 + sin(h * 0.17 + b.x * 2.0 - t * 2.1) * h * 0.025));
+  float x = a.x + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
   float d = (p.x - x) / (size * (1.0 + h * 0.09));
   float k = exp(-d * d) / (1.0 + h * 0.025) * a.w
     * smoothstep(t * RISE + 12.0, t * RISE - 6.0, h) // its rising tip
@@ -142,17 +151,27 @@ float plume(vec2 p, vec4 a, vec4 b) {
     * smoothstep(-3.0, 3.0, h); // soft where it starts
   return k * (0.75 + 0.25 * sin(h * 0.23 - t * 3.0 + b.x * 5.0) * sin(d * 2.0 + h * 0.07));
 }
-// How thick a scorched moth's smoke trail (frame.js smokeTrail) is at p: one soft band along its points, its width and
+// How thick a scorched moth's smoke trail (frame.js smokeTrail) is at p: one soft band along its points, each risen and
+// bent as a plume's smoke is (smokeBend), thinner and fainter the older it is and gone at the end of its life; width and
 // strength eased between them, the thickest of the segments near p so their joins don't double up, mottled a little.
+// Each point is where it was left, its age, and its moth's clock; an age below 0 parts one moth's trail from the next.
 float trailSmoke(vec2 p) {
-  float k = 0.0;
-  for (int i = 1; i < ${TRAIL_POINTS}; i++) {
+  float k = 0.0, size = uSmoke.x, aw = 1.0;
+  vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, its half-width and strength (-1: none)
+  for (int i = 0; i < ${TRAIL_POINTS}; i++) {
     if (i >= uTrailN) break;
-    vec4 a = uTrail[i - 1], b = uTrail[i];
-    if (min(a.w, b.w) <= 0.0) continue; // where one moth's trail ends and the next begins
-    vec2 ab = b.xy - a.xy;
-    float t = clamp(dot(p - a.xy, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0), d = length(p - a.xy - ab * t) / mix(a.z, b.z, t);
-    k = max(k, mix(a.w, b.w, t) * exp(-d * d));
+    vec4 q = uTrail[i];
+    float age = q.z / uSmoke.y;
+    vec3 b = vec3(q.x + size * smokeBend(q.z, q.w, 1.0), q.y - size * RISE * q.z, 0.6 * (1.0 - age));
+    float w = size * (3.6 - 2.0 * age);
+    if (q.z < 0.0) b.z = -1.0;
+    if (a.z > 0.0 && b.z > 0.0) {
+      vec2 ab = b.xy - a.xy;
+      float t = clamp(dot(p - a.xy, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0);
+      float d = length(p - a.xy - ab * t) / mix(aw, w, t);
+      k = max(k, mix(a.z, b.z, t) * exp(-d * d));
+    }
+    a = b; aw = w;
   }
   return k * (0.75 + 0.25 * sin(p.y * 0.23 + p.x * 0.11) * sin(p.x * 0.19 - p.y * 0.07));
 }

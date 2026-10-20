@@ -339,20 +339,18 @@ function plumes(now, strength, tip) {
 }
 // The smoke a scorched moth trails as it flies off, drawn by the background shader (background.js trailSmoke) as one soft
 // band along its path: the points it passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while
-// it's still smoking. Each point rises as the plumes' smoke does and drifts downwind (`wind`), and the band thins and fades
-// toward its old end, gone PLUME.life after the point was left. Each point is x, y, half-width and strength; a point of
-// strength 0 parts one moth's trail from the next. At most TRAIL_POINTS.
-function smokeTrail(wind) {
+// it's still smoking, each risen, bent by the wind and curled as a plume's smoke is, and gone PLUME.life after it was left.
+// Each point is where it was left, its age in seconds, and the moth's scorch clock offset by its seed (smokeBend's `now`),
+// with an age of -1 parting one moth's trail from the next. At most TRAIL_POINTS.
+function smokeTrail() {
   const out = [];
   for (const m of moths.values()) {
     const sc = m.scorch, path = (sc?.hit && sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life);
     if (!path.length) continue;
     if (sc.t - SCORCH.hit < TRAIL[0]) path.push([m.x, m.y, sc.t]);
-    if (out.length) out.push([0, 0, 1, 0]);
-    for (const [x, y, at] of path) {
-      const age = (sc.t - at) / PLUME.life, h = 29 * (sc.t - at); // 29: the plumes' RISE, units a second
-      out.push([x + PLUME.size * wind * h * h / 600, y - PLUME.size * h, PLUME.size * (3.6 - 2 * age), 0.6 * (1 - age)]);
-    }
+    if (out.length) out.push([0, 0, -1, 0]);
+    const now = sc.t + hash(m.key) % 97;
+    for (const [x, y, at] of path) out.push([x, y, sc.t - at, now]);
   }
   return out.slice(0, TRAIL_POINTS);
 }
@@ -442,7 +440,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
-    smoke: AMBIENT ? [] : plumes(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6, trail: AMBIENT ? [] : smokeTrail(GUST(s - 0.5) * 0.6),
+    smoke: AMBIENT ? [] : plumes(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6, trail: AMBIENT ? [] : smokeTrail(),
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
