@@ -279,12 +279,12 @@ const CANDLE = (() => {
   const WAX = ['#EADBC0', '#CDB894'], DRIP = { lit: ['#F2E6CF', '#CDB690'], dark: ['#D9C6A2', '#B9A27C'] }; // lit, dark side
   // a turned bronze part from its profile, [y, half-width] top to bottom. It closes with its bottom edge's front arc and
   // its top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
-  // in the bronze, in an ink outline
-  const turned = (id, prof, bowl = false) => {
+  // in the bronze (or `fill`), in an ink outline
+  const turned = (id, prof, bowl = false, fill = K.lit) => {
     const [y0, h0] = prof[0], [y1, h1] = prof[prof.length - 1];
     const d = `M${prof.map(([y, h]) => pt([cx - h, y])).join('L')}Q${cx} ${n(y1 + 2 * sag(y1, h1))} ${n(cx + h1)} ${n(y1)}`
       + `L${[...prof].reverse().map(([y, h]) => pt([cx + h, y])).join('L')}Q${cx} ${n(y0 + (bowl ? 2 : -2) * sag(y0, h0))} ${n(cx - h0)} ${n(y0)}Z`;
-    return `<path id="${id}" d="${d}" fill="${K.lit}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
+    return `<path id="${id}" d="${d}" fill="${fill}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
   };
   // a plain ring, `height` tall and `h` either side, its top face showing, with its rim's front edge inked
   const ring = (id, y, h, height) => turned(id, [[y, h], [y + height, h]])
@@ -589,11 +589,12 @@ const CANDLE = (() => {
       <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
       <linearGradient id="cdBronze">${[[0, '#21140A'], [0.15, '#3D2412'], [0.34, '#6E4220'], [0.44, '#B7885A'], [0.56, '#6E4220'], [0.78, '#3D2412'], [1, '#21140A']]
         .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient><!-- across each part's curve: dark edges, a highlight the flame lights (frame.js drawShine) -->
+      <linearGradient id="cdBronzeDome" href="#cdBronze" gradientUnits="userSpaceOnUse" x1="${cx - FOOT}" y1="${n(Y(523) - 30)}" x2="${cx + FOOT}" y2="${n(Y(543) + 30)}"/><!-- the same, slanting across the domed foot's upturned slope -->
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter></defs>
     ${pedestal}${holderVine.back}<!-- the vine's back turns, behind the candlestick -->
     ${ring('cdBase', Y(543), FOOT, 8)}
-    ${turned('cdFoot', profile(Y(523), Y(543), y => dome(y - Y(523) + 523)))}<!-- the domed foot, an ogee -->
+    ${turned('cdFoot', profile(Y(523), Y(543), y => dome(y - Y(523) + 523)), false, 'url(#cdBronzeDome)')}<!-- the domed foot, an ogee -->
     ${ring('cdCollar', Y(518), 20, 5)}
     ${turned('cdBaluster', profile(489, 518, y => y < 504 ? 10 + 7 * Math.sin((y - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((y - 504) / 14 * Math.PI / 2), 16).map(([y, h]) => [Y(y), h * k]))}
     ${ring('cdStemRing', Y(485), 10 * k, 4 * k)}
