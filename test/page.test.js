@@ -247,7 +247,7 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
     }
     vm.runInContext(src, c);
     const get = code => vm.runInContext(code, c), svg = get('STYLES.candle.back'), P = get('PEDESTAL'), D = get('DRAWN'), STEM = get('STEM');
-    const k = STEM / (D.collar - D.neck), lit = get('LACQUER.candle.lit');
+    const k = STEM / (D.collar - D.neck), lit = get('CANDLE.brass.lit'); // its rings are brass
     // each part's top and bottom at its sides: the turned bands (DRUM), the turned parts' profiles and the knop
     const parts = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="(#\w+)"/g)]
       .filter(m => m[7] === lit).map(m => ({ top: +m[2], bottom: +m[5] }));
@@ -296,8 +296,8 @@ test('the candle stands on a round marble pedestal, every rim one true ellipse a
   // the slab's side, P.depth deep under its top, its bottom rim's front the same true ellipse
   const ry = +(P.r * bow(P.top) / 2).toFixed(2);
   assert.ok(svg.includes(`M${340 - P.r} ${P.top}V${P.top + P.depth}A${P.r} ${ry} 0 0 0 ${340 + P.r} ${P.top + P.depth}V${P.top}Z`), `the slab's side, ${P.depth} deep under its top`);
-  // the candlestick's foot, its lowest bronze band, stands on the slab's top, neither floating over it nor sunk in
-  const foot = bands.filter(d => d.fill === run('LACQUER.candle.lit')).sort((a, b) => b.bottom - a.bottom)[0];
+  // the candlestick's foot, its lowest brass band, stands on the slab's top, neither floating over it nor sunk in
+  const foot = bands.filter(d => d.fill === run('CANDLE.brass.lit')).sort((a, b) => b.bottom - a.bottom)[0];
   assert.ok(Math.abs(foot.bottom - P.top) <= 3 && foot.half < P.r, `the foot ends at ${foot.bottom}, ${foot.half} either side, on a slab at ${P.top}`);
   // below the slab's top at its front, only the pedestal's own group (the slab, the column and the vine on them) draws
   const below = P.top + P.r * bow(P.top) / 2 + 0.5, all = drawn(svg);

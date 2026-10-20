@@ -250,8 +250,8 @@ const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget
 // top a body ending at `bottom` needs for its highest spot to sit at `y`.
 const PERCH_SPREAD = 0.44;
 function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5 + PERCH_SPREAD); }
-LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#6E4220', dark: '#40240F', ink: '#160A03', line: 1.2,
-  lip: [0, '#160A03'], rim: [0, 0, 0] }; // a rich dark bronze, browner than the Moroccan's brass
+LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#5C3520', dark: '#36190B', ink: '#140903', line: 1.2,
+  lip: [0, '#140903'], rim: [0, 0, 0] }; // the candlestick's carved dark wood (its brass fittings are CANDLE's BRASS)
 // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
 // `column` either side of the middle that runs down to the window's bottom edge, its veins and vine fading into it from
 // fade[0] to fade[1]. The
@@ -264,7 +264,9 @@ const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.
 PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
 PEDESTAL.split = PEDESTAL.top + 70; // where the vine's trunk, coming up the front of the column, splits into its branches
 const CANDLE = (() => {
-  const K = LACQUER.candle, cx = PILLAR.cx, GILT = '#B57A40', n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
+  const K = LACQUER.candle, cx = PILLAR.cx, n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
+  // the brass fittings, in the Moroccan's brass tones (its SHEENs), flat and cel-shaded, with a crisp highlight GILT
+  const BRASS_K = { ...K, lit: '#90753E', dark: '#5A401C', ink: '#2A1A08' }, GILT = '#B29C6A';
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
   // The candlestick placed from its drawn units (DRAWN): the pan and all on it under the pillar, the foot and all on it on
   // the pedestal, and the stem between, scaled about the middle to STEM tall, so a part keeps its shape.
@@ -276,21 +278,23 @@ const CANDLE = (() => {
   const WAX = ['#EADBC0', '#CDB894'], DRIP = { lit: ['#F2E6CF', '#CDB690'], dark: ['#D9C6A2', '#B9A27C'] }; // lit, dark side
   // a turned bronze part from its profile, [y, half-width] top to bottom. It closes with its bottom edge's front arc and
   // its top edge's back arc (seen from above), or with `bowl` its top edge's front arc, as a pan's bowl hangs under its rim;
-  // flat lit, darker from K.side of the way out, in an ink outline
-  const turned = (id, prof, bowl = false) => {
+  // flat lit, darker from K.side of the way out, in an ink outline: wood (`kit` K) with a hint of grain down it, brass with a
+  // crisp highlight down its lit side
+  const turned = (id, prof, bowl = false, kit = K) => {
     const [y0, h0] = prof[0], [y1, h1] = prof[prof.length - 1];
     const d = `M${prof.map(([y, h]) => pt([cx - h, y])).join('L')}Q${cx} ${n(y1 + 2 * sag(y1, h1))} ${n(cx + h1)} ${n(y1)}`
       + `L${[...prof].reverse().map(([y, h]) => pt([cx + h, y])).join('L')}Q${cx} ${n(y0 + (bowl ? 2 : -2) * sag(y0, h0))} ${n(cx - h0)} ${n(y0)}Z`;
     const edge = prof.map(([y, h]) => pt([cx + K.side * h, y + sag(y, h) * (1 - K.side ** 2)]));
-    const shine = prof.map(([y, h]) => pt([cx - 0.6 * h, y + sag(y, h) * 0.64])); // a crisp highlight down the lit side
-    return `<clipPath id="${id}"><path d="${d}"/></clipPath><path d="${d}" fill="${K.lit}"/>`
-      + `<path d="M${edge.join('L')}L${cx + 100} ${n(y1 + 30)}V${n(y0 - 30)}Z" fill="${K.dark}" clip-path="url(#${id})"/>`
-      + `<path d="M${shine.join('L')}" fill="none" stroke="${GILT}" stroke-width="1.1" stroke-linecap="round" clip-path="url(#${id})"/>`
-      + `<path d="${d}" fill="none" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
+    const down = f => `M${prof.map(([y, h]) => pt([cx + f * h, y + sag(y, h) * (1 - f * f)])).join('L')}`; // a line down it, f of the way out
+    const lines = kit === K ? `<path d="${down(-0.62)}${down(-0.3)}${down(0.12)}" fill="none" stroke="#3E2010" stroke-width=".6" opacity=".7" clip-path="url(#${id})"/>`
+      : `<path d="${down(-0.6)}" fill="none" stroke="${GILT}" stroke-width="1.1" stroke-linecap="round" clip-path="url(#${id})"/>`;
+    return `<clipPath id="${id}"><path d="${d}"/></clipPath><path d="${d}" fill="${kit.lit}"/>`
+      + `<path d="M${edge.join('L')}L${cx + 100} ${n(y1 + 30)}V${n(y0 - 30)}Z" fill="${kit.dark}" clip-path="url(#${id})"/>`
+      + lines + `<path d="${d}" fill="none" stroke="${kit.ink}" stroke-width="${kit.line}" stroke-linejoin="round"/>`;
   };
   const profile = (y0, y1, half, steps = 12) => Array.from({ length: steps + 1 }, (_, i) => { const y = y0 + (y1 - y0) * i / steps; return [y, half(y)]; });
   // gilt beads along an edge's front arc (y, `h` either side), from x0 to x1, nudged `dy` off it
-  const beads = (y, h, x0, x1, count, r, dy) => `<g fill="${GILT}" stroke="${K.ink}" stroke-width=".6">${Array.from({ length: count }, (_, i) => {
+  const beads = (y, h, x0, x1, count, r, dy) => `<g fill="${GILT}" stroke="${BRASS_K.ink}" stroke-width=".6">${Array.from({ length: count }, (_, i) => {
     const x = x0 + (x1 - x0) * i / (count - 1), f = (x - cx) / h;
     return `<circle cx="${n(x)}" cy="${n(y + sag(y, h) * (1 - f * f) + dy)}" r="${r}"/>`;
   }).join('')}</g>`;
@@ -347,9 +351,9 @@ const CANDLE = (() => {
   const VINE = '#5B5129', VINE_INK = '#1F1A0C';
   const thick = d => `<path d="${d}" fill="none" stroke="${VINE_INK}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
     + `<path d="${d}" fill="none" stroke="${VINE}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
-  // where the flame glints on the brass while it stands straight: on the pan's rim either side, the knop, the foot and the
+  // where the flame glints on the brass while it stands straight: on the pan's rim either side and its
   // pan's bead row (x, y, rx, ry)
-  const GLINTS = [[300, 431, 16, 3.2], [376, 431, 10, 2.4], [326, 476, 7, 3], [318, 534, 14, 3.4], [366, 437, 8, 1.6]]
+  const GLINTS = [[300, 431, 16, 3.2], [376, 431, 10, 2.4], [366, 437, 8, 1.6]]
     .map(([x, y, rx, ry]) => [...stick([x, y]).map(n), rx, ry]);
   const knopEdge = x => n(474 + 11 * Math.sqrt(1 - ((x - cx) / 25) ** 2) - 1);
   // the pedestal, by the candlestick's rule, in cool marble lit from the left, its right side in shade as the wax is
@@ -495,23 +499,22 @@ const CANDLE = (() => {
       <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
       <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}
       <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
-      <radialGradient id="cdGlint"><stop offset="0" stop-color="#E2A66A"/><stop offset=".55" stop-color="#D09050" stop-opacity=".8"/><stop offset="1" stop-color="#D09050" stop-opacity="0"/></radialGradient>
+      <radialGradient id="cdGlint"><stop offset="0" stop-color="#E6D3A0"/><stop offset=".55" stop-color="#C9B07A" stop-opacity=".8"/><stop offset="1" stop-color="#C9B07A" stop-opacity="0"/></radialGradient>
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
       ${fade('cdColLine', '#8E869B', 0.6)}</defs>
     ${pedestal}
-    ${DRUM(K, Y(543), FOOT, 8)}${beads(Y(551), FOOT, 272, 408, 17, 1.9, -2.6)}
+    ${DRUM(BRASS_K, Y(543), FOOT, 8)}${beads(Y(551), FOOT, 272, 408, 17, 1.9, -2.6)}
     ${turned('cdFoot', profile(Y(523), Y(543), y => { const u = (y - Y(523)) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
-    <path d="M${[0.15, 0.3, 0.45, 0.6, 0.75].map(u => { const h = 20 + 50 * u * u * (3 - 2 * u), y = Y(523) + 20 * u; return pt([cx - 0.7 * h, y + sag(y, h) * 0.51]); }).join('L')}" fill="none" stroke="${GILT}" stroke-width="1" stroke-linecap="round"/>
-    ${DRUM(K, Y(518), 18, 5)}
+    ${DRUM(BRASS_K, Y(518), 18, 5)}
     ${turned('cdBaluster', profile(489, 518, y => y < 504 ? 10 + 7 * Math.sin((y - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((y - 504) / 14 * Math.PI / 2), 16).map(([y, h]) => [Y(y), h * k]))}
-    ${DRUM(K, Y(485), 10 * k, 4 * k)}
+    ${DRUM(BRASS_K, Y(485), 10 * k, 4 * k)}
     <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="${K.lit}"/><rect x="${n(cx + K.side * knop.rx)}" y="${n(Y(462))}" width="30" height="${n(24 * k)}" fill="${K.dark}" clip-path="url(#cdKnop)"/>
     <ellipse cx="${cx}" cy="${n(knop.cy)}" rx="${n(knop.rx)}" ry="${n(knop.ry)}" fill="none" stroke="${K.ink}" stroke-width="${K.line}"/>
-    <path d="M${pt(stick([316.5, 470.2]))}A${n(knop.rx)} ${n(knop.ry)} 0 0 1 ${pt(stick([331.4, 463.7]))}" fill="none" stroke="${GILT}" stroke-width="1.2" stroke-linecap="round"/><!-- the knop, gadrooned underneath -->
+<!-- the knop, carved in gadroons underneath -->
     <path d="${on([324, 332, 340, 348, 356].map(x => `M${x} 476.5Q${n(x + (x - cx) * 0.08)} ${n((476.5 + knopEdge(x)) / 2)} ${n(x + (x - cx) * 0.04)} ${knopEdge(x)}`).join(''))}" fill="none" stroke="${K.dark}" stroke-width=".8"/>
-    ${DRUM(K, Y(452), 14, 8)}
-    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}"/>
+    ${DRUM(BRASS_K, Y(452), 14, 8)}
+    <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="84" ry="${n(sag(PILLAR.dish, 84))}" fill="${GILT}" stroke="${BRASS_K.ink}" stroke-width="${K.line}"/>
     <ellipse cx="${cx}" cy="${PILLAR.dish}" rx="78" ry="${n(sag(PILLAR.dish, 78))}" fill="#24140A"/><!-- the pan, its inside in the pillar's shadow -->
     <path d="${PILLAR_D}" fill="${WAX[0]}"/><rect x="${n(side)}" y="${rim - 10}" width="${n(cx + R + 2 - side)}" height="${PILLAR.bottom - rim + 10}" fill="${WAX[1]}" clip-path="url(#cdWax)"/>
     ${drips}
@@ -521,8 +524,8 @@ const CANDLE = (() => {
     <path d="${notch(0)}" fill="none" stroke="#D8C5A2" stroke-width="1"/>`)(dy => `M${n(NOTCH - 11)} ${n(rim + dy)}C${n(NOTCH - 10.5)} ${n(rim + 3.5)} ${n(NOTCH - 8)} ${n(rim + 3.5)} ${n(NOTCH)} ${n(rim + 3.5)}S${n(NOTCH + 10.5)} ${n(rim + 3.5)} ${n(NOTCH + 11)} ${n(rim + dy)}`)}
     ${[-1, 1].map(u => { const x = cx + u * (R + 3.5), y = PILLAR.dish, fill = (u < 0 ? DRIP.lit : DRIP.dark)[0]; // a drip pooled in the pan at each side
       return `<path d="M${x - 5.5} ${y + 10}C${x - 6} ${y + 4} ${x - 3.5} ${y + 1.5} ${x} ${n(y + 1.2)}C${x + 3.5} ${y + 1} ${x + 6} ${y + 4} ${x + 5.5} ${y + 10}Z" fill="${fill}"/>`; }).join('')}
-    ${turned('cdBowl', profile(PILLAR.dish, Y(452), y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}
-    <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
+    ${turned('cdBowl', profile(PILLAR.dish, Y(452), y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true, BRASS_K)}<!-- the brass drip pan -->
+    <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${BRASS_K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
     ${beads(PILLAR.dish, 81, 262, 418, 13, 2.2, 0)}
     ${vine(on('M306 452Q330 470 362 476'))}${vine(on('M326 494Q342 500 354 514'))}<!-- the vine, where it winds across the front -->
     ${flutter(stick([318, 472]), 0.6, leaf(...stick([318, 472]), 15, -75))}
@@ -535,7 +538,7 @@ const CANDLE = (() => {
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
-  return { back, front, column, glints: GLINTS, grapes: GRAPES };
+  return { back, front, column, brass: BRASS_K, glints: GLINTS, grapes: GRAPES };
 })();
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
