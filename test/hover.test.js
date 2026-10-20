@@ -77,3 +77,13 @@ test('a landed moth\'s area is centred on its drawn body, so a point on the lowe
   assert.strictEqual(zoneAt([upper.zone, lower.zone], 298, 86), lower.zone);
   assert.strictEqual(zoneAt([upper.zone, lower.zone], 298, 62), upper.zone, 'and the upper moth keeps its own');
 });
+
+test('a card holds its anchor through small moves of its moth, and takes a new one once the moth is well away or another area', () => {
+  const holdAnchor = vm.runInContext('holdAnchor', page), zone = {}, other = {};
+  const at = (z, x, y) => { const a = holdAnchor(z, x, y); return [a.x, a.y]; };
+  assert.deepStrictEqual(at(zone, 100, 100), [100, 100], 'the first spot is taken');
+  assert.deepStrictEqual(at(zone, 115, 90), [100, 100], 'a hop or resettle nearby changes nothing');
+  assert.deepStrictEqual(at(zone, 100, 130), [100, 100], 'still held a little short of the threshold');
+  assert.deepStrictEqual(at(zone, 100, 145), [100, 145], 'well away takes a new anchor');
+  assert.deepStrictEqual(at(other, 101, 146), [101, 146], 'another area takes its own at once');
+});

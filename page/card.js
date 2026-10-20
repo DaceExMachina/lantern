@@ -78,7 +78,7 @@ function enterZone(zone) {
 function clickZone(zone, shift) { const a = areas.get(zone); (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (The card's own click runs the action.)
 function tapZone(zone) { if (hovered === areas.get(zone)?.target) hideCard(); else enterZone(zone); }
-function hideCard() { hovered = null; $('card').classList.remove('show'); }
+function hideCard() { hovered = held = shown = null; $('card').classList.remove('show'); }
 
 function renderCard() {
   const m = hovered, s = m?.session;
@@ -116,6 +116,15 @@ function renderCard() {
   $('card').replaceChildren(...rows);
   $('card').classList.add('show');
 }
+// The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
+// anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.
+// Then it eases over to the new spot instead of snapping, so it reads as following rather than shaking.
+const CARD_HOLD = 40;
+let held = null, shown = null; // the anchor in screen px, and where the card is now on its way there
+function holdAnchor(zone, x, y) {
+  if (!held || held.zone !== zone || Math.hypot(x - held.x, y - held.y) >= CARD_HOLD) held = { zone, x, y };
+  return held;
+}
 function placeCard() {
   if (!hovered) return;
   const pt = document.querySelector('svg').createSVGPoint();
@@ -123,6 +132,9 @@ function placeCard() {
   pt.x = +zone.getAttribute('cx'); pt.y = +zone.getAttribute('cy');
   const ctm = document.querySelector('svg').getScreenCTM(), p = pt.matrixTransform(ctm), c = $('card');
   const gap = (+zone.getAttribute('r') || 48) * ctm.a * 0.7; // clear of the hover area, which covers the moth
-  const x = Math.min(p.x + gap, innerWidth - c.offsetWidth - 12), y = p.y + gap + c.offsetHeight > innerHeight - 8 ? p.y - c.offsetHeight - gap : p.y + gap;
-  c.style.transform = `translate(${Math.max(8, x)}px, ${Math.max(8, y)}px)`;
+  const a = holdAnchor(zone, p.x, p.y);
+  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > innerHeight - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
+  const to = { x: Math.max(8, x), y: Math.max(8, y) };
+  shown = shown ? { x: shown.x + (to.x - shown.x) * 0.2, y: shown.y + (to.y - shown.y) * 0.2 } : to; // a new card starts in place
+  c.style.transform = `translate(${shown.x}px, ${shown.y}px)`;
 }
