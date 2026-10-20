@@ -264,7 +264,8 @@ const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.
 PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
 // the vine (CANDLE's vineTop): its trunk is laid out from `anchor` up, curving across the front of the column to `split`,
 // where it divides into its branches; below `anchor` it runs on down as far as the window goes
-PEDESTAL.split = PEDESTAL.top + 350; PEDESTAL.anchor = PEDESTAL.split + 200;
+// (the split shows 151 below the slab's bottom edge, five times the 30 it first sat)
+PEDESTAL.split = PEDESTAL.top + 172; PEDESTAL.anchor = PEDESTAL.split + 200;
 const CANDLE = (() => {
   const K = LACQUER.candle, cx = PILLAR.cx, n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
   // the brass fittings, in the Moroccan's brass tones (its SHEENs), flat and cel-shaded, with a crisp highlight GILT
