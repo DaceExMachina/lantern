@@ -399,3 +399,24 @@ test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the 
     assert.ok(grapes.reduce((t, g) => t + g[1], 0) / grapes.length > at[1] + 8, `the bunch at ${at} hangs below its stalk`);
   }
 });
+
+test('every branch of the vine has its leaves spread along it, out toward its end', () => {
+  const branches = run('CANDLE.branches');
+  assert.ok(branches.length >= 10, `the branches: ${branches.length}`);
+  for (const { name, pts, leaves } of branches) {
+    const want = name.startsWith('stem') ? 2 : 3;
+    assert.ok(leaves.length >= want, `${name} has ${leaves.length} leaves, wants ${want}`);
+    const along = leaves.map(l => pts.findIndex(p => p[0] === l[0] && p[1] === l[1]) / (pts.length - 1));
+    assert.ok(along.every(u => u > 0), `${name}'s leaves grow on it`);
+    assert.ok(Math.max(...along) > 0.8, `${name}'s leaves reach out toward its end: ${along.map(u => u.toFixed(2))}`);
+  }
+});
+
+test('the trunk is one limb through the anchor: no jump in its width or turn in its direction there', () => {
+  const { anchor } = run('PEDESTAL'), { pts, ws } = run(`CANDLE.trunkLine(${anchor + 400})`);
+  const i = run('CANDLE.trunkLine(0)').pts.length; // the anchor: the first point after the fixed curve
+  assert.ok(i > 10 && i < pts.length - 10, `the anchor is inside the trunk: point ${i} of ${pts.length}`);
+  const dir = j => Math.atan2(pts[j + 1][1] - pts[j][1], pts[j + 1][0] - pts[j][0]);
+  assert.ok(Math.abs(ws[i] - ws[i - 1]) < 0.5, `its width carries on: ${ws[i - 1]} to ${ws[i]}`);
+  assert.ok(Math.abs(dir(i) - dir(i - 1)) < 0.25, `its direction carries on: ${dir(i - 1).toFixed(2)} to ${dir(i).toFixed(2)}`);
+});
