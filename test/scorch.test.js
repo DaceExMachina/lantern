@@ -230,7 +230,7 @@ test('a hit throws at most 5 sparks from scorches, from the contact point, count
 test('nothing grows: 50 scorches on one moth add no elements, keep the spark pool, and smoke only from the hit on', () => {
   const { els, document } = domStub(), ctx = context(1000, document), { length, hit } = ctx.SCORCH;
   ctx.run('level = 1'); // the flame at full brightness, its own sparks filling the pool
-  const [drawSparks, dropMoth, smoke] = ctx.run('[drawSparks, dropMoth, smoke]'), plumes = now => smoke(now, 0, null).plumes;
+  const [drawSparks, dropMoth, smoke] = ctx.run('[drawSparks, dropMoth, smoke]'), plumes = now => smoke(now, now / 1000, 0, null).plumes;
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
   const live = () => ctx.sparks.filter(p => p.scorch && p.life > 0).length;
   const step = (m, dt = 0.05) => {
@@ -265,20 +265,18 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
   assert.ok(!n.scorch && plumes(clock.wall).length === 0, 'switching to the barrel ends it on the next frame');
 });
 
-// background.js's smokeBend, run as JS with the wind at `wind`: it's written in scalars, so it reads as JS once typed
-const smokeBendAt = wind => {
+// background.js's smokeBend, run as JS: it's written in scalars, so it reads as JS once typed
+const smokeBendAt = () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float smokeBend\(float age, float now, float curl\) \{[\s\S]*?\n\}/);
   assert.ok(src, 'background.js has smokeBend');
   const js = src[0].replace('float smokeBend(float age, float now, float curl)', 'return (age, now, curl) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|sin)\(/g, 'Math.$1(');
-  return new Function('uSmoke', 'uSmokeS', 'RISE', js)({ w: wind }, { x: 24, y: 90 }, 29);
+  return new Function('S_SIZE', 'S_LENGTH', 'RISE', js)(21, 160, 29);
 };
-test('smoke bends downwind the higher it has risen, and curls into Ss that swell from nothing as it ages', () => {
-  const still = smokeBendAt(0), windy = smokeBendAt(0.6), nows = Array.from({ length: 200 }, (_, i) => i * 0.1);
-  assert.strictEqual(still(0, 3, 1), 0, 'none where it was let go');
-  assert.strictEqual(windy(1, 3, 0), 0.6 * (29 * 29 / 150 + 29 * 0.3), 'the wind alone, a second up');
-  assert.ok(windy(3, 3, 0) > 3 * windy(1, 3, 0), 'bent further the higher it is');
+test('smoke curls into Ss that swell from nothing as it ages', () => {
+  const still = smokeBendAt(), nows = Array.from({ length: 200 }, (_, i) => i * 0.1);
+  assert.ok(still(0, 3, 1) === 0, 'none where it was let go');
   const swing = age => Math.max(...nows.map(n => Math.abs(still(age, n, 1))));
-  assert.ok(swing(0.1) < 3 && swing(2) > 24, `the curl swells with age: ${swing(0.1).toFixed(2)} then ${swing(2).toFixed(2)}`);
+  assert.ok(swing(0.1) < 3 && swing(2) > 21, `the curl swells with age: ${swing(0.1).toFixed(2)} then ${swing(2).toFixed(2)}`);
   for (const n of nows) for (let age = 0; age < 6; age += 0.2)
     assert.ok(Math.abs(still(age + 0.2, n, 1) - still(age, n, 1)) < 15, `neighbours ${TRAIL_STEP}s apart stay together, at ${age.toFixed(1)}s`);
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
@@ -298,7 +296,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const wall = clock.wall;
   t.after(() => { clock.wall = wall; }); // the next test's windows start where they would without this one
   const { els, document } = domStub(), ctx = context(1000, document), { hit } = ctx.SCORCH;
-  const [smoke, TRAIL, TRAIL_POINTS, life] = ctx.run('[smoke, TRAIL, TRAIL_POINTS, PLUME.life]'), smokeTrail = () => smoke(clock.wall, 0, null).trail;
+  const [smoke, TRAIL, TRAIL_POINTS, life] = ctx.run('[smoke, TRAIL, TRAIL_POINTS, PLUME.life]'), smokeTrail = () => smoke(clock.wall, ctx.perf.t / 1000, 0, null).trail, smokeDrift = ctx.run('smokeDrift');
   assert.strictEqual(TRAIL[1], TRAIL_STEP);
   assert.ok(ctx.SCORCH.length >= hit + TRAIL[0] + life, 'the episode lasts as long as its smoke, so it never ends mid-trail');
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
@@ -325,8 +323,10 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const after = smokeTrail()[0], jump = Math.hypot(after[0] - before[0], after[1] - before[1]);
   assert.ok(m.scorch.t - hit >= TRAIL[0] && m.scorch.t - hit < TRAIL[0] + 0.1, `it stopped following ${TRAIL[0]}s after the hit`);
   assert.ok(jump <= 1, `its head stays where it was as the smoke stops following: it jumped ${jump.toFixed(2)}`);
+  const left = after[0] - smokeDrift(ctx.perf.t / 1000, after[2]); // where it was left, before the wind's push
   for (let i = 0; i < 5; i++) fly();
-  assert.deepStrictEqual(smokeTrail()[0].slice(0, 2), after.slice(0, 2), 'and stays there as the moth flies on');
+  const later = smokeTrail()[0];
+  assert.deepStrictEqual([later[0] - smokeDrift(ctx.perf.t / 1000, later[2]), later[1]], [left, after[1]], 'and stays there as the moth flies on, but for the wind');
   while (m.scorch && m.scorch.t < hit + TRAIL[0] + life) step([m]);
   assert.strictEqual(smokeTrail().length, 0, 'gone');
   // twelve moths due at once: only `smokers` start (the rest wait their turn), each its own band, parted by a point aged
@@ -372,7 +372,7 @@ test('the flame lets go one plume at a time, carrying on the one that\'s going',
   const ctx = context(), smoke = ctx.run('smoke');
   let was = null;
   for (let t = 0; t < 3 * 3600; t += 0.25) {
-    const now = BASE + t * 1000, out = smoke(now, 1, [340, 200]).plumes; // burning its hardest, its smoke the most often
+    const now = BASE + t * 1000, out = smoke(now, now / 1000, 1, [340, 200]).plumes; // burning its hardest, its smoke the most often
     assert.ok(out.length <= 1, `${out.length} plumes at once, ${t}s in`);
     if (out[0] && was) assert.ok(out[0][2] > was[2] || out[0][2] < 0.3, `a new plume ${t}s in cut off the one going`);
     was = out[0];
@@ -389,7 +389,7 @@ test('a scorched moth\'s smoke stays until it fades, however many smoke at once'
   for (let i = 0; i < 20 * length; i++) {
     ctx.perf.t += 50; clock.wall += 50;
     for (const m of ms) ctx.mothTarget(m.key, m, 0.05, ctx.perf.t / 1000);
-    const { plumes, trail } = smoke(clock.wall, 0, null), singes = plumes.map(p => p.slice(0, 2).join());
+    const { plumes, trail } = smoke(clock.wall, ctx.perf.t / 1000, 0, null), singes = plumes.map(p => p.slice(0, 2).join());
     for (const m of ms) {
       const sc = m.scorch;
       if (!sc?.hit) continue;

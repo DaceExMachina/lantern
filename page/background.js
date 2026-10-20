@@ -122,24 +122,35 @@ precision highp float;
 uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
-uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec4 uSmoke; uniform vec3 uSmokeCol;
-uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN; uniform vec3 uSmokeS; // the Ss' size and length, and how fast the smoke disperses (frame.js smokeS)
+uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec3 uSmoke; uniform vec3 uSmokeCol;
+uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
+uniform float uDrift[13]; // how far the wind has carried smoke aside, at ages 0 to PLUME.life in twelfths (frame.js smokeDrift)
 ${LIGHT}
 const float RISE = 29.0; // how fast smoke rises, units a second
-// How far a bit of smoke age seconds old has been carried aside from where it was let go, in PLUME sizes: downwind
-// further the higher it's risen, and curled into Ss, a slow wave along the smoke swelling from nothing to uSmokeS.x × curl
-// over its first second or so, uSmokeS.y long as it rises. Its now is the smoke's own clock, offset by its seed so each one curls differently; the bit was
-// let go at now - age, so the wave's phase runs along it and the Ss travel as it rises. Every plume and every scorched
-// moth's trail bends by this, so they read as one smoke. Scalars only, so the test can run it as JS.
+// the smoke's Ss: how far they swing aside and how tall they are, in scene units; and how fast it spreads out, its width
+// growing by this much of itself a second
+const float S_SIZE = 21.0, S_LENGTH = 160.0, DISPERSE = 1.55;
+// How far a bit of smoke age seconds old has curled aside from where it was let go, in PLUME sizes: into Ss, a slow wave
+// along the smoke swelling from nothing to S_SIZE × curl over its first second or so, S_LENGTH tall as it rises. Its now
+// is the smoke's own clock, offset by its seed so each one curls differently; the bit was let go at now - age, so the
+// wave's phase runs along it and the Ss travel as it rises. Every plume and every scorched moth's trail curls by this, so
+// they read as one smoke. Scalars only, so the test can run it as JS.
 float smokeBend(float age, float now, float curl) {
-  float h = RISE * age, at = now - age, k = 6.2832 * RISE / uSmokeS.y;
-  return uSmoke.w * (h * h / 150.0 + h * 0.3) + curl * uSmokeS.x * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
+  float at = now - age, k = 6.2832 * RISE / S_LENGTH;
+  return curl * S_SIZE * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
+}
+// How far the wind has carried smoke age seconds old aside since it was let go, in scene units: as far as it's carried
+// the dust over that time (frame.js smokeDrift), between uDrift's samples
+float smokeDrift(float age) {
+  float u = min(age / uSmoke.y, 1.0) * 12.0, d = 0.0;
+  for (int i = 0; i < 13; i++) d += uDrift[i] * max(0.0, 1.0 - abs(u - float(i)));
+  return d;
 }
 // How much wider smoke age seconds old has spread than when it was let go, thinner to match (its strength over the
 // square root of this)
-float spread(float age) { return 1.0 + uSmokeS.z * age; }
+float spread(float age) { return 1.0 + DISPERSE * age; }
 // How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
-// many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, opacity, and the wind. Every bit rises
+// many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, and opacity. Every bit rises
 // steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
 // plume was being let go, and fades as it ages. The column widens as it rises, and bends and curls (smokeBend).
 float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
@@ -147,7 +158,7 @@ float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
   vec2 o = mix(base, a.xy, smoothstep(0.0, 0.5, max(a.y - p.y, 0.0) / (uSmoke.x * RISE)));
   float size = uSmoke.x, t = a.z, h = (o.y - p.y) / size, age = max(h, 0.0) / RISE;
   if (h < -3.0 || h > t * RISE + 12.0) return 0.0;
-  float x = o.x + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
+  float x = o.x + smokeDrift(age) + size * (smokeBend(age, t + b.x, b.z) + b.w * h * 0.08);
   float sp = spread(age), d = (p.x - x) / (size * (1.0 + h * 0.09) * sp);
   float k = exp(-d * d) / ((1.0 + h * 0.025) * sqrt(sp)) * a.w
     * smoothstep(t * RISE + 12.0, t * RISE - 6.0, h) // its rising tip
@@ -361,7 +372,7 @@ function drawBackground(v) {
   v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
   gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
   gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
-  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform4f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha, v.smokeWind); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform3f(u.uSmokeS, smokeS.size, smokeS.length, smokeS.disperse);
+  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform3f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform1fv(u['uDrift[0]'], v.drift);
   if (v.plumes.length) {
     gl.uniform4fv(u['uPlume[0]'], v.plumes.flatMap(q => q.slice(0, 4)));
     gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));

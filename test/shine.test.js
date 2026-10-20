@@ -19,7 +19,7 @@ function context() {
   // background.js isn't loaded (it needs WebGL): drawLight's dust is one speck the test places, and the background draws nothing
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, wall: () => clock.wall,
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] },
-    dust: [], farDust: [], dustData: new Float32Array(4), drawBackground: () => {}, DUST_DEBUG: 0 });
+    dust: [], farDust: [], dustData: new Float32Array(4), drawBackground: v => { page.drawn = v; }, DUST_DEBUG: 0 });
   for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle;');
@@ -91,7 +91,7 @@ test('the hot air rises in a column straight above the flame and nowhere else, a
 });
 
 // The flame's plumes at wall time `now` (the shader draws them), burning at `strength`, its tip at `tip`.
-const flamePlumes = (ctx, now, strength = 0, tip = [340, 180]) => [...ctx.run('smoke')(now, strength, tip).plumes].map(q => [...q]);
+const flamePlumes = (ctx, now, strength = 0, tip = [340, 180]) => [...ctx.run('smoke')(now, now / 1000, strength, tip).plumes].map(q => [...q]);
 // the starts (wall ms) of the flame's plumes over `hours` from BASE, a second apart, at `strength`
 const plumeStarts = (ctx, strength, hours) => {
   const starts = new Set();
@@ -164,6 +164,27 @@ test('the column\'s edges sit where HEAT_COLUMN puts them, and it never goes NaN
   // where the column's width would reach 0 and below it, each speck still gets a number
   const zero = -C.half / C.widen;
   for (const up of [zero, zero - 1, zero + 1, -1e6]) for (const dx of [0, 0.5, 5]) assert.strictEqual(at(dx, up), 0, `${dx} across at ${up} up`);
+});
+
+test('the wind carries smoke aside exactly as far as it carries the dust over the same time', () => {
+  // a middling near speck (radius 1.3) with no orbiting of its own, level with the light 200 to its right: what's left of
+  // its x after its slow wander is the wind's push
+  const ctx = context(), data = ctx.run('dustData'), p = { a: 0, d: 200, w: 0, ph: 0, r: 1.3, lift: 0 };
+  ctx.run('dust').push(p);
+  const life = ctx.run('PLUME.life'), lx = ctx.run('style.light[0]');
+  const draw = s => { ctx.shine(s); ctx.run('drawLight')(0, s, ctx.flame); return ctx.run('drawn'); };
+  const pushed = s => { draw(s); return data[0] - lx - 200 - Math.sin(s * 0.3) * 18 - Math.sin(s * 0.7) * 6; };
+  let windy = 0;
+  for (const s of [12.3, 47.9, 133.1, 280.4]) {
+    const { drift } = draw(s);
+    assert.strictEqual(drift.length, 13);
+    drift.forEach((d, i) => {
+      const age = i * life / 12, dust = pushed(s) - pushed(s - age);
+      assert.ok(Math.abs(d - dust) < 1e-3, `${s}s, smoke ${age}s old: carried ${d.toFixed(3)}, the dust ${dust.toFixed(3)}`);
+      windy = Math.max(windy, Math.abs(d));
+    });
+  }
+  assert.ok(windy > 3, `the wind did blow: ${windy.toFixed(1)}`);
 });
 
 test('the dust drawn over the candle rises where the hot air carries it, in the near ring and the far one', () => {

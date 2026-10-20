@@ -312,7 +312,13 @@ function heatAt(x, y) {
 function liftDust(p, x, y, dt) {
   return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
 }
-// Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and bend downwind,
+// How far the wind carries a dust speck of radius r aside at s, k for its ring: at once, the lighter the further and the
+// sooner (a heavy one lags a fifth of a second). It's an offset on its orbit, so it drifts back as the gust eases.
+const gustAside = (s, r, k) => GUST(s - 0.12 * r) * k / r;
+// How far the wind has carried smoke `age` seconds old aside since it was let go at s - age: as far as it's carried a
+// middling near speck of dust (radius 1.3, the near dust's 0.7 to 1.9) over that time, so the two drift together.
+const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 14);
+// Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and drift with the wind,
 // each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (lanterns.js,
 // with its size and opacity). The flame lets one go from its tip now and then, on lanes keyed to the wall clock alone
 // (scorch's kind, scorchClock) so every window lets it go at once: one every minute or two however it burns, and more
@@ -322,13 +328,6 @@ function liftDust(p, x, y, dt) {
 // passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while it's still smoking. At most `smokers`
 // moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
 // none of it is ever dropped.
-// How big the smoke's Ss are and how long as it rises, in scene units (background.js smokeBend), and how fast it spreads
-// out, its width growing by this much of itself a second (background.js spread)
-const smokeS = {
-  size: devSlider('Smoke', 'smokecurl', 'S size', 0, 60, 1, 24, 'How far the smoke swings aside as it curls into Ss, once it has risen a second or so', v => { smokeS.size = v; }),
-  length: devSlider('Smoke', 'smokewave', 'S length', 20, 300, 5, 90, 'How tall each S of the smoke is', v => { smokeS.length = v; }),
-  disperse: devSlider('Smoke', 'disperse', 'disperse', 0, 2, 0.05, 0.6, 'How fast the smoke spreads out as it ages, wider and thinner', v => { smokeS.disperse = v; }),
-};
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
 const SMOKE_REL = 3, SINGE_REL = 0.8;
 // The flame's plume the lanes let go at `now` (wall ms) burning at `strength`, the earliest begun if two are: its key
@@ -346,9 +345,9 @@ let flamePlume = null; // the flame's plume going: its key, when it was let go (
 // first, from `tip` (its live tip, null without a bare flame) at the flame's `strength`, then the singes. Each plume's
 // newest smoke rises from its base: the flame's live tip, so its smoke always leaves the flame however it leans. Each of
 // the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where
-// it was left, its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), each trail's head
+// it was left (carried aside by the wind since, smokeDrift), its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), each trail's head
 // first, with an age of -1 parting one moth's trail from the next.
-function smoke(now, strength, tip) {
+function smoke(now, s, strength, tip) {
   const plumes = [], trail = [];
   if (!tip) flamePlume = null;
   else {
@@ -368,7 +367,7 @@ function smoke(now, strength, tip) {
       path.push([m.x, m.y, sc.t]);
     }
     if (trail.length && path.length) trail.push([0, 0, -1, 0]);
-    for (const [x, y, at] of path.reverse()) trail.push([x, y, sc.t - at, now]); // its head (the newest) first
+    for (const [x, y, at] of path.reverse()) trail.push([x + smokeDrift(s, sc.t - at), y, sc.t - at, now]); // its head (the newest) first
   }
   return { plumes, trail };
 }
@@ -430,10 +429,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
   // slow cycle (about 40 seconds) and now and then fades out and back over a few seconds, so its brightness mostly
   // changes as it drifts through light and shadow, not from twinkling
   const fadeOut = (t, ph) => 1 - Math.max(0, Math.sin(t + ph)) ** 6;
-  // The wind carries each speck sideways, at once and further than the lantern swings: the lighter the speck, the further
-  // and the sooner (a heavy one lags a fifth of a second), with a little lift and swirl of its own. It's an offset on the
-  // orbit, so they flow with a gust and drift back as it eases.
-  const blow = (p, k) => { const g = GUST(s - 0.12 * p.r) * k / p.r; return [g, -Math.abs(g) * 0.15 + g * 0.2 * Math.sin(s * 0.9 + p.ph)]; };
+  // The wind carries each speck sideways (gustAside), further than the lantern swings, with a little lift and swirl of its own
+  const blow = (p, k) => { const g = gustAside(s, p.r, k); return [g, -Math.abs(g) * 0.15 + g * 0.2 * Math.sin(s * 0.9 + p.ph)]; };
   dust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18, [wx, wy] = blow(p, 14);
@@ -461,7 +458,8 @@ function drawLight(dt, s, { size, flick, pulse }) {
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
     lightC: remote ? remote.c : [gx, gy], lightScale: remote ? remote.scale : Math.max(VIEW.kx, VIEW.ky), lightR: 22 + 14 * size,
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
-    ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), strength, heat && [heat.x, heat.y]), smokeWind: GUST(s - 0.5) * 0.6,
+    ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), s, strength, heat && [heat.x, heat.y]),
+    drift: Array.from({ length: 13 }, (_, i) => smokeDrift(s, i * PLUME.life / 12)), // background.js smokeDrift samples it
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
