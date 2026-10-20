@@ -333,7 +333,7 @@ extension LanternServer {
     ///  - running ones the hooks never announced are added, for working or paused sessions.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
     func reconcile() {
-        struct Look { let id: String, dir: String, tracked: [(String, Double)], known: Ordered<JSON>, adopt: Bool }
+        struct Look { let id: String, dir: String, tracked: [(String, Double)], known: Ordered<JSON>, adopt: Bool, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
             let list = agents[id] ?? Ordered<JSON>()
@@ -341,20 +341,25 @@ extension LanternServer {
                 let last = (a["last"] as? Double) ?? 0
                 return now() - last >= AGENT_CHECK_MS && Re("^[A-Za-z0-9_-]+$").test(aid) ? (aid, last) : nil
             }
-            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", tracked: tracked, known: list, adopt: ["working", "paused"].contains(str(s["state"])))
+            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", tracked: tracked, known: list, adopt: ["working", "paused"].contains(str(s["state"])), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
         guard !looks.isEmpty else { return }
         DispatchQueue.global().async {
-            let results = looks.map { l -> (String, [(String, Double)], Ordered<JSON>) in
+            let results = looks.map { l -> (String, [(String, Double)], Ordered<JSON>, Double, Any?) in
                 let gone = l.tracked.filter { aid, last in
                     let file = "\(l.dir)/subagents/agent-\(aid).jsonl", mtime = fileTimes(file)?.mtime
                     return (mtime != nil && lastTurn(tail(file, 64 * 1024)).done) || now() - max(last, mtime ?? 0) > AGENT_EXPIRE_MS
                 }
-                return (l.id, gone, l.adopt ? liveSubagents(l.dir, known: l.known) : Ordered<JSON>())
+                // a rename fires no hook, so re-read the title when either file it lives in has been written since we last looked
+                let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0)
+                let title = written > l.titleSeen ? readTitle(l.dir, l.title) : l.title
+                return (l.id, gone, l.adopt ? liveSubagents(l.dir, known: l.known) : Ordered<JSON>(), written, title)
             }
             DispatchQueue.main.async {
                 var changed = false
-                for (id, gone, found) in results where self.sessions[id] != nil {
+                for (id, gone, found, written, title) in results where self.sessions[id] != nil {
+                    self.sessions[id]!["titleSeen"] = written
+                    if str(self.sessions[id]!["title"]) != str(title) { self.sessions[id]!["title"] = title; changed = true }
                     for (aid, last) in gone where (self.agents[id]?[aid]?["last"] as? Double) == last { self.agents[id]![aid] = nil; changed = true } // unless it fired again meanwhile
                     for (aid, a) in found.items where self.agents[id]?[aid] == nil { self.agents[id, default: Ordered<JSON>()][aid] = a; changed = true }
                 }
