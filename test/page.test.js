@@ -101,7 +101,7 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
   // the outer tongue's outline at full size as it wobbles, sampled along its curves, in the scene
   const flame = new Map();
   for (let s = 0; s < 30; s += 0.05) {
-    run(`drawFlame(${s}, { size: 1, pulse: 1 })`);
+    run(`drawFlame(${s}, { size: 1, flick: 1, pulse: 1 })`);
     const n = els.fOuter.getAttribute('d').match(/-?[\d.]+/g).map(Number);
     for (let i = 2; i + 5 < n.length; i += 6) for (let t = 0; t <= 1; t += 0.05) {
       const b = (p0, p1, p2, p3) => (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t * t * p2 + t ** 3 * p3;

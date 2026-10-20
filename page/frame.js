@@ -236,14 +236,20 @@ function swingLantern(elapsed, s) {
 // the gust a moment late, fluttering while the gust changes. From the clock alone, so every window agrees.
 const windLean = s => style.flameWind ? style.flameWind * (GUST(s - 0.3) + (GUST(s) - GUST(s - 0.3)) * 2 * wobble(s * 3, 7)) : 0;
 // flame: layered tongues that lean and stretch independently, ember-small when idle, the taller ones bent further by the wind
-function drawFlame(s, { size, pulse }) {
+function drawFlame(s, { size, flick, pulse }) {
   const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]], wind = windLean(s);
   for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
     const n = $(id);
     put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08 + Math.abs(wind) * 0.004), wobble(s, k) * lean + wind * h / 96));
     put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
-  put($('fBase'), 'fill', pal('base'));
+  // the blue at its root swells and brightens with the flicker, breathes, and leans a little with the wind (a sixth as far
+  // as the outer tongue's tip, since it's the root)
+  const base = $('fBase'), breathe = 1 + 0.05 * Math.sin(s * 1.7);
+  put(base, 'fill', pal('base'));
+  put(base, 'cx', (340 + wobble(s, 5) * 1.2 + wind / 6).toFixed(2));
+  put(base, 'rx', (10 * flick * breathe).toFixed(2)); put(base, 'ry', (5 * flick * (2 - breathe)).toFixed(2));
+  put(base, 'opacity', (0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick).toFixed(3));
   const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
   put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
   // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
