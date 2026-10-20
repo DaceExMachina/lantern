@@ -46,8 +46,6 @@ let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], '
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
-// the smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense
-const PLUME = { size: 1, life: 6, alpha: 0.5 };
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);

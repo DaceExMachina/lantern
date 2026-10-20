@@ -394,7 +394,7 @@ test('the flame lets go one plume at a time, carrying on the one that\'s going',
   }
 });
 
-test('a scorched moth\'s smoke stays until it fades, however many smoke at once', () => {
+test('a scorched moth\'s smoke, once it fades, never comes back, with twice as many moths scorched as can smoke at once', () => {
   const { els, document } = domStub(), ctx = context(1000, document), { hit, length } = ctx.SCORCH;
   const smoke = ctx.run('smoke');
   // twelve moths scorched a quarter of a second apart, all smoking together

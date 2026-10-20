@@ -61,15 +61,19 @@
   const stale = drop => Array.from({ length: 34 }, (_, i) => ({ ...pr(100 + i, needs[i % 5]), updatedAt: new RealDate(BASE - (8 + i) * 864e5).toISOString(),
     owner: i % 4 === 0 ? owners[i % 3] : undefined })).filter((_, i) => !drop || i !== 33);
 
-  // frames at 60 a second, with the session text's 250ms timer ticking between them
-  const run = secs => () => { for (let i = Math.round(secs * 60); i--;) { const was = Math.floor(T / 250); T += 1000 / 60; frame(T); if (Math.floor(T / 250) !== was) tickPages(); } };
+  // frames at 60 a second, with the session text's 250ms timer ticking between them; LAST adds up the runs in the steps
+  // below, so it ends as T at the last picture
+  let LAST = T;
+  const run = secs => {
+    LAST += secs * 1000;
+    return () => { for (let i = Math.round(secs * 60); i--;) { const was = Math.floor(T / 250); T += 1000 / 60; frame(T); if (Math.floor(T / 250) !== was) tickPages(); } };
+  };
   // the session text is encoded and decoded off the clock: let the last picture land, draw the current one, let it land
   const settle = async () => { while (busy) await new Promise(r => realSetTimeout(r, 10)); };
   const snap = name => async () => { await settle(); tickPages(); await settle(); await new Promise(r => realSetTimeout(r, 50)); return name; };
   // On a lantern that scorches, move the wall clock (and nothing else) so sess-alpha's next scorch, found with the page's
   // own schedule, starts the hit plus 0.5s before the last picture, so it shows the sparks and the singe's first smoke.
   // On one whose flame smokes too (style.shine), the next such scorch with the flame's idle plume 2 to 3.5s in then.
-  const LAST = 21000;
   const catchScorch = () => {
     const st = STYLES[Q.get('style')];
     if (!st?.scorches) return;

@@ -158,6 +158,12 @@ function makeSubMoth(key, parentId, size) {
 const TRAIL = { secs: 1.5, every: 0.25, apart: 12, most: 12, s: 9, length: 70 }, SMOKERS = 6;
 const TRAIL_POINTS = SMOKERS * (TRAIL.most + 3);
 const PLUMES = 1 + SMOKERS; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
+// The smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense, and
+// its colour, a pale warm grey. The flame's lanes (frame.js smokeAt): one plume a `slot` seconds, let go somewhere in its
+// first `window`, once the flame burns at `from`. How many seconds a plume takes to let go: the flame's, and a singe's.
+const PLUME = { size: 1, life: 6, alpha: 0.5 }, SMOKE_COL = '#B4A8B4';
+const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
+const SMOKE_REL = 3, SINGE_REL = 0.8;
 
 // The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
 // tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it

@@ -319,17 +319,16 @@ const gustAside = (s, r, k) => GUST(s - 0.12 * r) * k / r;
 // middling near speck of dust (radius 1.3, the near dust's 0.7 to 1.9) over that time, so the two drift together.
 const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 14);
 // Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and drift with the wind,
-// each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (lanterns.js,
-// with its size and opacity). The flame lets one go from its tip now and then, on lanes keyed to the wall clock alone
-// (scorch's kind, scorchClock) so every window lets it go at once: one every minute or two however it burns, and more
-// lanes opening as it burns harder (`from`, the strength each opens at), so it smokes more often the busier things get.
+// each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (state.js,
+// with its size and opacity, the flame's lanes SMOKE and the let-go times). The flame lets one go from its tip now and
+// then, on lanes keyed to the wall clock alone (scorch's kind, scorchClock) so every window lets it go at once: one
+// every minute or two however it burns, and more lanes opening as it burns harder (`from`, the strength each opens at),
+// so it smokes more often the busier things get.
 // It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
 // scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
 // passed over TRAIL.secs after the hit (state.js TRAIL), joined to the moth while it's still smoking. At most SMOKERS
 // moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
 // none of it is ever dropped.
-const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
-const SMOKE_REL = 3, SINGE_REL = 0.8;
 // The flame's plume the lanes let go at `now` (wall ms) burning at `strength`, the earliest begun if two are: its key
 // (lane:slot) and seconds in, or null.
 function smokeAt(now, strength) {
@@ -502,7 +501,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
 // as long as its smoke lasts.
 const SCORCH_DEMO = devToggle('Demo', 'scorch', 'scorch demo', false, 'Every moth flies into the candle\'s flame every 15 seconds, failing checks or not (reloads the page)', () => location.reload());
 const SCORCH = SCORCH_DEMO ? { slot: 15, window: 1, length: 13, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
-const SCORCH_CHAR = '#5B4636', SMOKE_COL = '#B4A8B4'; // the wings' char, a warm brown; smoke, a pale warm grey
+const SCORCH_CHAR = '#5B4636'; // the wings' char, a warm brown
 // The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
 let tongue = null;
 // The episode in progress for `key` at wall-clock `now` (ms): its slot and the seconds since it started, or null.
