@@ -286,8 +286,8 @@ function lightPaper({ size, flick, pulse }) {
 }
 
 // ---- the candle's shine -------------------------------------------------------------------------------------------
-// A bare flame lights what's round it (style.shine, the candle's own numbers): glints on the brass that slide as the
-// flame leans (a reflection moves with what it reflects) and brighten as it flickers, its reflection in the molten pool at
+// A bare flame lights what's round it (style.shine, the candle's own numbers): the bronze's highlight, its reflection in
+// the molten pool (sliding as the flame leans, as a reflection moves with what it reflects) at
 // the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
 // on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background, and the tip smoke
 // leaves from). All of it follows this frame's flame.
@@ -374,11 +374,6 @@ function drawShine(s, { size, flick, pulse }) {
   // the flame's lean (its middle tongue's tip, drawFlame) and its outer tongue's tip, in the scene
   const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk, tip = flameTip(s, size);
   heat = { x: tip[0], y: tip[1], k: size, t: s % (2 * Math.PI) };
-  [...$('cdGlints').children].forEach((e, i) => {
-    const [x] = shine.glints[i];
-    put(e, 'cx', (x + lean * (0.9 + 0.25 * i)).toFixed(1));
-    put(e, 'opacity', (0.45 * flick * bright * (0.75 + 0.25 * Math.sin(s * 2 + i))).toFixed(2));
-  });
   const pool = $('cdPoolGlint');
   put(pool, 'cx', (fx + lean * 0.6 + Math.sin(s * 5.3) * 0.6).toFixed(1)); put(pool, 'rx', (2.4 + 0.6 * flick + 0.3 * Math.sin(s * 7)).toFixed(1));
   put(pool, 'fill', core); put(pool, 'opacity', (0.55 * bright).toFixed(2));
@@ -390,11 +385,10 @@ function drawShine(s, { size, flick, pulse }) {
   put($('cdWarmG'), 'color', mix(pal('paper'), '#ffffff', 0.6));
   put($('cdWarm'), 'opacity', ((0.4 + 0.15 * flick) * bright).toFixed(2));
   put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
-  // the bronze (lanterns.js cdBronze), shaded across each part's curve: its highlight, where the flame above reflects,
-  // slides with the lean, takes the flame's colour by bronzeTint, and is as bright as the flame burns and flickers
+  // the bronze (lanterns.js cdBronze), shaded across each part's curve: its highlight, held where the flame above reflects,
+  // takes the flame's colour by bronzeTint, and is as bright as the flame burns and flickers
   const bronze = $('cdBronze'), base = mix('#4E2710', '#8E5D30', bronzeTone), dark = mix(base, '#000000', 0.45), deep = mix(base, '#000000', 0.7);
   const hi = mix(base, mix(mix(base, '#F2C28A', 0.55), core, bronzeTint), Math.min(1, bronzeShine * bright * flick));
-  put(bronze, 'gradientTransform', `translate(${(Math.round(lean * 2) / 2 * 0.006).toFixed(3)} 0)`);
   [deep, dark, base, hi, base, dark, deep].forEach((c, i) => put(bronze.children[i], 'stop-color', c));
 }
 

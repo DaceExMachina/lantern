@@ -27,7 +27,7 @@ function context() {
   els.fCore = { getBBox: () => ({ x: 333, y: 352, width: 14, height: 30 }) }; // drawLight's flame core, somewhere in the tongue
   // the glint groups as the candle's markup draws them, each child with its attributes
   const back = run('STYLES.candle.back');
-  for (const id of ['cdGlints', 'cdPedestalGlints', 'cdGrapeGlints']) {
+  for (const id of ['cdPedestalGlints', 'cdGrapeGlints']) {
     els[id] = node();
     els[id].children = [...back.match(new RegExp(`id="${id}">(.*?)</g>`))[1].matchAll(/<(?:circle|ellipse)\b([^>]*)>/g)].map(([, a]) => {
       const n = node();
@@ -47,18 +47,12 @@ const leaning = ctx => {
 };
 const num = (el, k) => +el.getAttribute(k);
 
-test('the brass glints and the pool\'s reflection slide the way the flame leans', () => {
-  const ctx = context(), [left, right] = leaning(ctx), glints = ctx.run('CANDLE.glints');
+test('the pool\'s reflection slides the way the flame leans', () => {
+  const ctx = context(), [left, right] = leaning(ctx);
   for (const s of [left, right]) {
     ctx.shine(s);
-    const sign = Math.sign(ctx.lean(s));
-    ctx.els.cdGlints.children.forEach((e, i) => assert.strictEqual(Math.sign(num(e, 'cx') - glints[i][0]), sign, `glint ${i} at s ${s}`));
-    assert.strictEqual(Math.sign(num(ctx.els.cdPoolGlint, 'cx') - 340), sign, `the pool's reflection at s ${s}`);
+    assert.strictEqual(Math.sign(num(ctx.els.cdPoolGlint, 'cx') - 340), Math.sign(ctx.lean(s)), `the pool's reflection at s ${s}`);
   }
-  // and they brighten with the flicker
-  const at = flick => { ctx.flame.flick = flick; ctx.shine(left); return ctx.els.cdGlints.children.map(e => num(e, 'opacity')); };
-  const dim = at(0.94), lit = at(1.06);
-  dim.forEach((o, i) => assert.ok(lit[i] > o, `glint ${i} brighter at a higher flicker`));
 });
 
 test('each grape\'s glint sits on its side facing the flame, wherever it leans', () => {
@@ -203,13 +197,11 @@ test('the shader\'s column is HEAT_COLUMN, each number in its place', () => {
 });
 
 
-test('the bronze\'s highlight follows the flame: brighter as it burns and flickers, sliding the way it leans', () => {
-  const ctx = context(), [left, right] = leaning(ctx), hi = () => ctx.els.cdBronze.children[3].getAttribute('stop-color');
+test('the bronze\'s highlight follows the flame: brighter as it burns and flickers', () => {
+  const ctx = context(), [left] = leaning(ctx), hi = () => ctx.els.cdBronze.children[3].getAttribute('stop-color');
   const lum = c => [1, 3, 5].reduce((t, i) => t + parseInt(c.slice(i, i + 2), 16), 0);
-  ctx.shine(left); const bright = lum(hi());
-  Object.assign(ctx.flame, { size: 0.2, flick: 0.7 }); ctx.shine(left); const dim = lum(hi());
-  assert.ok(bright > dim + 60, `a big bright flame lights it more: ${bright} to ${dim}`);
-  Object.assign(ctx.flame, { size: 1, flick: 1 });
-  const shift = s => { ctx.shine(s); return +ctx.els.cdBronze.getAttribute('gradientTransform').match(/translate\((-?[\d.]+)/)[1]; };
-  assert.ok(shift(left) < 0 && shift(right) > 0, `the highlight slides with the lean: ${shift(left)}, ${shift(right)}`);
+  const at = (size, flick) => { Object.assign(ctx.flame, { size, flick }); ctx.shine(left); return lum(hi()); };
+  assert.ok(at(1, 1) > at(0.2, 1) + 40, `a big flame lights it more than an ember: ${at(1, 1)} to ${at(0.2, 1)}`);
+  assert.ok(at(0.6, 1) > at(0.6, 0.6) + 15, `and it dims as the flame flickers down: ${at(0.6, 1)} to ${at(0.6, 0.6)}`);
+
 });

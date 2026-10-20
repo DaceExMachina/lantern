@@ -381,3 +381,19 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   }
   assert.ok(svgs[2].length > svgs[1].length && svgs[1].length > svgs[0].length, 'a taller window draws more trunk below');
 });
+
+test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the bunch below it', () => {
+  const P = run('PEDESTAL'), svg = run('STYLES.candle.back') + run(`CANDLE.column(${P.anchor + 900})`);
+  // the limbs: their filled outlines (lanterns.js limb), as polygons
+  const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => m[1].split('L').map(p => p.split(' ').map(Number)));
+  const inside = ([x, y], poly) => poly.reduce((c, [x1, y1], i) => { const [x2, y2] = poly[(i + 1) % poly.length]; return (y1 > y) !== (y2 > y) && x < x1 + (y - y1) * (x2 - x1) / (y2 - y1) ? !c : c; }, false);
+  // each bunch (lanterns.js cluster): its stalk, from where it grows, then its grapes
+  const bunches = [...svg.matchAll(/<path d="M(-?[\d.]+) (-?[\d.]+)Q[^"]*" fill="none" stroke="#1F1A0C" stroke-width="2.2"[^>]*\/><path[^>]*\/>((?:<use href="#cdGrape"[^>]*\/>)+)/g)]
+    .map(m => ({ at: [+m[1], +m[2]], grapes: [...m[3].matchAll(/x="(-?[\d.]+)" y="(-?[\d.]+)"/g)].map(g => [+g[1], +g[2]]) }));
+  const hanging = bunches.filter(b => !(b.at[0] === 400 && b.at[1] === P.top - 8)); // but the one lying on the slab by the foot, as asked
+  assert.ok(hanging.length >= 4, `the bunches found: ${hanging.length}`);
+  for (const { at, grapes } of hanging) {
+    assert.ok(limbs.some(poly => inside(at, poly)), `the bunch at ${at} grows from a limb`);
+    assert.ok(grapes.reduce((t, g) => t + g[1], 0) / grapes.length > at[1] + 8, `the bunch at ${at} hangs below its stalk`);
+  }
+});

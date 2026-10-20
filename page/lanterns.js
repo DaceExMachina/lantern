@@ -276,7 +276,7 @@ PEDESTAL.fade = [PEDESTAL.top + 41, PEDESTAL.top + 191];
 PEDESTAL.split = PEDESTAL.top + 172; PEDESTAL.anchor = PEDESTAL.split + 200;
 const CANDLE = (() => {
   const K = LACQUER.candle, cx = PILLAR.cx, n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
-  const GILT = '#B57A40'; // the bronze's beads and the pan's lip, catching the light
+  const GILT = '#B57A40'; // the pan's lip, catching the light
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
   // The candlestick placed from its drawn units (DRAWN): the pan and all on it under the pillar, the foot and all on it on
   // the pedestal, and the stem between, scaled about the middle to STEM tall, so a part keeps its shape.
@@ -296,11 +296,6 @@ const CANDLE = (() => {
     return `<path id="${id}" d="${d}" fill="${K.lit}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>`;
   };
   const profile = (y0, y1, half, steps = 12) => Array.from({ length: steps + 1 }, (_, i) => { const y = y0 + (y1 - y0) * i / steps; return [y, half(y)]; });
-  // gilt beads along an edge's front arc (y, `h` either side), from x0 to x1, nudged `dy` off it
-  const beads = (y, h, x0, x1, count, r, dy) => `<g fill="${GILT}" stroke="${K.ink}" stroke-width=".6">${Array.from({ length: count }, (_, i) => {
-    const x = x0 + (x1 - x0) * i / (count - 1), f = (x - cx) / h;
-    return `<circle cx="${n(x)}" cy="${n(y + sag(y, h) * (1 - f * f) + dy)}" r="${r}"/>`;
-  }).join('')}</g>`;
   // a curve through points, rounding each corner between them
   const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
   // the crown's back wall, ragged and melted round at the shoulders; its front wall runs a unit below (the lip)
@@ -353,10 +348,6 @@ const CANDLE = (() => {
   const VINE = '#5B5129', VINE_INK = '#1F1A0C';
   const thick = d => `<path d="${d}" fill="none" stroke="${VINE_INK}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>`
     + `<path d="${d}" fill="none" stroke="${VINE}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
-  // where the flame glints on the brass while it stands straight: on the pan's rim either side and its
-  // pan's bead row (x, y, rx, ry)
-  const GLINTS = [[300, 431, 16, 3.2], [376, 431, 10, 2.4], [366, 437, 8, 1.6]]
-    .map(([x, y, rx, ry]) => [...stick([x, y]).map(n), rx, ry]);
   const knopEdge = x => n(474 + 11 * Math.sqrt(1 - ((x - cx) / 25) ** 2) - 1);
   // the pedestal, by the candlestick's rule, in cool marble lit from the left, its right side in shade as the wax is
   const P = PEDESTAL, left = cx - P.r, slabY = P.top + P.depth, col = P.column, FOOT = 74; // the foot's half-width
@@ -554,14 +545,13 @@ const CANDLE = (() => {
       <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
       <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}
       <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
-      <radialGradient id="cdGlint"><stop offset="0" stop-color="#F4D2A0"/><stop offset=".55" stop-color="#D89A5A" stop-opacity=".8"/><stop offset="1" stop-color="#D89A5A" stop-opacity="0"/></radialGradient>
       <linearGradient id="cdBronze">${[[0, '#21140A'], [0.15, '#3C2412'], [0.34, '#6E4220'], [0.44, '#B7885A'], [0.56, '#6E4220'], [0.78, '#3C2412'], [1, '#21140A']]
         .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient><!-- across each part's curve: dark edges, a flame-lit highlight (frame.js) -->
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
       ${fade('cdColLine', '#8E869B', 0.6)}</defs>
     ${pedestal}${holderVine.back}<!-- the vine's back turns, behind the candlestick -->
-    ${DRUM(K, Y(543), FOOT, 8)}${beads(Y(551), FOOT, 272, 408, 17, 1.9, -2.6)}
+    ${DRUM(K, Y(543), FOOT, 8)}
     ${turned('cdFoot', profile(Y(523), Y(543), y => { const u = (y - Y(523)) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
     ${DRUM(K, Y(518), 18, 5)}
     ${turned('cdBaluster', profile(489, 518, y => y < 504 ? 10 + 7 * Math.sin((y - 489) / 15 * Math.PI / 2) : 11 + 6 * Math.cos((y - 504) / 14 * Math.PI / 2), 16).map(([y, h]) => [Y(y), h * k]))}
@@ -583,16 +573,14 @@ const CANDLE = (() => {
       return `<path d="M${x - 5.5} ${y + 10}C${x - 6} ${y + 4} ${x - 3.5} ${y + 1.5} ${x} ${n(y + 1.2)}C${x + 3.5} ${y + 1} ${x + 6} ${y + 4} ${x + 5.5} ${y + 10}Z" fill="${fill}"/>`; }).join('')}
     ${turned('cdBowl', profile(PILLAR.dish, Y(452), y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}<!-- the drip pan -->
     <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
-    ${beads(PILLAR.dish, 81, 262, 418, 13, 2.2, 0)}
     ${cluster([400, P.top - 8], -72, [4, 4, 3, 3, 2, 1], grapes)}${leafOn([400, P.top - 8], 14, -35)}<!-- a full bunch lying on the slab by the foot -->
     ${holderVine.front}<!-- the vine's front turns on the candlestick -->
-    <g id="cdGlints">${GLINTS.map(([x, y, rx, ry]) => `<ellipse cx="${x}" cy="${y}" rx="${rx}" ry="${ry}" fill="url(#cdGlint)" opacity="0"/>`).join('')}</g>
     <g id="cdGrapeGlints">${grapeGlints(onPedestal)}</g><!-- the flame's shine (frame.js drawShine) -->
     <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
-  return { back, front, column, glints: GLINTS, grapes: GRAPES };
+  return { back, front, column, grapes: GRAPES };
 })();
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
