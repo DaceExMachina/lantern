@@ -36,7 +36,7 @@ function context() {
     });
   }
   const flame = { size: 1, flick: 1, pulse: 1 };
-  return { els, run, flame, shine: s => run('drawShine')(s, flame), lean: s => run(`wobble(${s}, 3) * 6 * 0.8`) };
+  return { els, run, flame, shine: s => run('drawShine')(s, flame), lean: s => run(`(wobble(${s}, 3) * 6 + windLean(${s}) * 70 / 96) * 0.8`) };
 }
 // page times (s) where the flame leans well over to the left and to the right
 const leaning = ctx => {

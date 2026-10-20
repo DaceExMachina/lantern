@@ -232,19 +232,22 @@ function swingLantern(elapsed, s) {
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
 
-// flame: layered tongues that lean and stretch independently, ember-small when idle
+// How far the wind (GUST) leans the flame's outer tongue downwind, in the flame's units, by style.flameWind: it follows
+// the gust a moment late, fluttering while the gust changes. From the clock alone, so every window agrees.
+const windLean = s => style.flameWind ? style.flameWind * (GUST(s - 0.3) + (GUST(s) - GUST(s - 0.3)) * 2 * wobble(s * 3, 7)) : 0;
+// flame: layered tongues that lean and stretch independently, ember-small when idle, the taller ones bent further by the wind
 function drawFlame(s, { size, pulse }) {
-  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
+  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]], wind = windLean(s);
   for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
     const n = $(id);
-    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
+    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08 + Math.abs(wind) * 0.004), wobble(s, k) * lean + wind * h / 96));
     put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
   put($('fBase'), 'fill', pal('base'));
   const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
   put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
   // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
-  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-wobble(s, 1) * 6 / (118 * hh)) * 180 / Math.PI;
+  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-(wobble(s, 1) * 6 + wind * 118 / 96) / (118 * hh)) * 180 / Math.PI;
   put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
   put($('fHalo'), 'color', pal('halo'));
   put($('flame'), 'opacity', pulse.toFixed(3));
@@ -255,7 +258,7 @@ function drawSparks(dt, s, size) {
   sparkClock += style.paper ? 0 : dt * (0.4 + 5 * level);
   while (sparkClock > 1) {
     sparkClock--;
-    sparks.push({ x: 340 + wobble(s, 2) * 6 * size, y: FLAME_BASE - 90 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
+    sparks.push({ x: 340 + (wobble(s, 2) * 6 + windLean(s)) * size, y: FLAME_BASE - 90 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
   }
   for (const p of sparks) { p.x += p.vx * dt + Math.sin(s * 4 + p.vy) * 0.3; p.y += p.vy * dt; p.life -= dt * 0.8; }
   while (sparks.length && sparks[0].life <= 0) sparks.shift();
@@ -335,7 +338,8 @@ function drawShine(s, { size, flick, pulse }) {
   if (!shine || AMBIENT) { heat = null; smokeFrom = null; return; }
   const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
   // the flame's lean (its middle tongue's tip, drawFlame) and its outer tongue's tip, in the scene
-  const lean = wobble(s, 3) * 6 * size * fk, tip = [fx + wobble(s, 2) * 9 * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08) * size * fk];
+  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk;
+  const tip = [fx + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
   heat = { x: tip[0], y: tip[1], k: size, t: s % (2 * Math.PI) };
   [...$('cdGlints').children].forEach((e, i) => {
     const [x] = shine.glints[i];

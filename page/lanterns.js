@@ -7,7 +7,7 @@
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
-// burner cup, a candle's rim), as a height and a half-width. `stands` is a lantern on its own foot, which doesn't sway
+// burner cup, a candle's rim), as a height and a half-width. `flameWind` is how far the wind leans its flame (none if absent). `stands` is a lantern on its own foot, which doesn't sway
 // and has nothing to hang from; it's the band its stand fills below it, a half-width and the top, from there to the
 // window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` starts the shade below at the holder's edge instead of at the light.
 // `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
@@ -43,6 +43,9 @@ let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
+// how far the wind leans a flame (style.flameWind, frame.js windLean): the candle's in the open, the Moroccan's
+// enclosed at about a third of it (?candlewind=, ?moroccanwind=)
+const FLAME_WIND = Object.fromEntries(Object.entries({ candle: 6, moroccan: 2 }).map(([k, d]) => [k, Q.has(k + 'wind') ? +(Q.get(k + 'wind') || d) : d]));
 // ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
 // and is kept in the URL).
 if (Q.has('dev')) {
@@ -87,6 +90,10 @@ if (Q.has('dev')) {
     ['gust', 1, 8, 0.1, 'How long a gust of wind lasts on average, in seconds. Each one runs from half to one and a half times this. The dust, fireflies and moths feel it too']]) {
     const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
     r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
+  }
+  for (const k of ['candle', 'moroccan']) {
+    const r = row(`${k} wind`, `How far the wind leans the ${k}'s flame`, { type: 'range', min: 0, max: 15, step: 0.5, value: FLAME_WIND[k] });
+    r.oninput = () => { STYLES[k].flameWind = +r.value; history.replaceState(null, '', query(`${k}wind`, r.value)); };
   }
   document.body.append(panel);
 }
@@ -548,7 +555,7 @@ const STYLES = {
   },
   moroccan: {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
-    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, tassel: [340, 486],
+    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, flameWind: FLAME_WIND.moroccan, tassel: [340, 486],
     holder: [404, 6], // the burner cup under the flame, the height of its bottom and the half-width of its mouth; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
@@ -590,7 +597,7 @@ const STYLES = {
   },
   candle: {
     name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
-    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye],
+    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: FLAME_WIND.candle,
     holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
     // the wax alone, a straight cylinder, its highest landing spot a hop, a moth's reach and the clearance below the flame
     body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + HOP + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
