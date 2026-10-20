@@ -175,7 +175,7 @@ final class LanternServer {
     var pageMtime = 0.0
     // The event log (Stats.swift), and what it last saw, so it only records changes.
     let stats: Stats
-    struct Seen { var waiting = false, snoozed: String?, snoozing = false, title: String? }
+    struct Seen { var waiting = false, snoozed: String?, rest: String?, title: String? }
     var seen: [String: Seen] = [:]
     var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
     var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the pages; memory only
@@ -526,14 +526,14 @@ final class LanternServer {
             // snoozed during the wait: for a while (until it does something new) or for good
             let snoozed = forGood(id) ? "forGood" : truthy(s["snoozed"]) ? "temporary" : nil
             if waiting, let snoozed, snoozed != was.snoozed { stats.note("waiting", id, ["snoozed": snoozed]); was.snoozed = snoozed }
-            // the stretches of the wait it was snoozed, by hand or by quiet hours
-            let snoozing = waiting && (snoozed != nil || quietNow)
-            if snoozing != was.snoozing { if snoozing { stats.begin("snoozed", id, at: t) } else { stats.end("snoozed", id, at: t) }; was.snoozing = snoozing }
+            // the stretches of the wait it was sleeping (snoozed for good) or snoozed (for a while, or by quiet hours)
+            let rest = !waiting ? nil : snoozed == "forGood" ? "sleeping" : snoozed != nil || quietNow ? "snoozed" : nil
+            if rest != was.rest { if let r = was.rest { stats.end(r, id, at: t) }; if let rest { stats.begin(rest, id, at: t) }; was.rest = rest }
             seen[id] = was
         }
         for (id, was) in seen where sessions[id] == nil {
             if was.waiting { stats.end("waiting", id, ["how": "ended"], at: t) }
-            if was.snoozing { stats.end("snoozed", id, at: t) }
+            if let r = was.rest { stats.end(r, id, at: t) }
             stats.end("alive", id, ["how": "ended"], at: t)
             seen[id] = nil
         }

@@ -36,6 +36,18 @@ es.addEventListener('settings', e => {
   staleOn = st.stale !== false; $('staleToggle').checked = staleOn;
   sync();
 });
+// The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
+// 9px, and only wraps past that. Text scales with its font size, so one measurement gives the size that fits.
+function fitStatus() {
+  const st = $('status'), cs = getComputedStyle(st), pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  st.style.fontSize = st.style.whiteSpace = '';
+  const fit = (st.clientWidth - pad) / (st.scrollWidth - pad), size = Math.floor(10 * parseFloat(cs.fontSize) * fit) / 10;
+  if (fit >= 1) return;
+  st.style.fontSize = `${Math.max(9, size)}px`;
+  if (size < 9) st.style.whiteSpace = 'normal';
+}
+new MutationObserver(fitStatus).observe($('status'), { childList: true, subtree: true, characterData: true });
+addEventListener('resize', fitStatus);
 setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
 es.onerror = () => {
   $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline';

@@ -7,16 +7,17 @@ const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 let recapSeen = null; // the last day (yyyy-MM-dd) a recap opened by itself, once settings say
 
 // Each session alive that day, from the log: when it ran, how long it waited on me (snoozed waits too, as in warm
-// moths), how much of that was snoozed, how many waits began that day and the longest, and what its PRs did.
+// moths), how much of that was snoozed or sleeping, how many waits began that day and the longest, and what its PRs did.
 function daySessions(day, spans, prs) {
   const runs = new Map(), clip = (b, e) => Math.max(0, Math.min(e, day.end) - Math.max(b, day.start));
   for (const [kind, b, e, , id, title, project] of spans) {
     if (!id || e <= day.start || b >= day.end) continue;
-    if (!runs.has(id)) runs.set(id, { id, began: Infinity, from: Infinity, to: 0, ms: 0, waitMs: 0, snoozedMs: 0, waits: 0, longest: 0, prs: new Map() });
+    if (!runs.has(id)) runs.set(id, { id, began: Infinity, from: Infinity, to: 0, ms: 0, waitMs: 0, snoozedMs: 0, sleepingMs: 0, waits: 0, longest: 0, prs: new Map() });
     const r = runs.get(id), ms = clip(b, e);
     if (kind === 'alive') { r.began = Math.min(r.began, b); r.from = Math.min(r.from, Math.max(b, day.start)); r.to = Math.max(r.to, Math.min(e, day.end)); r.ms += ms; r.title ||= title; r.project ||= project; }
     if (kind === 'waiting') { r.waitMs += ms; r.longest = Math.max(r.longest, ms); if (b >= day.start) r.waits++; }
     if (kind === 'snoozed') r.snoozedMs += ms;
+    if (kind === 'sleeping') r.sleepingMs += ms;
   }
   for (const [t, id, url, change, need, title] of prs) {
     const r = t >= day.start && t < day.end && url && runs.get(id);
@@ -83,7 +84,7 @@ function showStar(i) {
   } else h.textContent = name;
   facts.append(
     line(`${clock(s.from)} to ${s.to >= recapOngoing - MIN ? 'now' : clock(s.to)}, ran ${ago(s.ms)}`),
-    line(`${Math.round(100 * s.warm)}% warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs)} waiting, ${ago(s.snoozedMs)} snoozed`),
+    line(`${Math.round(100 * s.warm)}% warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs - s.sleepingMs)} waiting, ${ago(s.snoozedMs)} snoozed${s.sleepingMs ? `, ${ago(s.sleepingMs)} sleeping` : ''}`),
     line(s.waits ? `Waited on you ${s.waits === 1 ? 'once' : `${s.waits} times`}, the longest ${ago(s.longest)}` : 'Never waited on you', 'dim'),
     // ponytail: the log keeps Claude's folder name for the project, so a dash in a real folder name reads as a slash
     ...(s.project ? [line(String(s.project).replace(/-/g, '/').replace(/^\/Users\/[^/]+/, '~'), 'dim')] : []));
