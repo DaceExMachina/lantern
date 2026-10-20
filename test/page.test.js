@@ -368,6 +368,9 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   const leaves = (svg, from, to) => [...svg.matchAll(/class="cdLeaf" data-at="[\d.]+ ([\d.]+)"/g)].filter(m => +m[1] > from && +m[1] < to).length;
   const bottoms = [anchor + 20, anchor + 400, anchor + 1200], svgs = bottoms.map(at);
   assert.strictEqual(at(bottoms[1]), svgs[1], 'drawn twice at one height, the same');
+  const again = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document }); // another load of the page
+  for (const f of ['scene', 'dev', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), again);
+  assert.strictEqual(vm.runInContext(`CANDLE.column(${bottoms[1]})`, again), svgs[1], 'another load draws the same vine');
   assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
   assert.ok(leaves(svgs[0], split, anchor) >= 6, `shoots off the trunk between the split and the anchor: ${leaves(svgs[0], split, anchor)}`);
   assert.ok(leaves(svgs[2], anchor, bottoms[2]) >= 6, `and on down the trunk below it: ${leaves(svgs[2], anchor, bottoms[2])}`);
