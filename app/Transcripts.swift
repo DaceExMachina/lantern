@@ -167,14 +167,25 @@ func readTitle(_ dir: String, _ current: Any?) -> Any? {
 }
 
 struct Turn { var done = false, compacted = false, text: String?, cwd: Any? }
-// How the last turn ended: a finished turn (end_turn, then a turn_duration marker) means it's waiting for me.
+// User lines that don't start a turn: local slash commands (/rename, /clear) and their output, `!` shell lines, and a
+// background task's "finished" notice, which only starts a turn once Claude picks it up.
+let NOT_A_PROMPT = Re("^\\s*<(command-name|local-command-|bash-|task-notification)")
+// How the last turn ended: a finished turn (end_turn, then a turn_duration marker) means it's waiting for me. The
+// transcript is only read when no hook has said (seeding, adopting, subagents), and only the lines that mark a turn count:
+// a prompt, a tool's result, an assistant message, the turn_duration marker and a compaction. Everything else Claude Code
+// writes (attachments, titles, local commands, meta reminders, hook summaries, kinds it adds later) is skipped, so a
+// session renamed after its turn still reads as waiting.
 func lastTurn(_ lines: [String]) -> Turn {
     var ended = false // a turn_duration marker comes after the final message, so keep looking back for its text
     var answered = false // the last line is a tool's result: done only if that tool was a subagent's hand-back
     for line in lines.reversed() {
         guard let j = parse(Data(line.utf8)) as? JSON else { continue }
-        if str(j["type"]) == "system" && str(j["subtype"]) == "turn_duration" { ended = true; continue }
-        if str(j["type"]) == "assistant" {
+        let type = str(j["type"]), subtype = str(j["subtype"]), content = (j["message"] as? JSON)?["content"]
+        let compact = truthy(j["isCompactSummary"]) || subtype == "compact_boundary"
+        guard type == "assistant" || type == "user" && !truthy(j["isMeta"]) && !NOT_A_PROMPT.test((content as? String) ?? "")
+              || subtype == "turn_duration" || compact else { continue }
+        if subtype == "turn_duration" { ended = true; continue }
+        if type == "assistant" {
             let msg = j["message"] as? JSON
             let text = ((msg?["content"] as? [JSON]) ?? []).filter { str($0["type"]) == "text" }.map { str($0["text"]) }.joined(separator: "\n")
             if ended && text.isEmpty { continue }
@@ -184,12 +195,9 @@ func lastTurn(_ lines: [String]) -> Turn {
             return Turn(done: ended || str(msg?["stop_reason"]) == "end_turn", text: text, cwd: j["cwd"])
         }
         if ended { return Turn(done: true, cwd: j["cwd"]) }
-        if truthy(j["isCompactSummary"]) || str(j["subtype"]) == "compact_boundary" { return Turn(done: true, compacted: true, cwd: j["cwd"]) } // stopped right after a compact
-        // a background task's "finished" notice lands as a user message but only starts a turn once Claude picks it up,
-        // so one still sitting unanswered at the end doesn't mean the session is working
-        if str(j["type"]) == "user", str((j["message"] as? JSON)?["content"]).hasPrefix("<task-notification>") { continue }
-        if str(j["type"]) == "user", !answered, ((j["message"] as? JSON)?["content"] as? [JSON] ?? []).contains(where: { str($0["type"]) == "tool_result" }) { answered = true; continue }
-        if str(j["type"]) == "user" { return Turn(done: false, cwd: j["cwd"]) }
+        if compact { return Turn(done: true, compacted: true, cwd: j["cwd"]) } // stopped right after a compact
+        if !answered, (content as? [JSON] ?? []).contains(where: { str($0["type"]) == "tool_result" }) { answered = true; continue }
+        return Turn(done: false, cwd: j["cwd"]) // a prompt, or a second tool result: mid-turn
     }
     return Turn()
 }
@@ -295,11 +303,14 @@ func liveSubagents(_ dir: String, known: Ordered<JSON> = Ordered<JSON>()) -> Ord
     return agents
 }
 
-/// A session rebuilt from its transcript, before it joins the live ones.
-func seedSession(_ file: String, live: Bool, words: Bool) -> (JSON, Ordered<JSON>)? {
+/// A session rebuilt from its transcript, before it joins the live ones. `busy` is what Claude Code itself says about a
+/// running one (sessions/<pid>.json); it wins over reading the transcript, which is only the fallback.
+func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> (JSON, Ordered<JSON>)? {
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
-    let lines = tail(file), turn = lastTurn(lines)
+    let lines = tail(file)
+    var turn = lastTurn(lines)
+    if let busy { turn.done = !busy; turn.compacted = turn.compacted && !busy }
     var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "state": turn.compacted ? "idle" : turn.done ? "waiting" : "working",
                    "note": turn.done && !turn.compacted ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
@@ -411,16 +422,16 @@ extension LanternServer {
         if words { seedProse() }
         DispatchQueue.global().async {
             var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
-            let take = { (f: String, live: Bool, pid: Int?) in
+            let take = { (f: String, live: Bool, pid: Int?, busy: Bool?) in
                 let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
                 if seen.contains(id) { return }
                 // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
-                if var s = seedSession(f, live: live, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
+                if var s = seedSession(f, live: live, busy: busy, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
             }
             if !mirroring {
-                for (f, pid) in liveTranscripts() { take(f, true, pid) }
+                for (f, pid, busy) in liveTranscripts() { take(f, true, pid, busy) }
                 if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil) } }
+                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil, nil) } }
                 } else { print("seeding failed: no \(PROJECTS)") }
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
@@ -466,7 +477,7 @@ extension LanternServer {
         let known = Set(sessions.items.compactMap { truthy($0.1["pid"]) ? str($0.1["pid"]) : nil }), words = wordsOn
         DispatchQueue.global().async {
             let found = claudePids().filter { !known.contains($0) }.compactMap { pid in
-                sessionFile(pid).flatMap { seedSession($0, live: true, words: words) }.map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pid"] = Int(pid); return s }
+                sessionFile(pid).flatMap { seedSession($0.file, live: true, busy: $0.busy, words: words) }.map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pid"] = Int(pid); return s }
             }
             if found.isEmpty { return }
             DispatchQueue.main.async {
