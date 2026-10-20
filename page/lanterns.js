@@ -45,23 +45,15 @@ let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], '
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
-// the candle's bronze (frame.js drawShine), for tuning by eye: its tone (0 darker, 1 lighter), how bright its highlight
-// gets, and how much it takes the flame's colour
-let bronzeTone = devSlider('Temporary', 'bronzetone', 'bronze tone', 0, 1, 0.05, 0.5, 'The candlestick\'s bronze, darker to lighter', v => { bronzeTone = v; });
-let bronzeShine = devSlider('Temporary', 'bronzeshine', 'bronze highlight', 0, 2, 0.05, 1, 'How bright the flame\'s highlight on the bronze gets', v => { bronzeShine = v; });
-let bronzeTint = devSlider('Temporary', 'bronzetint', 'bronze flame tint', 0, 1, 0.05, 0.3, 'How much the highlight on the bronze takes the flame\'s colour', v => { bronzeTint = v; });
-// how big the vine's leaves grow (frame.js drawLeaves): this many times as drawn on the lower vine, 300 and more below its
-// split, tapering to a sixth of the way there above it
-let leafSize = devSlider('Temporary', 'leafsize', 'leaf size', 1, 5, 0.1, 3.5, 'How big the vine\'s leaves are, on the lower vine (the rest in proportion)', v => { leafSize = v; });
-// how far the vine's leaves turn with the gusts, and how much they flutter on their own (frame.js drawLeaves), in degrees
-let leafGust = devSlider('Temporary', 'leafgust', 'leaf gust', 0, 12, 0.5, 6, 'How far the vine\'s leaves swing with the gusts', v => { leafGust = v; });
-let leafFlutter = devSlider('Temporary', 'leafflutter', 'leaf flutter', 0, 1.5, 0.02, 0.12, 'How much the vine\'s leaves flutter on their own, between gusts', v => { leafFlutter = v; });
+// how big the candle's vine leaves grow (frame.js drawLeaves): this many times as drawn on the lower vine, 300 and more
+// below its split, tapering to a sixth of the way there above it; and how far they turn with the gusts and flutter on
+// their own, in degrees
+const LEAF_SIZE = 3.5, LEAF_GUST = 6, LEAF_FLUTTER = 0.12;
 // how far the wind leans a flame (style.flameWind, frame.js windLean): the candle's in the open, the Moroccan's
-// enclosed at about a third of it (?candlewind=, ?moroccanwind=)
-// the smoke's plumes (frame.js plumes, background.js plume): how big, how many seconds each bit lasts, and how dense
-// (?plumesize=, ?plumelife=, ?plumealpha=)
-const PLUME = Object.fromEntries(Object.entries({ size: 1, life: 6, alpha: 0.5 }).map(([k, d]) => [k, Q.has('plume' + k) ? +(Q.get('plume' + k) || d) : d]));
-const FLAME_WIND = Object.fromEntries(Object.entries({ candle: 6, moroccan: 2 }).map(([k, d]) => [k, Q.has(k + 'wind') ? +(Q.get(k + 'wind') || d) : d]));
+// enclosed at about a third of it
+const FLAME_WIND = { candle: 6, moroccan: 2 };
+// the smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense
+const PLUME = { size: 1, life: 6, alpha: 0.5 };
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);
@@ -405,7 +397,7 @@ const CANDLE = (() => {
   // a curling tendril from `p`, heading `a`, coiling `side` (1 or -1)
   const tendril = (p, a, side, rand) => flutter(p, 0.4, `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`);
   // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up. It's drawn at `w` and grown as it
-  // flutters (frame.js drawLeaves, by leafSize), the more the lower it hangs: `low`, 0 down to the vine's split, 1 from 300 below
+  // flutters (frame.js drawLeaves, by LEAF_SIZE), the more the lower it hangs: `low`, 0 down to the vine's split, 1 from 300 below
   const leafOn = (p, w, deg) => {
     const a = deg * Math.PI / 180, q = [p[0] + Math.sin(a) * w * 0.25, p[1] - Math.cos(a) * w * 0.25];
     return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`, // smaller leaves more
@@ -595,8 +587,8 @@ const CANDLE = (() => {
       <linearGradient id="cdGlow" x1="0" x2="0" y1="0" y2="1"><stop class="paperStop" offset="0" stop-opacity=".85"/><stop class="paperStop" offset=".35" stop-opacity=".45"/>
       <stop class="paperStop" offset="1" stop-opacity="0"/></linearGradient>${GRAPE}
       <radialGradient id="cdWarmG" cx="${cx}" cy="${P.top - 3}" r="110" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="currentColor" stop-opacity=".55"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></radialGradient>
-      <linearGradient id="cdBronze">${[[0, '#21140A'], [0.15, '#3C2412'], [0.34, '#6E4220'], [0.44, '#B7885A'], [0.56, '#6E4220'], [0.78, '#3C2412'], [1, '#21140A']]
-        .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient><!-- across each part's curve: dark edges, a flame-lit highlight (frame.js) -->
+      <linearGradient id="cdBronze">${[[0, '#21140A'], [0.15, '#3D2412'], [0.34, '#6E4220'], [0.44, '#B7885A'], [0.56, '#6E4220'], [0.78, '#3D2412'], [1, '#21140A']]
+        .map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join('')}</linearGradient><!-- across each part's curve: dark edges, a highlight the flame lights (frame.js drawShine) -->
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
       ${fade('cdColLine', '#8E869B', 0.6)}</defs>

@@ -325,7 +325,7 @@ const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 1
 // lanes opening as it burns harder (`from`, the strength each opens at), so it smokes more often the busier things get.
 // It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
 // scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
-// passed over TRAIL.secs after the hit (state.js TRAIL), joined to the moth while it's still smoking. At most `smokers`
+// passed over TRAIL.secs after the hit (state.js TRAIL), joined to the moth while it's still smoking. At most SMOKERS
 // moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
 // none of it is ever dropped.
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
@@ -405,17 +405,16 @@ function drawShine(s, { size, flick, pulse }) {
   put($('cdWarm'), 'opacity', ((0.4 + 0.15 * flick) * bright).toFixed(2));
   put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
   // the bronze (lanterns.js cdBronze), shaded across each part's curve: its highlight, held where the flame above reflects,
-  // takes the flame's colour by bronzeTint, and is as bright as the flame burns and flickers
-  const bronze = $('cdBronze'), base = mix('#4E2710', '#8E5D30', bronzeTone), dark = mix(base, '#000000', 0.45), deep = mix(base, '#000000', 0.7);
-  const hi = mix(base, mix(mix(base, '#F2C28A', 0.55), core, bronzeTint), Math.min(1, bronzeShine * bright * flick));
-  [deep, dark, base, hi, base, dark, deep].forEach((c, i) => put(bronze.children[i], 'stop-color', c));
+  // takes a little of the flame's colour, and is as bright as the flame burns and flickers
+  const BRONZE = '#6E4220'; // the bronze's middle tone, between its dark edges (lanterns.js cdBronze)
+  put($('cdBronze').children[3], 'stop-color', mix(BRONZE, mix(mix(BRONZE, '#F2C28A', 0.55), core, 0.3), Math.min(1, bright * flick)));
 }
 
 // The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) move in the wind: each turns about its stem
 // toward downwind by how far it points from it (up to twice as far for one pointing into the wind, not at all for one
 // already pointing with it) times the gust's strength, by its weight (smaller leaves more), plus a faint flutter of its
 // own. A gust reaches the vine from its upwind side: each leaf feels it later the further downwind it is. A leaf also grows
-// about its stem by leafSize (lanterns.js), fully on the lower vine (`low` 1) and a sixth as much at the top (0). Found and
+// about its stem by LEAF_SIZE (lanterns.js), fully on the lower vine (`low` 1) and a sixth as much at the top (0). Found and
 // read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
 function drawLeaves(s) {
   cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
@@ -427,7 +426,7 @@ function drawLeaves(s) {
     const g = GUST(s - 0.15 - ph * 0.03 - from * (x - 340) * 0.004), down = g > 0 ? 90 : -90;
     let turn = ((down - deg) % 360 + 360) % 360; // how far round to downwind, -180 to 180, over the top when it points straight into the wind
     if (turn > 180 || (turn === 180 && down < 0)) turn -= 360;
-    const a = k * (leafGust * Math.abs(g) * turn / 90 + leafFlutter * Math.sin(s * (3 + ph * 0.3) + ph)), grow = low < 0 ? 1 : 1 + (leafSize - 1) * (1 + 5 * low) / 6;
+    const a = k * (LEAF_GUST * Math.abs(g) * turn / 90 + LEAF_FLUTTER * Math.sin(s * (3 + ph * 0.3) + ph)), grow = low < 0 ? 1 : 1 + (LEAF_SIZE - 1) * (1 + 5 * low) / 6;
     put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (grow === 1 ? '' : ` translate(${x} ${y}) scale(${grow.toFixed(2)}) translate(${-x} ${-y})`));
   }
 }
@@ -529,7 +528,7 @@ function scorchStep(m, flying, now = Date.now()) {
   if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
   const at = scorchClock(m.key, now), sc = m.scorch;
   if (!sc) {
-    if (!at || at.t >= SCORCH.start || [...moths.values()].filter(o => o.scorch).length >= smokers) return null; // too many smoking: next time
+    if (!at || at.t >= SCORCH.start || [...moths.values()].filter(o => o.scorch).length >= SMOKERS) return null; // too many smoking: next time
     const rand = seeded(hash(`${m.key}:scorch:${at.slot}:touch`));
     m.scorch = { slot: at.slot, t: at.t, hit: false, flying, rand, up: 0.25 + 0.25 * rand(), side: stretch(m.home)[0] < tongue.cx ? -1 : 1 };
   } else if (!at || at.slot !== sc.slot || !style.scorches || (!sc.hit && !red())) return m.scorch = null;

@@ -344,10 +344,10 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   assert.ok(off <= TRAIL.s, `and stays there as the moth flies on, but for the wind and its curl: ${off.toFixed(2)} off`);
   while (m.scorch && m.scorch.t < hit + TRAIL.secs + life) step([m]);
   assert.strictEqual(smokeTrail().length, 0, 'gone');
-  // twelve moths due at once: only `smokers` start (the rest wait their turn), each its own band, parted by a point aged
+  // twelve moths due at once: only SMOKERS start (the rest wait their turn), each its own band, parted by a point aged
   // -1, every point of every trail drawn, within TRAIL_POINTS
   ctx.moths.delete(m.key); // its episode still runs, and would take a turn
-  const ms = Array.from({ length: 12 }, (_, i) => make(`sess-t${i}`)), smokers = ctx.run('smokers');
+  const ms = Array.from({ length: 12 }, (_, i) => make(`sess-t${i}`)), smokers = ctx.run('SMOKERS');
   ctx.run(`scorchClock = (key, now) => ({ slot: 0, t: (now - ${clock.wall}) / 1000 })`); // every moth's episode starting now
   for (let i = 0; i < 80; i++) step(ms);
   const scorched = ms.filter(n => n.scorch?.hit), c = smokeTrail();
@@ -355,7 +355,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const drawn = scorched.reduce((sum, n) => sum + n.scorch.trail.length + (n.scorch.trail.at(-1)[2] === n.scorch.t || n.scorch.trailDone ? 0 : 1), 0) + smokers - 1; // each trail, joined to its moth, parted from the next
   assert.strictEqual(c.length, drawn, 'every point drawn');
   assert.strictEqual(c.filter(p => p[2] === -1).length, smokers - 1, 'parted between moths');
-  assert.ok(ctx.run('SMOKERS_MAX * (TRAIL.most + 3) <= TRAIL_POINTS && 1 + SMOKERS_MAX <= PLUMES'), 'the most that can smoke fit the shader');
+  assert.ok(ctx.run('SMOKERS * (TRAIL.most + 3) <= TRAIL_POINTS && 1 + SMOKERS <= PLUMES'), 'the most that can smoke fit the shader');
 });
 
 test('every window scorches a moth at the same moments, whatever its own clocks and whenever it opened, with no Math.random', () => {

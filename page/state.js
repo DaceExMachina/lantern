@@ -152,13 +152,12 @@ function makeSubMoth(key, parentId, size) {
 
 // A scorched moth's smoke trail (frame.js smoke, background.js trailSmoke): the seconds it's left over, a point on its path
 // every `every` seconds or `apart` units flown, whichever comes first, `most` of them, and the Ss it curls into along its
-// length (their size and length, in scene units). Up to SMOKERS_MAX moths smoke at once (frame.js smokers), and
+// length (their size and length, in scene units). Up to SMOKERS moths smoke at once (frame.js scorchStep), and
 // TRAIL_POINTS holds all their trails: each one's points, the last where the smoke stops following, one joined to the
 // moth, and one parting it from the next.
-const TRAIL = { secs: 1.5, every: 0.25, apart: 12, most: 12, s: 9, length: 70 }, SMOKERS_MAX = 8;
-let smokers = devSlider('Smoke', 'smokers', 'smoking moths', 1, SMOKERS_MAX, 1, 6, 'How many moths can be scorched and smoking at once; another waits for its next turn', v => { smokers = v; });
-const TRAIL_POINTS = SMOKERS_MAX * (TRAIL.most + 3);
-const PLUMES = 1 + SMOKERS_MAX; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
+const TRAIL = { secs: 1.5, every: 0.25, apart: 12, most: 12, s: 9, length: 70 }, SMOKERS = 6;
+const TRAIL_POINTS = SMOKERS * (TRAIL.most + 3);
+const PLUMES = 1 + SMOKERS; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
 
 // The column of hot air over a bare flame (frame.js heatAt, and heat() in background.js's shaders): its half-width at the
 // tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it

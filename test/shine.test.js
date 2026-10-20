@@ -229,7 +229,6 @@ test('the bronze\'s highlight follows the flame: brighter as it burns and flicke
 
 test('a gust turns each vine leaf toward downwind by how far it points from it', () => {
   const ctx = context();
-  ctx.run('leafFlutter = 0; leafSize = 1');
   const leaf = deg => ({ e: node(), x: 340, y: 600, k: 1, low: -1, deg, ph: 0 }), angle = l => +l.e.getAttribute('transform').match(/rotate\((-?[\d.]+)/)[1];
   for (const sign of [1, -1]) {
     const s = Array.from({ length: 4000 }, (_, i) => i * 0.05).find(t => sign * ctx.run(`GUST(${t} - 0.15)`) > 1.5 && sign * ctx.run(`GUST(${t})`) > 0);
