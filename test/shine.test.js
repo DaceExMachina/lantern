@@ -35,6 +35,8 @@ function context() {
       return n;
     });
   }
+  els.cdBronze = node(); // the bronze's gradient, its stops as drawn
+  els.cdBronze.children = [...back.match(/id="cdBronze">(.*?)<\/linearGradient>/)[1].matchAll(/<stop\b/g)].map(() => node());
   const flame = { size: 1, flick: 1, pulse: 1 };
   return { els, run, flame, shine: s => run('drawShine')(s, flame), lean: s => run(`(wobble(${s}, 3) * 6 + windLean(${s}) * 70 / 96) * 0.8`) };
 }
@@ -200,3 +202,14 @@ test('the shader\'s column is HEAT_COLUMN, each number in its place', () => {
   }
 });
 
+
+test('the bronze\'s highlight follows the flame: brighter as it burns and flickers, sliding the way it leans', () => {
+  const ctx = context(), [left, right] = leaning(ctx), hi = () => ctx.els.cdBronze.children[3].getAttribute('stop-color');
+  const lum = c => [1, 3, 5].reduce((t, i) => t + parseInt(c.slice(i, i + 2), 16), 0);
+  ctx.shine(left); const bright = lum(hi());
+  Object.assign(ctx.flame, { size: 0.2, flick: 0.7 }); ctx.shine(left); const dim = lum(hi());
+  assert.ok(bright > dim + 60, `a big bright flame lights it more: ${bright} to ${dim}`);
+  Object.assign(ctx.flame, { size: 1, flick: 1 });
+  const shift = s => { ctx.shine(s); return +ctx.els.cdBronze.getAttribute('gradientTransform').match(/translate\((-?[\d.]+)/)[1]; };
+  assert.ok(shift(left) < 0 && shift(right) > 0, `the highlight slides with the lean: ${shift(left)}, ${shift(right)}`);
+});

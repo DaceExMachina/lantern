@@ -392,6 +392,12 @@ function drawShine(s, { size, flick, pulse }) {
   put($('cdWarmG'), 'color', mix(pal('paper'), '#ffffff', 0.6));
   put($('cdWarm'), 'opacity', ((0.4 + 0.15 * flick) * bright).toFixed(2));
   put($('cdFootShadow'), 'cx', (fx - lean * 0.5).toFixed(1));
+  // the bronze (lanterns.js cdBronze), shaded across each part's curve: its highlight, where the flame above reflects,
+  // slides with the lean, takes the flame's colour by bronzeTint, and is as bright as the flame burns and flickers
+  const bronze = $('cdBronze'), base = mix('#4E2710', '#8E5D30', bronzeTone), dark = mix(base, '#000000', 0.45), deep = mix(base, '#000000', 0.7);
+  const hi = mix(base, mix(mix(base, '#F2C28A', 0.55), core, bronzeTint), Math.min(1, bronzeShine * bright * flick));
+  put(bronze, 'gradientTransform', `translate(${(Math.round(lean * 2) / 2 * 0.006).toFixed(3)} 0)`);
+  [deep, dark, base, hi, base, dark, deep].forEach((c, i) => put(bronze.children[i], 'stop-color', c));
 }
 
 // The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) flutter in the wind: each turns about its

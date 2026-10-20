@@ -247,15 +247,15 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
     }
     vm.runInContext(src, c);
     const get = code => vm.runInContext(code, c), svg = get('STYLES.candle.back'), P = get('PEDESTAL'), D = get('DRAWN'), STEM = get('STEM');
-    const k = STEM / (D.collar - D.neck), lit = get('CANDLE.brass.lit'); // its rings are brass
+    const k = STEM / (D.collar - D.neck), lit = get('LACQUER.candle.lit');
     // each part's top and bottom at its sides: the turned bands (DRUM), the turned parts' profiles and the knop
-    const parts = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="(#\w+)"/g)]
+    const parts = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="([^"]+)"/g)]
       .filter(m => m[7] === lit).map(m => ({ top: +m[2], bottom: +m[5] }));
     for (const id of ['cdBowl', 'cdBaluster', 'cdFoot']) {
-      const ys = [...svg.match(new RegExp(`<clipPath id="${id}"><path d="M([^Q]+)Q`))[1].matchAll(/[\d.]+ ([\d.]+)/g)].map(m => +m[1]);
+      const ys = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/[\d.]+ ([\d.]+)/g)].map(m => +m[1]);
       parts.push({ id, top: Math.min(...ys), bottom: Math.max(...ys) });
     }
-    const [, cy, ry] = svg.match(/<clipPath id="cdKnop"><ellipse cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
+    const [, cy, ry] = svg.match(/<ellipse id="cdKnop" cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
     parts.push({ id: 'knop', top: cy - ry, bottom: cy + ry });
     parts.sort((a, b) => a.top - b.top);
     // top to bottom, and how far below the part above each starts: the neck's band ends at 460 in the drawing and the knop
@@ -288,7 +288,7 @@ test('the candle stands on a round marble pedestal, every rim one true ellipse a
   const lowest = Math.max(...[...svg.matchAll(/V([\d.]+)/g)].map(m => +m[1]));
   assert.ok(lowest >= 700, `the column stops at ${lowest}`);
   // the turned bands (DRUM): each edge's front arc dips by the candlestick's bow
-  const bands = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="(#\w+)"/g)]
+  const bands = [...svg.matchAll(/<path d="M([\d.]+) ([\d.]+)Q340 ([\d.]+) ([\d.]+) \2V([\d.]+)Q340 ([\d.]+) \1 \5Z" fill="([^"]+)"/g)]
     .map(m => ({ half: (m[4] - m[1]) / 2, top: +m[2], topQ: +m[3], bottom: +m[5], bottomQ: +m[6], fill: m[7] }));
   for (const d of bands) for (const [y, q] of [[d.top, d.topQ], [d.bottom, d.bottomQ]]) {
     assert.ok(Math.abs(q - (y + d.half * bow(y))) < 0.01, `a band ${d.half} either side: its edge at ${y} dips to ${q}, not ${y + d.half * bow(y)}`);
@@ -296,8 +296,8 @@ test('the candle stands on a round marble pedestal, every rim one true ellipse a
   // the slab's side, P.depth deep under its top, its bottom rim's front the same true ellipse
   const ry = +(P.r * bow(P.top) / 2).toFixed(2);
   assert.ok(svg.includes(`M${340 - P.r} ${P.top}V${P.top + P.depth}A${P.r} ${ry} 0 0 0 ${340 + P.r} ${P.top + P.depth}V${P.top}Z`), `the slab's side, ${P.depth} deep under its top`);
-  // the candlestick's foot, its lowest brass band, stands on the slab's top, neither floating over it nor sunk in
-  const foot = bands.filter(d => d.fill === run('CANDLE.brass.lit')).sort((a, b) => b.bottom - a.bottom)[0];
+  // the candlestick's foot, its lowest bronze band, stands on the slab's top, neither floating over it nor sunk in
+  const foot = bands.filter(d => d.fill === run('LACQUER.candle.lit')).sort((a, b) => b.bottom - a.bottom)[0];
   assert.ok(Math.abs(foot.bottom - P.top) <= 3 && foot.half < P.r, `the foot ends at ${foot.bottom}, ${foot.half} either side, on a slab at ${P.top}`);
   // below the slab's top at its front, only the pedestal's own group (the slab, the column and the vine on them) draws
   const below = P.top + P.r * bow(P.top) / 2 + 0.5, all = drawn(svg);
