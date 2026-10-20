@@ -44,16 +44,24 @@ function makeGhost(o) {
 // its own seeded preference, at its own seeded distance. It keeps that spot while it stays clear, so the target doesn't
 // flicker as the moths shift; only when a moth's slice takes it over does it move, to the nearest direction with room
 // to spare. Planned twice a second, not every frame.
+// A standing lantern's stand (style.stands) blocks the directions that would put one behind it.
 const angleGap = (a, b) => Math.abs(((a - b) % 6.283 + 9.425) % 6.283 - 3.1416);
-function nextAim(aim, pref, taken) {
-  const clear = (a, pad) => taken.every(([t, w]) => angleGap(a, t) > w + pad);
+function nextAim(aim, pref, taken, blocked = a => false) {
+  const clear = (a, pad) => taken.every(([t, w]) => angleGap(a, t) > w + pad) && !blocked(a);
   if (aim !== undefined && clear(aim, 0)) return aim;
   const from = aim ?? pref;
-  for (let i = 0; i < 64; i++) for (const sign of [1, -1]) {
+  // somewhere with room to spare, or if it's that crowded, at least not behind the stand
+  for (const ok of [a => clear(a, 0.12), a => !blocked(a)]) for (let i = 0; i < 64; i++) for (const sign of [1, -1]) {
     const a = from + sign * i * 0.05;
-    if (clear(a, 0.12)) return a;
+    if (ok(a)) return a;
   }
   return from;
+}
+// whether a spot `dist` out in direction `a` (as driftTo places it) is within `pad` of the band a stand fills, its
+// sideways offset measured unstretched, since a wider window only pushes it further out
+function behindStand(a, dist, pad) {
+  const st = style.stands;
+  return !!st && Math.abs(Math.cos(a) * dist) < st.half + pad && 320 + Math.sin(a) * dist * 0.95 * VIEW.ky > st.top - pad;
 }
 let stalePlannedAt = -1;
 function planStale(s, loose) {
@@ -61,8 +69,9 @@ function planStale(s, loose) {
   stalePlannedAt = s;
   const taken = [];
   for (const m of moths.values()) if (m.home && !m.parentId && !m.leaving) taken.push([Math.atan2(m.home[1] - 320, m.home[0] - 340), 0.42]);
-  for (const m of ghosts.values()) { m.aim = nextAim(m.aim, m.pref, taken); taken.push([m.aim, 0.3]); }
-  for (const d of loose) { d.aim = nextAim(d.aim, d.pref, taken); taken.push([d.aim, 0.1]); }
+  // pads: a ghost's drift, wings and the wisps circling it; a wisp's drift, the wind and its glow
+  for (const m of ghosts.values()) { m.aim = nextAim(m.aim, m.pref, taken, a => behindStand(a, m.dist, 72)); taken.push([m.aim, 0.3]); }
+  for (const d of loose) { d.aim = nextAim(d.aim, d.pref, taken, a => behindStand(a, d.dist, 36)); taken.push([d.aim, 0.1]); }
 }
 // One step of a critically damped spring, solved exactly so any frame length is stable: from rest it eases in, and it
 // eases out into the target without overshooting. Peak speed is about 0.37 * k * the distance; 95% there after 4.7 / k s.

@@ -366,7 +366,8 @@ function drawShine(s, { size, flick, pulse }) {
 function drawLight(dt, s, { size, flick, pulse }) {
   const [gx, gy] = rot(...style.light);
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
-  // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs
+  // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
+  // standing candle's flame instead, since its body runs down below)
   const ringR = [250, 190, 135].map((r, i) => r * (0.88 + 0.12 * level) * (1 + 0.03 * Math.sin(s * 1.1 - (2 - i) * 0.9)));
   // dust drifts around the light; the far specks fill the dark out to the edges. A speck stays lit for most of a
   // slow cycle (about 40 seconds) and now and then fades out and back over a few seconds, so its brightness mostly
@@ -397,7 +398,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
   const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
-    ringC: rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
+    ringC: style.stands ? [gx, gy] : rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
     // on a second display the glow centres on the lantern's light off its edge (it's only drawn there as the dust's light)
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),

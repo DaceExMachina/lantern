@@ -8,7 +8,8 @@
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
 // burner cup, a candle's rim), as a height and a half-width. `stands` is a lantern on its own foot, which doesn't sway
-// and has nothing to hang from. `shadeFromHolder` starts the shade below at the holder's edge instead of at the light.
+// and has nothing to hang from; it's the band its stand fills below it, a half-width and the top, from there to the
+// window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` starts the shade below at the holder's edge instead of at the light.
 // `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
@@ -282,7 +283,8 @@ function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5
 LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: '#8A5E2E', dark: '#553A1B', ink: '#1E1209', line: 1.2,
   lip: [0, '#1E1209'], rim: [0, 0, 0] }; // darker and browner than the Moroccan's brass
 // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
-// `column` either side of the middle that runs down out of the window, fading into the room from fade[0] to fade[1]. The
+// `column` either side of the middle that runs down to the window's bottom edge, its veins and vine fading into it from
+// fade[0] to fade[1]. The
 // candlestick's foot stands on it, under a stem STEM tall between the pan's neck and the foot's collar.
 // The candlestick is drawn in its own units, its pan at `dish`, its stem from the pan's neck at `neck` down to the foot's
 // collar at `collar` and its foot on a slab at `slab`, and placed from there (CANDLE's stick).
@@ -398,11 +400,14 @@ const CANDLE = (() => {
   const climbEnd = -1.25, climbTop = P.fade[0] + 6, climbR = col + 2; // where the stem leaves the column for the slab
   const climbAt = pt([cx + climbR * Math.sin(climbEnd), climbTop + sag(climbTop, climbR) * Math.cos(climbEnd)]);
   // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
-  const pedestal = `<g class="cdPedestal"><path d="M${cx - col} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColLit)"/>
-    <path d="M${n(cx + K.side * col)} ${slabY}V${P.fade[1]}H${cx + col}V${slabY}Z" fill="url(#cdColDark)"/>
-    <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${P.fade[1]}`).join('')}" fill="none" stroke="url(#cdColLine)" stroke-width=".8"/>
+  // the fluted column, solid down to `bottom` (the window's bottom edge, so it never ends in mid-air; drawHang redraws it)
+  const column = bottom => `<path d="M${cx - col} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.lit}"/>
+    <path d="M${n(cx + K.side * col)} ${slabY}V${bottom}H${cx + col}V${slabY}Z" fill="${MARBLE.dark}"/>
+    <path d="${[-4, -3, -2, -1, 0, 1, 2, 3, 4].map(k => `M${n(cx + col * Math.sin(k * Math.PI / 10))} ${slabY}V${bottom}`).join('')}" fill="none" stroke="#8E869B" stroke-opacity=".6" stroke-width=".8"/>
+    <path d="M${cx - col} ${slabY}V${bottom}M${cx + col} ${slabY}V${bottom}" fill="none" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>`;
+  // its own group (class cdPedestal), so nothing else drawn below the slab's top can pass for it
+  const pedestal = `<g class="cdPedestal"><g id="cdColumn">${column(P.fade[1])}</g>
     <path d="M${cx - 68} ${P.fade[0] + 4}q14 12 6 26t18 30M${cx + 12} ${P.fade[0]}q-8 14 6 22t-4 34M${cx + 54} ${P.fade[0] + 6}q10 10 2 22" fill="none" stroke="url(#cdColLine)" stroke-width=".7"/>
-    <path d="M${cx - col} ${slabY}V${P.fade[1]}M${cx + col} ${slabY}V${P.fade[1]}" fill="none" stroke="url(#cdColInk)" stroke-width="${K.line}"/><!-- the fluted column -->
     <path d="${helix(climbR, P.fade[1] - 50, climbTop, 1.4, climbEnd)}" fill="none" stroke="url(#cdVineFade)" stroke-width="2.2" stroke-linecap="round"/>
     ${DRUM(MARBLE, P.top, P.r, P.depth)}<ellipse cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${n(sag(P.top, P.r))}" fill="#E2DDE8" stroke="${MARBLE.ink}" stroke-width="${K.line}"/>
     <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${n(sag(P.top, P.r))}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
@@ -427,7 +432,7 @@ const CANDLE = (() => {
       <radialGradient id="cdPool" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#FFF8EC"/><stop offset=".7" stop-color="#F3E5C8"/><stop offset="1" stop-color="#D9C6A2"/></radialGradient>
       <linearGradient id="cdSmokeG" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#B9AFC8" stop-opacity=".3"/><stop offset="1" stop-color="#B9AFC8" stop-opacity="0"/></linearGradient>
       <filter id="cdSoft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
-      ${fade('cdColLit', MARBLE.lit)}${fade('cdColDark', MARBLE.dark)}${fade('cdColLine', '#8E869B', 0.6)}${fade('cdColInk', MARBLE.ink)}${fade('cdVineFade', '#4A4424')}</defs>
+      ${fade('cdColLine', '#8E869B', 0.6)}${fade('cdVineFade', '#4A4424')}</defs>
     ${pedestal}
     ${DRUM(K, Y(543), FOOT, 8)}${beads(Y(551), FOOT, 272, 408, 17, 1.9, -2.6)}
     ${turned('cdFoot', profile(Y(523), Y(543), y => { const u = (y - Y(523)) / 20; return 20 + 50 * u * u * (3 - 2 * u); }))}<!-- the domed foot, an ogee -->
@@ -468,7 +473,7 @@ const CANDLE = (() => {
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
-  return { back, front, glints: GLINTS, grapes: GRAPES };
+  return { back, front, column, glints: GLINTS, grapes: GRAPES };
 })();
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
@@ -562,7 +567,7 @@ const STYLES = {
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
   candle: {
-    name: 'Pillar candle', stands: true, paper: false, scorches: true, // a bare flame, standing on the crown
+    name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
     flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye],
     holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so it sets the shade's fan
     // the wax alone, a straight cylinder, its highest landing spot a hop, a moth's reach and the clearance below the flame
@@ -585,9 +590,11 @@ function paintRibbon(name) {
 let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
 // its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
-// standing lantern has none.
+// standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
 function drawHang() {
   const h = $('hang');
+  const column = style.stands && $('cdColumn');
+  if (column) column.innerHTML = CANDLE.column(VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620);
   if (!h) return;
   if (!style.chain) return h.setAttribute('d', `M340 ${VIEW.top - 2}V22`);
   let links = '';
