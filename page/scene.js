@@ -64,8 +64,14 @@ function caster(x, y, tilt, scale, pts) {
 const pathOf = p => { const f = ([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`; return `M${f(p[0])}Q${f(p[1])} ${f(p[2])}Q${f(p[3])} ${f(p[4])}Z`; };
 // big moths for sessions, medium for supervisor agents, small for plain subagents
 const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
-// where session moths live, clear of the lantern; each session keeps its spot and wanders around it
-const HOMES = [[150,170],[530,160],[115,390],[565,385],[190,550],[490,555],[245,85],[435,85]];
+// Session moths' homes (state.js sync hands them out): n spots spread evenly round an oval about the lantern, clear of
+// every lantern's body, leaving out the arc at the bottom within 150 to either side of the middle, where the candle's
+// stand is. The i-th, clockwise from the bottom left; a moth doubling up on a taken spot (`layer` 1, 2...) sits a little
+// further in. Each session wanders around its home.
+function ringHome(i, n, layer = 0) {
+  const gap = Math.asin(150 / 225), a = Math.PI / 2 + gap + (i + 0.5) * (2 * Math.PI - 2 * gap) / n, k = 1 - 0.18 * layer;
+  return [340 + 225 * k * Math.cos(a), 320 + 235 * k * Math.sin(a)];
+}
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
 
 // The scene is designed on a 600x600 square around the lantern. To fill any window shape, the visible area grows
