@@ -119,10 +119,14 @@ test('a moth landed on the candle, of any size and in any pose, stays clear of t
 });
 
 test('a restless landed moth hops HOP off its spot', () => {
-  // waiting 20 minutes, its dice on a hop, which starts at s = 10 and peaks 0.8s in, measured from the spot it lifts off
-  run(`style = STYLES.candle; hopper = { key: 'hopper', size: 1.4, x: 340, y: 300, home: [150, 170], wasLanded: true, hops: 0, fidgetAt: 10, dice: 0.9,
-    session: { id: 'hopper', state: 'waiting', waitingSince: Date.now() - 20 * 60000 } }; hopper.along = findPerch(hopper, () => 0.5)`);
+  // waiting 20 minutes, the wall clock stopped 0.8s into its next hop, where it peaks, measured from the spot it lifts off
+  const ws = 1.8e12, peak = run(`(() => { let n = Math.floor((${ws} + 20 * 60000) / 1000 / FIDGET.slot);
+    while (fidgetSlot('hopper', n, ${ws}).kind !== 'hop') n++;
+    return fidgetSlot('hopper', n, ${ws}).start + FIDGET.hop / 2; })()`);
+  run(`style = STYLES.candle; hopper = { key: 'hopper', size: 1.4, x: 340, y: 300, home: [150, 170], wasLanded: true, hopSlot: -1,
+    session: { id: 'hopper', state: 'waiting', waitingSince: ${ws} } }; hopper.along = 0.5; realNow = Date.now; Date.now = () => ${peak * 1000}`);
   const { ty } = run('mothTarget("hopper", hopper, 1 / 60, 10.8)'), rest = run('rot(hopper.perch[0], hopper.perch[1])[1] + 6 * hopper.size'); // the spot it lifted off
+  run('Date.now = realNow');
   assert.strictEqual(run('hopper.fidget'), 'hop');
   assert.ok(Math.abs(rest - ty - run('HOP')) < 1e-9, `it rises ${rest - ty}, not ${run('HOP')}`);
 });

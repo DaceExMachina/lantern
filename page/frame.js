@@ -6,16 +6,9 @@ const sparks = [];
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
 const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
-// How far along its line toward home a landing moth sits (perchAt), so its dotted line never crosses another; if a
-// neighbour is closer than 40, try further in or out and keep the roomiest spot.
-function findPerch(m, rand, from) {
-  const spots = [...moths.values()].filter(o => o !== m && o.wasLanded).map(o => o.perch);
-  if (from) spots.push(from); // a hop must go somewhere new, so the spot it left counts as taken
-  const home = stretch(m.home), room = a => { const p = perchAt(home, a); return Math.min(Infinity, ...spots.map(o => Math.hypot(o[0] - p[0], o[1] - p[1]))); };
-  let best = rand();
-  for (let i = 0; i < 20 && room(best) < 40; i++) { const c = rand(); if (room(c) > room(best)) best = c; }
-  return best;
-}
+// How far out along its line toward home (perchAt) a moth sits when it lands, or after the hop in fidget slot `slot`.
+// Seeded by the session and the slot alone, so every window puts it in the same spot.
+const alongFor = (key, ws, slot) => seeded(hash(`${key}:${ws}:${slot ?? 'land'}`))();
 
 // A pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
 /** @type {Element | undefined} */
@@ -556,6 +549,28 @@ function glideHome(m, dt) {
   const k = 1 - Math.exp(-1.5 * dt);
   m.home = [m.home[0] + (m.spot[0] - m.home[0]) * k, m.home[1] + (m.spot[1] - m.home[1]) * k];
 }
+// A landed moth's fidgets, off the wall clock like the scorch schedule (scorchClock), so every window shows them at the
+// same moments: its time splits into `slot`-second slots, shifted by its own seeded phase, and each holds one fidget
+// starting at a seeded point in the slot's first `window` seconds. Mostly a breath, `breathe` seconds long: its wings
+// open over 3s, stay open a moment, and close over 3s. Once it has waited 15 minutes it's restless, and about one slot
+// in three is a hop instead, `hop` seconds long, landing on its new spot `lift` of the way in. All in seconds.
+const FIDGET = { slot: 16, window: 8, breathe: 8, hop: 1.6, lift: 0.35 };
+const fidgetPhase = key => seeded(hash(key + ':fidget'))();
+// Slot n of moth `key`'s fidgets, for a session waiting since `ws` (ms, 0 if it isn't): when it starts (wall-clock
+// seconds) and what it is.
+function fidgetSlot(key, n, ws) {
+  const rand = seeded(hash(`${key}:fidget:${n}`)), start = (n + fidgetPhase(key)) * FIDGET.slot + rand() * FIDGET.window;
+  return { start, kind: ws && start * 1000 - ws >= 15 * 60000 && rand() < 0.35 ? 'hop' : 'breathe' };
+}
+// The slot of the last hop moth `key` has landed from by wall-clock `now` (seconds), or undefined if it hasn't hopped.
+function lastHop(key, ws, now) {
+  if (!ws) return;
+  for (let n = Math.floor(now / FIDGET.slot - fidgetPhase(key)); ; n--) {
+    const { start, kind } = fidgetSlot(key, n, ws);
+    if (start * 1000 < ws + 15 * 60000) return; // ponytail: walks back a slot at a time; it stops at the first hop or once it's before the moth got restless
+    if (kind === 'hop' && now - start > FIDGET.hop * FIDGET.lift) return n;
+  }
+}
 // Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
@@ -583,38 +598,31 @@ function mothTarget(k, m, dt, s) {
     ease = 8; flap = 29;
   } else if (needsMe) {
     // land with the wing joint on the paper (the joint sits 2,6 from the moth's position)
+    const ws = m.session.waitingSince || 0, now = Date.now() / 1000;
     if (!m.wasLanded) {
-      m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
-      m.along = findPerch(m, m.rand);
-      m.hops = 0;
+      m.rand = seeded(hash(`${m.key}:${ws}`)); // this landing's dice, the same in every window
+      // a window that opens on a moth that has already hopped puts it where the others have it
+      m.hopSlot = lastHop(m.key, ws, now);
+      m.along = alongFor(m.key, ws, m.hopSlot);
     }
     // its spot follows its home round as that glides, and as the lantern sways, so the line between them stays on its own ray
     m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
     [tx, ty] = rot(m.perch[0], m.perch[1]); tx += 2 * m.size; ty += 6 * m.size; ease = 4;
     // which spot this frame's target came from: it rides that one as it moves, and eases over to a new one after a hop,
     // or when its home glides over to the other side of the lantern
-    m.perchAim = `${m.hops}${Math.sign(m.perch[0] - 340)}`;
-    // Every 8-16s a waiting moth breathes: its wings open over 3s, stay open a moment, and close
-    // over 3s. After 15 minutes it's restless and sometimes hops off the paper instead. A hop takes 1.6s, a breath 8s.
-    // Snoozed ones stay still.
-    const waited = (Date.now() - (m.session.waitingSince || Date.now())) / 60000;
-    const weights = waited >= 15 ? { breathe: 0.65, hop: 0.35 } : { breathe: 1 };
+    m.perchAim = `${m.hopSlot}${Math.sign(m.perch[0] - 340)}`;
+    // Breaths and hops (fidgetSlot) run off the wall clock, so every window shows them at the same moments. Snoozed ones stay still.
     m.fidget = '';
-    if (m.session.snoozed) m.fidgetAt = 0;
-    else {
-      if (!m.fidgetAt) { m.fidgetAt = s + 3 + Math.random() * 8; m.dice = Math.random(); }
-      let kind = 'breathe', acc = 0;
-      for (const [k, w] of Object.entries(weights)) if (m.dice < (acc += w)) { kind = k; break; }
-      const dur = kind === 'breathe' ? 8 : 1.6, into = m.into = s - m.fidgetAt;
-      if (into > dur) { m.fidgetAt = s + 8 + Math.random() * 8; m.dice = Math.random(); }
-      else if (into > 0) {
+    if (!m.session.snoozed) {
+      const n = Math.floor(now / FIDGET.slot - fidgetPhase(m.key)), { start, kind } = fidgetSlot(m.key, n, ws), into = m.into = now - start;
+      if (into > 0 && into < FIDGET[kind]) {
         m.fidget = kind;
-        if (m.fidget === 'hop') {
-          ty -= HOP * Math.sin(Math.PI * into / dur);
-          // a hop lands on a new spot in its own slice, picked once as it lifts off (seeded by the hop count, so windows agree)
-          if (into > dur * 0.35 && m.hoppedAt !== m.fidgetAt) {
-            m.hoppedAt = m.fidgetAt;
-            m.along = findPerch(m, seeded(hash(`${m.key}:${m.session.waitingSince || 0}:${++m.hops}`)), m.perch);
+        if (kind === 'hop') {
+          ty -= HOP * Math.sin(Math.PI * into / FIDGET.hop);
+          // a hop lands on a new spot along its line, picked once as it lifts off (seeded by its slot, so windows agree)
+          if (into > FIDGET.hop * FIDGET.lift && m.hopSlot !== n) {
+            m.hopSlot = n;
+            m.along = alongFor(m.key, ws, n);
           }
         }
       }
