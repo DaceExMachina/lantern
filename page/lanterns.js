@@ -10,6 +10,7 @@
 // burner cup, a candle's rim), as a height and a half-width. `flameWind` is how far the wind leans its flame (none if absent). `stands` is a lantern on its own foot, which doesn't sway
 // and has nothing to hang from; it's the band its stand fills below it, a half-width and the top, from there to the
 // window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` shades below from the holder's corners instead, as the live flame's base and tip see them (background.js rimShade).
+// `shine` is a bare flame lighting its holder, and lists the grapes it glints on (frame.js drawShine).
 // `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
@@ -45,13 +46,6 @@ let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], '
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
-// how big the candle's vine leaves grow (frame.js drawLeaves): this many times as drawn on the lower vine, 300 and more
-// below its split, tapering to a sixth of the way there above it; and how far they turn with the gusts and flutter on
-// their own, in degrees
-const LEAF_SIZE = 3.5, LEAF_GUST = 6, LEAF_FLUTTER = 0.12;
-// how far the wind leans a flame (style.flameWind, frame.js windLean): the candle's in the open, the Moroccan's
-// enclosed at about a third of it
-const FLAME_WIND = { candle: 6, moroccan: 2 };
 // the smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense
 const PLUME = { size: 1, life: 6, alpha: 0.5 };
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
@@ -232,42 +226,32 @@ const seeded = seed => () => {
 // The pillar candle is an ivory pillar on a bronze altar candlestick wound with a grapevine. It stands on its own foot
 // instead of hanging (style.stands), and is drawn seen from its light's height by the barrel's rule. An edge d below
 // that sags d / 1350 of its half-width at the front, so the rim, just under the flame, is edge-on and the drip pan and
-// foot are seen from above. The pillar's numbers place the flame, the light, the shade and the wax moths land on: its
-// middle, half-width, crown (the rim, at its mean height), bottom (hidden in the pan, 200 below the rim), the pan's rim,
-// and the eye.
-const PILLAR = { cx: 340, r: 50, rim: 275 };
-PILLAR.bottom = PILLAR.rim + 200;
-PILLAR.dish = PILLAR.rim + 186;
-PILLAR.eye = PILLAR.rim - 18; // the flame's core: where the light comes from, and the drawing's eye height
-PILLAR.flame = [PILLAR.cx, PILLAR.rim - 2, 0.8]; // the shared flame, standing on the crown
-// Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
-// tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units.
-const FLAME_DIP = 0.04 * 96 * 1.08;
-// How far a landed moth's wings reach from its perch on screen. The wing point furthest from the joint, at r, swells with
-// perspective to at most r·EYE/√(EYE² − r²) (wing3d), at the largest moth.
-const MOTH_REACH = (r => r * EYE / Math.sqrt(EYE * EYE - r * r))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
-  * Math.max(...Object.values(SIZE));
-const FLAME_CLEARANCE = 10; // the gap kept between a landed moth's wings and the flame at its fullest
+// foot are seen from above. makeCandle draws it, and gives its style (STYLES.candle) with the numbers it was drawn from;
+// the tests draw it at other numbers too: the pillar's half-width `r` and crown `rim`, the stem's height `stem`, and the
+// drawing's neck `neck`.
 const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
-// Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (pickPerch); perchTop is the
-// top a body ending at `bottom` needs for its highest spot to sit at `y`.
+// Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (pickPerch).
 const PERCH_SPREAD = 0.44;
-function perchTop(y, bottom) { return (y - (0.5 - PERCH_SPREAD) * bottom) / (0.5 + PERCH_SPREAD); }
-LACQUER.candle = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: 'url(#cdBronze)', dark: 'none', ink: '#160A03', line: 1.2,
-  lip: [0, '#160A03'], rim: [0, 0, 0] }; // bronze, shaded across each curve by one gradient lit by the flame (frame.js drawShine)
-// The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
-// `column` either side of the middle that runs down to the window's bottom edge. The candlestick's foot stands on it, under a stem STEM tall between the pan's neck and the foot's collar.
-// The candlestick is drawn in its own units, its pan at `dish`, its stem from the pan's neck at `neck` down to the foot's
-// collar at `collar` and its foot on a slab at `slab`, and placed from there (CANDLE's stick).
-const DRAWN = { dish: 426, neck: 460, collar: 518, slab: 549 };
-const STEM = 41;
-const PEDESTAL = { top: PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), r: 112, depth: 14, column: 85 };
-// the vine (CANDLE's vineTop): its trunk is laid out from `anchor` up, curving across the front of the column to `split`,
-// where it divides into its branches; below `anchor` it runs on down as far as the window goes
-// (the split shows 151 below the slab's bottom edge, five times the 30 it first sat)
-PEDESTAL.split = PEDESTAL.top + 172; PEDESTAL.anchor = PEDESTAL.split + 200;
-const CANDLE = (() => {
-  const K = LACQUER.candle, cx = PILLAR.cx, n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
+function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) {
+  // The pillar's numbers place the flame, the light, the shade and the wax moths land on: its middle, half-width, crown
+  // (the rim, at its mean height), bottom (hidden in the pan, 200 below the rim), the pan's rim, the eye (the flame's
+  // core: where the light comes from, and the drawing's eye height) and the shared flame, standing on the crown.
+  const PILLAR = { cx: 340, r: R, rim, bottom: rim + 200, dish: rim + 186, eye: rim - 18, flame: [340, rim - 2, 0.8] };
+  // The candlestick is drawn in its own units, its pan at `dish`, its stem from the pan's neck at `neck` down to the foot's
+  // collar at `collar` and its foot on a slab at `slab`, and placed from there (stick, below).
+  const DRAWN = { dish: 426, neck, collar: 518, slab: 549 };
+  // The marble pedestal the candlestick stands on is a round slab, `depth` deep with its top at `top`, on a fluted column
+  // `column` either side of the middle that runs down to the window's bottom edge. The candlestick's foot stands on it,
+  // under a stem STEM tall between the pan's neck and the foot's collar.
+  // The vine (vineTop): its trunk is laid out from `anchor` up, curving across the front of the column to `split`, where it
+  // divides into its branches; below `anchor` it runs on down as far as the window goes (the split shows 151 below the
+  // slab's bottom edge, five times the 30 it first sat).
+  const top = PILLAR.dish + (DRAWN.neck - DRAWN.dish) + STEM + (DRAWN.slab - DRAWN.collar), split = top + 172;
+  const PEDESTAL = { top, r: 112, depth: 14, column: 85, split, anchor: split + 200 };
+  // bronze, shaded across each curve by one gradient lit by the flame (frame.js drawShine)
+  const K = { cx: PILLAR.cx, bow: y => 2 * (y - PILLAR.eye) / 1350, side: 0.44, lit: 'url(#cdBronze)', dark: 'none', ink: '#160A03', line: 1.2,
+    lip: [0, '#160A03'], rim: [0, 0, 0] };
+  const cx = PILLAR.cx, n = v => +v.toFixed(2), pt = (/** @type {number[]} */ [x, y]) => `${n(x)} ${n(y)}`;
   const GILT = '#B57A40'; // the pan's lip, catching the light
   const sag = (y, h) => h * K.bow(y) / 2; // how far down an edge `h` wide either side dips at its front
   // The candlestick placed from its drawn units (DRAWN): the pan and all on it under the pillar, the foot and all on it on
@@ -294,7 +278,7 @@ const CANDLE = (() => {
   const smooth = ps => `M${pt(ps[0])}${ps.slice(1, -1).map((p, i) => `Q${pt(p)} ${pt([(p[0] + ps[i + 2][0]) / 2, (p[1] + ps[i + 2][1]) / 2])}`).join('')}L${pt(ps[ps.length - 1])}`;
   // the crown's back wall, ragged and melted round at the shoulders; its front wall runs a unit below (the lip)
   // (each point is across the pillar from -1 to 1, and up from the rim)
-  const { r: R, rim } = PILLAR, side = cx + K.side * R; // the pillar's half-width and rim, and where its dark side starts
+  const side = cx + K.side * R; // where the pillar's dark side starts
   const CROWN = [[-1, 9.5], [-1, -1], [-0.6, -2.2], [-0.24, -1], [0.24, -0.8], [0.6, -1.6], [1, -1], [1, 20]] // the left starts where smooth() ends the right's curve, so the shoulders mirror
     .map(([u, dy]) => [cx + u * R, rim + dy]);
   const PILLAR_D = `${smooth(CROWN)}V${PILLAR.bottom}H${cx - R}Z`;
@@ -326,7 +310,6 @@ const CANDLE = (() => {
     return `<use href="#cdGrape${shade}" x="${n(x)}" y="${n(y)}" transform="translate(${n(x)} ${n(y)}) scale(${n(0.9 + 0.2 * r())}) translate(${n(-x)} ${n(-y)})"/>`;
   }).join('');
   const GRAPES = /** @type {number[][]} */ ([]); // every grape drawn with a glint, for their glints
-  const grapes = ps => grapeUses(ps, true);
   // the glints on the grapes from the `from`th drawn on, in their order (frame.js drawShine)
   const grapeGlints = from => GRAPES.slice(from).map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1" opacity="0"/>`).join('');
   // a hex-packed bunch, in rows of `rows` grapes 9.6 apart, 8.4 down, from (x, y), each row `lean` further over; a row the
@@ -399,27 +382,20 @@ const CANDLE = (() => {
   // a curling tendril from `p`, heading `a`, coiling `side` (1 or -1)
   const tendril = (p, a, side, rand) => flutter(p, 0.4, `<path d="M${shoot(p, a, 14, 2.2, side * 0.18, 0.12, rand).pts.map(pt).join('L')}" fill="none" stroke="${VINE}" stroke-width=".9" stroke-linecap="round"/>`);
   // a grape leaf on a stalk from `p`, `w` across, pointing `deg` from straight up. It's drawn at `w` and grown as it
-  // flutters (frame.js drawLeaves, by LEAF_SIZE), the more the lower it hangs: `low`, 0 down to the vine's split, 1 from 300 below
+  // flutters (frame.js drawLeaves), the more the lower it hangs: `low`, 0 down to the vine's split, 1 from 300 below
   const leafOn = (p, w, deg) => {
     const a = deg * Math.PI / 180, q = [p[0] + Math.sin(a) * w * 0.25, p[1] - Math.cos(a) * w * 0.25];
     return flutter(p, 20 / w, `<path d="M${pt(p)}L${pt(q)}" fill="none" stroke="${VINE}" stroke-width="1.2" stroke-linecap="round"/>${leaf(q[0], q[1], w, deg)}`, // smaller leaves more
       n(Math.min(1, Math.max(0, (p[1] - P.split) / 300))), deg);
   };
   // a tapering bunch hanging (or lying) from its stalk at `p`, its axis `deg` from straight down, rows of grapes from the
-  // stalk out; `put` draws the grapes (grapes() for those with glints, or plain uses on the column, which is redrawn)
-  const cluster = (p, deg, rows, put) => {
+  // stalk out; `glints` for grapes with glints (not on the column, which is redrawn)
+  const cluster = (p, deg, rows, glints = false) => {
     const a = deg * Math.PI / 180, top = [p[0] - Math.sin(a) * 9, p[1] + Math.cos(a) * 9];
     const ps = bunch(0, 0, rows, 0).map(([x, y]) => [top[0] + x * Math.cos(a) - y * Math.sin(a), top[1] + x * Math.sin(a) + y * Math.cos(a)]);
     return `<path d="M${pt(p)}Q${pt([p[0] + 3, (p[1] + top[1]) / 2])} ${pt(top)}" fill="none" stroke="${VINE_INK}" stroke-width="2.2" stroke-linecap="round"/>`
       + `<path d="M${pt(p)}Q${pt([p[0] + 3, (p[1] + top[1]) / 2])} ${pt(top)}" fill="none" stroke="${VINE}" stroke-width="1.3" stroke-linecap="round"/>`
-      + put(ps.sort((u, v) => u[1] - v[1]));
-  };
-  const useGrapes = ps => grapeUses(ps);
-  // what grows off a shoot's end: a leaf, a tendril, or now and then a bunch
-  const tip = (end, a, rand, put) => {
-    const k = rand();
-    return k < 0.45 ? leafOn(end, 15 + 10 * rand(), a * 180 / Math.PI + 90 + (rand() - 0.5) * 50)
-      : k < 0.8 ? tendril(end, a, rand() < 0.5 ? 1 : -1, rand) : cluster(end, (rand() - 0.5) * 30, [3, 3, 2, 2, 1], put);
+      + grapeUses(ps.sort((u, v) => u[1] - v[1]), glints);
   };
   const climbEnd = -1.25, climbTop = P.top + 47, climbR = col + 2; // where the trunk leaves the column for the slab
   const climbAt = round(climbR, climbEnd, climbTop);
@@ -475,7 +451,7 @@ const CANDLE = (() => {
       const r = seeded(hash(`candle:vine:${name}`)), { pts, a: end } = shoot(p, a, steps, 3.3, curl, 0.015, r), last = pts.length - 1;
       limbs.push(branch(pts, w0, Math.max(1, w0 * 0.28), w0 > 3 ? 6 : 4, r));
       BRANCHES.push({ name, pts, leaves: leavesAlong(pts, leaves, w0 > 3 ? 15 : 12, r) });
-      if (bunch) twigs.push(cluster(pts[Math.round(bunch * last)], (r() - 0.5) * 16, [3, 3, 2, 2, 1], useGrapes));
+      if (bunch) twigs.push(cluster(pts[Math.round(bunch * last)], (r() - 0.5) * 16, [3, 3, 2, 2, 1]));
       twigs.push(tendril(pts[last], end, curl > 0 ? 1 : -1, r));
     };
     // up to where the vine climbs over the slab (climbAt), wandering; round the column both ways at the split
@@ -487,7 +463,7 @@ const CANDLE = (() => {
     const [wrap2] = roundAbout(wrap2Ths.map(th => round(R1, th, P.split - (th1 - th) * 18)), wrap2Ths.map(th => Math.cos(th) > 0), flare(wrap2Ths.length, 5, 2), rand);
     limbs.push(branch(up, 8, 5, 4));
     twigs.push(leafOn(up[3], 18, 60), leafOn(up[7], 22, -40), leafOn(up[15], 18, 50), leafOn(up[23], 16, -30), leafOn(up[27], 14, -50), tendril(up[19], 0.2, 1, rand),
-      cluster(wrap[Math.min(5, wrap.length - 1)], -6, [3, 3, 2, 1], useGrapes));
+      cluster(wrap[Math.min(5, wrap.length - 1)], -6, [3, 3, 2, 1]));
     BRANCHES.push({ name: 'wrap', pts: wrap, leaves: leavesAlong(wrap, 3, 15, rand) }, { name: 'wrap2', pts: wrap2, leaves: leavesAlong(wrap2, 4, 15, rand) });
     // thin shoots off the trunk below the split
     [[9, 1], [21, -1], [34, 1], [43, -1]].forEach(([i, side], j) => sprout(`stem${j}`, stem[i], side > 0 ? -0.6 : Math.PI + 0.6, 8 + (i % 4), -side * 0.13, 2.6, 2));
@@ -506,7 +482,7 @@ const CANDLE = (() => {
       const runs = roundAbout(us.map(u => round(R + 3 * Math.sin(u * 17), th0 + turn * u, base + (top - base) * u)), us.map(u => Math.cos(th0 + turn * u) > 0), us.map(u => 5 - 3.4 * u), r);
       runs.forEach((pts, j) => {
         BRANCHES.push({ name: `bigR${j}`, pts, leaves: leavesAlong(pts, Math.max(3, Math.round(pts.length / 9)), 15, r) });
-        if (!j) twigs.push(cluster(pts[Math.round(0.3 * (pts.length - 1))], 0, [3, 3, 2, 2, 1], useGrapes));
+        if (!j) twigs.push(cluster(pts[Math.round(0.3 * (pts.length - 1))], 0, [3, 3, 2, 2, 1]));
         else twigs.push(tendril(pts[pts.length - 1], -2.6, -1, r));
       });
     })();
@@ -591,7 +567,7 @@ const CANDLE = (() => {
     <ellipse id="cdWarm" cx="${cx}" cy="${P.top}" rx="${P.r}" ry="${rimRy(P.r)}" fill="url(#cdWarmG)" opacity="0"/><!-- the slab's top, warmed round the foot by the flame -->
     <ellipse id="cdFootShadow" cx="${cx}" cy="${P.top - 5}" rx="${FOOT}" ry="${rimRy(FOOT)}" fill="#2B2238" opacity=".35"/><!-- the foot's shadow on it -->
     <g id="cdPencil" transform="translate(${pt(over[17])}) rotate(13) scale(.8)"></g><!-- Jerrett's pencil (pencil.js), under the vine -->
-    ${cluster(edgeAt, 8, [4, 4, 3, 3, 2, 1], grapes)}${overVine}${leafOn(edgeAt, 12, 150)}
+    ${cluster(edgeAt, 8, [4, 4, 3, 3, 2, 1], true)}${overVine}${leafOn(edgeAt, 12, 150)}
     <!-- the vine, up the column, over the slab's edge and across it to the foot, a bunch hanging off it at the edge -->
     <g id="cdPedestalGlints">${grapeGlints(0)}</g></g>`;
   const onPedestal = GRAPES.length; // the grapes drawn so far are the pedestal's bunch
@@ -629,15 +605,31 @@ const CANDLE = (() => {
       return `<path d="M${x - 5.5} ${y + 10}C${x - 6} ${y + 4} ${x - 3.5} ${y + 1.5} ${x} ${n(y + 1.2)}C${x + 3.5} ${y + 1} ${x + 6} ${y + 4} ${x + 5.5} ${y + 10}Z" fill="${fill}"/>`; }).join('')}
     ${turned('cdBowl', profile(PILLAR.dish, Y(452), y => 30 + 54 * Math.sqrt(Math.max(0, 1 - ((y - PILLAR.dish) / 26) ** 2))), true)}<!-- the drip pan -->
     <path d="M256 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 84))} 424 ${PILLAR.dish}L418 ${PILLAR.dish}Q${cx} ${n(PILLAR.dish + 2 * sag(PILLAR.dish, 78))} 262 ${PILLAR.dish}Z" fill="${GILT}" stroke="${K.ink}" stroke-width="${K.line}" stroke-linejoin="round"/>
-    ${cluster([400, P.top - 8], -72, [4, 4, 3, 3, 2, 1], grapes)}${leafOn([400, P.top - 8], 14, -35)}<!-- a full bunch lying on the slab by the foot -->
+    ${cluster([400, P.top - 8], -72, [4, 4, 3, 3, 2, 1], true)}${leafOn([400, P.top - 8], 14, -35)}<!-- a full bunch lying on the slab by the foot -->
     ${holderVine.front}<!-- the vine's front turns on the candlestick -->
     <g id="cdGrapeGlints">${grapeGlints(onPedestal)}</g><!-- the flame's shine (frame.js drawShine) -->
     <ellipse cx="${cx}" cy="${rim + 1.2}" rx="40" ry="2.6" fill="url(#cdPool)"/><ellipse id="cdPoolGlint" cx="${cx}" cy="${rim + 1.4}" rx="3" ry=".9" opacity="0" filter="url(#cdSoft)"/><!-- the molten pool -->`;
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
-  return { back, front, column, trunkLine, branches: BRANCHES, grapes: GRAPES };
-})();
+  // Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
+  // tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units. A landed moth's
+  // wings reach from its perch on screen at most w·EYE/√(EYE² − w²) (wing3d), w the wing point furthest from the joint, at
+  // the largest moth. So the wax's highest landing spot is a hop, that reach and 10 clear below the flame, and the body
+  // starts where pickPerch's highest spot (0.5 - PERCH_SPREAD of the way down) lands there.
+  const reach = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
+    * Math.max(...Object.values(SIZE));
+  const highest = PILLAR.flame[1] + 0.04 * 96 * 1.08 * PILLAR.flame[2] + HOP + reach + 10, waxBottom = PILLAR.dish - 8;
+  return {
+    name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
+    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: 6, // in the open, the wind leans it hard (frame.js windLean)
+    holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so its corners cast the shadow
+    // the wax alone, a straight cylinder
+    body: { top: (highest - (0.5 - PERCH_SPREAD) * waxBottom) / (0.5 + PERCH_SPREAD), bottom: waxBottom, half: () => PILLAR.r },
+    back, front, shine: GRAPES, // its bare flame shines on the brass, the pool, the grapes and the marble (drawShine)
+    column, trunkLine, branches: BRANCHES, pillar: PILLAR, pedestal: PEDESTAL, drawn: DRAWN, stem: STEM, lacquer: K, // the column is redrawn to the window's bottom (drawHang)
+  };
+}
 // a hairline bevel catching the light along the top and left of each frame, pillar and band
 const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><path d="M313.2 404V294.2h53.6M281.2 404V294.2h23.6M375.2 404V294.2h23.6
   M306.9 290v118M369.9 290v118M275.9 290v118M277 285.4h126M277 408.4h126M277 413.4h126M300 428.3h80M295 244.4h90"/></g>`;
@@ -689,7 +681,8 @@ const STYLES = {
   },
   moroccan: {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
-    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, flameWind: FLAME_WIND.moroccan, tassel: [340, 486],
+    name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, flameWind: 2, // enclosed, the wind leans it about a third as hard as the candle's
+    tassel: [340, 486],
     holder: [404, 6], // the burner cup under the flame, the height of its bottom and the half-width of its mouth; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
@@ -729,15 +722,7 @@ const STYLES = {
       <g id="tassel"><path d="M338.8 485h2.4v4h-2.4Z" fill="${BRASS.side}"/><ellipse cx="340" cy="492" rx="3.6" ry="3" fill="${BRASS.lit}"/>
         <ellipse cx="340" cy="498" rx="2.4" ry="2" fill="${BRASS.side}"/><path d="M338 500L340 510L342 500Z" fill="${BRASS.lit}"/></g>`,
   },
-  candle: {
-    name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
-    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: FLAME_WIND.candle,
-    holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so its corners cast the shadow
-    // the wax alone, a straight cylinder, its highest landing spot a hop, a moth's reach and the clearance below the flame
-    body: { top: perchTop(PILLAR.flame[1] + FLAME_DIP * PILLAR.flame[2] + HOP + MOTH_REACH + FLAME_CLEARANCE, PILLAR.dish - 8), bottom: PILLAR.dish - 8,
-      half: () => PILLAR.r },
-    back: CANDLE.back, front: CANDLE.front, shine: CANDLE, // its bare flame shines on the brass, the pool, the grapes and the marble (drawShine)
-  },
+  candle: makeCandle(),
 };
 // The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
 const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
@@ -759,7 +744,7 @@ function drawHang() {
   const h = $('hang');
   const column = style.stands && $('cdColumn');
   cdLeaves = null; // drawLeaves finds them again
-  if (column) column.innerHTML = CANDLE.column(VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620);
+  if (column) column.innerHTML = style.column(VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620);
   if (!h) return;
   if (!style.chain) return h.setAttribute('d', `M340 ${VIEW.top - 2}V22`);
   let links = '';

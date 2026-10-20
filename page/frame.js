@@ -150,7 +150,7 @@ function frame(t) {
   drawSparks(dt, s, flame.size);
   lightPaper(flame);
   drawShine(s, flame);
-  if (style.shine) drawLeaves(s);
+  if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), rot(...style.light), [125, 170], dt, s);
   for (const [k, m] of moths) {
     const aim = mothTarget(k, m, dt, s);
@@ -292,7 +292,7 @@ function lightPaper({ size, flick, pulse }) {
 }
 
 // ---- the candle's shine -------------------------------------------------------------------------------------------
-// A bare flame lights what's round it (style.shine, the candle's own numbers): the bronze's highlight, its reflection in
+// A bare flame lights what's round it (style.shine, where each grape that glints sits): the bronze's highlight, its reflection in
 // the molten pool (sliding as the flame leans, as a reflection moves with what it reflects) at
 // the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
 // on it pushed away from the lean. Above it the air shimmers (heat, for drawLight and the background, and the tip smoke
@@ -396,8 +396,8 @@ function drawShine(s, { size, flick, pulse }) {
   const pool = $('cdPoolGlint');
   put(pool, 'cx', (fx + lean * 0.6 + Math.sin(s * 5.3) * 0.6).toFixed(1)); put(pool, 'rx', (2.4 + 0.6 * flick + 0.3 * Math.sin(s * 7)).toFixed(1));
   put(pool, 'fill', core); put(pool, 'opacity', (0.55 * bright).toFixed(2));
-  [...$('cdPedestalGlints').children, ...$('cdGrapeGlints').children].forEach((c, i) => { // the pedestal's bunch first, as CANDLE.grapes
-    const [x, y] = shine.grapes[i], dx = fx + lean - x, dy = style.light[1] - y, d = Math.hypot(dx, dy), ph = i * 2.39; // spread round the twinkle
+  [...$('cdPedestalGlints').children, ...$('cdGrapeGlints').children].forEach((c, i) => { // the pedestal's bunch first, as style.shine
+    const [x, y] = shine[i], dx = fx + lean - x, dy = style.light[1] - y, d = Math.hypot(dx, dy), ph = i * 2.39; // spread round the twinkle
     put(c, 'cx', (x + dx / d * 2.4).toFixed(1)); put(c, 'cy', (y + dy / d * 2.4).toFixed(1)); put(c, 'fill', core);
     put(c, 'opacity', (0.4 * flick * bright * (0.55 + 0.45 * Math.sin(s * 1.7 + ph) ** 2)).toFixed(2));
   });
@@ -412,9 +412,10 @@ function drawShine(s, { size, flick, pulse }) {
 
 // The candle's vine leaves and tendrils (class cdLeaf, lanterns.js flutter) move in the wind: each turns about its stem
 // toward downwind by how far it points from it (up to twice as far for one pointing into the wind, not at all for one
-// already pointing with it) times the gust's strength, by its weight (smaller leaves more), plus a faint flutter of its
-// own. A gust reaches the vine from its upwind side: each leaf feels it later the further downwind it is. A leaf also grows
-// about its stem by LEAF_SIZE (lanterns.js), fully on the lower vine (`low` 1) and a sixth as much at the top (0). Found and
+// already pointing with it) times the gust's strength and 6 degrees, by its weight (smaller leaves more), plus a faint
+// flutter of its own. A gust reaches the vine from its upwind side: each leaf feels it later the further downwind it is. A
+// leaf also grows about its stem, to 3.5 times as drawn on the lower vine (`low` 1) and a sixth of the way there at the
+// top (0). Found and
 // read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
 function drawLeaves(s) {
   cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
@@ -426,7 +427,7 @@ function drawLeaves(s) {
     const g = GUST(s - 0.15 - ph * 0.03 - from * (x - 340) * 0.004), down = g > 0 ? 90 : -90;
     let turn = ((down - deg) % 360 + 360) % 360; // how far round to downwind, -180 to 180, over the top when it points straight into the wind
     if (turn > 180 || (turn === 180 && down < 0)) turn -= 360;
-    const a = k * (LEAF_GUST * Math.abs(g) * turn / 90 + LEAF_FLUTTER * Math.sin(s * (3 + ph * 0.3) + ph)), grow = low < 0 ? 1 : 1 + (LEAF_SIZE - 1) * (1 + 5 * low) / 6;
+    const a = k * (6 * Math.abs(g) * turn / 90 + 0.12 * Math.sin(s * (3 + ph * 0.3) + ph)), grow = low < 0 ? 1 : 1 + 2.5 * (1 + 5 * low) / 6;
     put(e, 'transform', `rotate(${(Math.round(a * 2) / 2).toFixed(1)} ${x} ${y})` + (grow === 1 ? '' : ` translate(${x} ${y}) scale(${grow.toFixed(2)}) translate(${-x} ${-y})`));
   }
 }

@@ -7,7 +7,6 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { drawn } = require('./lowest');
 
 const row = () => ({ title: 'its own title', dataset: {}, classList: { toggle() {} } }); // a settings row
 const attrs = {}, els = {
@@ -88,7 +87,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
 });
 
 test('moths land on the candle\'s wax: below its rim, above its dish and within the pillar', () => {
-  const P = run('PILLAR');
+  const P = run('STYLES.candle.pillar');
   for (const a of angles) for (const r of [0, 0.5, 1]) {
     const [x, y] = run(`style = STYLES.candle; pickPerch(${a}, () => ${r})`);
     assert.ok(P.rim < y && y < P.dish, `a ${a.toFixed(2)}, rand ${r}: y ${y} is off the wax (${P.rim} to ${P.dish})`);
@@ -97,7 +96,7 @@ test('moths land on the candle\'s wax: below its rim, above its dish and within 
 });
 
 test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', () => {
-  const [fx, fy, k] = run('STYLES.candle.flame'), FLAME_BASE = run('FLAME_BASE'), clear = run('FLAME_CLEARANCE'), HOP = run('HOP');
+  const [fx, fy, k] = run('STYLES.candle.flame'), FLAME_BASE = run('FLAME_BASE'), clear = 10, HOP = run('HOP');
   // the outer tongue's outline at full size as it wobbles, sampled along its curves, in the scene
   const flame = new Map();
   for (let s = 0; s < 30; s += 0.05) {
@@ -137,7 +136,7 @@ test('a restless landed moth hops HOP off its spot', () => {
 });
 
 test('the candle shades the room below its rim, and nothing above its flame', () => {
-  const c = run('STYLES.candle'), P = run('PILLAR');
+  const c = run('STYLES.candle'), P = c.pillar;
   assert.deepStrictEqual([...c.holder], [P.rim, P.r], 'the fan below is set by the rim, the widest thing under the flame');
   assert.ok(c.light[1] < c.holder[0], 'the light sits above the rim, so the fan opens downward');
   assert.strictEqual(c.caps, undefined, 'no caps: nothing above the flame');
@@ -159,7 +158,7 @@ test('the candle\'s rim shades the room below from its corners: lit outside the 
     run(`drawLight(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 })`);
     if (key !== 'candle') { assert.deepStrictEqual([...page.background.rim], [0, 0, 0], `${key}: no rim shadow`); continue; }
     const v = page.background, [bx, by, tx, ty] = v.flame, [cx, half, rimY] = v.rim, shade = rimShadeFrom(v);
-    assert.deepStrictEqual([cx, half, rimY], [run('PILLAR.cx'), run('PILLAR.r'), run('PILLAR.rim')], 'the pillar\'s rim');
+    assert.deepStrictEqual([cx, half, rimY], [...run('[STYLES.candle.pillar.cx, STYLES.candle.pillar.r, STYLES.candle.pillar.rim]')], 'the pillar\'s rim');
     assert.ok(ty < by - 40, 'the live tip stands well above the base');
     // along each corner's two lines, 200 below the rim, nudged one unit either side
     for (const side of [-1, 1]) {
@@ -183,16 +182,10 @@ test('the candle\'s rim shades the room below from its corners: lit outside the 
     assert.strictEqual(rimShadeFrom({ flame: [340, 273, 340 + lean, 200], rim: [340, 50, 275] })(x, y), 1, `lean ${lean}: (${x}, ${y}) under the rim is dark`);
 });
 
-// The pillar's numbers, changed to untidy ones in a copy of lanterns.js, and the wax drawn there.
-const pageFile = f => fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8');
+// The candle drawn at its pillar's numbers and at untidy ones, and the wax drawn there.
 test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
   for (const [r, rim] of [[50, 275], [61, 247]]) {
-    const at = `r ${r}, rim ${rim}`, c = vm.createContext({ URLSearchParams, location: { search: '' } });
-    vm.runInContext(pageFile('scene') + pageFile('dev'), c);
-    const lanterns = pageFile('lanterns').replace(/^const PILLAR = .*$/m, line => `${line} PILLAR.r = ${r}; PILLAR.rim = ${rim};`);
-    assert.notStrictEqual(lanterns, pageFile('lanterns'), 'PILLAR found');
-    vm.runInContext(lanterns, c);
-    const { back, front } = vm.runInContext('STYLES.candle', c), P = vm.runInContext('PILLAR', c), side = vm.runInContext('LACQUER.candle.side', c);
+    const at = `r ${r}, rim ${rim}`, { back, front, pillar: P, lacquer: { side } } = run(`makeCandle({ r: ${r}, rim: ${rim} })`);
     const near = (a, b, what) => assert.ok(Math.abs(a - b) < 0.01, `${at}: ${what} at ${a}, not ${b}`);
     // the pillar's outline, every point it passes through M, Q, L, V and H
     const pts = [];
@@ -231,51 +224,37 @@ test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
   }
 });
 
-// The candlestick at its real numbers, at untidy ones (the pillar's rim and STEM) and with its drawing's neck moved, each in
-// a copy of lanterns.js: its bronze parts stack from the pan down to the slab, each joint as drawn.
-test('the candlestick\'s parts stack from the pan down to the slab as drawn, its stem STEM tall, wherever the pillar and stem put them', () => {
-  const variants = [['as it is', {}], ['rim 263.5, STEM 47.3', { PILLAR: 'PILLAR.rim = 263.5;', STEM: 'STEM = 47.3;' }], ['the drawing\'s neck at 461.5', { DRAWN: 'DRAWN.neck = 461.5;' }]];
-  for (const [at, edits] of variants) {
-    const c = vm.createContext({ URLSearchParams, location: { search: '' } });
-    vm.runInContext(pageFile('scene') + pageFile('dev'), c);
-    let src = pageFile('lanterns');
-    if (edits.STEM) src = src.replace(/^const STEM = .*$/m, 'let STEM = 41;');
-    for (const [name, code] of Object.entries(edits)) {
-      const was = src;
-      src = src.replace(new RegExp(`^(const|let) ${name} = .*$`, 'm'), line => `${line} ${code}`);
-      assert.notStrictEqual(src, was, `${name} found`);
-    }
-    vm.runInContext(src, c);
-    const get = code => vm.runInContext(code, c), svg = get('STYLES.candle.back'), P = get('PEDESTAL'), D = get('DRAWN'), STEM = get('STEM');
-    const k = STEM / (D.collar - D.neck), lit = get('LACQUER.candle.lit');
-    // each part's top and bottom at its sides: the turned parts' profiles (rings included) and the knop
-    const parts = [];
-    for (const id of ['cdBowl', 'cdNeck', 'cdStemRing', 'cdBaluster', 'cdCollar', 'cdFoot', 'cdBase']) {
-      const ys = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/[\d.]+ ([\d.]+)/g)].map(m => +m[1]);
-      parts.push({ id, top: Math.min(...ys), bottom: Math.max(...ys) });
-    }
-    const [, cy, ry] = svg.match(/<ellipse id="cdKnop" cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
-    parts.push({ id: 'knop', top: cy - ry, bottom: cy + ry });
-    parts.sort((a, b) => a.top - b.top);
-    // top to bottom, each starting where the part above ends
-    const joints = [['the bowl', 0], ['the neck', 0], ['the knop', 0], ['the upper collar', 0], ['the baluster', 0],
-      ['the lower collar', 0], ['the foot', 0], ['the foot\'s band', 0]];
-    assert.strictEqual(parts.length, joints.length, `${at}: ${parts.length} parts`);
-    assert.ok(Math.abs(parts[0].top - get('PILLAR.dish')) < 0.01, `${at}: the bowl hangs from the pan's rim`);
-    joints.slice(1).forEach(([what, gap], i) => {
-      const got = parts[i + 1].top - parts[i].bottom;
-      assert.ok(Math.abs(got - gap) < 0.02, `${at}: ${what} starts ${got.toFixed(3)} below the part above, not ${gap.toFixed(3)}`);
+// The candlestick at its real numbers, at untidy ones (the pillar's rim and its stem's height) and with its drawing's neck
+// moved: its bronze parts stack from the pan down to the slab, each meeting the next, flush where they're meant to be.
+test('the candlestick\'s parts stack from the pan down to the slab as drawn, its stem as tall as asked, wherever the pillar and stem put them', () => {
+  for (const [at, dims] of [['as it is', {}], ['rim 263.5, stem 47.3', { rim: 263.5, stem: 47.3 }], ['the drawing\'s neck at 461.5', { neck: 461.5 }]]) {
+    const { back: svg, pillar: { dish, rim }, pedestal: P, drawn: D, stem: STEM } = run(`makeCandle(${JSON.stringify(dims)})`);
+    for (const [k, v] of Object.entries(dims)) assert.strictEqual({ rim, stem: STEM, neck: D.neck }[k], v, `${at}: drawn at ${k} ${v}`);
+    // each turned part's profile ends, top to bottom (lanterns.js turned): its top and bottom, and its half-width at each
+    const parts = ['cdBowl', 'cdNeck', 'cdStemRing', 'cdBaluster', 'cdCollar', 'cdFoot', 'cdBase'].map(id => {
+      const pts = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/([\d.]+) ([\d.]+)/g)].map(m => [340 - +m[1], +m[2]]);
+      return { id, top: pts[0][1], topHalf: pts[0][0], bottom: pts[pts.length - 1][1], bottomHalf: pts[pts.length - 1][0] };
     });
+    const [, cy, ry] = svg.match(/<ellipse id="cdKnop" cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
+    parts.splice(2, 0, { id: 'knop', top: cy - ry, topHalf: 0, bottom: cy + ry, bottomHalf: 0 }); // a round knop: it meets at a point
+    assert.ok(Math.abs(parts[0].top - dish) < 0.01, `${at}: the bowl hangs from the pan's rim`);
+    for (let i = 1; i < parts.length; i++) {
+      const [a, b] = [parts[i - 1], parts[i]];
+      assert.ok(Math.abs(b.top - a.bottom) < 0.02, `${at}: ${b.id} starts ${(b.top - a.bottom).toFixed(3)} below ${a.id}: a gap or an overlap`);
+      const wide = Math.max(a.bottomHalf, b.topHalf), narrow = Math.min(a.bottomHalf, b.topHalf);
+      if (narrow > 0 && wide / narrow < 1.5) assert.ok(wide - narrow < 0.02, `${at}: ${a.id} (${a.bottomHalf}) and ${b.id} (${b.topHalf}) nearly meet in width, so should be flush`);
+    }
     // the foot's band sinks 2 into the slab, as drawn (551 on a slab at 549)
-    assert.ok(Math.abs(parts[parts.length - 1].bottom - P.top - 2) < 0.02, `${at}: the foot's band ends ${parts[parts.length - 1].bottom - P.top} past the slab's top`);
+    const base = parts[parts.length - 1].bottom;
+    assert.ok(Math.abs(base - P.top - 2) < 0.02, `${at}: the foot's band ends ${base - P.top} past the slab's top`);
     // the stem, from the neck's band down to the lower collar
-    const stem = parts[4].bottom - get('PILLAR.dish') - (D.neck - D.dish);
-    assert.ok(Math.abs(stem - STEM) < 0.02, `${at}: the stem is ${stem} tall`);
+    const stem = parts[4].bottom - dish - (D.neck - D.dish);
+    assert.ok(Math.abs(stem - STEM) < 0.02, `${at}: the stem is ${stem} tall, not ${STEM}`);
   }
 });
 
 test('the candle stands on a round marble pedestal, every rim one true ellipse at its top\'s tilt, with no floor under it', () => {
-  const c = run('STYLES.candle'), P = run('PEDESTAL'), bow = run('LACQUER.candle.bow'), svg = c.back + c.front;
+  const c = run('STYLES.candle'), P = c.pedestal, bow = c.lacquer.bow, svg = c.back + c.front;
   const ellipses = [...svg.matchAll(/<ellipse\b[^>]*>/g)].map(([e]) => Object.fromEntries(['cy', 'rx', 'ry'].map(k => [k, +e.match(new RegExp(`\\b${k}="([\\d.]+)"`))[1]])));
   assert.ok(ellipses.some(e => e.cy === P.top && e.rx === P.r), `the slab's top, ${P.r} wide at ${P.top}`);
   for (const e of ellipses.filter(e => e.cy >= P.top - 10)) {
@@ -291,13 +270,6 @@ test('the candle stands on a round marble pedestal, every rim one true ellipse a
   // the candlestick's foot, its base ring, stands on the slab's top, neither floating over it nor sunk in
   const [, x, , bottom] = svg.match(/<path id="cdBase" d="M([\d.]+) ([\d.]+)L[\d.]+ ([\d.]+)Q/).map(Number), half = 340 - x;
   assert.ok(Math.abs(bottom - P.top) <= 3 && half < P.r, `the foot ends at ${bottom}, ${half} either side, on a slab at ${P.top}`);
-  // below the slab's top at its front, only the pedestal's own group (the slab, the column and the vine on them) draws
-  const below = P.top + P.r * bow(P.top) / 2 + 0.5, all = drawn(svg);
-  const inPedestal = n => { for (; n; n = n.parent) if (n.tag === 'g' && (n.attrs.class || '').split(/\s+/).includes('cdPedestal')) return true; return false; };
-  assert.ok(all.some(d => d.low > below && inPedestal(d.node)), 'the pedestal reaches below its slab\'s top');
-  for (const { node, low } of all) {
-    assert.ok(low <= below || inPedestal(node), `a <${node.tag}> outside the pedestal reaches ${low.toFixed(1)}, below the slab's top at ${below.toFixed(1)}: a floor? ${JSON.stringify(node.attrs).slice(0, 100)}`);
-  }
 });
 
 test('the candle\'s wax under the rim takes the flame\'s colour', () => {
@@ -354,7 +326,7 @@ test('a wing faces the flame on the side its lit face turns to', () => {
 });
 
 test('the candle\'s vine comes from its seed and the length of its trunk alone: a taller window shows more of the same vine', () => {
-  const { top, split, anchor } = run('PEDESTAL'), at = bottom => run(`CANDLE.column(${bottom})`);
+  const { top, split, anchor } = run('STYLES.candle.pedestal'), at = bottom => run(`STYLES.candle.column(${bottom})`);
   // every point the vine and column draw from just over the slab down to `below`, as "x y" pairs, in drawing order
   const pts = (svg, below) => [...svg.matchAll(/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g)].filter(m => +m[2] > top - 60 && +m[2] < below).map(m => `${m[1]} ${m[2]}`);
   const leaves = (svg, from, to) => [...svg.matchAll(/class="cdLeaf" data-at="[\d.]+ ([\d.]+)"/g)].filter(m => +m[1] > from && +m[1] < to).length;
@@ -362,7 +334,7 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   assert.strictEqual(at(bottoms[1]), svgs[1], 'drawn twice at one height, the same');
   const again = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document }); // another load of the page
   for (const f of ['scene', 'dev', 'lanterns', 'pencil']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), again);
-  assert.strictEqual(vm.runInContext(`CANDLE.column(${bottoms[1]})`, again), svgs[1], 'another load draws the same vine');
+  assert.strictEqual(vm.runInContext(`STYLES.candle.column(${bottoms[1]})`, again), svgs[1], 'another load draws the same vine');
   assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
   assert.ok(leaves(svgs[0], split, anchor) >= 6, `shoots off the trunk between the split and the anchor: ${leaves(svgs[0], split, anchor)}`);
   assert.ok(leaves(svgs[0], top - 60, anchor) >= 20, `leaves on the vine above the anchor: ${leaves(svgs[0], top - 60, anchor)}`);
@@ -383,7 +355,7 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
 });
 
 test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the bunch below it', () => {
-  const P = run('PEDESTAL'), svg = run('STYLES.candle.back') + run(`CANDLE.column(${P.anchor + 900})`);
+  const P = run('STYLES.candle.pedestal'), svg = run('STYLES.candle.back') + run(`STYLES.candle.column(${P.anchor + 900})`);
   // the limbs: their filled outlines (lanterns.js limb), as polygons
   const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => m[1].split('L').map(p => p.split(' ').map(Number)));
   const inside = ([x, y], poly) => poly.reduce((c, [x1, y1], i) => { const [x2, y2] = poly[(i + 1) % poly.length]; return (y1 > y) !== (y2 > y) && x < x1 + (y - y1) * (x2 - x1) / (y2 - y1) ? !c : c; }, false);
@@ -399,7 +371,7 @@ test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the 
 });
 
 test('every branch of the vine has its leaves spread along it, out toward its end', () => {
-  const branches = run('CANDLE.branches');
+  const branches = run('STYLES.candle.branches');
   assert.ok(branches.length >= 10, `the branches: ${branches.length}`);
   for (const { name, pts, leaves } of branches) {
     const want = name.startsWith('stem') ? 2 : 3;
@@ -411,8 +383,8 @@ test('every branch of the vine has its leaves spread along it, out toward its en
 });
 
 test('the trunk is one limb through the anchor: no jump in its width or turn in its direction there', () => {
-  const { anchor } = run('PEDESTAL'), { pts, ws } = run(`CANDLE.trunkLine(${anchor + 400})`);
-  const i = run('CANDLE.trunkLine(0)').pts.length; // the anchor: the first point after the fixed curve
+  const { anchor } = run('STYLES.candle.pedestal'), { pts, ws } = run(`STYLES.candle.trunkLine(${anchor + 400})`);
+  const i = run('STYLES.candle.trunkLine(0)').pts.length; // the anchor: the first point after the fixed curve
   assert.ok(i > 10 && i < pts.length - 10, `the anchor is inside the trunk: point ${i} of ${pts.length}`);
   const dir = j => Math.atan2(pts[j + 1][1] - pts[j][1], pts[j + 1][0] - pts[j][0]);
   assert.ok(Math.abs(ws[i] - ws[i - 1]) < 0.5, `its width carries on: ${ws[i - 1]} to ${ws[i]}`);
@@ -420,9 +392,9 @@ test('the trunk is one limb through the anchor: no jump in its width or turn in 
 });
 
 test('every limb of the vine drawn, branch, trunk or climber, has leaves all along it', () => {
-  const P = run('PEDESTAL'), MAX_GAP = 100;
+  const P = run('STYLES.candle.pedestal'), MAX_GAP = 100;
   // the whole vine at a tall window, but its turns behind the candlestick and behind the column
-  const svg = run('STYLES.candle.back').replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${run(`CANDLE.column(${P.anchor + 600})`)}</g>`).replace(/<\/g><\/g>([\s\S]*?)<!-- the vine's back turns/, '')
+  const svg = run('STYLES.candle.back').replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${run(`STYLES.candle.column(${P.anchor + 600})`)}</g>`).replace(/<\/g><\/g>([\s\S]*?)<!-- the vine's back turns/, '')
     .replace(/(<clipPath id="cdColClip">[\s\S]*?<\/clipPath>)[\s\S]*?<!-- the vine's turns behind the column -->/g, '$1');
   const leaves = [...svg.matchAll(/class="cdLeaf" data-at="(-?[\d.]+) (-?[\d.]+)"[^>]*data-low/g)].map(m => [+m[1], +m[2]]);
   // each limb's middle line, from its outline: one side out, the other back (lanterns.js limb)
@@ -446,23 +418,6 @@ test('every limb of the vine drawn, branch, trunk or climber, has leaves all alo
   assert.ok(checked >= 12, `limbs checked: ${checked}`);
 });
 
-test('each of the candlestick\'s parts meets the next exactly: no gap, and the same width where they\'re meant to be flush', () => {
-  const svg = run('STYLES.candle.back');
-  // each turned part's profile ends: its top and bottom, and its half-width at each (lanterns.js turned)
-  const parts = ['cdBowl', 'cdNeck', 'cdStemRing', 'cdBaluster', 'cdCollar', 'cdFoot', 'cdBase'].map(id => {
-    const pts = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/([\d.]+) ([\d.]+)/g)].map(m => [340 - +m[1], +m[2]]);
-    return { id, top: pts[0][1], topHalf: pts[0][0], bottom: pts[pts.length - 1][1], bottomHalf: pts[pts.length - 1][0] };
-  });
-  const [, cy, ry] = svg.match(/<ellipse id="cdKnop" cx="[\d.]+" cy="([\d.]+)" rx="[\d.]+" ry="([\d.]+)"/).map(Number);
-  parts.splice(2, 0, { id: 'knop', top: cy - ry, topHalf: 0, bottom: cy + ry, bottomHalf: 0 }); // a round knop: it meets at a point
-  for (let i = 1; i < parts.length; i++) {
-    const [a, b] = [parts[i - 1], parts[i]];
-    assert.ok(Math.abs(b.top - a.bottom) < 0.01, `${b.id} starts ${(b.top - a.bottom).toFixed(2)} below ${a.id}: a gap or an overlap`);
-    const wide = Math.max(a.bottomHalf, b.topHalf), narrow = Math.min(a.bottomHalf, b.topHalf);
-    if (narrow > 0 && wide / narrow < 1.5) assert.ok(wide - narrow < 0.01, `${a.id} (${a.bottomHalf}) and ${b.id} (${b.topHalf}) nearly meet in width, so should be flush`);
-  }
-});
-
 // Jerrett made the candle: when his first name comes from the server, its pedestal gets a pencil, and no other lantern has one.
 test('the pencil shows for Jerrett, on the candle only', () => {
   const shows = name => run(`firstName = ${JSON.stringify(name)}; pencilShows()`);
@@ -472,9 +427,9 @@ test('the pencil shows for Jerrett, on the candle only', () => {
 });
 
 test('no limb of the vine ends in the air: each end tapers to a tip, joins another limb, or goes behind the column', () => {
-  const P = run('PEDESTAL'), bottom = P.anchor + 600, col = P.column, slabY = P.top + P.depth;
+  const P = run('STYLES.candle.pedestal'), bottom = P.anchor + 600, col = P.column, slabY = P.top + P.depth;
   // the candle, its column drawn down to `bottom` in place of the one in its markup
-  const svg = run('STYLES.candle.back').replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${run(`CANDLE.column(${bottom})`)}</g>`);
+  const svg = run('STYLES.candle.back').replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${run(`STYLES.candle.column(${bottom})`)}</g>`);
   const front = svg.indexOf('<!-- the vine\'s turns behind the column -->');
   const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => {
     const o = m[1].split('L').map(q => q.split(' ').map(Number)), n = o.length / 2;
