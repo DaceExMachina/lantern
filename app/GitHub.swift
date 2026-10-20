@@ -76,9 +76,10 @@ extension LanternServer {
     // A session owns the PRs it created, plus its branch's PR, but only if it's the only session in that folder
     // (sessions sharing the main checkout don't each own whatever branch happens to be checked out there).
     func refreshGitHub() {
-        if refreshing || (accounts.count == 0 && !truthy(settings["github"])) { return }
+        if accounts.count == 0 && !truthy(settings["github"]) { return }
+        if refreshing { refreshAgain = true; return }
         refreshing = true
-        let list = sessions.items.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
+        let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
         let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }
         DispatchQueue.global().async {
             // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
@@ -121,11 +122,12 @@ extension LanternServer {
                 for url in created { if let p = all[url] { prs[url] = p } }
                 github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1)] }
             }
-            // The stale list: my open PRs that no session owns and nobody has touched for a week, oldest first.
+            // The stale list: my open PRs that no session owns and nobody has touched for a week (quiet), oldest first.
             let owned = Set(github.values.flatMap { $0.map { str($0["url"]) } }), weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
             let iso = ISO8601DateFormatter()
+            let quiet = Set(all.items.filter { iso.date(from: str($0.1["updatedAt"])).map { $0 < weekAgo } ?? false }.map(\.0))
             let dead: [JSON] = all.items.compactMap { url, p in
-                guard !owned.contains(url), let at = iso.date(from: str(p["updatedAt"])), at < weekAgo else { return nil }
+                guard !owned.contains(url), quiet.contains(url) else { return nil }
                 return ["url": url, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))",
                         "need": prNeed(p), "updatedAt": p["updatedAt"]!]
             }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }
@@ -135,11 +137,12 @@ extension LanternServer {
                 self.stale = dead
                 for (id, g) in github { self.sessions[id]?["github"] = g }
                 // a failed query would make every PR look gone, so only a complete answer goes in the log
-                if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), closed: closed) }
+                if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
                 self.saveGitHubCache()
                 self.refreshing = false
                 self.broadcast()
+                if self.refreshAgain { self.refreshAgain = false; self.refreshGitHub() }
                 // then, in the background, find which old sessions made any dead PRs we haven't looked up yet
                 let missing = self.stale.map { str($0["url"]) }.filter { self.owners[$0] == nil }
                 if !missing.isEmpty {

@@ -23,7 +23,7 @@ final class Stats {
     private let queue = DispatchQueue(label: "lantern.stats")
     private let file: String
     private var earned = Set<String>() // "id day" already in the table, so live checks don't write on every broadcast
-    var onEarn: (String) -> Void = { _ in } // a badge just earned (its id), on the main queue: the server tells open pages
+    var onEarn: (String) -> Void = { _ in } // a badge earned for the first time ever (its id), on the main queue: the server tells open pages
     var dayStart = 0 // the day rollover, in minutes after midnight (settings.dayStart)
 
     init(_ file: String) { self.file = file }
@@ -222,10 +222,10 @@ final class Stats {
                       (e.kind = 'pr' AND json_extract(e.data, '$.change') = 'merged' AND EXISTS (SELECT 1 FROM events g WHERE g.kind = 'stale'
                         AND json_extract(g.data, '$.how') = 'revived' AND json_extract(g.data, '$.url') = json_extract(e.data, '$.url') AND g.time < e.time)))
                     """) { got.append("revived") }
-                // Séance: five stale PRs revived in a week (touched again, or picked up by a session)
-                if self.run("SELECT count(*) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
+                // Séance: five stale PRs revived in a week (touched again), each PR once however often it came back
+                if self.run("SELECT count(DISTINCT json_extract(data, '$.url')) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') = 'revived' AND time >= ?1 AND time < ?2", [e - week, e]).first?[0] == "1" { got.append("seance") }
                 // Ghostbuster: five stale PRs merged or closed in a day
-                if yes("SELECT count(*) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
+                if yes("SELECT count(DISTINCT json_extract(data, '$.url')) >= 5 FROM events WHERE kind = 'stale' AND json_extract(data, '$.how') IN ('merged', 'closed') AND time >= ?1 AND time < ?2") { got.append("ghostbuster") }
                 if self.lightsOut(f, min(e, t)) { got.append("lights_out") }
                 if over {
                     // Warm all day: an hour or more of sessions, and the lantern warm nine tenths of the time it ran outside quiet hours
@@ -249,10 +249,12 @@ final class Stats {
         }
     }
 
-    /// Writes a badge the first time it's earned that day, and tells onEarn only when the row is new.
+    /// Writes a badge for the day, and tells onEarn only if no earlier day ever had it: the firefly swarm is for the first
+    /// time. Catch-up goes oldest day first, so a first-ever badge found there still gets its one swarm.
     private func give(_ id: String, _ day: String, _ t: Double) {
+        let first = run("SELECT count(*) FROM achievements WHERE id = ?", [id]).first?[0] == "0"
         run("INSERT OR IGNORE INTO achievements (id, day, time) VALUES (?, ?, ?)", [id, day, t])
-        if sqlite3_changes(db) > 0 { DispatchQueue.main.async { self.onEarn(id) } }
+        if first { DispatchQueue.main.async { self.onEarn(id) } }
     }
 
     /// Lights Out: two hours or more between sessions (so lunch doesn't count) with the lantern open and nothing alive at all, outside quiet hours.

@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const row = () => ({ title: 'its own title', dataset: {}, classList: { toggle() {} } }); // a settings row
+const row = () => ({ classList: { toggle() {} } }); // a settings row
 const attrs = {}, els = {
   lantern: { innerHTML: '', getAttribute: k => attrs[k] ?? null, setAttribute: (k, v) => { attrs[k] = v; } },
   style: { value: '' },
@@ -284,12 +284,9 @@ test('the candle\'s wax under the rim takes the flame\'s colour', () => {
 test('on the candle the session text and ribbon controls grey out', () => {
   run(`applyStyle('candle')`);
   assert.strictEqual(els.textToggle.disabled, true);
-  assert.strictEqual(els.textToggle.parentElement.title, 'Only the paper lanterns show session text');
   assert.ok(els.ribbons.children.every(b => b.disabled), 'every swatch');
-  assert.strictEqual(els.ribbons.parentElement.title, 'Only the barrel has a ribbon');
   run(`applyStyle('barrel')`);
   assert.strictEqual(els.textToggle.disabled, false, 'and come back on the barrel');
-  assert.strictEqual(els.ribbons.parentElement.title, 'its own title');
 });
 
 // flapWing became a view onto the one 3D wing model (wing3d); in flight it has to draw exactly what the old

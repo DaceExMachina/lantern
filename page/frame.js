@@ -483,7 +483,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
     // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
     // the way to the flame's colour at five sixths the brightness, and toward the flame's core as it burns brighter: the
     // room behind it brightens with the flame too, and a wall that didn't would fade into it at full flame
-    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, col: mix(mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6), pal('core'), 0.65 * strength) } : null,
+    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, heat, col: mix(mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6), pal('core'), 0.65 * strength) } : null,
     bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
 }
