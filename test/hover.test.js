@@ -41,6 +41,23 @@ test('shift+click runs an area\'s snooze menu, a plain click runs its click acti
   assert.deepStrictEqual(calls, ['click', 'snooze']);
 });
 
+test('a tap shows a moth\'s card without running its click, and tapping the same moth again puts it away', () => {
+  const calls = [], card = { classList: { add() {}, remove: () => calls.push('hide') } };
+  vm.runInContext('globalThis.$ = () => globalThis.cardEl; globalThis.clearTimeout = () => {}; globalThis.hovered = null; globalThis.renderCard = () => {}', page);
+  page.cardEl = card;
+  const moth = {}, other = {};
+  const hoverZone = vm.runInContext('hoverZone', page);
+  const zone = hoverZone({}, moth, () => calls.push('click')), zone2 = hoverZone({}, other, () => calls.push('click'));
+  const tapZone = vm.runInContext('tapZone', page), hovered = () => vm.runInContext('hovered', page);
+  tapZone(zone);
+  assert.strictEqual(hovered(), moth, 'first tap shows its card');
+  tapZone(zone2);
+  assert.strictEqual(hovered(), other, 'tapping another moth moves the card to it');
+  tapZone(zone2);
+  assert.strictEqual(hovered(), null, 'the same moth again dismisses');
+  assert.deepStrictEqual(calls, ['hide'], 'and no tap ran a click action');
+});
+
 test('landed moths 20 apart (r 32) still split at their midpoint', () => {
   const a = circle(0, 0, 32), b = circle(20, 0, 32);
   assert.strictEqual(zoneAt([a, b], 9, 0), a);
