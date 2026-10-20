@@ -278,10 +278,9 @@ test('smoke curls into Ss that swell from nothing as it ages', () => {
   const swing = age => Math.max(...nows.map(n => Math.abs(still(age, n, 1))));
   assert.ok(swing(0.1) < 3 && swing(2) > 21, `the curl swells with age: ${swing(0.1).toFixed(2)} then ${swing(2).toFixed(2)}`);
   for (const n of nows) for (let age = 0; age < 6; age += 0.2)
-    assert.ok(Math.abs(still(age + 0.2, n, 1) - still(age, n, 1)) < 15, `neighbours ${TRAIL_STEP}s apart stay together, at ${age.toFixed(1)}s`);
+    assert.ok(Math.abs(still(age + 0.2, n, 1) - still(age, n, 1)) < 15, `neighbours 0.2s apart stay together, at ${age.toFixed(1)}s`);
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
 });
-const TRAIL_STEP = 0.25;
 test('a trail is full width while its head is on the moth, and tapers to a point there once it has stopped following', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float trailTaper\(float age, float head\) \{.*\}/);
   assert.ok(src, 'background.js has trailTaper');
@@ -292,13 +291,29 @@ test('a trail is full width while its head is on the moth, and tapers to a point
   assert.strictEqual(taper(1.5, 1), 1, 'and full width a little way back');
 });
 
+test('a fast moth\'s trail is laid by distance, within its budget, and curls into Ss across its path', t => {
+  const wall = clock.wall;
+  t.after(() => { clock.wall = wall; });
+  const { els, document } = domStub(), ctx = context(1000, document), { hit } = ctx.SCORCH, [smoke, TRAIL] = ctx.run('[smoke, TRAIL]');
+  const m = sessionMoth('sess-fast', { g: els.moths.appendChild(node('g')) });
+  ctx.moths.set(m.key, m);
+  const step = () => { ctx.perf.t += 50; clock.wall += 50; ctx.mothTarget(m.key, m, 0.05, ctx.perf.t / 1000); };
+  while (!m.scorch?.hit) step();
+  const y0 = m.y;
+  while (!m.scorch.trailDone) { m.x += 6; m.y = y0; step(); } // flying straight right at 120 units a second
+  const laid = m.scorch.trail.slice(0, -1); // all but the last, where it stopped following
+  assert.ok(laid.length <= TRAIL.most, `within its budget: ${laid.length} points`);
+  for (let i = 1; i < laid.length; i++) assert.ok(laid[i][0] - laid[i - 1][0] <= TRAIL.apart + 6, `a point every ${TRAIL.apart} units or so: ${laid[i][0] - laid[i - 1][0]} at ${i}`);
+  const across = smoke(clock.wall, ctx.perf.t / 1000, 0, null).trail.filter(p => p[2] > 0.3).map(p => Math.abs(p[1] - y0));
+  assert.ok(Math.max(...across) > TRAIL.s / 2 && Math.max(...across) <= TRAIL.s + 1e-9, `curled across its straight path, up to ${TRAIL.s}: ${Math.max(...across).toFixed(2)}`);
+});
+
 test('a scorched moth trails one band of smoke along its path, aging toward its old end, and bounded', t => {
   const wall = clock.wall;
   t.after(() => { clock.wall = wall; }); // the next test's windows start where they would without this one
   const { els, document } = domStub(), ctx = context(1000, document), { hit } = ctx.SCORCH;
   const [smoke, TRAIL, TRAIL_POINTS, life] = ctx.run('[smoke, TRAIL, TRAIL_POINTS, PLUME.life]'), smokeTrail = () => smoke(clock.wall, ctx.perf.t / 1000, 0, null).trail, smokeDrift = ctx.run('smokeDrift');
-  assert.strictEqual(TRAIL[1], TRAIL_STEP);
-  assert.ok(ctx.SCORCH.length >= hit + TRAIL[0] + life, 'the episode lasts as long as its smoke, so it never ends mid-trail');
+  assert.ok(ctx.SCORCH.length >= hit + TRAIL.secs + life, 'the episode lasts as long as its smoke, so it never ends mid-trail');
   const make = key => { const m = sessionMoth(key, { g: els.moths.appendChild(node('g')) }); ctx.moths.set(key, m); return m; };
   const step = (ms, dt = 0.05) => { ctx.perf.t += dt * 1000; clock.wall += dt * 1000; for (const m of ms) ctx.mothTarget(m.key, m, dt, ctx.perf.t / 1000); };
   const m = make('sess-trail');
@@ -306,7 +321,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const a = smokeTrail(), head = a[0];
   assert.ok(a.length >= 4, `points all along its path: ${a.length}`);
   assert.deepStrictEqual([head[0], head[1], head[2]], [m.x, m.y, 0], 'its head first, joined to the moth while it smokes');
-  assert.ok(a.every(p => p[2] >= 0 && p[3] === a[0][3]), 'one band, unbroken, on one clock');
+  assert.ok(a.every(p => p[2] >= 0), 'one band, unbroken');
   for (let i = 1; i < a.length; i++) assert.ok(a[i][2] > a[i - 1][2], `older toward its old end, at ${i}`);
   // a frame as frame() runs it: the moth's step, then its move (mothMove, here 3 units over), then the smoke drawn. Its
   // head sits where the moth is drawn, on the frames it leaves a point too
@@ -321,13 +336,13 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   let before = smokeTrail()[0];
   while (!m.scorch.trailDone) { before = smokeTrail()[0]; fly(); }
   const after = smokeTrail()[0], jump = Math.hypot(after[0] - before[0], after[1] - before[1]);
-  assert.ok(m.scorch.t - hit >= TRAIL[0] && m.scorch.t - hit < TRAIL[0] + 0.1, `it stopped following ${TRAIL[0]}s after the hit`);
+  assert.ok(m.scorch.t - hit >= TRAIL.secs && m.scorch.t - hit < TRAIL.secs + 0.1, `it stopped following ${TRAIL.secs}s after the hit`);
   assert.ok(jump <= 1, `its head stays where it was as the smoke stops following: it jumped ${jump.toFixed(2)}`);
-  const left = after[0] - smokeDrift(ctx.perf.t / 1000, after[2]); // where it was left, before the wind's push
+  const left = [after[0] - smokeDrift(ctx.perf.t / 1000, after[2]), after[1]]; // where it was left, before the wind's push
   for (let i = 0; i < 5; i++) fly();
-  const later = smokeTrail()[0];
-  assert.deepStrictEqual([later[0] - smokeDrift(ctx.perf.t / 1000, later[2]), later[1]], [left, after[1]], 'and stays there as the moth flies on, but for the wind');
-  while (m.scorch && m.scorch.t < hit + TRAIL[0] + life) step([m]);
+  const later = smokeTrail()[0], off = Math.hypot(later[0] - smokeDrift(ctx.perf.t / 1000, later[2]) - left[0], later[1] - left[1]);
+  assert.ok(off <= TRAIL.s, `and stays there as the moth flies on, but for the wind and its curl: ${off.toFixed(2)} off`);
+  while (m.scorch && m.scorch.t < hit + TRAIL.secs + life) step([m]);
   assert.strictEqual(smokeTrail().length, 0, 'gone');
   // twelve moths due at once: only `smokers` start (the rest wait their turn), each its own band, parted by a point aged
   // -1, every point of every trail drawn, within TRAIL_POINTS
@@ -340,7 +355,7 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   const drawn = scorched.reduce((sum, n) => sum + n.scorch.trail.length + (n.scorch.trail.at(-1)[2] === n.scorch.t || n.scorch.trailDone ? 0 : 1), 0) + smokers - 1; // each trail, joined to its moth, parted from the next
   assert.strictEqual(c.length, drawn, 'every point drawn');
   assert.strictEqual(c.filter(p => p[2] === -1).length, smokers - 1, 'parted between moths');
-  assert.ok(ctx.run('SMOKERS_MAX * (Math.ceil(TRAIL[0] / TRAIL[1]) + 3) <= TRAIL_POINTS && 1 + SMOKERS_MAX <= PLUMES'), 'the most that can smoke fit the shader');
+  assert.ok(ctx.run('SMOKERS_MAX * (TRAIL.most + 3) <= TRAIL_POINTS && 1 + SMOKERS_MAX <= PLUMES'), 'the most that can smoke fit the shader');
 });
 
 test('every window scorches a moth at the same moments, whatever its own clocks and whenever it opened, with no Math.random', () => {

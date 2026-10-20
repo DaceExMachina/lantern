@@ -123,7 +123,7 @@ uniform vec2 uRes; uniform vec4 uBox; uniform vec3 uBg; uniform float uAmbient;
 uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float uRingA;
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec3 uSmoke; uniform vec3 uSmokeCol;
-uniform vec4 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
+uniform vec3 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
 uniform float uDrift[13]; // how far the wind has carried smoke aside, at ages 0 to PLUME.life in twelfths (frame.js smokeDrift)
 ${LIGHT}
 const float RISE = 29.0; // how fast smoke rises, units a second
@@ -172,9 +172,9 @@ float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
 // of a second. Scalars only, so the test can run it as JS.
 float trailTaper(float age, float head) { return 1.0 - 0.85 * smoothstep(0.0, 0.3, head) * (1.0 - smoothstep(head, head + 0.35, age)); }
 // How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
-// bent and spread as a plume's smoke is (smokeBend, spread), fainter the older it is and gone at the end of its life;
+// spread as a plume's smoke is (spread), fainter the older it is and gone at the end of its life;
 // width, strength and age eased between them, the thickest of the segments near p so their joins don't double up.
-// Each point is where it was left, its age, and its moth's clock, each trail's head (its newest) first; an age below 0
+// Each point is where it is (frame.js smoke bends and curls it) and its age, each trail's head (its newest) first; an age below 0
 // parts one moth's trail from the next. Its head tapers once it leaves the moth (trailTaper) and its tail fades out as it
 // ages, so neither end looks cut off.
 float trailSmoke(vec2 p) {
@@ -182,10 +182,10 @@ float trailSmoke(vec2 p) {
   vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, and its strength (-1: none)
   for (int i = 0; i < ${TRAIL_POINTS}; i++) {
     if (i >= uTrailN) break;
-    vec4 q = uTrail[i];
+    vec3 q = uTrail[i];
     if (a.z < 0.0) head = q.z; // a new trail: this is its head
     float sp = spread(q.z), w = size * 2.4 * sp * trailTaper(q.z, head);
-    vec3 b = vec3(q.x + size * smokeBend(q.z, q.w, 1.0), q.y - size * RISE * q.z, 0.6 * (1.0 - q.z / uSmoke.y) / sqrt(sp));
+    vec3 b = vec3(q.x, q.y - size * RISE * q.z, 0.6 * (1.0 - q.z / uSmoke.y) / sqrt(sp));
     if (q.z < 0.0) b.z = -1.0;
     if (a.z > 0.0 && b.z > 0.0) {
       vec2 ab = b.xy - a.xy;
@@ -378,7 +378,7 @@ function drawBackground(v) {
     gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));
     gl.uniform2fv(u['uPlumeBase[0]'], v.plumes.flatMap(q => q.slice(8, 10)));
   }
-  gl.uniform1i(u.uTrailN, v.trail.length); if (v.trail.length) gl.uniform4fv(u['uTrail[0]'], v.trail.flat());
+  gl.uniform1i(u.uTrailN, v.trail.length); if (v.trail.length) gl.uniform3fv(u['uTrail[0]'], v.trail.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

@@ -325,7 +325,7 @@ const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 1
 // lanes opening as it burns harder (`from`, the strength each opens at), so it smokes more often the busier things get.
 // It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
 // scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
-// passed every TRAIL[1] seconds for TRAIL[0] after the hit, joined to the moth while it's still smoking. At most `smokers`
+// passed over TRAIL.secs after the hit (state.js TRAIL), joined to the moth while it's still smoking. At most `smokers`
 // moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
 // none of it is ever dropped.
 const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
@@ -345,7 +345,7 @@ let flamePlume = null; // the flame's plume going: its key, when it was let go (
 // first, from `tip` (its live tip, null without a bare flame) at the flame's `strength`, then the singes. Each plume's
 // newest smoke rises from its base: the flame's live tip, so its smoke always leaves the flame however it leans. Each of
 // the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where
-// it was left (carried aside by the wind since, smokeDrift), its age in seconds and its moth's scorch clock offset by its seed (smokeBend's `now`), each trail's head
+// it was left, carried aside by the wind since (smokeDrift) and curled across its path, and its age in seconds, each trail's head
 // first, with an age of -1 parting one moth's trail from the next.
 function smoke(now, s, strength, tip) {
   const plumes = [], trail = [];
@@ -360,14 +360,23 @@ function smoke(now, s, strength, tip) {
     }
   }
   for (const m of moths.values()) if (m.scorch?.hit) {
-    const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life), now = sc.t + hash(m.key) % 97;
+    const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life);
     plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
     if (!sc.trailDone) { // joined to the moth where it's drawn now, in place of a point it left this frame before it moved
       if (path.at(-1)?.[2] === sc.t) path.pop();
-      path.push([m.x, m.y, sc.t]);
+      const last = path.at(-1);
+      path.push([m.x, m.y, sc.t, last ? last[3] + Math.hypot(m.x - last[0], m.y - last[1]) : 0]);
     }
-    if (trail.length && path.length) trail.push([0, 0, -1, 0]);
-    for (const [x, y, at] of path.reverse()) trail.push([x + smokeDrift(s, sc.t - at), y, sc.t - at, now]); // its head (the newest) first
+    if (trail.length && path.length) trail.push([0, 0, -1]);
+    // each point carried aside by the wind since it was left, and curled into Ss across the path by how far along it it
+    // is, swelling in over its first third of a second and travelling slowly along it; its head (the newest) first
+    const seed = hash(m.key) % 97, head = [];
+    path.forEach(([x, y, at, along], i) => {
+      const [ax, ay] = path[Math.max(0, i - 1)], [bx, by] = path[Math.min(path.length - 1, i + 1)], d = Math.hypot(bx - ax, by - ay) || 1;
+      const curl = TRAIL.s * Math.min(1, (sc.t - at) / 0.3) * Math.sin(along * 2 * Math.PI / TRAIL.length - sc.t * 1.3 + seed);
+      head.unshift([x + smokeDrift(s, sc.t - at) - curl * (by - ay) / d, y + curl * (bx - ax) / d, sc.t - at]);
+    });
+    trail.push(...head);
   }
   return { plumes, trail };
 }
@@ -599,16 +608,18 @@ function mothTarget(k, m, dt, s) {
   // a scorch steers only a moth drifting near home. It flies into the flame and off it, then darts about as it settles
   const sc = scorchStep(m, flying);
   if (sc?.hit && !sc.trailDone) { // a point on its smoke trail as it flies away, and the last where it is as the smoke stops following it
-    const done = sc.t - SCORCH.hit >= TRAIL[0];
-    if (done || sc.t >= (sc.trailAt ?? 0)) { sc.trailAt = sc.t + TRAIL[1]; sc.trailDone = done; (sc.trail ??= []).push([m.x, m.y, sc.t]); }
+    const done = sc.t - SCORCH.hit >= TRAIL.secs, last = sc.trail?.at(-1), flown = last ? Math.hypot(m.x - last[0], m.y - last[1]) : 0;
+    if (done || !last || sc.trail.length < TRAIL.most && (sc.t - last[2] >= TRAIL.every || flown >= TRAIL.apart)) {
+      sc.trailDone = done; (sc.trail ??= []).push([m.x, m.y, sc.t, (last?.[3] ?? 0) + flown]); // with how far along its path it is
+    }
   }
   if (sc && flying) {
     const { phase, a } = scorchFlight(sc.t), ph = m.phase;
     if (phase === 'approach') { [tx, ty] = sc.aim; flap = 26; }
     else if (phase === 'recoil') { tx = sc.aim[0] + sc.side * 70; ty = sc.aim[1] - 45; ease = 7; flap = 34; }
-    else {
-      tx += a * (16 * Math.sin(3.1 * s + ph) + 6 * Math.sin(7.7 * s + 2 * ph)); ty += a * (12 * Math.cos(2.7 * s + ph) + 5 * Math.sin(6.9 * s + ph));
-      ease = 2.4 + 2 * a; flap = 22.4 + 10 * a;
+    else { // flustered on its way home: slower than calm, on a lazy weave side to side and a little up and down, with a singed moth's jitter over it
+      tx += a * (34 * Math.sin(1.4 * s + ph) + 7 * Math.sin(5.3 * s + 2 * ph)); ty += a * (14 * Math.cos(1.1 * s + ph) + 4 * Math.sin(4.9 * s + ph));
+      ease = 2.4 - 1.3 * a; flap = 22.4 + 10 * a;
     }
   }
   return { tx, ty, ease, flap, needsMe };
