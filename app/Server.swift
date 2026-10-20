@@ -288,7 +288,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
