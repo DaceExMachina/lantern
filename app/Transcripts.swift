@@ -170,6 +170,7 @@ struct Turn { var done = false, compacted = false, text: String?, cwd: Any? }
 // How the last turn ended: a finished turn (end_turn, then a turn_duration marker) means it's waiting for me.
 func lastTurn(_ lines: [String]) -> Turn {
     var ended = false // a turn_duration marker comes after the final message, so keep looking back for its text
+    var answered = false // the last line is a tool's result: done only if that tool was a subagent's hand-back
     for line in lines.reversed() {
         guard let j = parse(Data(line.utf8)) as? JSON else { continue }
         if str(j["type"]) == "system" && str(j["subtype"]) == "turn_duration" { ended = true; continue }
@@ -177,6 +178,9 @@ func lastTurn(_ lines: [String]) -> Turn {
             let msg = j["message"] as? JSON
             let text = ((msg?["content"] as? [JSON]) ?? []).filter { str($0["type"]) == "text" }.map { str($0["text"]) }.joined(separator: "\n")
             if ended && text.isEmpty { continue }
+            // a background agent ends by calling SubagentHandback with its report, not with a closing turn (and no
+            // SubagentStop follows), so its transcript ends on that call's result
+            if answered { return Turn(done: ((msg?["content"] as? [JSON]) ?? []).contains { str($0["type"]) == "tool_use" && str($0["name"]) == "SubagentHandback" }, text: text, cwd: j["cwd"]) }
             return Turn(done: ended || str(msg?["stop_reason"]) == "end_turn", text: text, cwd: j["cwd"])
         }
         if ended { return Turn(done: true, cwd: j["cwd"]) }
@@ -184,6 +188,7 @@ func lastTurn(_ lines: [String]) -> Turn {
         // a background task's "finished" notice lands as a user message but only starts a turn once Claude picks it up,
         // so one still sitting unanswered at the end doesn't mean the session is working
         if str(j["type"]) == "user", str((j["message"] as? JSON)?["content"]).hasPrefix("<task-notification>") { continue }
+        if str(j["type"]) == "user", !answered, ((j["message"] as? JSON)?["content"] as? [JSON] ?? []).contains(where: { str($0["type"]) == "tool_result" }) { answered = true; continue }
         if str(j["type"]) == "user" { return Turn(done: false, cwd: j["cwd"]) }
     }
     return Turn()

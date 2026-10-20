@@ -157,6 +157,24 @@ test('a subagent whose transcript ends in a finished turn is dropped once quiet,
   await until(async () => (await agentIds(base)).length === 0, 'the finished subagent to be dropped');
 });
 
+// Background agents end by calling SubagentHandback with their report, not with a closing turn, and no SubagentStop
+// follows: a transcript ending on that call's result is finished too, while one ending on any other tool's result isn't.
+test('a subagent whose transcript ends in a hand-back is dropped once quiet, long before the expiry', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, agentTool);
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  const call = name => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name, input: {} }] } });
+  const result = JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } });
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), [JSON.stringify(user('Audit it')), call('Bash'), result].join('\n') + '\n');
+  await wait(500); // ends on an ordinary tool's result: still going
+  assert.deepStrictEqual(await agentIds(base), ['a1']);
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), [JSON.stringify(user('Audit it')), call('SubagentHandback'), result].join('\n') + '\n');
+  await until(async () => (await agentIds(base)).length === 0, 'the handed-back subagent to be dropped');
+});
+
 test('a subagent whose start the hooks missed is found from its transcript by the sweep, while its session is working', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, agentEnv(600));
