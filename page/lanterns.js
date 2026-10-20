@@ -768,15 +768,11 @@ function applyStyle(key) {
   if (text) {
     text.disabled = !style.surface;
     text.parentElement.classList.toggle('unavailable', !style.surface);
-    const row = text.parentElement; row.dataset.title ??= row.title; // its own title, while it's usable
-    row.title = style.surface ? row.dataset.title : 'Only the paper lanterns show session text';
   }
   const ribbons = $('ribbons'); // likewise the ribbon colours, on lanterns without one
   if (ribbons) {
     for (const b of ribbons.children) /** @type {HTMLButtonElement} */ (b).disabled = !style.ribbon;
     ribbons.parentElement.classList.toggle('unavailable', !style.ribbon);
-    const row = ribbons.parentElement; row.dataset.title ??= row.title;
-    row.title = style.ribbon ? row.dataset.title : 'Only the barrel has a ribbon';
   }
   for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
   $('style').value = key;
