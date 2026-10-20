@@ -8,7 +8,7 @@ const path = require('path');
 const vm = require('vm');
 
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-for (const f of ['scene', 'lanterns', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const stepRibbon = vm.runInContext('stepRibbon', page);
 
 const KNOT = [340, 470], DT = 1 / 60;

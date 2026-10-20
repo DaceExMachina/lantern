@@ -135,7 +135,7 @@ function frame(t) {
   const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
-  const calling = sessions.some(x => x.state === 'waiting' && !x.snoozed);
+  const calling = fakeLamp === 'live' ? sessions.some(x => x.state === 'waiting' && !x.snoozed) : fakeLamp === 'violet'; // fakeLamp: lanterns.js
   level = fakeFlame ?? level + (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"; fakeFlame: lanterns.js, ?flame=
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
@@ -450,7 +450,7 @@ function drawLight(dt, s, { size, flick, pulse }) {
 // or it waits for the next slot. The flame touches it `hit` seconds in. All in seconds. The schedule reads only the key
 // and the wall clock, so every window (app, panel, screensaver) scorches a moth at the same moments.
 // ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 10 seconds.
-const SCORCH_DEMO = Q.has('scorch');
+const SCORCH_DEMO = devToggle('Demo', 'scorch', 'scorch demo', false, 'Every moth flies into the candle\'s flame every 10 seconds, failing checks or not (reloads the page)', () => location.reload());
 const SCORCH = SCORCH_DEMO ? { slot: 10, window: 1, length: 9, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
 const SCORCH_CHAR = '#5B4636', SMOKE_COL = '#B4A8B4'; // the wings' char, a warm brown; smoke, a pale warm grey
 // The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.

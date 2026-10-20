@@ -45,6 +45,9 @@ es.onerror = () => {
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
 for (const mode of ['panel', 'screensaver', 'ambient']) if (Q.has(mode)) document.body.classList.add(mode);
 fitView();
+// the dev panel (dev.js): the backtick key opens and closes it, unless you're typing; ?dev opens it on load
+addEventListener('keydown', devKey);
+if (Q.has('dev')) toggleDevPanel();
 
 $('quiet').onclick = () => {
   const [h, m] = quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);

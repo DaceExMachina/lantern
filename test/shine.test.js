@@ -20,7 +20,7 @@ function context() {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, wall: () => clock.wall,
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] },
     dust: [], farDust: [], dustData: new Float32Array(4), drawBackground: () => {}, DUST_DEBUG: 0 });
-  for (const f of ['scene', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle;');
   for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow']) els[id] = node();

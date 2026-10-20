@@ -12,7 +12,7 @@ test('no top-level name is declared by two page scripts', () => {
     // top-level lines only: declarations at column 0, and every name in a `const a = .., b = ..` list on that line
     for (const [, kind, rest] of source.matchAll(/^(const|let|var|function|class|async function)\s+(.*)$/gm)) {
       const names = /function|class/.test(kind) ? [rest.match(/^\*?\s*([\w$]+)/)[1]]
-        : [...rest.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}|'[^']*'|`[^`]*`|"[^"]*"/g, '').matchAll(/(?:^|,)\s*([\w$]+)\s*(?==|,|;|$)/g)].map(m => m[1]);
+        : [...rest.replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}|'[^']*'|`[^`]*`|"[^"]*"/g, '').matchAll(/(?:^|,)\s*([\w$]+)\s*(?==(?!>)|,|;|$)/g)].map(m => m[1]);
       for (const name of names) {
         assert.ok(!seen.has(name) || seen.get(name) === file, `'${name}' is declared in both ${seen.get(name)} and ${file}`);
         seen.set(name, file);

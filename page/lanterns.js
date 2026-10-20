@@ -36,8 +36,10 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
 let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
-// ?flame=: hold the flame at a brightness, 0 (idle ember) to 1 (five sessions working, the default), whatever is running (frame.js)
-let fakeFlame = Q.has('flame') ? +(Q.get('flame') || 1) : null;
+// the dev panel's flame (dev.js): hold it at a brightness, 0 (idle ember) to 1 (five sessions working), whatever is running,
+// and force its colour warm or violet, whatever the sessions say (frame.js)
+let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
+let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
@@ -49,62 +51,6 @@ const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k
 // (?plumesize=, ?plumelife=, ?plumealpha=)
 const PLUME = Object.fromEntries(Object.entries({ size: 1, life: 6, alpha: 0.5 }).map(([k, d]) => [k, Q.has('plume' + k) ? +(Q.get('plume' + k) || d) : d]));
 const FLAME_WIND = Object.fromEntries(Object.entries({ candle: 6, moroccan: 2 }).map(([k, d]) => [k, Q.has(k + 'wind') ? +(Q.get(k + 'wind') || d) : d]));
-// ?dev: a small panel, top left, to tune the twist, the swing and the wind, and fake the flame, by eye (applies at once
-// and is kept in the URL).
-if (Q.has('dev')) {
-  const panel = document.createElement('div'), query = (k, v) => {
-    const q = new URLSearchParams(location.search); if (v === null) q.delete(k); else q.set(k, v); return `?${q}`;
-  };
-  panel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 240px; padding: 6px 14px; background: rgba(30, 24, 46, .96);'
-    + 'border: 1px solid #4A3B68; border-radius: 10px; color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
-  // each row is one label, its click area the row's full width and height, meeting the next row's; hovering anywhere on it
-  // shows what it does, and a slider shows its value after it
-  const row = (text, title, attrs) => {
-    const label = document.createElement('label'), input = Object.assign(document.createElement('input'), attrs);
-    label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
-    label.title = title;
-    if (attrs.type === 'range') {
-      const value = document.createElement('span');
-      value.style.cssText = 'min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums';
-      const show = () => { value.textContent = input.value; };
-      input.style.flex = '1'; input.addEventListener('input', show); show();
-      label.append(text, input, value);
-    } else label.append(input, text);
-    panel.append(label);
-    return input;
-  };
-  const on = row('twist', 'Turn the brass to and from the light as the lantern swings', { type: 'checkbox', checked: twistGain > 0 });
-  const gain = row('strength', 'How far the brass turns with the swing. Higher makes its shine move more', { type: 'range', min: 0, max: 5, step: 0.1, value: twistGain || 3 });
-  on.onchange = gain.oninput = () => {
-    twistGain = on.checked ? +gain.value : 0;
-    history.replaceState(null, '', query('twist', twistGain === 3 ? null : String(twistGain)));
-  };
-  const fake = row('fake flame', 'Hold the flame at a set brightness, whatever your sessions are doing', { type: 'checkbox', checked: fakeFlame !== null });
-  const bright = row('brightness', 'How bright the fake flame burns, from an idle ember to five sessions working', { type: 'range', min: 0, max: 1, step: 0.05, value: fakeFlame ?? 1 });
-  fake.onchange = bright.oninput = () => {
-    fakeFlame = fake.checked ? +bright.value : null;
-    history.replaceState(null, '', query('flame', fakeFlame === null ? null : String(fakeFlame)));
-  };
-  for (const [k, min, max, step, title] of [
-    ['period', 2, 8, 0.1, 'How long one full swing of the lantern takes, in seconds'],
-    ['damping', 0.05, 0.6, 0.01, 'How quickly the swinging dies down. Lower rocks longer'],
-    ['forget', 0.3, 5, 0.1, 'How long a steady lean in the wind keeps pushing the lantern, in seconds. Longer makes it lean with the wind instead of swinging back'],
-    ['gain', 0, 3, 0.05, 'How hard changes in the wind push the lantern'],
-    ['gust', 1, 8, 0.1, 'How long a gust of wind lasts on average, in seconds. Each one runs from half to one and a half times this. The dust, fireflies and moths feel it too']]) {
-    const r = row(k, /** @type {string} */ (title), { type: 'range', min, max, step, value: sway[k] });
-    r.oninput = () => { sway[k] = +r.value; history.replaceState(null, '', query(k, sway[k] === SWAY[k] ? null : r.value)); };
-  }
-  for (const [k, min, max, step, title] of [['size', 0.3, 3, 0.05, 'How big the smoke\'s plumes are'],
-    ['life', 1, 10, 0.25, 'How many seconds each bit of smoke lasts as it rises'], ['alpha', 0, 1, 0.05, 'How dense the smoke is']]) {
-    const r = row(`smoke ${k}`, /** @type {string} */ (title), { type: 'range', min, max, step, value: PLUME[k] });
-    r.oninput = () => { PLUME[k] = +r.value; history.replaceState(null, '', query(`plume${k}`, r.value)); };
-  }
-  for (const k of ['candle', 'moroccan']) {
-    const r = row(`${k} wind`, `How far the wind leans the ${k}'s flame`, { type: 'range', min: 0, max: 15, step: 0.5, value: FLAME_WIND[k] });
-    r.oninput = () => { STYLES[k].flameWind = +r.value; history.replaceState(null, '', query(`${k}wind`, r.value)); };
-  }
-  document.body.append(panel);
-}
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);

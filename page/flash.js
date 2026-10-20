@@ -282,3 +282,5 @@ function playFlash(id) {
 window.lanternBadge = flashBadge; // from the console: lanternBadge('hive_mind')
 // ?demoBadge=hive_mind,ghosted plays those badges on load, without earning them
 for (const id of (Q.get('demoBadge') || '').split(',').filter(Boolean)) setTimeout(() => flashBadge(id), 1500);
+let devBadge = devSelect('Demo', 'badge', 'badge', Object.keys(ACHIEVEMENTS), 'warm_all_day', 'Which badge the play button flashes', v => { devBadge = v; });
+devButton('Demo', 'play badge', 'Flash the chosen badge, without earning it', () => flashBadge(devBadge));

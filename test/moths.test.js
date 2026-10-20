@@ -7,7 +7,7 @@ const path = require('path');
 const vm = require('vm');
 
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-for (const f of ['scene', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const mothMove = vm.runInContext('mothMove', page), GUST = vm.runInContext('GUST', page);
 // a moment the wind is still: the first time it changes sign, halved in on; and the first moment it blows about 1.6 to the right
 let calm = 0, hi = 0.05, windy = 0;

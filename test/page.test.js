@@ -27,7 +27,7 @@ const document = { getElementById: id => els[id] ?? null, querySelectorAll: () =
 // background.js isn't loaded, so drawBackground only records what drawLight gives it, and there's no dust
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {},
   drawBackground: v => { page.background = v; }, dust: [], farDust: [], dustData: { set() {} } });
-for (const f of ['scene', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 // How far round the side a perch sits: 0 at the lantern's middle, 1 at its rim (at that height).
@@ -188,7 +188,7 @@ const pageFile = f => fs.readFileSync(path.join(__dirname, '..', 'page', f + '.j
 test('the candle\'s wax is drawn where its pillar\'s numbers put it', () => {
   for (const [r, rim] of [[50, 275], [61, 247]]) {
     const at = `r ${r}, rim ${rim}`, c = vm.createContext({ URLSearchParams, location: { search: '' } });
-    vm.runInContext(pageFile('scene'), c);
+    vm.runInContext(pageFile('scene') + pageFile('dev'), c);
     const lanterns = pageFile('lanterns').replace(/^const PILLAR = .*$/m, line => `${line} PILLAR.r = ${r}; PILLAR.rim = ${rim};`);
     assert.notStrictEqual(lanterns, pageFile('lanterns'), 'PILLAR found');
     vm.runInContext(lanterns, c);
@@ -237,7 +237,7 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
   const variants = [['as it is', {}], ['rim 263.5, STEM 47.3', { PILLAR: 'PILLAR.rim = 263.5;', STEM: 'STEM = 47.3;' }], ['the drawing\'s neck at 461.5', { DRAWN: 'DRAWN.neck = 461.5;' }]];
   for (const [at, edits] of variants) {
     const c = vm.createContext({ URLSearchParams, location: { search: '' } });
-    vm.runInContext(pageFile('scene'), c);
+    vm.runInContext(pageFile('scene') + pageFile('dev'), c);
     let src = pageFile('lanterns');
     if (edits.STEM) src = src.replace(/^const STEM = .*$/m, 'let STEM = 41;');
     for (const [name, code] of Object.entries(edits)) {
