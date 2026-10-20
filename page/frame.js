@@ -551,6 +551,12 @@ function scorchStep(m, flying, now = Date.now()) {
   return e;
 }
 // ---- moths -------------------------------------------------------------------
+// A session moth's home eases toward the spot sync gave it, so when sessions come or go the others slide over to make
+// room rather than jump (about 95% there in two seconds).
+function glideHome(m, dt) {
+  const k = 1 - Math.exp(-1.5 * dt);
+  m.home = [m.home[0] + (m.spot[0] - m.home[0]) * k, m.home[1] + (m.spot[1] - m.home[1]) * k];
+}
 // Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
@@ -560,7 +566,7 @@ function mothTarget(k, m, dt, s) {
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
     const a = m.phase + s * 0.12;
     m.home = [orbit.home[0] + Math.cos(a) * 62, orbit.home[1] + Math.sin(a) * 44];
-  }
+  } else if (m.spot) glideHome(m, dt);
   const parent = m.parentId && moths.get(m.parentId);
   if (m.parentId && (!parent || parent.leaving)) m.leaving = true;
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet

@@ -23,17 +23,16 @@ function sync() {
   const base = raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
   sessions = quiet() ? base.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : base;
   $('quiet').classList.toggle('on', quiet());
-  const live = new Set();
-  for (const s of AMBIENT ? [] : sessions) { // the ambient view only needs the sessions for the glow's colour
+  const live = new Set(), shown = AMBIENT ? [] : sessions; // the ambient view only needs the sessions for the glow's colour
+  for (const s of shown) {
     live.add(s.id);
     if (!moths.has(s.id)) moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
     moths.get(s.id).session = s;
     // A session another session started (the Claude app's side sessions) is a satellite: it orbits its parent's moth,
     // smaller, with its thread to the parent; it still lands on the lantern on its own when it needs you.
-    const m = moths.get(s.id), parent = s.parent && moths.get(s.parent);
-    m.satellite = parent && !parent.leaving ? s.parent : null;
+    const m = moths.get(s.id);
+    m.satellite = s.parent && alive.has(s.parent) ? s.parent : null;
     m.size = m.satellite ? SIZE.supervisor : SIZE.session; // like a supervisor agent
-    if (m.satellite) m.slot = -1; // it doesn't hold one of the home spots
     // a fresh snooze (not quiet hours, not waking) puffs a "zz" off the moth; the first sync only records where it stands
     const snooze = s.forGood ? 'always' : s.snoozed && !s.quiet ? 'once' : '';
     if (m.snooze !== undefined && snooze && snooze !== m.snooze) m.puff = { at: performance.now() / 1000, kind: snooze };
@@ -46,6 +45,20 @@ function sync() {
     }
   }
   for (const [k, m] of moths) if (!live.has(k)) m.leaving = true;
+  // Homes depend only on the sessions the server sent, so every window agrees however they arrived. There are as many
+  // spots as sessions on their own, 3 to 16, evenly round the lantern. Each session wants the one at its own seeded angle;
+  // active ones choose first and resting ones (snoozed for good, or idle: both change rarely, unlike working and waiting)
+  // after, so a resting moth takes a free spot rather than push an active one out. Past 16, they double up where it's
+  // least crowded. A join or leave can move the others; frame.js glides them there.
+  const want = id => seeded(hash(id))(), resting = s => s.forGood || s.state === 'idle';
+  const own = shown.filter(s => !moths.get(s.id).satellite)
+    .sort((a, b) => resting(a) - resting(b) || want(a.id) - want(b.id) || (a.id < b.id ? -1 : 1));
+  const n = Math.min(16, Math.max(3, own.length)), held = Array(n).fill(0), off = (i, id) => Math.abs(i + 0.5 - want(id) * n);
+  for (const { id } of own) {
+    const i = held.reduce((best, c, i) => c < held[best] || c === held[best] && off(i, id) < off(best, id) ? i : best, 0);
+    moths.get(id).spot = ringHome(i, n, held[i]++);
+  }
+  for (const s of shown) { const m = moths.get(s.id); m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.js)
 
   // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
   const working = sessions.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length;
@@ -129,16 +142,10 @@ function hoverable(m) {
 }
 
 function makeSessionMoth(key) {
-  // each session has its own favourite home spot, so every window agrees; if it's taken, the next free one
-  const taken = new Set([...moths.values()].filter(m => m.home && !m.leaving).map(m => m.slot)), pref = hash(key) % HOMES.length;
-  let slot, i = 0;
-  do slot = (pref + i) % HOMES.length + Math.floor(i / HOMES.length) * HOMES.length, i++; while (taken.has(slot));
-  const [hx, hy] = HOMES[slot % HOMES.length];
-  const spill = Math.floor(slot / HOMES.length) * 35; // more than 8 sessions: crowd in near an existing spot
   const [x, y] = stretch(EDGES[Math.floor(Math.random() * EDGES.length)]);
   const thread = el('path');
   $('threads').append(thread);
-  return hoverable({ ...mothNode(), size: SIZE.session, slot, home: [hx + spill, hy + spill * 0.5], thread,
+  return hoverable({ ...mothNode(), size: SIZE.session, thread,
     x, y, phase: seeded(hash(key))() * 10, perch: pickPerch(), cool: 0, leaving: false });
 }
 
