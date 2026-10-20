@@ -14,6 +14,10 @@ let TITLE_EVERY_MS = 15.0 * 1000
 // from this recently; past both, it's left open but quiet (a dev server, a stuck agent) and rests like an idle one.
 let TASK_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_TASK_FRESH_SECONDS"] ?? "") ?? 30 * 60) * 1000
 let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_FRESH_SECONDS"] ?? "") ?? 5 * 60) * 1000
+// A subagent not heard from this long is assumed finished (its SubagentStop never came) and stops orbiting.
+let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
+// Only a subagent quiet this long gets its transcript read to see if it finished; busier ones are plainly alive.
+let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
 let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "elicitation_dialog", "agent_needs_input"]
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 // Claude Code's config folder: CLAUDE_CONFIG_DIR, or `claudeDir` in Lantern's settings.json (an app opened from the Dock
@@ -417,6 +421,7 @@ final class LanternServer {
     func sweep() {
         let t = now()
         var changed = false
+        pruneAgents()
         for (id, var s) in sessions.items {
             if settle(&s, id) { sessions[id] = s; changed = true }
             // with its process known, only that decides: a closed session goes, an open one stays however quiet it's been
@@ -428,7 +433,6 @@ final class LanternServer {
             // a session only seen on disk gets the normal timeout until it proves it's alive with a real event
             let limit = str(s["state"]) == "waiting" && !truthy(s["unconfirmed"]) ? WAITING_EXPIRE_MS : EXPIRE_MS
             if t - ((s["last"] as? Double) ?? 0) > limit { sessions[id] = nil; agents[id] = nil; changed = true; continue }
-            for (aid, a) in agents[id]?.items ?? [] where t - ((a["last"] as? Double) ?? 0) > EXPIRE_MS { agents[id]![aid] = nil; changed = true }
         }
         if changed { broadcast() }
     }

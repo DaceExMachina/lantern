@@ -315,6 +315,30 @@ extension LanternServer {
             }
         }
     }
+    /// Drops subagents that have gone: their transcript's last turn is done, or neither a hook nor their transcript has
+    /// moved for AGENT_EXPIRE_MS (their SubagentStop never came). Reads the transcript tails off the main queue.
+    func pruneAgents() {
+        var look: [(String, String, String, Double)] = []
+        for (id, list) in agents {
+            guard let project = sessions[id]?["project"] as? String else { continue }
+            for (aid, a) in list.items where now() - ((a["last"] as? Double) ?? 0) >= AGENT_CHECK_MS && Re("^[A-Za-z0-9_-]+$").test(aid) {
+                look.append((id, aid, "\(PROJECTS)/\(project)/\(id)/subagents/agent-\(aid).jsonl", (a["last"] as? Double) ?? 0))
+            }
+        }
+        guard !look.isEmpty else { return }
+        DispatchQueue.global().async {
+            let gone = look.filter { _, _, file, last in
+                let mtime = fileTimes(file)?.mtime
+                return (mtime != nil && lastTurn(tail(file, 64 * 1024)).done) || now() - max(last, mtime ?? 0) > AGENT_EXPIRE_MS
+            }
+            guard !gone.isEmpty else { return }
+            DispatchQueue.main.async {
+                var changed = false
+                for (id, aid, _, last) in gone where (self.agents[id]?[aid]?["last"] as? Double) == last { self.agents[id]![aid] = nil; changed = true } // unless it fired again meanwhile
+                if changed { self.broadcast() }
+            }
+        }
+    }
     func loadAgentMeta(_ id: String, _ aid: String, _ file: String) {
         DispatchQueue.global().async {
             guard let data = FileManager.default.contents(atPath: file), let j = parse(data) as? JSON else { return }
