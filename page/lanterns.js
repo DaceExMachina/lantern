@@ -11,6 +11,8 @@
 // and has nothing to hang from; it's the band its stand fills below it, a half-width and the top, from there to the
 // window's bottom, which the background's wisps and ghosts keep out of (stale.js). `shadeFromHolder` shades below from the holder's corners instead, as the live flame's base and tip see them (background.js rimShade).
 // `shine` is a bare flame lighting its holder, and lists the grapes it glints on (frame.js drawShine).
+// `heat` is the hot air rising off it, which shimmers what's behind it and lifts the dust (frame.js drawHeat): where it
+// leaves, `at` in the lantern's own units (swinging with it), or its bare flame's tip without one, and how strong at full flame.
 // `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
@@ -624,7 +626,7 @@ function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) 
     holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so its corners cast the shadow
     // the wax alone, a straight cylinder
     body: { top: (highest - (0.5 - PERCH_SPREAD) * waxBottom) / (0.5 + PERCH_SPREAD), bottom: waxBottom, half: () => PILLAR.r },
-    back, front, shine: GRAPES, // its bare flame shines on the brass, the pool, the grapes and the marble (drawShine)
+    back, front, shine: GRAPES, heat: { k: 1 }, // its bare flame shines on the brass, the pool, the grapes and the marble (drawShine)
     column, trunkLine, branches: BRANCHES, pillar: PILLAR, pedestal: PEDESTAL, drawn: DRAWN, stem: STEM, lacquer: K, // the column is redrawn to the window's bottom (drawHang)
   };
 }
@@ -680,7 +682,7 @@ const STYLES = {
   moroccan: {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, flameWind: 2, // enclosed, the wind leans it about a third as hard as the candle's
-    tassel: [340, 486],
+    tassel: [340, 486], heat: { at: [340, 190], k: 0.5 }, // out through the dome's piercings, gentler than over the candle's bare flame
     holder: [404, 6], // the burner cup under the flame, the height of its bottom and the half-width of its mouth; it throws a narrow fan of shadow straight down
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
@@ -722,6 +724,8 @@ const STYLES = {
   },
   candle: makeCandle(),
 };
+// ponytail: temporary, for dialling in the Moroccan's shimmer; bake the pick into its heat.k and drop this
+STYLES.moroccan.heat.k = devSlider('Temporary', 'moroccanheat', 'Moroccan heat', 0, 2, 0.05, STYLES.moroccan.heat.k, 'How strongly the air above the Moroccan shimmers at full flame', v => { STYLES.moroccan.heat.k = v; });
 // The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
 const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
   cerulean: ['#4385B1', '#29567A', '#0D2A44'], madder: ['#A8433A', '#712A25', '#36110E'], ochre: ['#C08A2E', '#82601F', '#3B280A'],
