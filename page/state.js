@@ -146,7 +146,7 @@ function makeSessionMoth(key) {
   const thread = el('path');
   $('threads').append(thread);
   return hoverable({ ...mothNode(), size: SIZE.session, thread,
-    x, y, phase: seeded(hash(key))() * 10, perch: pickPerch(), cool: 0, leaving: false });
+    x, y, phase: seeded(hash(key))() * 10, cool: 0, leaving: false });
 }
 
 function makeSubMoth(key, parentId, size) {
