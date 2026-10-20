@@ -345,14 +345,16 @@ extension LanternServer {
         }
         guard !looks.isEmpty else { return }
         DispatchQueue.global().async {
+            let app = appSessions() // the Claude app keeps the title it shows in its own file for the session
             let results = looks.map { l -> (String, [(String, Double)], Ordered<JSON>, Double, Any?) in
                 let gone = l.tracked.filter { aid, last in
                     let file = "\(l.dir)/subagents/agent-\(aid).jsonl", mtime = fileTimes(file)?.mtime
                     return (mtime != nil && lastTurn(tail(file, 64 * 1024)).done) || now() - max(last, mtime ?? 0) > AGENT_EXPIRE_MS
                 }
-                // a rename fires no hook, so re-read the title when either file it lives in has been written since we last looked
-                let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0)
-                let title = written > l.titleSeen ? readTitle(l.dir, l.title) : l.title
+                // a rename fires no hook, so re-read the title when a file it lives in has been written since we last looked
+                let mine = app.first { $0.cli == l.id }
+                let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0, mine?.mtime ?? 0)
+                let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
                 return (l.id, gone, l.adopt ? liveSubagents(l.dir, known: l.known) : Ordered<JSON>(), written, title)
             }
             DispatchQueue.main.async {

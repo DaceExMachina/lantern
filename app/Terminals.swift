@@ -32,9 +32,9 @@ func liveTranscripts() -> [(file: String, pid: Int?)] {
 }
 
 // The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session
-// id, and for its side sessions the session that started them. Only those three fields are read.
+// id, and for its side sessions the session that started them. Only those fields and its title (what the app shows) are read.
 let APP_SESSIONS = HOME + "/Library/Application Support/Claude/claude-code-sessions"
-typealias AppSession = (cli: String, local: String, from: String?)
+typealias AppSession = (cli: String, local: String, from: String?, title: String?, mtime: Double)
 // Each file is parsed again only when it has changed (by modification time); files that are gone drop out.
 var appSessionCache: [String: (mtime: Date, session: AppSession?)] = [:]
 let appSessionLock = NSLock()
@@ -49,7 +49,7 @@ func appSessions() -> [AppSession] {
         var session: AppSession?
         if let data = FileManager.default.contents(atPath: file.path), let j = parse(data) as? JSON,
            let cli = j["cliSessionId"] as? String, let local = j["sessionId"] as? String {
-            session = (cli, local, (j["spawnedFrom"] as? JSON)?["sessionId"] as? String)
+            session = (cli, local, (j["spawnedFrom"] as? JSON)?["sessionId"] as? String, j["title"] as? String, mtime.timeIntervalSince1970 * 1000)
         }
         seen[file.path] = (mtime, session)
     }
