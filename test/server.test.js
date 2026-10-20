@@ -342,6 +342,61 @@ test('a transcript ending on an unanswered task notification seeds as waiting, n
   ...transcript(UUID(2), [user('Start on the docs')]), // mid-turn, for contrast
 }));
 
+// Only the lines that mark a turn decide a seeded session's state. Whatever else Claude Code writes after the turn (each
+// tail below is shaped like lines in real transcripts) leaves a finished turn waiting and an unfinished one working.
+const meta = text => ({ type: 'user', isMeta: true, cwd: '/work', message: { role: 'user', content: text } });
+const local = content => ({ type: 'system', subtype: 'local_command', cwd: '/work', content });
+const AFTER_TURN = {
+  'a /rename': [{ type: 'custom-title', customTitle: 'mediator' }, { type: 'agent-name', agentName: 'mediator' },
+    local('<command-name>/rename</command-name>'), local('<local-command-stdout>Session renamed to: mediator</local-command-stdout>'),
+    meta('<system-reminder>\nThe user named this session "mediator".\n</system-reminder>')],
+  'an older local command': [user('<command-name>/clear</command-name> <command-message>clear</command-message>'), user('<local-command-stdout></local-command-stdout>')],
+  'a local command caveat': [meta([{ type: 'text', text: '<local-command-caveat>The command below was run directly in Claude Code.</local-command-caveat>' }])],
+  'a ! shell line': [user('<bash-input>git status</bash-input>'), user('<bash-stdout>clean</bash-stdout><bash-stderr></bash-stderr>')],
+  'an attachment': [{ type: 'attachment', attachment: { type: 'hook_success' } }, { type: 'attachment', attachment: { type: 'queued_command' } }],
+  'system notes': [{ type: 'system', subtype: 'stop_hook_summary' }, { type: 'system', subtype: 'away_summary', content: 'You were fixing it.' },
+    { type: 'system', subtype: 'informational' }, { type: 'system', subtype: 'api_error' }],
+  'bookkeeping': ['file-history-snapshot', 'ai-title', 'pr-link', 'last-prompt', 'permission-mode', 'mode', 'queue-operation', 'cost-state'].map(type => ({ type })),
+  'a kind Claude Code adds later': [{ type: 'something-new', message: { content: 'hello' } }],
+};
+test('a transcript ending on lines that aren\'t a turn seeds from the last turn: waiting after a finished one, working mid-turn', async t => {
+  const kinds = Object.entries(AFTER_TURN), file = (i, done) => `.claude/projects/-work/0000${String(i).padStart(4, '0')}-${done ? 1 : 2}000-4000-8000-000000000000.jsonl`;
+  const finished = [user('Fix it'), answer('Fixed.'), turnEnd];
+  const midTurn = [user('Fix it'), { type: 'assistant', cwd: '/work', message: { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: {} }] } }];
+  const base = await serve(t, Object.assign({}, ...kinds.flatMap(([, tail], i) => [
+    { [file(i, true)]: jsonl([...finished, ...tail]) }, { [file(i, false)]: jsonl([...midTurn, ...tail]) }])));
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === kinds.length * 2 && s; }, 'every transcript to be seeded');
+  const state = (i, done) => sessions.find(s => s.id === path.basename(file(i, done), '.jsonl')).state;
+  assert.deepStrictEqual(Object.fromEntries(kinds.map(([kind], i) => [kind, [state(i, true), state(i, false)]])),
+    Object.fromEntries(kinds.map(([kind]) => [kind, ['waiting', 'working']])));
+});
+
+// The transcript only stands in when no hook has said: a session the hooks already know keeps its state when adoption
+// finds its process and reads a transcript that says otherwise (here one that hasn't caught up with the Stop yet).
+test('adoption never overrides the state a hook gave a session with what its transcript says', async t => {
+  const proc = spawn('sleep', ['60']), other = spawn('sleep', ['60']), id = UUID(8), unknown = UUID(9);
+  t.after(() => { proc.kill(); other.kill(); });
+  const transcriptOf = s => `.claude/projects/-work/${s}.jsonl`;
+  let home;
+  const base = await serve(t, {
+    [transcriptOf(id)]: jsonl([user('Fix it'), ...AFTER_TURN['a /rename']]), // reads as mid-turn
+    [transcriptOf(unknown)]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]),
+    'no-bin/ps': `#!/bin/sh\n[ -f "$HOME/go" ] && echo "${proc.pid} claude" && echo "${other.pid} claude"\n`,
+    [`.claude/sessions/${proc.pid}.json`]: JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/work' }),
+    [`.claude/sessions/${other.pid}.json`]: JSON.stringify({ pid: other.pid, sessionId: unknown, cwd: '/work' }),
+  }, h => {
+    home = h;
+    fs.chmodSync(path.join(h, 'no-bin/ps'), 0o755);
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000); // too old for startup seeding: only adoption finds them
+    for (const s of [id, unknown]) fs.utimesSync(path.join(h, transcriptOf(s)), dayAgo, dayAgo);
+  }, { LANTERN_ADOPT_SECONDS: '0.2' });
+  await post(base, '/event', { session_id: id, hook_event_name: 'Stop', cwd: '/work', last_assistant_message: 'Fixed.' });
+  fs.writeFileSync(path.join(home, 'go'), '');
+  // the pass that adopts the unknown session also read the hooked one's transcript, since the hook gave it no process
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.some(x => x.id === unknown) && s; }, 'adoption to run');
+  assert.deepStrictEqual(sessions.map(s => [s.id, s.state]), [[id, 'waiting'], [unknown, 'waiting']]);
+});
+
 // The Claude app's session files say which session started which; a side session whose parent is alive gets `parent`.
 const appSession = (local, cli, from) => ({ [`Library/Application Support/Claude/claude-code-sessions/a/b/${local}.json`]: JSON.stringify({ sessionId: local, cliSessionId: cli, ...(from ? { spawnedFrom: { sessionId: from } } : {}) }) });
 test('a side session with a live parent points at it', t => replay(t, 'seed-side-session', {
