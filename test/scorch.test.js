@@ -284,6 +284,16 @@ test('smoke bends downwind the higher it has risen, and curls into Ss that swell
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
 });
 const TRAIL_STEP = 0.25;
+test('a trail is full width while its head is on the moth, and tapers to a point there once it has stopped following', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float trailTaper\(float age, float head\) \{.*\}/);
+  assert.ok(src, 'background.js has trailTaper');
+  const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const taper = new Function('smoothstep', src[0].replace('float trailTaper(float age, float head) {', 'return (age, head) => {'))(smoothstep);
+  for (const age of [0, 0.1, 0.3, 1]) assert.strictEqual(taper(age, 0), 1, `following, ${age}s along: full width`);
+  assert.ok(Math.abs(taper(1, 1) - 0.15) < 1e-9, 'stopped: its head a point');
+  assert.strictEqual(taper(1.5, 1), 1, 'and full width a little way back');
+});
+
 test('a scorched moth trails one band of smoke along its path, aging toward its old end, and bounded', t => {
   const wall = clock.wall;
   t.after(() => { clock.wall = wall; }); // the next test's windows start where they would without this one
@@ -300,6 +310,13 @@ test('a scorched moth trails one band of smoke along its path, aging toward its 
   assert.deepStrictEqual([head[0], head[1], head[2]], [m.x, m.y, 0], 'its head first, joined to the moth while it smokes');
   assert.ok(a.every(p => p[2] >= 0 && p[3] === a[0][3]), 'one band, unbroken, on one clock');
   for (let i = 1; i < a.length; i++) assert.ok(a[i][2] > a[i - 1][2], `older toward its old end, at ${i}`);
+  // a frame as frame() runs it: the moth's step, then its move (mothMove, here 3 units over), then the smoke drawn. Its
+  // head sits where the moth is drawn, on the frames it leaves a point too
+  for (let i = 0; i < 6; i++) {
+    step([m]); m.x += 3;
+    const [hx, hy, age] = smokeTrail()[0];
+    assert.deepStrictEqual([hx, hy, age], [m.x, m.y, 0], `its head on the moth as drawn, ${i} frames on`);
+  }
   // as it stops following the moth (which moves a unit a frame here), its head stays where the moth was then, no further
   // back, and is left there to fade out PLUME.life later
   const fly = () => { m.x += 1; step([m]); };

@@ -357,7 +357,10 @@ function smoke(now, strength, tip) {
   for (const m of moths.values()) if (m.scorch?.hit) {
     const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life), now = sc.t + hash(m.key) % 97;
     plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
-    if (!sc.trailDone && path.at(-1)?.[2] !== sc.t) path.push([m.x, m.y, sc.t]); // joined to the moth, unless it just left a point there
+    if (!sc.trailDone) { // joined to the moth where it's drawn now, in place of a point it left this frame before it moved
+      if (path.at(-1)?.[2] === sc.t) path.pop();
+      path.push([m.x, m.y, sc.t]);
+    }
     if (trail.length && path.length) trail.push([0, 0, -1, 0]);
     for (const [x, y, at] of path.reverse()) trail.push([x, y, sc.t - at, now]); // its head (the newest) first
   }

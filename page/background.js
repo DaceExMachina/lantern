@@ -156,12 +156,16 @@ float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
     * smoothstep(-3.0, 3.0, h); // soft where it starts
   return k;
 }
+// How wide a smoke trail is at a point age seconds old, as a share of its spread width, its head's age head: full while
+// its head is on the moth (age 0), and once it has stopped following, narrowing to a point over the head's newest third
+// of a second. Scalars only, so the test can run it as JS.
+float trailTaper(float age, float head) { return 1.0 - 0.85 * smoothstep(0.0, 0.3, head) * (1.0 - smoothstep(head, head + 0.35, age)); }
 // How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
 // bent and spread as a plume's smoke is (smokeBend, spread), fainter the older it is and gone at the end of its life;
 // width, strength and age eased between them, the thickest of the segments near p so their joins don't double up.
 // Each point is where it was left, its age, and its moth's clock, each trail's head (its newest) first; an age below 0
-// parts one moth's trail from the next. Its head narrows to a point over its newest third of a second, and its tail fades
-// out as it ages, so neither end looks cut off.
+// parts one moth's trail from the next. Its head tapers once it leaves the moth (trailTaper) and its tail fades out as it
+// ages, so neither end looks cut off.
 float trailSmoke(vec2 p) {
   float k = 0.0, size = uSmoke.x, aw = 1.0, head = 0.0;
   vec3 a = vec3(0.0, 0.0, -1.0); // the last point: where it is now, and its strength (-1: none)
@@ -169,7 +173,7 @@ float trailSmoke(vec2 p) {
     if (i >= uTrailN) break;
     vec4 q = uTrail[i];
     if (a.z < 0.0) head = q.z; // a new trail: this is its head
-    float sp = spread(q.z), w = size * 2.4 * sp * (0.15 + 0.85 * smoothstep(0.0, 0.35, q.z - head));
+    float sp = spread(q.z), w = size * 2.4 * sp * trailTaper(q.z, head);
     vec3 b = vec3(q.x + size * smokeBend(q.z, q.w, 1.0), q.y - size * RISE * q.z, 0.6 * (1.0 - q.z / uSmoke.y) / sqrt(sp));
     if (q.z < 0.0) b.z = -1.0;
     if (a.z > 0.0 && b.z > 0.0) {
