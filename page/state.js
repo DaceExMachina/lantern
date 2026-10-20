@@ -46,14 +46,14 @@ function sync() {
   }
   for (const [k, m] of moths) if (!live.has(k)) m.leaving = true;
   // Homes depend only on the sessions the server sent, so every window agrees however they arrived. There are as many
-  // spots as sessions on their own, 8 to 16, evenly round the lantern. Each session wants the one at its own seeded angle;
+  // spots as sessions on their own, 3 to 16, evenly round the lantern. Each session wants the one at its own seeded angle;
   // active ones choose first and resting ones (snoozed for good, or idle: both change rarely, unlike working and waiting)
   // after, so a resting moth takes a free spot rather than push an active one out. Past 16, they double up where it's
   // least crowded. A join or leave can move the others; frame.js glides them there.
   const want = id => seeded(hash(id))(), resting = s => s.forGood || s.state === 'idle';
   const own = shown.filter(s => !moths.get(s.id).satellite)
     .sort((a, b) => resting(a) - resting(b) || want(a.id) - want(b.id) || (a.id < b.id ? -1 : 1));
-  const n = Math.min(16, Math.max(8, own.length)), held = Array(n).fill(0), off = (i, id) => Math.abs(i + 0.5 - want(id) * n);
+  const n = Math.min(16, Math.max(3, own.length)), held = Array(n).fill(0), off = (i, id) => Math.abs(i + 0.5 - want(id) * n);
   for (const { id } of own) {
     const i = held.reduce((best, c, i) => c < held[best] || c === held[best] && off(i, id) < off(best, id) ? i : best, 0);
     moths.get(id).spot = ringHome(i, n, held[i]++);

@@ -45,12 +45,20 @@ test('two windows agree on every home, whatever order sessions reached them in a
   assert.deepStrictEqual(two, one, 'the same spot for every session in both windows');
 });
 
-test('one to sixteen sessions stay well apart', () => {
-  // Sixteen evenly round the oval are 67.6 apart, fewer further; the old overflow put a moth 39 from another.
-  const own = KEYS.filter(k => k !== 'side');
+test('sessions spread evenly round the lantern, clear of the stand and the string', () => {
+  // Sixteen evenly round the oval are 60.8 apart, fewer further; the old overflow put a moth 39 from another.
+  const own = KEYS.filter(k => k !== 'side'), w = open();
   for (let n = 2; n <= own.length; n++) {
     const spots = open().show(own.slice(0, n));
-    assert.ok(closest(spots) > 65, `${n} sessions: the closest two are ${closest(spots).toFixed(1)} apart`);
+    assert.ok(closest(spots) > 55, `${n} sessions: the closest two are ${closest(spots).toFixed(1)} apart`);
+    // up to eight, each has a spot of its own as far apart as the ring allows: nobody bunches on one side
+    const ring = w.run(`return Array.from({ length: ${Math.max(n, 3)} }, (_, i) => ringHome(i, ${Math.max(n, 3)}))`);
+    if (n <= 8) assert.ok(closest(spots) >= closest(ring) - 0.01, `${n} sessions are as spread as ${ring.length} spots: ${closest(spots).toFixed(1)} of ${closest(ring).toFixed(1)}`);
+  }
+  for (let n = 1; n <= 20; n++) for (let i = 0; i < n; i++) {
+    const [x, y] = w.run(`return ringHome(${i}, ${n})`);
+    assert.ok(Math.abs(x - 340) >= 60 - 1e-9 || y > 240, `spot ${i} of ${n} keeps 60 off the string: ${x.toFixed(1)}, ${y.toFixed(1)}`);
+    assert.ok(Math.abs(x - 340) >= 150 - 1e-9 || y < 420, `spot ${i} of ${n} keeps off the candle's stand: ${x.toFixed(1)}, ${y.toFixed(1)}`);
   }
   // past sixteen they double up, the second a little further in, never on top of another
   const many = open().show([...own, 'a', 'b', 'c', 'd']);
@@ -59,14 +67,19 @@ test('one to sixteen sessions stay well apart', () => {
 });
 
 test('a resting session takes a free spot rather than push out an active one that wants the same', () => {
-  const w = open(), active = KEYS.slice(0, 6), pref = id => w.run(`return [Math.floor(seeded(hash('${id}'))() * 8), seeded(hash('${id}'))()]`);
-  const taken = active.map(pref);
-  // one that wants a spot an active session holds, and would get it first if it chose in plain hash order
-  const rest = Array.from({ length: 200 }, (_, i) => 'rest' + i).find(id => taken.some(([i, f]) => pref(id)[0] === i && pref(id)[1] < f));
+  // six active and one resting session share seven spots; each wants the spot at its seeded angle
+  const w = open(), active = KEYS.slice(0, 6), pref = id => w.run(`const f = seeded(hash('${id}'))(); return [Math.floor(f * 7), f]`);
+  const wants = active.map(pref), mine = wants.filter(([i], _, all) => all.filter(([j]) => j === i).length === 1);
+  // one that wants a spot only one active session wants, and would get it first if it chose in plain seeded order
+  let rest, victim;
+  for (let r = 0; r < 500 && !rest; r++) {
+    const [i, f] = pref('rest' + r), hit = mine.find(([j, g]) => j === i && f < g);
+    if (hit) { rest = 'rest' + r; victim = active[wants.indexOf(hit)]; }
+  }
   assert.ok(rest, 'found a resting session that clashes with an active one');
-  const alone = w.show(active), both = w.show([...active, rest], [rest]);
-  for (const k of active) assert.deepStrictEqual(both[k], alone[k], `${k} keeps its spot when ${rest} rests nearby`);
-  assert.ok(closest(both) > 100, `${rest} found a spot of its own: ${closest(both).toFixed(1)}`);
+  const both = w.show([...active, rest], [rest]), ring = w.run('return Array.from({ length: 7 }, (_, i) => ringHome(i, 7))');
+  assert.deepStrictEqual(both[victim], ring[pref(victim)[0]], `${victim} keeps the spot it wants when ${rest} wants it too`);
+  assert.ok(closest(both) >= closest(Object.fromEntries(ring.entries())) - 0.01, `${rest} found a spot of its own: ${closest(both).toFixed(1)}`);
 });
 
 test('when a session joins, the others glide to their new homes', () => {
