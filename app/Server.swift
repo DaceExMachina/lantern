@@ -174,6 +174,7 @@ final class LanternServer {
     var githubEpoch = 0 // counts clearGitHub, so a refresh that began before one can tell its answer is out of date
     var lastResults: [String: (at: Double, data: JSON)] = [:] // each GitHub query's last answer, by top folder or account (GitHub.swift refreshGitHub)
     var refreshing = false, refreshAgain = false // a refresh asked for while one runs goes once more straight after it
+    var ghbusDue = false // a refresh a ghbus event asked for is on its way (GitHub.swift refreshSoon)
     var mirror: URL? // a preview's: the live app's /events, whose sessions it shows instead of finding its own (see follow())
     // the test server replaces it, since the machine running the tests may well be locked
     var screenLocked = { (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true }
@@ -276,7 +277,8 @@ final class LanternServer {
         seed()
         loadAccounts()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
-        if let mirror { follow(mirror) } else {
+        if let mirror { follow(mirror) } else { // a preview's sessions come from the app; its own poll is enough for its PR lists
+            listenGhbus()
             Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_SWEEP_SECONDS"] ?? "") ?? 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
             Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_ADOPT_SECONDS"] ?? "") ?? 60, repeats: true) { _ in self.adopt() }
         }
