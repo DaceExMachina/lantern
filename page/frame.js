@@ -143,7 +143,7 @@ function frame(t) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), lightAt(), [125, 170], dt, s);
+  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, { ...r, need: 'review' }])), lightAt(), [125, 170], dt);
   for (const [k, m] of moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
@@ -759,19 +759,18 @@ function mothFireflies(m, dt, s) {
   const want = new Map(), gh = m.session.github;
   if (m.leaving) {} // nothing: they all drift off
   else if (gh) {
-    const needs = p => ['ready', 'failing', 'changes'].includes(p.need);
-    for (const p of [...gh.filter(needs), ...gh.filter(p => !needs(p))]) want.set(p.url, p.need); // needy first, so the cap keeps them
+    for (const p of byUrgency(gh, m.flies)) want.set(p.url, p);
   }
   else {
     const youLinks = new Set((m.session.forYou?.you || []).map(p => p.url).filter(Boolean));
-    for (const url of m.session.created || []) if (youLinks.has(url)) want.set(url, 'mention');
+    for (const url of m.session.created || []) if (youLinks.has(url)) want.set(url, { need: 'mention' });
   }
   const home = stretch(m.home);
-  swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt, s);
+  swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt);
   // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
   // middle of the swarm straight toward its perch, along the line that lies on (perchAt), so no two ever cross
   m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);
-  const tie = [...m.flies.values()].find(f => f.gone === undefined && f.x !== undefined); // the oldest firefly: it eases in to the swarm's middle, where the line starts (f.near)
+  const tie = [...m.flies.values()].find(f => !f.leave && f.x !== undefined); // the oldest firefly: it eases in to the swarm's middle, where the line starts (f.near)
   const tied = m.wasLanded && !!tie;
   for (const f of m.flies.values()) f.near = tied && f === tie;
   if (tied) {

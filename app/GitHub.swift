@@ -26,6 +26,27 @@ func prNeed(_ p: JSON) -> String {
     if str(p["reviewDecision"]) == "APPROVED" && !running { return "ready" }
     return truthy(p["isDraft"]) ? "draft" : "waiting"
 }
+// When the page animates a PR's firefly from, so every window plays it at the same moment: `seen` when this list first
+// had it (it flies in), `since` when its need last changed, and `was` the need before (its colour crossfades). One that
+// left the list merged or closed stays a minute with that as its need, for its firefly's exit.
+func stamp(_ prs: [JSON], was old: [JSON], closed: [String: String], at t: Double) -> [JSON] {
+    let before = Dictionary(old.map { (str($0["url"]), $0) }, uniquingKeysWith: { a, _ in a })
+    var out = prs.map { p -> JSON in
+        var p = p
+        guard let o = before[str(p["url"])] else { p["seen"] = t; p["since"] = t; return p }
+        p["seen"] = o["seen"] ?? 0
+        if str(o["need"]) == str(p["need"]) { p["since"] = o["since"] ?? 0; p["was"] = o["was"] } else { p["since"] = t; p["was"] = o["need"] }
+        return p
+    }
+    let still = Set(prs.map { str($0["url"]) })
+    for var o in old where !still.contains(str(o["url"])) {
+        guard let state = closed[str(o["url"])] else { continue }
+        let need = state == "MERGED" ? "merged" : "closed"
+        if str(o["need"]) == need { if t - ((o["since"] as? NSNumber)?.doubleValue ?? 0) < 60_000 { out.append(o) } }
+        else if !["merged", "closed"].contains(str(o["need"])) { o["was"] = o["need"]; o["need"] = need; o["since"] = t; out.append(o) }
+    }
+    return out
+}
 func git(_ cwd: String, _ args: [String]) -> String? {
     let r = run("/usr/bin/git", ["-C", cwd] + args, timeout: 5)
     return r.ok ? r.out.trim : nil
@@ -40,13 +61,13 @@ func ghGraphql(_ cwd: String) -> JSON? {
 // Through gh, which GitHub account a folder gets can depend on where it is (a wrapper that picks a token by the
 // top folder under home, say: ~/work for one account, ~/projects for another). So the PR query runs once per top folder
 // under home (one more for everything outside it), from any one of that folder's repos, not once per repo.
-func accountFolders(_ cwds: [String]) -> [String] {
+func accountFolders(_ cwds: [String]) -> [(top: String, cwd: String)] {
     var byTop: [String: String] = [:]
     for cwd in cwds {
         let top = cwd.hasPrefix(HOME + "/") ? cwd.dropFirst(HOME.count + 1).split(separator: "/").first.map(String.init) ?? "" : ""
         byTop[top] = byTop[top] ?? cwd
     }
-    return Array(byTop.values)
+    return byTop.sorted { $0.key < $1.key }.map { (top: $0.key, cwd: $0.value) }
 }
 /// A blocking HTTPS request, for background queues only.
 func fetch(_ url: String, method: String = "GET", headers: [String: String], body: Any? = nil) -> (status: Int, json: JSON?) {
@@ -79,15 +100,17 @@ extension LanternServer {
         if accounts.count == 0 && !truthy(settings["github"]) { return }
         if refreshing { refreshAgain = true; return }
         refreshing = true
+        let epoch = githubEpoch
         let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
-        let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }
+        let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }, previous = lastResults
         DispatchQueue.global().async {
             // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
             // every time from a background process.
             let live = list.filter { !$0.1.isEmpty && git($0.1, ["rev-parse", "--is-inside-work-tree"]) != nil }
             var errors: [String: String] = [:]
+            let folders = tokens.isEmpty ? accountFolders(live.map(\.1)) : [], keys = tokens.isEmpty ? folders.map(\.top) : tokens.map(\.0) // a query is a top folder's gh or an account's token
             let queries: [() -> JSON?] = tokens.isEmpty
-                ? accountFolders(live.map(\.1)).map { cwd in { ghGraphql(cwd) } }
+                ? folders.map { f in { ghGraphql(f.cwd) } }
                 : tokens.map { login, token in {
                     let r = fetch("https://api.github.com/graphql", method: "POST", headers: ["Authorization": "Bearer \(token)", "User-Agent": "lantern-pr"], body: ["query": prQuery(PR_GQL)])
                     if r.status == 401 { DispatchQueue.main.sync { errors[login] = "expired" }; return nil } // the token was revoked or expired: reconnect
@@ -97,8 +120,15 @@ extension LanternServer {
                 } }
             var results = [JSON?](repeating: nil, count: queries.count)
             DispatchQueue.concurrentPerform(iterations: queries.count) { i in let r = queries[i](); DispatchQueue.main.sync { results[i] = r } }
+            // a query that failed (a blip) keeps what it found in the last 10 minutes (GH_KEEP_MS), so its PRs neither vanish and fly back in,
+            // nor hold up every other query's. An expired token isn't a blip: its PRs go, and the account row says to reconnect.
+            let t0 = now(), answers = results.enumerated().map { i, r -> JSON? in
+                if let r = r { return r }
+                guard errors[keys[i]] != "expired", let last = previous[keys[i]], t0 - last.at < GH_KEEP_MS else { return nil }
+                return last.data
+            }
             var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:]
-            for data in results {
+            for data in answers {
                 for p in (data?["closed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { closed[str(p["url"])] = str(p["state"]) }
                 for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
                     wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))"]
@@ -132,12 +162,21 @@ extension LanternServer {
                         "need": prNeed(p), "updatedAt": p["updatedAt"]!]
             }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }
             DispatchQueue.main.async {
+                // turned off (and perhaps on again) while this ran: its answer was built from what was there before, so don't bring that back
+                guard epoch == self.githubEpoch, self.accounts.count > 0 || truthy(self.settings["github"]) else {
+                    self.refreshing = false
+                    if self.refreshAgain { self.refreshAgain = false; self.refreshGitHub() } // one asked for since is a fresh start
+                    return
+                }
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
-                self.reviews = wanted.items.map(\.1)
+                let t = now()
+                // fresh answers are remembered with their time; a kept one keeps its old time, so it ages out
+                self.lastResults = Dictionary(keys.enumerated().compactMap { i, k in results[i].map { (k, (at: t, data: $0)) } ?? previous[k].map { (k, $0) } }, uniquingKeysWith: { a, _ in a })
+                self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
                 self.stale = dead
-                for (id, g) in github { self.sessions[id]?["github"] = g }
-                // a failed query would make every PR look gone, so only a complete answer goes in the log
-                if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
+                for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
+                // a query that failed with nothing from before would make its PRs look gone, so then nothing is logged
+                if !answers.isEmpty && answers.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
                 self.saveGitHubCache()
                 self.refreshing = false
@@ -161,7 +200,7 @@ extension LanternServer {
         DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
     }
 
-    func clearGitHub() { reviews = []; stale = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
+    func clearGitHub() { githubEpoch += 1; lastResults = [:]; reviews = []; stale = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
 
     // Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain.
     func loadAccounts() {

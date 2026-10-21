@@ -19,6 +19,8 @@ let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT
 // An agent heard from by a hook this recently is alive whatever its transcript says (it may not be written yet).
 let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
 // How long after its last hook event a session Claude Code calls idle may still be waiting for that turn's Stop to arrive.
+// How long a GitHub query that fails (a blip) keeps its last answer, so its PRs don't vanish and fly back in.
+let GH_KEEP_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_GH_KEEP_SECONDS"] ?? "") ?? 10 * 60) * 1000
 let STATUS_LAG_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_STATUS_LAG_SECONDS"] ?? "") ?? 10) * 1000
 let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "elicitation_dialog", "agent_needs_input"]
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
@@ -167,6 +169,8 @@ final class LanternServer {
     func staleOut() -> [JSON] { stale.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
+    var githubEpoch = 0 // counts clearGitHub, so a refresh that began before one can tell its answer is out of date
+    var lastResults: [String: (at: Double, data: JSON)] = [:] // each GitHub query's last answer, by top folder or account (GitHub.swift refreshGitHub)
     var refreshing = false, refreshAgain = false // a refresh asked for while one runs goes once more straight after it
     var mirror: URL? // a preview's: the live app's /events, whose sessions it shows instead of finding its own (see follow())
     // the test server replaces it, since the machine running the tests may well be locked
@@ -668,7 +672,8 @@ final class LanternServer {
     func logPRs(open: Set<String>, quiet: Set<String>, closed: [String: String]) {
         var owned: [String: (need: String, session: String, title: Any)] = [:]
         for (id, s) in sessions.items {
-            for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
+            // a merged or closed one the list keeps for its firefly's exit is logged as it leaves, below
+            for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil && !["merged", "closed"].contains(str(p["need"])) { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
         }
         // A session no refresh has looked at yet (it joined while one ran, or is still reading its transcript) keeps what it
         // owned: not looked at isn't owning nothing.
