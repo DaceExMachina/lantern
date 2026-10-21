@@ -197,10 +197,17 @@
   #gh h3 { margin: 0 0 var(--space-1); font-size: 13px; color: var(--ink-strong); display: flex; align-items: center; gap: var(--space-1-5); }
   #gh h3 svg { color: var(--accent-violet); }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin: 3px 0; }
+  #gh .row:has(.tools) { margin: 0; }
   #gh .code { font: 600 var(--text-xl)/1.2 var(--font-mono); letter-spacing: .12em; color: var(--ink-strong); margin: var(--space-1-5) 0; }
   #gh button { all: unset; cursor: pointer; color: var(--accent-violet); text-decoration: underline dotted; text-underline-offset: 3px; }
   #gh button:hover, #gh a:hover, #help a:hover { color: var(--ink-hover); }
   #gh a, #help a { color: var(--accent-violet); }
+  /* the link's row ends in two icon buttons: their click areas run the row's full height and meet, the hover is just the icon,
+     and the pair reaches out into the menu's padding so the icons line up with the text edge */
+  #gh .tools { display: flex; align-self: stretch; margin-right: calc(-1 * var(--space-1-5)); }
+  #gh .icon { display: flex; align-items: center; padding: var(--space-1) var(--space-1-5); text-decoration: none; }
+  #gh .icon .face { display: flex; border-radius: var(--radius-sm); } /* the visible part: just the icon, so the focus ring hugs it */
+  #gh .icon:focus-visible .face { outline: 1px solid var(--focus); outline-offset: var(--space-0-5); }
   #gh .dim { color: var(--ink-dim); font-size: 11.5px; }
   #gh .warn { color: var(--warn-ink); }
   #status .next { all: unset; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
