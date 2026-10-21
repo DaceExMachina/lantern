@@ -49,35 +49,38 @@ function prRows(prs) {
 }
 
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a
-// click run `onClick` and hide it. `target` is what `hovered` becomes; `cardAt` says which of its areas the card sits beside.
-// One set of pointer handlers on #zones (main.js) serves them all, so overlapping areas can split fairly (zoneAt).
-const areas = new WeakMap();
-function hoverZone(zone, target, onClick, cardAt) {
-  areas.set(zone, { target, onClick, cardAt });
+// click run `onClick` (or on a right-click, `menu`) and hide it. `target` is what `hovered` becomes; `cardAt` says which of
+// its areas the card sits beside. They're plain circles in scene units (x, y, r; `off` while they can't be hovered), hit-tested
+// in JS by one set of pointer handlers on the scene (main.js), never SVG elements: moving one of those every frame makes
+// WebKit repaint the scene under it.
+/** @typedef {{ x: number, y: number, r: number, off: boolean, target: any, onClick: () => void, cardAt?: string, menu?: () => void }} Zone */
+/** @type {Set<Zone>} */
+const zones = new Set();
+function hoverZone(target, onClick, r, cardAt) {
+  const zone = { x: 0, y: 0, r, off: false, target, onClick, cardAt };
+  zones.add(zone);
   return zone;
 }
 // Areas can overlap, so a point belongs to the nearest area that contains it: two neighbours split their overlap down the
-// middle, whichever is drawn on top. Plain distance, not weighted by radius: weighting would let a flying moth's wide
+// middle, in whatever order they come. Plain distance, not weighted by radius: weighting would let a flying moth's wide
 // area swallow a landed neighbour's own body.
 function zoneAt(zones, x, y) {
   let best = null, near = Infinity;
   for (const z of zones) {
-    const d = Math.hypot(x - +z.getAttribute('cx'), y - +z.getAttribute('cy'));
-    if (d < +z.getAttribute('r') && d < near) [best, near] = [z, d];
+    const d = Math.hypot(x - z.x, y - z.y);
+    if (!z.off && d < z.r && d < near) [best, near] = [z, d];
   }
   return best;
 }
-function enterZone(zone) {
-  const a = areas.get(zone);
-  if (!a) return;
+function enterZone(a) {
   clearTimeout(hideTimer);
   if (hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
   hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
-function clickZone(zone, shift) { const a = areas.get(zone); (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
+function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (The card's own click runs the action.)
-function tapZone(zone) { if (hovered === areas.get(zone)?.target) hideCard(); else enterZone(zone); }
+function tapZone(zone) { if (hovered === zone.target) hideCard(); else enterZone(zone); }
 function hideCard() { hovered = held = shown = null; $('card').classList.remove('show'); }
 
 function renderCard() {
@@ -129,9 +132,9 @@ function placeCard() {
   if (!hovered) return;
   const pt = document.querySelector('svg').createSVGPoint();
   const zone = hovered.cardAt === 'flies' && hovered.flyZone ? hovered.flyZone : hovered.zone; // beside whichever area was hovered
-  pt.x = +zone.getAttribute('cx'); pt.y = +zone.getAttribute('cy');
+  pt.x = zone.x; pt.y = zone.y;
   const ctm = document.querySelector('svg').getScreenCTM(), p = pt.matrixTransform(ctm), c = $('card');
-  const gap = (+zone.getAttribute('r') || 48) * ctm.a * 0.7; // clear of the hover area, which covers the moth
+  const gap = zone.r * ctm.a * 0.7; // clear of the hover area, which covers the moth
   const a = holdAnchor(zone, p.x, p.y);
   const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > innerHeight - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   const to = { x: Math.max(8, x), y: Math.max(8, y) };

@@ -284,6 +284,22 @@ function drawFlies(w, h, box) {
   gl.drawArrays(gl.POINTS, 0, flyLightN);
   gl.disableVertexAttribArray(ac); gl.enableVertexAttribArray(0);
 }
+// The ghost moths (stale.js): their wings as triangles in one flat, pale colour at each moth's own faint opacity, over
+// the fireflies' light as they were over it in the SVG. Two wings crossing show darker, as two see-through wings would.
+const GHOSTS = program(`
+attribute vec3 a; uniform vec4 uBox; varying float vA;
+void main() { gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0); vA = a.z; }`, `
+precision mediump float; uniform vec3 uCol; varying float vA;
+void main() { gl_FragColor = vec4(uCol, vA); }`);
+const ghostsBuf = gl.createBuffer();
+function drawGhosts(box) {
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(GHOSTS.p);
+  gl.bindBuffer(gl.ARRAY_BUFFER, ghostsBuf); gl.bufferData(gl.ARRAY_BUFFER, ghostWings, gl.DYNAMIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  gl.uniform4f(GHOSTS.u.uBox, ...box); gl.uniform3fv(GHOSTS.u.uCol, rgb(WISP_TINT));
+  gl.drawArrays(gl.TRIANGLES, 0, ghostWingN);
+}
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 const dustBuf = gl.createBuffer();
@@ -490,6 +506,8 @@ function drawBackground(v) {
   gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
   if (flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
   flyLightN = 0;
+  if (ghostWingN) drawGhosts([x, y, w, h]);
+  ghostWingN = 0;
   if (v.farWall) drawFarWall(v.farWall, c.width, c.height, [x, y, w, h]);
   if (v.fire) drawBareFlame(v, c.width, [x, y, w, h]);
   // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up

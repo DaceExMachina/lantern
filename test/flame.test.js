@@ -26,7 +26,7 @@ function context() {
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] } });
   for (const f of ['scene', 'dev', 'lanterns', 'state', 'background', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
-  run('VIEW.box = [40, 20, 600, 600]; flyLightN = 0; farWallTex = {}'); // the Moroccan's far wall counts as baked already
+  run('VIEW.box = [40, 20, 600, 600]; flyLightN = 0; ghostWingN = 0; farWallTex = {}'); // the Moroccan's far wall counts as baked already
   run('realDraw = drawBackground; drawBackground = v => { drawn = v; realDraw(v); }'); // keeping what drawLight gives it
   return { run, els, uniforms };
 }

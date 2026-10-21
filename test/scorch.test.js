@@ -31,7 +31,7 @@ const clock = { wall: BASE };
 function context(origin = 1000, document = undefined) {
   const perf = { t: origin, now: () => perf.t };
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: perf, wall: () => clock.wall, document });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle; tongue = { cx: 341, half: 11, height: 62 };');
   return { page, run, perf, SCORCH: run('SCORCH'), mothTarget: run('mothTarget'), scorchStep: run('scorchStep'), scorchClock: run('scorchClock'),

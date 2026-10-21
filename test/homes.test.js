@@ -12,8 +12,8 @@ const stub = new Proxy(function () {}, { get: (_, k) => k === Symbol.toPrimitive
 // a window on the lantern, `kx` times as wide as it is tall
 function open(kx = 1) {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document: stub,
-    hoverZone: () => ({ style: {}, getAttribute() {}, setAttribute() {} }), areas: { get: () => ({}) }, alertMe() {} }); // the hover cards (card.js) and notifications aren't loaded
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+    alertMe() {} }); // notifications aren't loaded
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => JSON.parse(vm.runInContext(`JSON.stringify((() => { ${code} })())`, page) ?? 'null');
   run(`VIEW.kx = ${kx}`);
   const homes = what => run(`return Object.fromEntries([...moths].filter(([, m]) => !m.leaving && !m.satellite).map(([k, m]) => [k, m.${what}]))`);
@@ -193,6 +193,6 @@ test('two windows opened at different times show the same sessions and agents', 
   late.run(`raw = ${snap(true, 'a1', 'a2')}; sync()`);
   assert.deepStrictEqual(shows(late), ['api', 'api/a1', 'api/a2', 'docs']);
   assert.deepStrictEqual(shows(early), shows(late));
-  // and the ones that came back can be hovered and clicked again (main.js zoneFor skips areas with pointer events off)
-  assert.deepStrictEqual(early.run(`return [...moths].filter(([, m]) => m.zone?.style.pointerEvents === 'none').map(([k]) => k)`), []);
+  // and the ones that came back can be hovered and clicked again (card.js zoneAt skips areas that are off)
+  assert.deepStrictEqual(early.run(`return [...moths].filter(([, m]) => m.zone?.off).map(([k]) => k)`), []);
 });

@@ -10,7 +10,7 @@ const vm = require('vm');
 const page = vm.createContext({});
 vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
 const zoneAt = vm.runInContext('zoneAt', page);
-const circle = (cx, cy, r) => ({ getAttribute: k => String({ cx, cy, r }[k]) });
+const circle = (x, y, r) => ({ x, y, r, off: false });
 
 test('two overlapping hover areas split at the midpoint, and a point outside both picks neither', () => {
   const a = circle(0, 0, 48), b = circle(60, 0, 48); // 60 apart, so they overlap from x = 12 to x = 48
@@ -32,8 +32,8 @@ test('a landed moth keeps its own body next to a flying moth\'s wider area', () 
 test('shift+click runs an area\'s snooze menu, a plain click runs its click action', () => {
   const calls = [];
   vm.runInContext('globalThis.$ = () => ({ classList: { remove() {} } }); globalThis.clearTimeout = () => {}; globalThis.hideTimer = 0', page);
-  const zone = vm.runInContext('hoverZone', page)({}, {}, () => calls.push('click'));
-  vm.runInContext('areas', page).get(zone).menu = () => calls.push('snooze');
+  const zone = vm.runInContext('hoverZone', page)({}, () => calls.push('click'));
+  zone.menu = () => calls.push('snooze');
   const clickZone = vm.runInContext('clickZone', page);
   clickZone(zone, false);
   assert.deepStrictEqual(calls, ['click']);
@@ -47,7 +47,7 @@ test('a tap shows a moth\'s card without running its click, and tapping the same
   page.cardEl = card;
   const moth = {}, other = {};
   const hoverZone = vm.runInContext('hoverZone', page);
-  const zone = hoverZone({}, moth, () => calls.push('click')), zone2 = hoverZone({}, other, () => calls.push('click'));
+  const zone = hoverZone(moth, () => calls.push('click')), zone2 = hoverZone(other, () => calls.push('click'));
   const tapZone = vm.runInContext('tapZone', page), hovered = () => vm.runInContext('hovered', page);
   tapZone(zone);
   assert.strictEqual(hovered(), moth, 'first tap shows its card');
@@ -68,7 +68,7 @@ test('a landed moth\'s area is centred on its drawn body, so a point on the lowe
   const frame = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
   for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
   const mothZones = vm.runInContext('mothZones', frame);
-  const zone = () => { const at = {}; return { setAttribute: (k, v) => at[k] = v, getAttribute: k => at[k], style: {} }; };
+  const zone = () => ({});
   // a moth folded on flat paper, its body pointing up the screen: the wings the way mothWings draws them, as caster() sums them up
   const shade = vm.runInContext('(x, y) => caster(x, y, 0, 1, [...wing3d(WING_UP, [0, -1, 0], [0, 0, 1], 0.1), ...wing3d(WING_SIDE, [0, -1, 0], [0, 0, 1], 0.16)])', frame);
   const landed = y => { const m = { x: 300, y, size: 1, tilt: 0, zone: zone(), shade: shade(300, y) }; mothZones(m, true); return m; };
