@@ -109,7 +109,8 @@
   };
   // the chrome scenes: each panel opened over the barrel in turn, then closed (a function, as run() adds to LAST)
   const chrome = () => [
-    () => { $('menu').showPopover(); $('help').open = true; }, snap('menu'), () => { $('menu').hidePopover(); },
+    () => { $('menu').showPopover(); $('help').open = true; }, snap('menu'),
+    () => { github = { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }; renderGitHub(); }, snap('menu-github'), () => { $('menu').hidePopover(); },
     async () => { $('stats').showPopover(); await loadStats(); }, snap('stats'), () => { $('stats').hidePopover(); },
     async () => { await openRecap(6); }, snap('recap'), () => { $('recap').hidePopover(); },
     () => { enterZone(moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { hideCard(); },
