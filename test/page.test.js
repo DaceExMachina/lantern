@@ -440,9 +440,9 @@ test('no limb of the vine ends in the air: each end tapers to a tip, joins anoth
 test('the twist never passes TWIST_MAX, even with the sway held at the extreme', () => {
   run(`applyStyle('moroccan')`);
   const max = run('TWIST_MAX');
-  const peak = swing => run(`swingHold = ${swing}; Math.max(...Array.from({ length: 3600 }, (_, i) => (swingLantern(1 / 60, 500 + i / 60), Math.abs(twist))))`);
+  // the swing pinned at `a` degrees before every frame, as a gust far past the normal ones would
+  const peak = a => run(`Math.max(...Array.from({ length: 3600 }, (_, i) => (swing.a = ${a}, swing.v = 0, swingLantern(1 / 60, 500 + i / 60), Math.abs(twist))))`);
   const held = peak(8);
   assert.ok(held > max * 0.9 && held <= max, `held at 8 degrees the twist reaches ${held}, up to ${max}`);
   assert.ok(peak(-8) <= max, 'and the same swung the other way');
-  run('swingHold = 0');
 });

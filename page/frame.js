@@ -175,9 +175,7 @@ let swayAngle = 0;
 let twist = 0;
 // The most the twist may turn, in degrees. The target eases into it (tanh) rather than hitting a wall, so a big gust can't
 // spin the faces round; over an hour of normal wind the twist's median is 14, its 90th percentile 37 and its peak 99.
-// ponytail: temporary sliders, for dialling in the cap; bake the pick into TWIST_MAX and drop both
-let TWIST_MAX = devSlider('Temporary', 'maxtwist', 'max twist', 5, 120, 1, 45, 'The most the Moroccan\'s twist may turn, in degrees; hold the swing at an extreme to see it', v => { TWIST_MAX = v; });
-let swingHold = devSlider('Temporary', 'swing', 'swing', -8, 8, 0.1, 0, 'Holds the lantern at this sway angle, in degrees (gusts reach about 6 either way); 0 lets the wind swing it', v => { swingHold = v; });
+const TWIST_MAX = 60;
 // A flat face's tone: how squarely it faces a light 35 degrees to the left as the lantern twists (`angle` round the lantern,
 // `tilt` up, the light sitting a little above), squared so the tone moves plainly as it turns, with a low floor so a face
 // turned a little away still lifts off the darkest tone as the twist brings it round; blended along FACET_TONES.
@@ -205,7 +203,6 @@ function swingLantern(elapsed, s) {
   swing.wind += (GUST(s) - swing.wind) * Math.min(1, dt / sway.forget);
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
-  if (swingHold) { swing.a = swingHold; swing.v = 0; }
   swayAngle = style.stands ? 0 : swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain / TWIST_MAX) - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
