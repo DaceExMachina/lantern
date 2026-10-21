@@ -30,6 +30,9 @@ function context() {
   run('realDraw = drawBackground; drawBackground = v => { drawn = v; realDraw(v); }'); // keeping what drawLight gives it
   return { run, els, uniforms };
 }
+// The chain's mechanics, apart from how Dace tuned it: a loose, lightly damped feel at every size (the tuned blaze is
+// damped past overshooting, so it settles without a whip)
+const loose = ctx => ctx.run('Object.assign(FEEL, { stiffness: [70, 70], falloff: [3, 3], damping: [5, 5], inertia: [15, 15] })');
 // a frame of the flame at page time s, `dt` on, burning at full size
 const step = (ctx, s, dt = 1 / 60) => ctx.run(`stepFlame(${dt}, ${s}, { size: 1, flick: 1, pulse: 1 })`);
 
@@ -86,6 +89,7 @@ test('the tip the smoke, the hot air and the rim\'s shadow leave from is the sha
 
 test('the flame\'s spring settles: kicked, it swings past upright and comes to rest', () => {
   const ctx = context();
+  loose(ctx);
   ctx.run(`applyStyle('candle')`);
   const rest = step(ctx, 5).tip; // the clock held at 5: a steady wind and wobble, so it has somewhere to settle
   for (let i = 0; i < 600; i++) step(ctx, 5); // ten seconds: even the loosest spring has come to rest
@@ -129,6 +133,7 @@ test('the flame feels like an ember when idle and a blaze at full, easing betwee
 
 test('a swing travels up the flame: its lower links lean first, the tip after, then all of it settles', () => {
   const ctx = context();
+  loose(ctx);
   ctx.run(`applyStyle('moroccan'); swayAngle = 0`);
   for (let i = 0; i < 600; i++) step(ctx, 5);
   const rest = ctx.run('flameChain.pts.map(p => p.x)'), n = rest.length;
