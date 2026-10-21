@@ -14,7 +14,7 @@ function tipSpot(tip, el) {
 function make(tag, cls = '', ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
 function link({ label, url }, text = label) {
   const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text; a.title = label;
+  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text;
   return a;
 }
 const short = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
@@ -109,13 +109,15 @@ function sessionRows(s) {
   // The work below, in its tray: agents (each once; background tasks only when they aren't one), side sessions, PRs.
   const tray = [], side = sessions.filter(o => o.parent === s.id), loose = (s.tasks || []).filter(t => !s.subagents.some(a => a.description === t));
   if (s.subagents.length || loose.length) { // in a tinted band of their own, set apart from the rest of the work
-    const zone = make('div', 'agentZone', make('div', 'head', 'Agents', make('span', 'r', String(s.subagents.length))));
+    // "Running": agents and the shell commands it left running, counted apart ("2 agents · 1 shell")
+    const count = [[s.subagents.length, 'agent', 'agents'], [loose.length, 'shell', 'shells']].filter(([n]) => n).map(([n, one, many]) => `${n} ${n > 1 ? many : one}`).join(' · ');
+    const zone = make('div', 'agentZone', make('div', 'head', 'Running', make('span', 'r', count)));
     tray.push(zone);
     // oldest first, by start then id, so the order never shifts while they run: a new agent joins at the bottom and a
     // finished one just drops out, whatever order the server's list comes in
     const agents = [...s.subagents].sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || String(a.id).localeCompare(String(b.id)));
     for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
-    for (const t of loose) zone.append(agentRow({ job: t, last: 0 }, now));
+    for (const t of loose) zone.append(agentRow({ job: t, last: 0, kind: 'shell' }, now));
   }
   if (side.length) {
     tray.push(make('div', 'head', 'Side sessions', make('span', 'r', String(side.length))));
@@ -127,19 +129,23 @@ function sessionRows(s) {
   return rows;
 }
 
-// An agent in the tray, three lines. First the live dot (dim once it's been quiet 10 s), its task tag as a chip (when
-// the step starts "[tag]", a tag some setups put on every step), its model, and how long it's run; then its job; then its
-// current step. The job and step are cut to a line each; a click opens the agent to show them in full, and it stays
-// open, by id, through the redraws until the card closes. A button, so the keyboard gets it too.
+// An agent in the tray. With a task tag (when its step starts "[tag]", a tag some setups put on every step) or a model to
+// show, three lines: the live dot (dim once it's been quiet 10 s), the tag as a chip, the model and how long it's run;
+// then its job; then its current step. With neither, two: the dot, the job and the time; then the step. A shell command
+// has no step, so it's one line: the dot, the command, "shell" and the time. The job and step are cut to a line each; a
+// click opens the agent to show them in full, and it stays open, by id, through the redraws until the card closes. A
+// button, so the keyboard gets it too.
 const TAG = /^\[([^\]]+)\]\s*/;
 const openAgents = new Set();
-/** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string }} a */
-function agentRow({ id, job, activity = '', started, last = 0, model }, now) {
+/** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string, kind?: string }} a */
+function agentRow({ id, job, activity = '', started, last = 0, model, kind }, now) {
   const tag = activity.match(TAG)?.[1], step = activity.replace(TAG, ''), key = id || job;
-  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''),
-    make('span', 'arow', make('span', 'live' + (now - last > 10e3 ? ' quiet' : '')), ...(tag ? [make('span', 'tag', tag)] : []),
-      ...(model ? [make('span', 'model', model)] : []), ...(started ? [make('span', 't', short(now - started))] : [])),
-    make('span', 'job', job), ...(step ? [make('span', 'astep', step)] : []));
+  const dot = make('span', 'live' + (now - last > 10e3 ? ' quiet' : '')), time = started ? [make('span', 't', short(now - started))] : [];
+  const about = [...(tag ? [make('span', 'tag', tag)] : []), ...(model ? [make('span', 'model', model)] : [])], name = make('span', 'job', job);
+  const lines = kind ? [make('span', 'arow', dot, name, make('span', 'model', kind), ...time)] // a shell command: its kind in the model's style
+    : about.length ? [make('span', 'arow', dot, ...about, ...time), name]
+    : [make('span', 'arow', dot, name, ...time)]; // nothing to say on a line of its own
+  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), ...lines, ...(step ? [make('span', 'astep', step)] : []));
   row.setAttribute('aria-expanded', String(openAgents.has(key)));
   const toggle = () => {
     const open = !openAgents.has(key);
@@ -179,15 +185,15 @@ function prBlock(s) {
   };
   const dot = need => { const i = make('i'); i.style.background = FLY[need] || FLY.quiet; return i; };
   const head = make('div', 'phead', ph, tog);
-  // the PRs past the cap are bare numbers, so each shows its title in the badges' tooltip while hovered or focused,
-  // placed as a badge's is (tipSpot). The tip is fixed, so out of the card's flow, but the card's transform makes the
-  // card its frame, so the window spot is taken back to the card's.
+  // A PR's title where the card doesn't already show it in full: an overflow link past the cap (a bare number), or a
+  // list row whose title is cut short. It's the badges' tooltip, shown while hovered or focused and placed as a badge's
+  // is (tipSpot). The tip is fixed, so out of the card's flow, but the card's transform makes the card its frame, so the
+  // window spot is taken back to the card's. A chip names itself in the header instead.
   const tip = make('div', 'badgeTip');
   tip.setAttribute('role', 'tooltip');
-  const titled = p => {
-    const a = link(p);
-    a.removeAttribute('title'); // the tip says it
+  const titled = (/** @type {HTMLElement} */ a, p, cut = () => true) => {
     a.onpointerenter = a.onfocus = () => {
+      if (!cut()) return;
       tip.textContent = p.title;
       const at = tipSpot(tip, a), card = $('card'), c = card.getBoundingClientRect();
       tip.style.left = `${at.left - c.left - card.clientLeft}px`; tip.style.top = `${at.top - c.top - card.clientTop}px`;
@@ -204,12 +210,12 @@ function prBlock(s) {
     return a;
   }))];
   return [head, ...prs.slice(0, PR_CAP).map(p => {
-    const a = link(p, '');
+    const a = link(p, ''), ti = make('div', 'ti', p.title);
     a.className = 'pr2';
-    a.append(make('div', 'ti', p.title), make('div', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
+    a.append(ti, make('div', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
       ...(p.createdAt ? [make('span', 't', short(Date.now() - Date.parse(p.createdAt)))] : []))); // how long it's been open
-    return a;
-  }), ...(prs.length > PR_CAP ? [make('div', 'more', `${prs.length - PR_CAP} more: `, ...prs.slice(PR_CAP).flatMap((p, i) => [i ? ', ' : '', titled(p)]), tip)] : [])];
+    return titled(a, p, () => ti.scrollWidth > ti.clientWidth);
+  }), ...(prs.length > PR_CAP ? [make('div', 'more', `${prs.length - PR_CAP} more: `, ...prs.slice(PR_CAP).flatMap((p, i) => [i ? ', ' : '', titled(link(p), p)]))] : []), tip];
 }
 // The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
 // anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.

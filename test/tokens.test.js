@@ -22,8 +22,9 @@ const raw = (prop, value) => RAW_COLOUR.test(value) || SIZED.test(prop) && /(?<!
   || prop === 'font-weight' && /^(?:\d+|normal|bold)$/.test(value) || prop === 'z-index' && /^-?\d+$/.test(value);
 const declarations = body => body.split(';').map(d => d.split(':')).filter(d => d.length > 1).map(([p, ...v]) => [p.trim(), v.join(':').trim()]);
 
-// The hover card is being redesigned (page/card.js and its CSS), so it joins the tokens once that lands, not before.
-const LATER = { css: /#card\b|\.starCard\b/, files: ['card.js'] };
+// The hover card's colours with no token near them yet, waiting on Dace's call: the cool agents band, the tray's
+// translucent dark, and the error and paused pills. Everything else on the card uses the tokens.
+const LATER = { css: /#card \.(?:agentZone(?: \.head)?|tray|chip\.(?:error|paused))\s*$/, files: [] };
 // What's left to migrate. It only shrinks: an entry that no longer has a raw value fails too, so delete it.
 const DEBT = new Set(require('./tokens-debt.json'));
 

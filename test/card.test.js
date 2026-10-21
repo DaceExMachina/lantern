@@ -57,7 +57,7 @@ test('an open list shows the worst four, failing and changes requested first, th
   assert.deepStrictEqual(find(card, 'pr2').map(a => a.href), [5, 3, 4, 2].map(n => pr(n).url));
   const [more] = find(card, 'more');
   assert.strictEqual(text(more), '2 more: #1, #6');
-  const [tip] = find(more, 'badgeTip'), overflow = more.children.filter(c => c.tag === 'a');
+  const [tip] = find(card, 'badgeTip'), overflow = more.children.filter(c => c.tag === 'a');
   assert.strictEqual(tip.attrs.role, 'tooltip');
   assert.strictEqual(overflow[1].title, undefined, 'no native title over the tip');
   // near the window's right edge: the tip keeps 8px inside it, placed in the card's frame (the card is at 1100, 200)
@@ -210,4 +210,40 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
   assert.deepStrictEqual([calls, posts], [[], ['/snooze']], 'the snooze, and not the open');
   assert.deepStrictEqual([pill({}).title, pill({ snoozed: true }).title, pill({ snoozed: true, forGood: true }).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
   assert.strictEqual(pill({}).attrs['aria-label'], 'needs you: snooze');
+});
+
+test('no PR link shows a native "#n" title; a list row shows its title in the tip only when it is cut short', () => {
+  const { show, run } = load();
+  const titles = card => all(card).filter(n => n.tag === 'a').map(a => a.title);
+  assert.deepStrictEqual(titles(show(session({ github: TEN }))).filter(Boolean), [], 'chips');
+  run('prList.s1 = true');
+  const card = show(session({ github: TEN }));
+  assert.deepStrictEqual(titles(card).filter(Boolean), [], 'list rows and overflow links');
+  const [tip] = find(card, 'badgeTip'), [row] = find(card, 'pr2'), [ti] = find(row, 'ti');
+  card.rect = { left: 0, top: 0 }; row.rect = { left: 10, right: 200, top: 300, bottom: 330, width: 190 };
+  ti.scrollWidth = 150; ti.clientWidth = 190;
+  row.onpointerenter();
+  assert.strictEqual(tip.className, 'badgeTip', 'it fits: no tip');
+  ti.scrollWidth = 400;
+  row.onpointerenter();
+  assert.deepStrictEqual([text(tip), tip.className], [text(ti), 'badgeTip show'], 'cut short: its full title');
+  row.onpointerleave();
+  assert.strictEqual(tip.className, 'badgeTip');
+});
+
+test('an agent with no tag or model is two lines (job beside the dot), and a shell command is one, "shell" in the model\'s place', () => {
+  const { show } = load();
+  const card = show(session({ state: 'working', tasks: ['npm run preview'], subagents: [
+    { id: 'a', description: 'Tagged', model: 'Opus 5.5', activity: '[t] Step', started: now - 1e3, last: now },
+    { id: 'b', description: 'Model only', model: 'Opus 5.5', activity: 'Step', started: now - 2e3 + 1e3, last: now },
+    { id: 'c', description: 'Neither', activity: 'Step', started: now, last: now }] }));
+  const shape = r => r.children.map(c => [c.className, ...(c.className === 'arow' ? c.children.map(x => x.className) : [])]);
+  assert.deepStrictEqual(find(card, 'agent').map(shape), [
+    [['arow', 'live', 'tag', 'model', 't'], ['job'], ['astep']],
+    [['arow', 'live', 'model', 't'], ['job'], ['astep']],
+    [['arow', 'live', 'job', 't'], ['astep']],
+    [['arow', 'live quiet', 'job', 'model']]]);
+  assert.strictEqual(text(find(card, 'agent')[3]), 'npm run previewshell');
+  const [head] = find(find(card, 'agentZone')[0], 'head');
+  assert.strictEqual(text(head), 'Running3 agents · 1 shell');
 });
