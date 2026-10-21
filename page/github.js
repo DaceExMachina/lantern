@@ -25,9 +25,9 @@ function renderGitHub() {
   if (signIn) {
     const link = make('a', 'Open github.com/login/device'); link.href = signIn.url; link.target = '_blank'; link.rel = 'noopener';
     // two icon buttons, in the footer's corner-icon style, to the right of the link
-    const svg = d => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">${d}</svg>`;
-    const icon = (label, d, onclick) => { const b = make('button', '', 'icon'); b.title = b.ariaLabel = label; b.innerHTML = svg(d); b.onclick = onclick; return b; };
-    const copy = icon('Copy code', GH_COPY, () => navigator.clipboard?.writeText(signIn.code).then(() => { copy.innerHTML = svg(GH_CHECK); copy.title = 'Copied'; }));
+    const face = d => `<span class="face"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round">${d}</svg></span>`;
+    const icon = (label, d, onclick) => { const b = make('button', '', 'icon'); b.title = b.ariaLabel = label; b.innerHTML = face(d); b.onclick = onclick; return b; };
+    const copy = icon('Copy code', GH_COPY, () => navigator.clipboard?.writeText(signIn.code).then(() => { copy.innerHTML = face(GH_CHECK); copy.title = 'Copied'; }));
     const cancel = icon('Cancel', GH_CANCEL, () => { if (!ghDemo) post('/github', { cancel: true }); });
     const tools = make('span', '', 'tools'); tools.append(copy, cancel);
     const bar = make('div', '', 'row'); bar.append(link, tools);

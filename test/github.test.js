@@ -19,7 +19,7 @@ test('connecting shows copy then cancel as icon buttons to the right of the link
   assert.ok(bar, 'the link has a row');
   const buttons = find(bar, n => n.tag === 'button');
   assert.deepStrictEqual(buttons.map(b => b.ariaLabel), ['Copy code', 'Cancel']);
-  assert.ok(buttons.every(b => b.innerHTML.startsWith('<svg') && b.title === b.ariaLabel || b.title === 'Copied'));
+  assert.ok(buttons.every(b => b.innerHTML.includes('<svg') && b.title === b.ariaLabel || b.title === 'Copied'));
   const before = buttons[0].innerHTML;
   buttons[0].onclick(); await Promise.resolve(); await Promise.resolve();
   assert.deepStrictEqual(copied, ['ABCD-1234']);
