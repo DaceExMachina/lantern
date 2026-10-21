@@ -65,7 +65,7 @@ func accountFolders(_ cwds: [String]) -> [(top: String, cwd: String)] {
     var byTop: [String: String] = [:]
     for cwd in cwds {
         let top = cwd.hasPrefix(HOME + "/") ? cwd.dropFirst(HOME.count + 1).split(separator: "/").first.map(String.init) ?? "" : ""
-        byTop[top] = min(byTop[top] ?? cwd, cwd) // the same repo whatever order the sessions are in
+        byTop[top] = byTop[top] ?? cwd
     }
     return byTop.sorted { $0.key < $1.key }.map { (top: $0.key, cwd: $0.value) }
 }
@@ -119,11 +119,11 @@ extension LanternServer {
                 } }
             var results = [JSON?](repeating: nil, count: queries.count)
             DispatchQueue.concurrentPerform(iterations: queries.count) { i in let r = queries[i](); DispatchQueue.main.sync { results[i] = r } }
-            // a query that failed (a blip) keeps what it found in the last 10 minutes, so its PRs neither vanish and fly back in,
+            // a query that failed (a blip) keeps what it found in the last 10 minutes (GH_KEEP_MS), so its PRs neither vanish and fly back in,
             // nor hold up every other query's. An expired token isn't a blip: its PRs go, and the account row says to reconnect.
             let t0 = now(), answers = results.enumerated().map { i, r -> JSON? in
                 if let r = r { return r }
-                guard errors[keys[i]] != "expired", let last = previous[keys[i]], t0 - last.at < 600_000 else { return nil }
+                guard errors[keys[i]] != "expired", let last = previous[keys[i]], t0 - last.at < GH_KEEP_MS else { return nil }
                 return last.data
             }
             var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:]
@@ -161,6 +161,8 @@ extension LanternServer {
                         "need": prNeed(p), "updatedAt": p["updatedAt"]!]
             }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }
             DispatchQueue.main.async {
+                // turned off while this ran: don't bring the PRs back
+                guard self.accounts.count > 0 || truthy(self.settings["github"]) else { self.refreshing = false; self.refreshAgain = false; return }
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
                 let t = now()
                 // fresh answers are remembered with their time; a kept one keeps its old time, so it ages out

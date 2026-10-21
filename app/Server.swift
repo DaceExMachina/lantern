@@ -19,6 +19,8 @@ let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT
 // An agent heard from by a hook this recently is alive whatever its transcript says (it may not be written yet).
 let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
 // How long after its last hook event a session Claude Code calls idle may still be waiting for that turn's Stop to arrive.
+// How long a GitHub query that fails (a blip) keeps its last answer, so its PRs don't vanish and fly back in.
+let GH_KEEP_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_GH_KEEP_SECONDS"] ?? "") ?? 10 * 60) * 1000
 let STATUS_LAG_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_STATUS_LAG_SECONDS"] ?? "") ?? 10) * 1000
 let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "elicitation_dialog", "agent_needs_input"]
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
