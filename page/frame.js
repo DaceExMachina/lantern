@@ -603,9 +603,11 @@ function mothTarget(k, m, dt, s) {
   // fresh landing's spot (alongFor).
   if (!m.parentId && m.home) {
     if (!needsMe) m.along = alongFor(m.key);
-    else if (!m.wasLanded) {
-      m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
-      // a window that opens on a moth that has already hopped puts it where the others have it
+    else {
+      if (!m.wasLanded) m.rand = seeded(hash(`${m.key}:${m.session.waitingSince || 0}`)); // this landing's dice, the same in every window
+      // the spot of its last hop, off the wall clock alone, so every window has it in the same place however long it's been
+      // open, snoozed or not (a snoozed one eases over without the hop). ponytail: lastHop every frame; it walks back
+      // about three slots to the last hop
       m.hopSlot = lastHop(m.key, m.session.waitingSince || 0, Date.now() / 1000);
       m.along = alongFor(m.key, m.hopSlot);
     }
@@ -636,14 +638,8 @@ function mothTarget(k, m, dt, s) {
       const n = Math.floor(now / FIDGET.slot - fidgetPhase(m.key)), { start, kind } = fidgetSlot(m.key, n, ws), into = m.into = now - start;
       if (into > 0 && into < FIDGET[kind]) {
         m.fidget = kind;
-        if (kind === 'hop') {
-          ty -= HOP * Math.sin(Math.PI * into / FIDGET.hop);
-          // a hop lands on a new spot along its line, picked once as it lifts off (seeded by its slot, so windows agree)
-          if (into > FIDGET.hop * FIDGET.lift && m.hopSlot !== n) {
-            m.hopSlot = n;
-            m.along = alongFor(m.key, n);
-          }
-        }
+        // a hop lands on a new spot along its line (lastHop moves it there `lift` of the way in)
+        if (kind === 'hop') ty -= HOP * Math.sin(Math.PI * into / FIDGET.hop);
       }
     }
   } else {
