@@ -6,7 +6,7 @@ import Foundation
 let GH = [ProcessInfo.processInfo.environment["LANTERN_GH"], HOME + "/.local/bin/gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
     .compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0) } ?? "gh" // an app's PATH is minimal, so look in the usual places
 let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
-let PR_GQL = "url number title state isDraft updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
 func prQuery(_ fields: String) -> String {
     """
     query {
@@ -150,7 +150,7 @@ extension LanternServer {
                     for (url, p) in all.items where str(p["headRefName"]) == branch && str((p["repository"] as? JSON)?["nameWithOwner"]).lowercased() == repo?.lowercased() { prs[url] = p }
                 }
                 for url in created { if let p = all[url] { prs[url] = p } }
-                github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1)] }
+                github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1), "createdAt": $0.1["createdAt"] ?? NSNull()] } // createdAt: how long it's been open, for the card
             }
             // The stale list: my open PRs that no session owns and nobody has touched for a week (quiet), oldest first.
             let owned = Set(github.values.flatMap { $0.map { str($0["url"]) } }), weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)

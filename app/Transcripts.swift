@@ -304,19 +304,49 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
 /// only in the subagent's transcript) and its finishing wakes the subagent, not the session. One memmem over the mapped
 /// file, as in linesWorthParsing, so an 85 MB transcript costs milliseconds.
 func taskStart(_ file: String, _ id: String) -> Double? {
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let line = lineWith(file, "\"backgroundTaskId\":\"\(id)\""), let stamp = (parse(line) as? JSON)?["timestamp"] as? String, let at = iso.date(from: stamp) else { return nil }
+    return (at.timeIntervalSince1970 * 1000).rounded(.down)
+}
+/// The first line of a file holding `needle`: one memmem over the mapped file, so an 85 MB transcript costs milliseconds.
+func lineWith(_ file: String, _ needle: String) -> Data? {
     guard let data = try? Data(contentsOf: URL(fileURLWithPath: file), options: .alwaysMapped) else { return nil }
-    let needle = Array("\"backgroundTaskId\":\"\(id)\"".utf8)
-    let line = data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) -> Data? in
+    let needle = Array(needle.utf8)
+    return data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) -> Data? in
         guard let base = buf.baseAddress, let hit = memmem(base, buf.count, needle, needle.count) else { return nil }
         var start = UnsafeRawPointer(hit) - base, end = start
         while start > 0 && buf[start - 1] != 10 { start -= 1 }
         while end < buf.count && buf[end] != 10 { end += 1 }
         return Data(bytes: base + start, count: end - start)
     }
-    let iso = ISO8601DateFormatter()
-    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    guard let line, let stamp = (parse(line) as? JSON)?["timestamp"] as? String, let at = iso.date(from: stamp) else { return nil }
-    return (at.timeIntervalSince1970 * 1000).rounded(.down)
+}
+
+/// The model an agent runs now, by name ("Opus 5.5"): the newest model named in its transcript's last 128 KB, a `model`
+/// attachment or a reply's `message.model`, since about 1 in 200 agents switch mid-run. Past that, the model attachment
+/// near its start (written about 70 ms in, by every Claude Code version and the desktop app; a fork has none), then its
+/// first reply's. nil until one is written. Only lines naming a model get parsed.
+func agentModel(_ file: String) -> String? {
+    let named = { (j: JSON) -> String? in
+        if str(j["type"]) == "assistant", let m = (j["message"] as? JSON)?["model"] as? String { return m }
+        guard let at = j["attachment"] as? JSON, str(at["type"]) == "model", let id = at["identity"] as? JSON else { return nil }
+        return [id["marketingName"], id["modelId"]].compactMap { $0 as? String }.first { !$0.isEmpty }
+    }
+    let usable = { (m: String?) in m.flatMap { $0.isEmpty || $0 == "<synthetic>" ? nil : modelLabel($0) } } // <synthetic>: a reply Claude Code made up, an API error
+    for line in tail(file, 128 * 1024).reversed() where line.contains("\"model") {
+        if let j = parse(Data(line.utf8)) as? JSON, let m = usable(named(j)) { return m }
+    }
+    for needle in ["\"type\":\"model\",\"identity\"", "\"type\":\"assistant\""] {
+        if let line = lineWith(file, needle), let j = parse(line) as? JSON, let m = usable(named(j)) { return m }
+    }
+    return nil
+}
+/// A model as the card names it: "Opus 5.5 (1M context)" is "Opus 5.5", and an id ("claude-opus-5-5[1m]",
+/// "claude-haiku-4-5-20251001", "us.anthropic.claude-opus-5-5-v1:0") becomes its name. Anything else is kept.
+func modelLabel(_ m: String) -> String {
+    let m = Re("\\s*(\\([^)]*\\)|\\[[^\\]]*\\])$").replace(m, "")
+    guard let p = Re("claude-([a-z]+)-([0-9]{1,2}(?:-[0-9]{1,2}(?![0-9]))?)").match(m), let family = p[1], let version = p[2] else { return m }
+    return family.capitalized + " " + version.replacingOccurrences(of: "-", with: ".")
 }
 
 /// Subagents under a session folder that are still going: transcript not finished, and touched within AGENT_EXPIRE_MS (an
@@ -327,7 +357,9 @@ func liveSubagents(_ dir: String) -> Ordered<JSON> {
     for f in transcripts(dir + "/subagents") {
         guard let agent = Re("^agent-([A-Za-z0-9_-]+)\\.jsonl$").match((f as NSString).lastPathComponent)?[1], let mtime = fileTimes(f)?.mtime,
               now() - mtime <= AGENT_EXPIRE_MS, !lastTurn(tail(f, 64 * 1024)).done else { continue }
-        var a: JSON = ["type": "", "description": "", "activity": "", "tries": 3, "last": mtime]
+        // tries 0: an agent found before its model is written gets it once it fires a hook (loadAgentMeta)
+        var a: JSON = ["type": "", "description": "", "activity": "", "tries": 0, "last": mtime, "started": fileTimes(f)?.birth ?? mtime]
+        if let m = agentModel(f) { a["model"] = m }
         if let data = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(agent).meta.json"), let j = parse(data) as? JSON {
             a["type"] = or(j["agentType"], ""); a["description"] = or(j["description"], "")
         }
@@ -418,15 +450,21 @@ extension LanternServer {
             }
         }
     }
-    func loadAgentMeta(_ id: String, _ aid: String, _ file: String) {
+    /// An agent's job and type from its meta file, and its model from its transcript (agentModel).
+    func loadAgentMeta(_ id: String, _ aid: String, _ dir: String) {
         DispatchQueue.global().async {
-            guard let data = FileManager.default.contents(atPath: file), let j = parse(data) as? JSON else { return }
+            let meta = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(aid).meta.json").flatMap(parse) as? JSON
+            let model = agentModel("\(dir)/subagents/agent-\(aid).jsonl")
             DispatchQueue.main.async {
-                if var a = self.agents[id]?[aid] {
-                    a["description"] = or(j["description"], "")
-                    if !truthy(a["type"]) { a["type"] = or(j["agentType"], "") }
-                    self.agents[id]![aid] = a
+                guard let was = self.agents[id]?[aid] else { return }
+                var a = was
+                if let meta {
+                    a["description"] = or(meta["description"], "")
+                    if !truthy(a["type"]) { a["type"] = or(meta["agentType"], "") }
                 }
+                if let model { a["model"] = model }
+                if NSDictionary(dictionary: a).isEqual(to: was) { return } // another try that found nothing new
+                self.agents[id]![aid] = a
                 self.broadcast()
             }
         }
