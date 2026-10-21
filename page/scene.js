@@ -16,6 +16,9 @@ const WING_SIDE = [[0, 0], [12, -14], [18, -4], [14, 6], [0, 0]];
 // both wings hinge on the body axis, the line between them (they point at about -96° and -12.5°)
 const AXIS = -54.4 * Math.PI / 180, AU = [Math.cos(AXIS), Math.sin(AXIS)], AN = [-Math.sin(AXIS), Math.cos(AXIS)];
 const EYE = 40; // viewer distance in moth units: smaller means stronger perspective
+// How far a wing tip can reach from the moth's position, per unit of size, with the perspective (see wing3d): w·EYE/√(EYE² − w²),
+// w the wing point furthest from the joint
+const WING_REACH = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))));
 
 // The one wing model, in 3D (scene axes: x right, y down, z toward the viewer). A wing's 2D outline (along the body
 // AU, across it AN) is placed on a frame of directions: T along the body, N the way a folded wing stands (out of the
