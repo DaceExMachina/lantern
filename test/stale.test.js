@@ -123,7 +123,7 @@ test('hovering a wisp or a ghost moth finds it where it is drawn now, after it h
 test('every screen draws the wisps and ghosts in the same places, whatever its frame rate and whenever it opened', () => {
   const clock = { t: BASE }, a = screen(clock), b = screen(clock);
   let outA, outB;
-  for (let t = 0; t <= 30; t += 1 / 60) { // the app at 60 fps since BASE; the panel at 25, opened 10s later with its own page clock
+  for (let t = 0; t <= 30; t += 1 / 60) { // the app at 60 fps since BASE; the panel at 20, opened 10s later with its own page clock
     clock.t = BASE + t * 1000;
     outA = a.frame(1 / 60, t);
     if (t >= 10 && Math.round(t * 60) % 3 === 0) outB = b.frame(0.05, 100 + t - 10);
