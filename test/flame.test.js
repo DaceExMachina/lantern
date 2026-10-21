@@ -52,6 +52,14 @@ test('the tip the smoke, the hot air and the rim\'s shadow leave from is the sha
   const half = new Function(src.match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/)[0].replace('float flameHalf(float t)', 'return t =>')
     .replace(/\bfloat /g, 'let ').replace(/\b(sqrt|pow)\(/g, 'Math.$1('))();
   assert.ok(half(0.999) > 0 && half(1) === 0 && half(1.01) === 0, 'the tongue comes to its point at t = 1');
+  // nothing of any tongue shows above its tip or below its base, however its spine falls across a pixel
+  const tongue = new Function('flameHalf', src.match(/float tongue\(vec2 q, float w, float h, float px\) \{[\s\S]*?\n\}/)[0]
+    .replace('float tongue(vec2 q, float w, float h, float px)', 'return (q, w, h, px) =>').replace(/\bfloat /g, 'let ')
+    .replace(/\babs\(/g, 'Math.abs(').replace(/\bclamp\(([^;]*), 0\.0, 1\.0\)/, 'Math.min(1, Math.max(0, $1))'))(half);
+  for (const [w, h] of [[34, 96], [24, 70], [13, 40]]) for (const y of [h, h * 1.001, h * 1.2, -0.05 * h]) for (const x of [0, 0.1, -0.3]) {
+    assert.strictEqual(tongue({ x, y }, w, h, 1), 0, `a tongue ${w} by ${h} shows at ${x}, ${y}: a line off its tip`);
+  }
+  assert.ok(tongue({ x: 0, y: 48 }, 34, 96, 1) === 1, 'and covers its middle');
   assert.match(src, /q\.x -= uShape\.x \* pow\(t, 1\.6\) \+ uShape\.z \* mid \*/, 'the spine reaches the lean at the tip, and the noise is weighed by mid');
   assert.match(src, /mid = 4\.0 \* t \* \(1\.0 - t\)/, 'mid is 0 at the tip');
   assert.match(src, /tongue\(q, 34\.0 \* swell, h, px\)/, 'the outer tongue is h tall');

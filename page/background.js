@@ -402,8 +402,13 @@ float flameHalf(float t) {
   float u = (t - 0.3) / 0.7;
   return pow(1.0 - u, 1.1) * (1.0 + 0.9 * u); // full shoulders, a sharp tip
 }
-// how much of a tongue w wide and h tall covers q (x from the spine), its edge eased over a pixel (px, in flame units)
-float tongue(vec2 q, float w, float h, float px) { return clamp((0.72 * w * flameHalf(q.y / h) - abs(q.x)) / px + 0.5, 0.0, 1.0); }
+// How much of a tongue w wide and h tall covers q (x from the spine), its edge eased over a pixel (px, in flame units).
+// None where it has no width (above its tip, below its base): eased there, the spine's own pixel would show half covered,
+// a thin line straight up off the tip. Scalars and q.x, q.y only, so the test can run it as JS.
+float tongue(vec2 q, float w, float h, float px) {
+  float hw = 0.72 * w * flameHalf(q.y / h);
+  return hw > 0.0 ? clamp((hw - abs(q.x)) / px + 0.5, 0.0, 1.0) : 0.0;
+}
 void main() {
   vec2 q = vec2(vP.x - uBase.x, uBase.y - vP.y) / uBase.z;
   float h = uShape.y, time = uBase.w, px = uPx / uBase.z, t = clamp(q.y / h, 0.0, 1.0), mid = 4.0 * t * (1.0 - t);
