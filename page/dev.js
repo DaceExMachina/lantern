@@ -29,19 +29,19 @@ function devKey(/** @type {KeyboardEvent} */ e) {
 function toggleDevPanel() {
   if (devPanel) { devPanel.hidden = !devPanel.hidden; return; }
   devPanel = document.createElement('div');
-  devPanel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 260px; max-height: calc(100vh - 24px); overflow-y: auto;'
-    + 'box-sizing: border-box; padding: 4px 14px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;'
+  devPanel.style.cssText = 'position: fixed; top: var(--space-3); left: var(--space-3); z-index: var(--z-overlay); width: 260px; max-height: calc(100vh - 24px); overflow-y: auto;'
+    + 'box-sizing: border-box; padding: var(--space-1) 14px var(--space-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);'
     + 'color: var(--ink); font: 12.5px/1.5 Georgia, serif; box-shadow: var(--shadow-lg)';
   const sections = new Map();
   for (const r of devRows) {
     if (!sections.has(r.section)) {
       const d = document.createElement('details'), s = document.createElement('summary');
-      d.open = true; s.textContent = r.section; s.style.cssText = 'padding: 6px 0 2px; cursor: pointer; color: var(--accent-violet)';
+      d.open = true; s.textContent = r.section; s.style.cssText = 'padding: var(--space-1-5) 0 var(--space-0-5); cursor: pointer; color: var(--accent-violet)';
       d.append(s); devPanel.append(d); sections.set(r.section, d);
     }
     // each row is one label: its click area the row's full width and height, meeting the next row's
     const row = document.createElement('label');
-    row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 5px 0; cursor: pointer';
+    row.style.cssText = 'display: flex; align-items: center; gap: var(--space-2); padding: 5px 0; cursor: pointer';
     row.title = r.title;
     sections.get(r.section).append(row);
     if (r.kind === 'button') {

@@ -45,33 +45,33 @@
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
      so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, main.js) */
-  footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: 12px 0; position: relative; }
-  #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 12px; } /* the padding keeps the text off the window edge once it has slid all the way left */
+  footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
+  #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 var(--space-3); } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
   /* the quiet, stats and settings buttons: each one's click area runs the bar's full height and meets its neighbours',
      so there's no dead spot between or around them */
   .corners { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
-  .corner { all: unset; cursor: pointer; color: var(--accent-violet); display: flex; align-items: center; padding: 0 6px; }
-  .corner:last-child { padding-right: 16px; }
+  .corner { all: unset; cursor: pointer; color: var(--accent-violet); display: flex; align-items: center; padding: 0 var(--space-1-5); }
+  .corner:last-child { padding-right: var(--space-4); }
   .corner:hover { color: var(--ink-hover); }
   #quiet.on svg path:first-child { fill: currentColor; } /* a full moon... well, a filled one, while quiet is on */
   .corner:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
-  .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 14px; color: var(--ink); font-size: 12.5px; line-height: 1.5; box-shadow: var(--shadow-lg); }
+  .flyup { inset: auto var(--space-3) 52px auto; margin: 0; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
+    padding: var(--space-3) 14px; color: var(--ink); font-size: 12.5px; line-height: 1.5; box-shadow: var(--shadow-lg); }
   .flyup:popover-open { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 72px); overflow-y: auto; }
   #help { border-top: 1px solid var(--line-soft); padding-top: 10px; }
   #help summary { cursor: pointer; color: var(--accent-violet); }
   #help summary:hover { color: var(--ink-hover); }
-  #help p { margin: 6px 0 0; }
+  #help p { margin: var(--space-1-5) 0 0; }
   #help b { color: var(--ink-hover); font-weight: 600; }
   #help .key { white-space: nowrap; }
-  #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
+  #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 var(--space-0-5) 0 var(--space-1-5); }
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
   #menu { padding-top: 7px; }
   #menu:popover-open { gap: 0; }
   /* each option's tip is a docked card like the recap's, above the menu at its width (main.js docks it). It shows after a
      short hover on the row, or when a control in it has keyboard focus. */
-  #menu .tip { max-width: none; box-sizing: border-box; z-index: 1; transition-delay: .5s; }
+  #menu .tip { max-width: none; box-sizing: border-box; z-index: var(--z-tip); transition-delay: .5s; }
   #menu .tip.show { opacity: 1; }
   #menu > label { display: flex; padding: 5px 0; }
   #menu .time { justify-content: space-between; white-space: nowrap; }
@@ -80,22 +80,22 @@
      Nothing moves when it flips. The words and each half of the switch run the row's full height, and the halves touch. */
   #menu .switch { display: flex; }
   #menu .switch > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
-  #menu .switch > label { display: flex; padding-left: 8px; } /* the time's click area runs the row's full height too */
+  #menu .switch > label { display: flex; padding-left: var(--space-2); } /* the time's click area runs the row's full height too */
   #menu .switch input:disabled { opacity: .4; }
   #menu input[type=time], .pill button span { box-sizing: border-box; height: 26px; } /* the switch matches the input */
   #menu input[type=time] { width: 8.6em; } /* one width for every time, the widest value's, so their edges line up */
   .pill { display: flex; }
   .pill button { all: unset; cursor: pointer; display: flex; align-items: center; padding: 5px 0; }
-  .pill button span { display: flex; align-items: center; padding: 0 8px; border: 1px solid var(--line); background: var(--surface-raised); color: var(--accent-violet); }
-  .pill button:first-child span { border-radius: 6px 0 0 6px; }
-  .pill button:last-child span { border-radius: 0 6px 6px 0; border-left: none; }
+  .pill button span { display: flex; align-items: center; padding: 0 var(--space-2); border: 1px solid var(--line); background: var(--surface-raised); color: var(--accent-violet); }
+  .pill button:first-child span { border-radius: var(--radius-md) 0 0 var(--radius-md); }
+  .pill button:last-child span { border-radius: 0 var(--radius-md) var(--radius-md) 0; border-left: none; }
   .pill button[aria-pressed=true] span { background: var(--surface-selected); color: var(--ink-strong); }
   .pill button:hover span { color: var(--ink-hover); }
   .pill button:focus-visible span { outline: 1px solid var(--focus); outline-offset: 1px; }
   #menu #style { flex: 1; }
   #menu > :has(+ .tip + #gh) { padding-bottom: 10px; } /* the last row reaches down to the GitHub section's line */
   #menu #help { margin-top: 5px; }
-  #menu .ribbon { display: flex; align-items: center; gap: 6px; }
+  #menu .ribbon { display: flex; align-items: center; gap: var(--space-1-5); }
   #menu .unavailable { opacity: .4; }
   #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
   #ribbons button { all: unset; flex: 1; display: flex; justify-content: center; padding: 5px 0; cursor: pointer; }
@@ -105,7 +105,7 @@
   #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
-  #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
+  #stats, #recap { inset: var(--space-5) 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
   #stats:popover-open { gap: var(--space-4); }
   #recap:popover-open { gap: var(--space-3); }
   #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
@@ -130,7 +130,7 @@
   :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(16em, 1fr)); gap: var(--space-1) var(--space-3); margin-top: 0; }
   :is(#stats, #recap) .legend span { display: flex; align-items: center; white-space: nowrap; }
   :is(#stats, #recap) .legend [data-v] { margin-left: auto; min-width: 5.4em; text-align: right; }
-  :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
+  :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 var(--space-1) 0 var(--space-0-5); }
   :is(#stats, #recap) dl { display: grid; gap: var(--space-2) var(--space-3); margin: 0; }
   /* the stats panel's six numbers: 3 by 2 when there's room (380px), else 2 by 3 */
   #stats dl { grid-template-columns: repeat(2, 1fr); }
@@ -139,14 +139,14 @@
   :is(#stats, #recap) dd { margin: 0; color: var(--ink-strong); font-size: 16px; font-variant-numeric: tabular-nums; }
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
-  #stats .day .none { border: 1px dashed var(--line-soft); border-radius: 3px; box-sizing: border-box; }
+  #stats .day .none { border: 1px dashed var(--line-soft); border-radius: var(--radius-sm); box-sizing: border-box; }
   #stats .day b { color: var(--ink); font-weight: 500; }
   :is(#stats, #recap) .dim { color: var(--ink-dim); margin: 0; }
   :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: var(--accent-warm-surface); color: var(--accent-warm-ink); white-space: nowrap; }
+  #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--accent-warm-surface); color: var(--accent-warm-ink); white-space: nowrap; }
   #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
-  .badgeTip { position: fixed; z-index: 10; pointer-events: none; max-width: 240px; padding: 8px 10px; border: 1px solid var(--line);
-    border-radius: 10px; background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: 1.45;
+  .badgeTip { position: fixed; z-index: var(--z-overlay); pointer-events: none; max-width: 240px; padding: var(--space-2) 10px; border: 1px solid var(--line);
+    border-radius: var(--radius-lg); background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: 1.45;
     opacity: 0; transition: opacity .12s; }
   .badgeTip.show { opacity: 1; }
   .badgeTip b { color: var(--ink-strong); font-weight: 600; }
@@ -185,25 +185,25 @@
   #status.waiting { color: #B9A8FF; }
   #status .warm { color: var(--ink-dim); }
   #status.offline { color: #8A7A99; font-style: italic; }
-  #gh h3 { margin: 0 0 4px; font-size: 13px; color: var(--ink-strong); display: flex; align-items: center; gap: 6px; }
+  #gh h3 { margin: 0 0 var(--space-1); font-size: 13px; color: var(--ink-strong); display: flex; align-items: center; gap: var(--space-1-5); }
   #gh h3 svg { color: var(--accent-violet); }
-  #gh .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
-  #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: var(--ink-strong); margin: 6px 0; }
+  #gh .row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin: 3px 0; }
+  #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: var(--ink-strong); margin: var(--space-1-5) 0; }
   #gh button { all: unset; cursor: pointer; color: var(--accent-violet); text-decoration: underline dotted; text-underline-offset: 3px; }
   #gh button:hover, #gh a:hover, #help a:hover { color: var(--ink-hover); }
   #gh a, #help a { color: var(--accent-violet); }
   #gh .dim { color: var(--ink-dim); font-size: 11.5px; }
   #gh .warn { color: var(--warn-ink); }
   #status .next { all: unset; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
-    padding: 12px 0; margin: -12px 0; } /* clickable to the bar's top and bottom edges, without moving the text */
+    padding: var(--space-3) 0; margin: calc(-1 * var(--space-3)) 0; } /* clickable to the bar's top and bottom edges, without moving the text */
   #status .next:hover { color: #E4DAFF; }
-  .panel #status .next { padding: 6px 0; margin: -6px 0; }
+  .panel #status .next { padding: var(--space-1-5) 0; margin: calc(-1 * var(--space-1-5)) 0; }
   #status .next:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
-  .panel footer { --corners: 86px; font-size: 11px; padding: 6px 0; } /* room for the quiet, stats and menu buttons */
-  .panel .corner { padding: 0 4px; }
-  .panel .corner:last-child { padding-right: 6px; }
-  .panel .flyup { right: 6px; bottom: 36px; width: min(260px, calc(100vw - 12px)); }
+  .panel footer { --corners: 86px; font-size: 11px; padding: var(--space-1-5) 0; } /* room for the quiet, stats and menu buttons */
+  .panel .corner { padding: 0 var(--space-1); }
+  .panel .corner:last-child { padding-right: var(--space-1-5); }
+  .panel .flyup { right: var(--space-1-5); bottom: 36px; width: min(260px, calc(100vw - 12px)); }
   .panel #card { max-width: 210px; font-size: 11.5px; }
   .panel .notify { display: none; }
   /* screensaver mode (opened with ?screensaver): just the scene, with the glow running to the screen's edges */
@@ -213,20 +213,20 @@
   #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
   .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
   /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
-  #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
+  #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: var(--z-flash); }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
-    display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 12px 30px 13px;
-    border-radius: 99px; text-align: center; color: #2B2440; opacity: 0; font-family: Georgia, 'Times New Roman', serif; } /* the book pages' face */
+    display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: var(--space-3) 30px 13px;
+    border-radius: var(--radius-pill); text-align: center; color: #2B2440; opacity: 0; font-family: Georgia, 'Times New Roman', serif; } /* the book pages' face */
   #flash .pill b { font-size: 16.8px; font-weight: 700; }
   #flash .pill span { font-size: 14.4px; font-weight: 700; color: #3A2E52; }
   #flash .pill:focus-visible { outline: 1px solid var(--focus); outline-offset: 4px; }
-  .panel #flash .pill { top: 12px; padding: 8px 20px; max-width: calc(100vw - 24px); }
+  .panel #flash .pill { top: var(--space-3); padding: var(--space-2) 20px; max-width: calc(100vw - 24px); }
   .panel #flash .pill b { font-size: 14.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
+  label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: var(--space-1-5); }
   label.unavailable { cursor: default; }
   label.unavailable input { cursor: default; }
-  input[type=checkbox] { appearance: none; margin: 0; width: 13px; height: 13px; border: 1px solid var(--ink-faint); border-radius: 3px; background: var(--surface-raised); display: grid; place-content: center; cursor: pointer; }
+  input[type=checkbox] { appearance: none; margin: 0; width: 13px; height: 13px; border: 1px solid var(--ink-faint); border-radius: var(--radius-sm); background: var(--surface-raised); display: grid; place-content: center; cursor: pointer; }
   input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
   input[type=checkbox]:checked::after { content: ''; width: 6px; height: 3px; border: solid #F6F0FF; border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }
   input[type=checkbox]:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
@@ -245,7 +245,7 @@
   :is(#card, .starCard) a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
   :is(#card, .starCard) a:hover { color: #F0E8FF; border-color: #B9A8FF; }
   :is(#card, .starCard) .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
-  select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
+  select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-0-5) var(--space-1-5); }
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
