@@ -287,6 +287,26 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
     })
 }
 
+/// When the session itself started background task `id`: the timestamp of the tool result in its own transcript that
+/// carries `"backgroundTaskId":"<id>"`. nil when the transcript has no such line, so a subagent started it (that line is
+/// only in the subagent's transcript) and its finishing wakes the subagent, not the session. One memmem over the mapped
+/// file, as in linesWorthParsing, so an 85 MB transcript costs milliseconds.
+func taskStart(_ file: String, _ id: String) -> Double? {
+    guard let data = try? Data(contentsOf: URL(fileURLWithPath: file), options: .alwaysMapped) else { return nil }
+    let needle = Array("\"backgroundTaskId\":\"\(id)\"".utf8)
+    let line = data.withUnsafeBytes { (buf: UnsafeRawBufferPointer) -> Data? in
+        guard let base = buf.baseAddress, let hit = memmem(base, buf.count, needle, needle.count) else { return nil }
+        var start = UnsafeRawPointer(hit) - base, end = start
+        while start > 0 && buf[start - 1] != 10 { start -= 1 }
+        while end < buf.count && buf[end] != 10 { end += 1 }
+        return Data(bytes: base + start, count: end - start)
+    }
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    guard let line, let stamp = (parse(line) as? JSON)?["timestamp"] as? String, let at = iso.date(from: stamp) else { return nil }
+    return (at.timeIntervalSince1970 * 1000).rounded(.down)
+}
+
 /// Subagents under a session folder that look like they're still going: transcript touched in the last two minutes and not
 /// finished. Skips (without reading) any in `known`.
 func liveSubagents(_ dir: String, known: Ordered<JSON> = Ordered<JSON>()) -> Ordered<JSON> {
@@ -321,6 +341,7 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     s["created"] = createdPRs(file, dir)
     let agents = liveSubagents(dir)
     s["awaits"] = str(s["turn"]) == "ended" && agents.count > 0
+    s["agentsAwaited"] = agents.keys
     if str(s["turn"]) == "ended" { s["waitingSince"] = st.mtime } // it's been waiting since its transcript last changed
     return (s, agents)
 }

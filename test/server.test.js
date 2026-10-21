@@ -106,22 +106,27 @@ test('posting quietUntil without a style keeps the lantern style', t => replay(t
 // or an agent was heard from within LANTERN_AGENT_FRESH_SECONDS; past both it rests (idle, open but quiet), flipped by
 // the sweep (every LANTERN_SWEEP_SECONDS) with no new event.
 const bg = (agentFresh, taskFresh) => ({ LANTERN_AGENT_FRESH_SECONDS: String(agentFresh), LANTERN_TASK_FRESH_SECONDS: String(taskFresh), LANTERN_SWEEP_SECONDS: '0.1' });
-const stopWith = (...tasks) => ({ session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Running in the background.', background_tasks: tasks });
+// A task only counts when the session itself started it: the tool result carrying its backgroundTaskId is in the
+// session's own transcript, timestamped when it started. `started` is that line, `S1_TRANSCRIPT` s1's transcript.
+const S1_TRANSCRIPT = '.claude/projects/-w/s1.jsonl';
+const started = (id, at = Date.now()) => ({ type: 'user', timestamp: new Date(at).toISOString(), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${id}`, content: `Command running in background with ID: ${id}` }] }, toolUseResult: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: id } });
+const stopWith = (home, ...tasks) => ({ session_id: 's1', hook_event_name: 'Stop', cwd: '/w', transcript_path: path.join(home, S1_TRANSCRIPT), last_assistant_message: 'Running in the background.', background_tasks: tasks });
 const SERVER = { id: 'b1', type: 'shell', status: 'running', description: 'preview server', command: 'npm run preview' };
 const s1 = async base => (await snapshot(base)).sessions.find(s => s.id === 's1');
 const agentTool = { session_id: 's1', hook_event_name: 'PreToolUse', cwd: '/w', agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: { file_path: '/w/x.js' } };
 
 test('a background agent that keeps firing hook events keeps its session working, rests once quiet, and wakes again', async t => {
-  const base = await serve(t, {}, () => {}, bg(1, 0.3));
+  let home;
+  const base = await serve(t, {}, h => home = h, bg(1, 0.3));
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
   await post(base, '/event', agentTool);
-  await post(base, '/event', stopWith({ id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
+  await post(base, '/event', stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
   for (const end = Date.now() + 2500; Date.now() < end; await wait(200)) { // well past the task's 0.3s, the agent busy all along
     await post(base, '/event', agentTool);
     assert.strictEqual((await s1(base)).state, 'paused');
   }
   const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the quiet session to rest');
-  assert.match(quiet.note, /^1 background task open for \d+m$/);
+  assert.match(quiet.note, /^1 agent open for \d+m$/);
   await post(base, '/event', agentTool);
   await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
 });
@@ -221,29 +226,71 @@ test('a subagent whose start the hooks missed is found from its transcript by th
 });
 
 test('a background shell task younger than the threshold keeps its session working', async t => {
-  const base = await serve(t, {}, () => {}, bg(0.1, 60));
-  await post(base, '/event', stopWith(SERVER));
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h, bg(0.1, 60));
+  await post(base, '/event', stopWith(home, SERVER));
   await wait(1000); // ten sweeps, the agent threshold long past
   assert.deepStrictEqual((({ state, note }) => ({ state, note }))(await s1(base)), { state: 'paused', note: 'Waiting on 1 background task' });
 });
 
 test('a background task open past the threshold with no agent activity rests after the sweep, and stays old across turns', async t => {
-  const base = await serve(t, {}, () => {}, bg(0.1, 0.5));
-  await post(base, '/event', stopWith(SERVER));
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h, bg(0.1, 0.5));
+  await post(base, '/event', stopWith(home, SERVER));
   assert.strictEqual((await until(() => s1(base), 'the session')).state, 'paused');
   const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the session to rest with no new event');
   assert.match(quiet.note, /^1 background task open for \d+m$/);
-  // the same server still open at the next turn's end: it's as old as when first seen, so the session rests at once
+  // the same server still open at the next turn's end: it's as old as when it started, so the session rests at once
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'more' });
-  await post(base, '/event', stopWith(SERVER));
+  await post(base, '/event', stopWith(home, SERVER));
   assert.strictEqual((await s1(base)).state, 'idle');
+});
+
+// A task's age comes from the line in the transcript that started it, not from when this lantern first saw it, so a
+// restart (a fresh server) doesn't make a two-hour-old dev server fresh again.
+test('a background task the transcript says started two hours ago rests at its first Stop on a fresh server', async t => {
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1', Date.now() - 2 * 3600 * 1000)]) }, h => home = h, bg(0.1, 30 * 60));
+  await post(base, '/event', stopWith(home, SERVER));
+  const s = await s1(base);
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'idle', note: '1 background task open for 120m', tasks: ['preview server'] });
+});
+
+// Dace's 7791 zombie (Oct 20), from his real transcripts (test/fixtures/zombie, text redacted): subagent a3dc4fce41f0fcc8e
+// started shell task b2xhvxx4z (a throwaway server on 7791), ended its turn at 19:44:44Z and fired no hook again, and
+// Claude Code kept both listed as running in every Stop. Neither wakes the main session: the agent is long finished (not in
+// the agents map, its transcript done and quiet) and the shell's start is only in the subagent's transcript. So the turn
+// ending at 20:17Z is waiting on Dace, where Lantern showed "Waiting on 1 background task" for 14 hours. bo1p24jsb, the
+// main session's own merge job, does count, and its age comes from the transcript line that started it.
+test('Stop ignores a finished subagent and the shell task it started (the 7791 zombie), and counts the session\'s own task by its real age', async t => {
+  const id = 'c0223694-dbd3-47d3-99d4-c889a060f541', file = `.claude/projects/-Users-user/${id}.jsonl`, fixture = name => fs.readFileSync(path.join(__dirname, 'fixtures/zombie', name), 'utf8');
+  const agentFile = `.claude/projects/-Users-user/${id}/subagents/agent-a3dc4fce41f0fcc8e.jsonl`;
+  let home;
+  const base = await serve(t, { [file]: fixture('main.jsonl'), [agentFile]: fixture('agent-a3dc4fce41f0fcc8e.jsonl') }, h => {
+    home = h;
+    const ended = new Date(Date.now() - 33 * 60 * 1000); // its last line, 33 minutes before the 20:17Z turn
+    fs.utimesSync(path.join(h, agentFile), ended, ended);
+  });
+  const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/Users/user', transcript_path: path.join(home, file), ...more });
+  const ZOMBIES = [{ id: 'a3dc4fce41f0fcc8e', type: 'subagent', status: 'running', description: 'Spread the moths', agent_type: 'opus-implement' },
+    { id: 'b2xhvxx4z', type: 'shell', status: 'running', description: 'Serve the page on 7791', command: './server' }];
+  await hook('UserPromptSubmit', { prompt: 'why does this session show as active?' });
+  await hook('Stop', { last_assistant_message: 'It was the leftover server.', background_tasks: ZOMBIES });
+  const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return { state: s.state, note: s.note, tasks: s.tasks }; };
+  assert.deepStrictEqual(await shown(), { state: 'waiting', note: 'Finished its turn', tasks: [] });
+  // the session's own merge job still open: started hours ago per its transcript line, so it rests at once
+  await hook('UserPromptSubmit', { prompt: 'and the merge?' });
+  await hook('Stop', { last_assistant_message: 'Merging in the background.', background_tasks: [...ZOMBIES, { id: 'bo1p24jsb', type: 'shell', status: 'running', description: 'Merge it', command: 'gh pr merge' }] });
+  const merge = await shown();
+  assert.deepStrictEqual({ ...merge, note: merge.note.replace(/\d+m$/, 'Nm') }, { state: 'idle', note: '1 background task open for Nm', tasks: ['Merge it'] });
 });
 
 // Every way a run of hook events leaves a session's state, note and waitingSince, as one table: the events in order, then
 // what the page shows. Each row runs as its own session on one server.
 const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...more });
 const STOP = ev('Stop', { last_assistant_message: 'Done.' }), ASK = ev('Stop', { last_assistant_message: 'Should I merge it?' });
-const TASK = { background_tasks: [SERVER] }, UPS = ev('UserPromptSubmit', { prompt: 'go' });
+// the table's server points transcript_path at a transcript that started b1
+const TASK = { background_tasks: [SERVER], transcript_path: '' }, UPS = ev('UserPromptSubmit', { prompt: 'go' });
 const STATE_TABLE = [
   ['a prompt', [UPS], 'working', ''],
   ['a tool call', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} })], 'working', ''],
@@ -269,8 +316,9 @@ const STATE_TABLE = [
   ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
 ];
 test('the state table: what each run of hook events leaves a session showing', async t => {
-  const base = await serve(t);
-  for (const [name, events] of STATE_TABLE) for (const e of events) await post(base, '/event', { ...e, session_id: name });
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h);
+  for (const [name, events] of STATE_TABLE) for (const e of events) await post(base, '/event', { ...e, session_id: name, ...('transcript_path' in e ? { transcript_path: path.join(home, S1_TRANSCRIPT) } : {}) });
   const sessions = (await snapshot(base)).sessions;
   const got = STATE_TABLE.map(([name]) => { const s = sessions.find(x => x.id === name); return [name, s.state, s.note, s.state === 'waiting' ? s.waitingSince > 0 : s.waitingSince]; });
   assert.deepStrictEqual(got, STATE_TABLE.map(([name, , state, note]) => [name, state, note, state === 'waiting' ? true : 0]));

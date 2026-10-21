@@ -22,20 +22,38 @@
     "post": "/event",
     "body": {
       "session_id": "s1",
+      "hook_event_name": "SubagentStart",
+      "cwd": "/work/s1",
+      "agent_id": "a2",
+      "agent_type": "opus-audit"
+    }
+  },
+  {
+    "post": "/event",
+    "body": {
+      "session_id": "s1",
       "hook_event_name": "Stop",
       "cwd": "/work/s1",
       "last_assistant_message": "Two audits are running.",
       "background_tasks": [
         {
           "description": "Audit the server",
-          "status": "running"
+          "status": "running",
+          "id": "a1",
+          "type": "subagent",
+          "agent_type": "opus-audit"
         },
         {
-          "description": "Audit the page"
+          "description": "Audit the page",
+          "id": "a2",
+          "type": "subagent",
+          "agent_type": "opus-audit"
         },
         {
           "description": "Old one",
-          "status": "completed"
+          "status": "completed",
+          "id": "a0",
+          "type": "subagent"
         }
       ]
     }
@@ -56,7 +74,7 @@
           },
           "id": "s1",
           "last": "<time>",
-          "note": "Waiting on 2 background tasks",
+          "note": "Waiting on 2 agents",
           "prompt": "Audit everything",
           "snoozed": false,
           "started": "<time>",
@@ -69,12 +87,17 @@
               "last": "<time>",
               "tries": 0,
               "type": "opus-audit"
+            },
+            {
+              "activity": "",
+              "description": "",
+              "id": "a2",
+              "last": "<time>",
+              "tries": 0,
+              "type": "opus-audit"
             }
           ],
-          "tasks": [
-            "Audit the server",
-            "Audit the page"
-          ],
+          "tasks": [],
           "waitingSince": 0
         }
       ]
@@ -119,7 +142,7 @@
           },
           "id": "s1",
           "last": "<time>",
-          "note": "Waiting on 2 background tasks",
+          "note": "Waiting on 2 agents",
           "prompt": "Audit everything",
           "snoozed": false,
           "started": "<time>",
@@ -132,12 +155,17 @@
               "last": "<time>",
               "tries": 0,
               "type": "opus-audit"
+            },
+            {
+              "activity": "",
+              "description": "",
+              "id": "a2",
+              "last": "<time>",
+              "tries": 0,
+              "type": "opus-audit"
             }
           ],
-          "tasks": [
-            "Audit the server",
-            "Audit the page"
-          ],
+          "tasks": [],
           "ticks": 1,
           "waitingSince": 0
         }
@@ -185,7 +213,16 @@
           "snoozed": false,
           "started": "<time>",
           "state": "waiting",
-          "subagents": [],
+          "subagents": [
+            {
+              "activity": "",
+              "description": "",
+              "id": "a2",
+              "last": "<time>",
+              "tries": 0,
+              "type": "opus-audit"
+            }
+          ],
           "tasks": [],
           "ticks": 1,
           "waitingSince": "<time>"
