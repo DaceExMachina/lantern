@@ -138,12 +138,15 @@ test('no thread or dotted line ever crosses another, flying or landed, as sessio
   assert.ok(landed > 5000 && flying > 5000, `checked ${landed} dotted lines and ${flying} flying moths' threads`);
 });
 
+// a frame of every session moth's aim at wall-clock `t` (ms) and frame clock `s`: what each is doing, and where along its line it sits
+const fidgets = (w, t, s) => w.run(`Date.now = () => ${t}; for (const [k, m] of moths) if (!m.parentId && !m.satellite) m.wasLanded = mothTarget(k, m, 1 / 30, ${s})?.needsMe;
+  return Object.fromEntries([...moths].map(([k, m]) => [k, [m.fidget, m.along]]))`);
+const HOP_IDS = KEYS.filter(k => k !== 'side').slice(0, 10);
+
 test('two windows show the same breaths and hops at the same moments, and hop to the same spots', () => {
   // ten sessions waiting 20 minutes, so they're restless and hop now and then; one window has been open a while, the
   // other opens 37 seconds later, each with its own frame clock and window shape
-  const t0 = 1.8e12, waiting = { state: 'waiting', waitingSince: t0 - 20 * 60000 }, ids = KEYS.filter(k => k !== 'side').slice(0, 10);
-  const frame = (w, t, s) => w.run(`Date.now = () => ${t}; for (const [k, m] of moths) if (!m.parentId && !m.satellite) m.wasLanded = mothTarget(k, m, 1 / 30, ${s})?.needsMe;
-    return Object.fromEntries([...moths].map(([k, m]) => [k, [m.fidget, m.along]]))`);
+  const t0 = 1.8e12, waiting = { state: 'waiting', waitingSince: t0 - 20 * 60000 }, ids = HOP_IDS, frame = fidgets;
   const a = open(), b = open(1.8);
   a.show(ids, [], waiting);
   for (let i = 0; i < 37 * 30; i++) frame(a, t0 + i / 30 * 1000, i / 30);
@@ -157,6 +160,21 @@ test('two windows show the same breaths and hops at the same moments, and hop to
     hops += Object.values(one).filter(([f]) => f === 'hop').length;
   }
   assert.ok(hops > 30, `moths hopped while both watched: ${hops} hop frames`);
+});
+
+// A snoozed moth doesn't fidget, but it still moves to each hop's spot (easing over, without the hop), so a window that
+// has been open for ages and one opened now put it in the same place. Quiet hours snooze every waiting moth the same way.
+test('two windows put snoozed moths in the same spots, however long each has been open', () => {
+  const t0 = 1.8e12, snoozed = { state: 'waiting', snoozed: true, waitingSince: t0 - 20 * 60000 };
+  const a = open(), b = open(1.8);
+  a.show(HOP_IDS, [], snoozed);
+  const first = fidgets(a, t0, 0);
+  for (let i = 1; i <= 10 * 60; i++) fidgets(a, t0 + i * 1000, i); // ten minutes, a frame a second
+  b.show(HOP_IDS, [], snoozed);
+  const t = t0 + 600 * 1000, one = fidgets(a, t, 600), two = fidgets(b, t, 5);
+  assert.ok(HOP_IDS.every(k => one[k][1] !== first[k][1]), 'every snoozed moth has moved to a later hop\'s spot in the window open all along');
+  assert.ok(Object.values(one).every(([f]) => f === ''), 'snoozed moths never breathe or hop');
+  assert.deepStrictEqual(two, one, 'both windows show every snoozed moth in the same spot');
 });
 
 // Each window is a view of the server's latest snapshot and nothing else. A window open through a snapshot that briefly
