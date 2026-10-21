@@ -30,7 +30,8 @@
           "project": "-work-2",
           "started": "<time>",
           "state": "working",
-          "subagents": []
+          "subagents": [],
+          "waitingSince": 0
         }
       ]
     }

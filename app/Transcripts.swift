@@ -311,7 +311,7 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     let lines = tail(file)
     var turn = lastTurn(lines)
     if let busy { turn.done = !busy; turn.compacted = turn.compacted && !busy }
-    var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "state": turn.compacted ? "idle" : turn.done ? "waiting" : "working",
+    var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "turn": turn.compacted ? "idle" : turn.done ? "ended" : "running",
                    "note": turn.done && !turn.compacted ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
                    "unconfirmed": !live]
@@ -320,8 +320,8 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
     let agents = liveSubagents(dir)
-    if str(s["state"]) == "waiting" && agents.count > 0 { s["state"] = "paused"; s["note"] = "Waiting on its agents" }
-    if str(s["state"]) == "waiting" { s["waitingSince"] = st.mtime } // it's been waiting since its transcript last changed
+    s["awaits"] = str(s["turn"]) == "ended" && agents.count > 0
+    if str(s["turn"]) == "ended" { s["waitingSince"] = st.mtime } // it's been waiting since its transcript last changed
     return (s, agents)
 }
 
@@ -462,8 +462,10 @@ extension LanternServer {
         for (s, a) in seeded {
             let id = str(s["id"])
             if sessions[id] != nil { continue }
-            sessions[id] = s
+            var s = s
             agents[id] = a
+            derive(&s, id)
+            sessions[id] = s
             self.seeded.insert(id)
             loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
         }
