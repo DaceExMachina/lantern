@@ -89,8 +89,9 @@ function fitView() {
   svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
   VIEW.box = [x, y, w, h];
   VIEW.px = width / w; // CSS pixels per unit
-  const canvas = $('bg'), dpr = devicePixelRatio || 1;
-  canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr);
+  const canvas = $('bg'), k = (devicePixelRatio || 1) * bgScale; // background.js
+  canvas.width = Math.round(width * k); canvas.height = Math.round(height * k);
   VIEW.top = y;
   drawHang(); // the string or chain runs from the top of the window down to the lantern
+  bakeCutouts(); // the Moroccan's lace, at the new size (lanterns.js)
 }
