@@ -841,7 +841,7 @@ final class LanternServer {
         if json && req.url == "/snooze" {
             // A preview's sessions are the app's, so it snoozes them there and shows the app's next list; the app answers.
             if let mirror {
-                var r = URLRequest(url: URL(string: "/snooze", relativeTo: mirror)!)
+                var r = URLRequest(url: URL(string: "/snooze", relativeTo: mirror)!, timeoutInterval: 5) // a hung app fails fast
                 r.httpMethod = "POST"; r.httpBody = req.body; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 URLSession.shared.dataTask(with: r) { _, response, _ in
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 502 // the app isn't answering
