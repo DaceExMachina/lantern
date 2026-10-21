@@ -314,13 +314,15 @@ func taskStart(_ file: String, _ id: String) -> Double? {
     return (at.timeIntervalSince1970 * 1000).rounded(.down)
 }
 
-/// Subagents under a session folder that look like they're still going: transcript touched in the last two minutes and not
-/// finished. Skips (without reading) any in `known`.
+/// Subagents under a session folder that are still going: transcript not finished, and touched within AGENT_EXPIRE_MS (how
+/// long a hooked agent is kept without a word, so both sources agree; an agent waiting on a long tool call writes nothing
+/// for minutes). Startup and every sweep rebuild the agents from this, so a restart doesn't lose the quiet ones.
+/// Skips (without reading) any in `known`.
 func liveSubagents(_ dir: String, known: Ordered<JSON> = Ordered<JSON>()) -> Ordered<JSON> {
     var agents = Ordered<JSON>()
     for f in transcripts(dir + "/subagents") {
         guard let agent = Re("^agent-([A-Za-z0-9_-]+)\\.jsonl$").match((f as NSString).lastPathComponent)?[1], known[agent] == nil, let mtime = fileTimes(f)?.mtime,
-              now() - mtime <= 2 * 60 * 1000, !lastTurn(tail(f, 64 * 1024)).done else { continue }
+              now() - mtime <= AGENT_EXPIRE_MS, !lastTurn(tail(f, 64 * 1024)).done else { continue }
         var a: JSON = ["type": "", "description": "", "activity": "", "tries": 3, "last": mtime]
         if let data = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(agent).meta.json"), let j = parse(data) as? JSON {
             a["type"] = or(j["agentType"], ""); a["description"] = or(j["description"], "")
@@ -369,10 +371,11 @@ extension LanternServer {
     /// sweep; reads happen off the main queue and apply only if nothing changed meanwhile. Today it covers subagents:
     ///  - tracked ones quiet for AGENT_CHECK_MS go when their transcript's last turn is done, or when neither hooks nor
     ///    transcript moved for AGENT_EXPIRE_MS (SubagentStop never came);
-    ///  - running ones the hooks never announced are added, for working or paused sessions.
+    ///  - running ones the hooks never announced (started before a restart, or quiet since) are added, whatever the
+    ///    session's state: background agents run on while it waits on me.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
     func reconcile() {
-        struct Look { let id: String, dir: String, tracked: [(String, Double)], known: Ordered<JSON>, adopt: Bool, title: Any?, titleSeen: Double }
+        struct Look { let id: String, dir: String, tracked: [(String, Double)], known: Ordered<JSON>, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
             let list = agents[id] ?? Ordered<JSON>()
@@ -380,7 +383,7 @@ extension LanternServer {
                 let last = (a["last"] as? Double) ?? 0
                 return now() - last >= AGENT_CHECK_MS && Re("^[A-Za-z0-9_-]+$").test(aid) ? (aid, last) : nil
             }
-            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", tracked: tracked, known: list, adopt: ["working", "paused"].contains(str(s["state"])), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
+            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", tracked: tracked, known: list, title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
         guard !looks.isEmpty else { return }
         DispatchQueue.global().async {
@@ -394,7 +397,7 @@ extension LanternServer {
                 let mine = app.first { $0.cli == l.id }
                 let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0, mine?.mtime ?? 0)
                 let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
-                return (l.id, gone, l.adopt ? liveSubagents(l.dir, known: l.known) : Ordered<JSON>(), written, title)
+                return (l.id, gone, liveSubagents(l.dir, known: l.known), written, title)
             }
             DispatchQueue.main.async {
                 var changed = false
