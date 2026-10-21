@@ -408,18 +408,18 @@ extension LanternServer {
         }
     }
     /// Corrects the in-memory state against what's on disk, for the things a lost hook event leaves wrong. Called by the
-    /// sweep; reads happen off the main queue. Today it covers subagents: each session's are rebuilt from one rule (alive
-    /// while their transcript is unfinished and recent, or a hook was just heard), whatever the session's state, since
-    /// background agents run on while it waits on me. A lost SubagentStop, a restart and a quiet agent all come out right.
+    /// sweep; reads happen off the main queue, and `then` runs on the main queue once they've landed. Today it covers
+    /// subagents: each session's are rebuilt from one rule (alive while their transcript is unfinished and recent, or a
+    /// hook was just heard), whatever the session's state, since background agents run on while it waits on me. A lost SubagentStop, a restart and a quiet agent all come out right.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
-    func reconcile() {
+    func reconcile(then: @escaping () -> Void) {
         struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
             return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", had: Set(agents[id]?.keys ?? []),
                         modelled: Set(agents[id]?.items.filter { truthy($0.1["model"]) }.map(\.0) ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
-        guard !looks.isEmpty else { return }
+        guard !looks.isEmpty else { return then() }
         DispatchQueue.global().async {
             let app = appSessions() // the Claude app keeps the title it shows in its own file for the session
             let results = looks.map { l -> (String, Set<String>, Ordered<JSON>, Double, Any?) in
@@ -456,6 +456,7 @@ extension LanternServer {
                     self.agents[id] = kept
                 }
                 if changed { self.broadcast() }
+                then()
             }
         }
     }
