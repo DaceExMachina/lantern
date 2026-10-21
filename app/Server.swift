@@ -18,6 +18,8 @@ let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_
 let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
 // An agent heard from by a hook this recently is alive whatever its transcript says (it may not be written yet).
 let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
+// Tests only: how long reconcile's reads take, as on a slow disk, so a test can stall the server while they're out.
+let READ_DELAY_SECONDS = Double(ProcessInfo.processInfo.environment["LANTERN_READ_DELAY_SECONDS"] ?? "") ?? 0
 // How long after its last hook event a session Claude Code calls idle may still be waiting for that turn's Stop to arrive.
 // How long a GitHub query that fails (a blip) keeps its last answer, so its PRs don't vanish and fly back in.
 let GH_KEEP_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_GH_KEEP_SECONDS"] ?? "") ?? 10 * 60) * 1000
@@ -586,8 +588,8 @@ final class LanternServer {
     }
 
 
-    // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
-    func sweep() { reconcile(then: settle) } // judged on what reconcile just read, or an agent's newest writes are a sweep late
+    // Sessions are judged on what reconcile just read, or an agent's newest writes are a sweep late. Ending them doesn't wait.
+    func sweep() { reap(); reconcile(then: settle) }
     func settle() {
         let t = now()
         var changed = false
@@ -596,6 +598,14 @@ final class LanternServer {
             // says idle and the hooks have been quiet past their usual lag, look.
             if str(s["state"]) == "working" && t - ((s["last"] as? Double) ?? 0) > STATUS_LAG_MS && claudeIdle(s) { check(&s) }
             if derive(&s, id) { sessions[id] = s; changed = true }
+        }
+        if changed { broadcast() }
+    }
+    // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
+    func reap() {
+        let t = now()
+        var changed = false
+        for (id, s) in sessions.items {
             // with its processes known, only they decide: a session goes once every one has closed, and stays however quiet
             if let pids = s["pids"] as? [Int], !pids.isEmpty {
                 let alive = pids.filter { kill(pid_t($0), 0) == 0 || errno == EPERM }
