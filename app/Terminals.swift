@@ -17,7 +17,8 @@ func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
 }
 
 /// Running processes grouped by the transcript they write: one session can run in several (the Claude app's and a terminal
-/// `claude --resume` of it). It's busy when any of them says so, idle when they all do, and unknown when none says.
+/// `claude --resume` of it). It's busy when any of them says so, idle when the ones that say anything all say idle, and
+/// unknown when none says. check() reads the same mix the same way.
 func bySession(_ procs: [(file: String, pid: Int?, busy: Bool?)]) -> [(file: String, pids: [Int], busy: Bool?)] {
     var out = Ordered<(pids: [Int], busy: Bool?)>()
     for p in procs {
@@ -160,7 +161,7 @@ extension LanternServer {
                 end if
                 return out
                 """])
-            if !list.ok { print("findIterm: osascript failed: \(list.err.trim)") }
+            if !list.ok { print("findIterm: osascript failed") } // its error is in the log just above
             let tabs = list.out.components(separatedBy: "\n").map { $0.components(separatedBy: "\t") }.filter { UUID_RE.test($0[0]) }
             let pids = claudePids()
             var tabOf: [String: String] = [:], dirOf: [String: String] = [:]

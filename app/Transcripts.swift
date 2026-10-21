@@ -339,7 +339,9 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
     let lines = tail(file)
     var turn = lastTurn(lines)
-    if let busy { turn.done = !busy; turn.idle = turn.idle && !busy }
+    // Claude Code's own status wins: busy is a turn (or agents) running; idle with no finished turn to wait on is at the
+    // prompt (idle), as check() reads it, and idle after a finished turn is that turn waiting on me
+    if busy == true { turn.done = false; turn.idle = false } else if busy == false && !turn.done { turn.done = true; turn.idle = true }
     var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "turn": turn.idle ? "idle" : turn.done ? "ended" : "running",
                    "note": turn.done && !turn.idle ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
@@ -349,7 +351,7 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
     let agents = liveSubagents(dir)
-    s["awaits"] = str(s["turn"]) == "ended" && agents.count > 0
+    s["awaits"] = str(s["turn"]) == "ended" && agents.count > 0 && busy != false // Claude Code idle: nothing is pending
     s["agentsAwaited"] = agents.keys
     if str(s["turn"]) == "ended" { s["waitingSince"] = st.mtime } // it's been waiting since its transcript last changed
     return (s, agents)
