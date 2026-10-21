@@ -7,6 +7,8 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon.png">
 <style>
+  /* spacing scale on a 4px base; the stats panel and recap use it, the rest of the app moves over in a design-system pass */
+  :root { --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px; }
   html, body { margin: 0; height: 100%; background: #1E1930; color: #C9B8DA; font: 14px/1.4 Georgia, 'Times New Roman', serif; }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
@@ -73,38 +75,41 @@
   #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
-  #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: 14px 18px 16px; }
-  #stats:popover-open, #recap:popover-open { gap: 8px; }
+  #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
+  #stats:popover-open { gap: var(--space-4); }
+  #recap:popover-open { gap: var(--space-3); }
   #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
-  #stats h4 { margin: 10px 0 2px; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
-  #statsBody { display: flex; flex-direction: column; gap: 8px; }
-  :is(#stats, #recap) .headline { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
+  #statsBody { display: flex; flex-direction: column; gap: var(--space-4); }
+  #statsWeek { display: flex; flex-direction: column; gap: var(--space-2); } /* a heading, then its content; each heading after the first starts a new section */
+  #statsWeek h4:first-child { margin-top: 0; }
+  :is(#stats, #recap) .headline { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
   :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, 40px); line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
-  :is(#stats, #recap) .headline span { display: block; margin-top: 2px; color: #C9B8DA; }
+  :is(#stats, #recap) .headline span { display: block; margin-top: var(--space-1); color: #C9B8DA; }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
   #stats .ribbon svg { height: 68px; }
   :is(#stats, #recap) .ribbon { position: relative; touch-action: pan-y; }
   :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
   :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
-  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
+  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: calc(-1 * var(--space-1)); }
   /* The legend's four moth states in a plain grid, 2 by 2 when there's room, else 1 across. A column is 16em: the swatch,
      "snoozed / sleeping" (the longest label) and a 5.4em slot that fits "188h 58m", the longest value, so nothing wraps.
      Four across would need about 700px, more than the panel has. */
-  :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: 8px; }
-  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(16em, 1fr)); gap: 4px 14px; margin-top: 0; }
+  :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: var(--space-2); }
+  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(16em, 1fr)); gap: var(--space-1) var(--space-3); margin-top: 0; }
   :is(#stats, #recap) .legend span { display: flex; align-items: center; white-space: nowrap; }
   :is(#stats, #recap) .legend [data-v] { margin-left: auto; min-width: 5.4em; text-align: right; }
   :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
-  :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
+  :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: var(--space-2) var(--space-3); margin: 0; }
   :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }
   :is(#stats, #recap) dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
-  #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
   #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
   #stats .day b { color: #D8CCE6; font-weight: 500; }
   :is(#stats, #recap) .dim { color: #8F7FA6; margin: 0; }
-  :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+  :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; }
   #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
   .badgeTip { position: fixed; z-index: 10; pointer-events: none; max-width: 240px; padding: 8px 10px; border: 1px solid #4A3B68;
@@ -115,7 +120,8 @@
   .badgeTip .dim { color: #8F7FA6; }
   #stats .badge.unearned { background: none; color: #6B5C88; box-shadow: inset 0 0 0 1px #3A2E52; }
   #stats .badge small { opacity: .7; font-size: 10px; }
-  #stats .shelf summary { cursor: pointer; color: #C3B2FF; font-size: 12px; margin-bottom: 6px; }
+  #stats .shelf { margin-top: var(--space-2); }
+  #stats .shelf summary { cursor: pointer; color: #C3B2FF; font-size: 12px; margin-bottom: var(--space-2); }
   #stats .shelf summary:hover { color: #F0E8FF; }
   #stats .day { all: unset; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #8F7FA6; min-width: 0; }
   #stats button.day { cursor: pointer; border-radius: 4px; }
