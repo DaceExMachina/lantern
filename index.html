@@ -253,6 +253,10 @@
   #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking a stale PR's or a ghost's card opens it, like clicking its moth */
   #card.show:has(h3 .open) { cursor: default; } /* a session's opens from its header */
   :is(#card, .starCard) h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: flex-start; }
+  :where(#card button.chip) { all: unset; } /* a button that looks like the pill it is */
+  #card button.chip { cursor: pointer; }
+  #card button.chip:hover { filter: brightness(1.25); }
+  #card button.chip:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
   #card .chip { white-space: nowrap; flex-shrink: 0; margin-top: 2px; font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 99px; background: #4A3B58; color: #F2DCC0; }
   #card .chip.waiting { background: #5B44C9; color: #F0ECFF; }
   #card .chip.idle { background: #3A3050; color: #B9A8C8; }
@@ -285,6 +289,10 @@
   #card .head { display: flex; justify-content: space-between; align-items: baseline; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
   #card .head .r { text-transform: none; letter-spacing: 0; }
   #card .tray > :not(:first-child):is(.head, .phead) { margin-top: 10px; }
+  /* the agents' own band, tinted cool and edge to edge across the tray, as in the mockups' agent tray */
+  #card .agentZone { margin: 0 calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: rgb(51 64 94 / .28); border-bottom: 1px solid #33405E; }
+  #card .tray > .agentZone:first-child { margin-top: calc(-1 * var(--space-1-5)); }
+  #card .agentZone .head { color: #9DB0D6; }
   /* agents, three lines each in monospace: the live dot, task tag, model and time; the job; the step. A click opens one in full. */
   #card .agent { all: unset; display: block; box-sizing: border-box; width: calc(100% + 12px); font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.45; margin: var(--space-1) -6px 0; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
   #card .agent:hover { background: rgba(195, 178, 255, .08); }
@@ -322,6 +330,7 @@
   #card a.pr2:hover { background: rgba(195, 178, 255, .1); }
   #card .pr2 .ti { color: #E8DCF2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #card .pr2 .me { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #8F7FA6; }
+  #card .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; } /* like an agent's time */
   #card .pr2 .me b { color: #C3B2FF; font-weight: normal; }
   #card .more { font-size: 11px; color: #8F7FA6; padding-top: 2px; }
   .moth .wing { fill: var(--wing); }

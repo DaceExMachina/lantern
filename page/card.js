@@ -86,17 +86,21 @@ function renderCard() {
 // A session in rows. Its header opens the session (a click on its moth does the same; shift-click snoozes).
 function sessionRows(s) {
   const now = Date.now(), waiting = s.state === 'waiting', questions = waiting && s.forYou?.questions || [], you = waiting && s.forYou?.you || [];
-  const chip = make('span', 'chip ' + (s.error && waiting ? 'error' : s.snoozed && waiting ? 'idle' : s.state),
+  const chip = make('button', 'chip ' + (s.error && waiting ? 'error' : s.snoozed && waiting ? 'idle' : s.state),
     s.reported ? 'reported back' : s.error && waiting ? 'error' : s.snoozed && waiting ? (s.forGood ? 'sleeping' : 'snoozed') : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state);
   // The top is what it wants from me: the pill, a state line only where it says more than the pill (a permission, an
   // error; not "Finished its turn", "Waiting on…", or "Asks:" with the question boxed below), the questions, and its
   // "You:" message as a quote.
   const go = make('span', 'go');
   go.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg>';
-  const open = make('button', 'open', make('span', 'name', s.title || project(s), go), chip);
+  const open = make('button', 'open', make('span', 'name', s.title || project(s), go));
   open.title = 'Open this session';
   open.onclick = e => { const m = moths.get(s.id); if (m) clickZone(m.zone, e.shiftKey); };
-  const rows = [make('h3', '', open)];
+  // the pill does what a right-click on the moth does (its `menu`, state.js): snooze, then sleep, then wake
+  const next = s.forGood ? 'Wake' : waiting && !s.snoozed ? 'Snooze' : 'Sleep until you wake it';
+  chip.title = next; chip.setAttribute('aria-label', `${chip.textContent}: ${next.toLowerCase()}`);
+  chip.onclick = () => moths.get(s.id)?.zone?.menu?.();
+  const rows = [make('h3', '', open, chip)];
   if (s.state === 'working' && s.activity) rows.push(make('div', 'state', s.activity));
   else if (s.state !== 'working' && s.note && !/^(Finished its turn|Waiting on|Asks:)/.test(s.note)) rows.push(make('div', 'state' + (s.error ? ' error' : ''), s.note));
   for (const q of questions) rows.push(make('div', 'ask', q));
@@ -104,13 +108,14 @@ function sessionRows(s) {
   if (s.prompt && !waiting) rows.push(make('div', 'prompt', `“${s.prompt.length > 110 ? s.prompt.slice(0, 110) + '…' : s.prompt}”`));
   // The work below, in its tray: agents (each once; background tasks only when they aren't one), side sessions, PRs.
   const tray = [], side = sessions.filter(o => o.parent === s.id), loose = (s.tasks || []).filter(t => !s.subagents.some(a => a.description === t));
-  if (s.subagents.length || loose.length) {
-    tray.push(make('div', 'head', 'Agents', make('span', 'r', String(s.subagents.length))));
+  if (s.subagents.length || loose.length) { // in a tinted band of their own, set apart from the rest of the work
+    const zone = make('div', 'agentZone', make('div', 'head', 'Agents', make('span', 'r', String(s.subagents.length))));
+    tray.push(zone);
     // oldest first, by start then id, so the order never shifts while they run: a new agent joins at the bottom and a
     // finished one just drops out, whatever order the server's list comes in
     const agents = [...s.subagents].sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || String(a.id).localeCompare(String(b.id)));
-    for (const a of agents) tray.push(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
-    for (const t of loose) tray.push(agentRow({ job: t, last: 0 }, now));
+    for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
+    for (const t of loose) zone.append(agentRow({ job: t, last: 0 }, now));
   }
   if (side.length) {
     tray.push(make('div', 'head', 'Side sessions', make('span', 'r', String(side.length))));
@@ -201,7 +206,8 @@ function prBlock(s) {
   return [head, ...prs.slice(0, PR_CAP).map(p => {
     const a = link(p, '');
     a.className = 'pr2';
-    a.append(make('div', 'ti', p.title), make('div', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need));
+    a.append(make('div', 'ti', p.title), make('div', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
+      ...(p.createdAt ? [make('span', 't', short(Date.now() - Date.parse(p.createdAt)))] : []))); // how long it's been open
     return a;
   }), ...(prs.length > PR_CAP ? [make('div', 'more', `${prs.length - PR_CAP} more: `, ...prs.slice(PR_CAP).flatMap((p, i) => [i ? ', ' : '', titled(p)]), tip)] : [])];
 }

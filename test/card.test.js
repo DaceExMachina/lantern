@@ -177,3 +177,37 @@ test('an agent with no start time sorts after the timed ones, by id, and stays p
   assert.deepStrictEqual(jobs([agent('b'), agent('x', now - 1e3), agent('a')]), want);
   assert.deepStrictEqual(jobs([agent('a'), agent('b'), agent('x', now - 1e3)]), want);
 });
+
+test('agents sit in a band of their own in the tray, apart from the side sessions and PRs', () => {
+  const { show } = load();
+  const card = show(session({ state: 'working', tasks: ['preview server'], subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: [pr(1, 'ready')] }));
+  const [tray] = find(card, 'tray'), [zone] = find(card, 'agentZone');
+  assert.strictEqual(tray.children[0], zone, 'first in the tray');
+  assert.deepStrictEqual(find(zone, 'job').map(text), ['Build', 'preview server'], 'the agents and the background tasks');
+  assert.deepStrictEqual(find(zone, 'phead'), [], 'the PRs are outside it');
+});
+
+test('a listed PR shows how long it has been open, at the end of its second line', () => {
+  const { show, run } = load();
+  run('prList.s1 = true');
+  const card = show(session({ github: [{ ...pr(1, 'ready'), createdAt: new Date(now - 3 * 86400e3 - 60e3).toISOString() }, pr(2, 'draft')] }));
+  const lines = find(card, 'me');
+  assert.deepStrictEqual(lines.map(l => l.children.at(-1).className), ['t', undefined], 'only with a createdAt');
+  assert.strictEqual(text(lines[0].children.at(-1)), '3d');
+});
+
+test('the status pill does what a right-click on the moth does (snooze, sleep, wake), and doesn\'t open the session', () => {
+  const { show, run, page } = load();
+  const calls = [], m = {}, posts = [];
+  m.zone = run('hoverZone')(m, () => calls.push('open'), 48);
+  m.zone.menu = () => posts.push('/snooze'); // state.js's menu posts the next snooze
+  page.moths = new Map([['s1', m]]);
+  const pill = o => find(show(session(o)), 'chip')[0];
+  const p = pill({});
+  assert.strictEqual(p.tag, 'button');
+  assert.deepStrictEqual(show(session({})).children[0].children.map(c => c.className), ['open', 'chip waiting'], 'beside the open button, not inside it, so its click can\'t reach it');
+  p.onclick();
+  assert.deepStrictEqual([calls, posts], [[], ['/snooze']], 'the snooze, and not the open');
+  assert.deepStrictEqual([pill({}).title, pill({ snoozed: true }).title, pill({ snoozed: true, forGood: true }).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
+  assert.strictEqual(pill({}).attrs['aria-label'], 'needs you: snooze');
+});
