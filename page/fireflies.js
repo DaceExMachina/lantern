@@ -62,20 +62,21 @@ function leaveStep(kind, t, [dx, dy]) {
   if (kind === 'closed') { const go = 30 * t + 250 * t * t; return [dx * go, dy * go, 1 - 0.45 * Math.min(1, t / 0.4), 1]; }
   const flare = 1.6, shake = 7, loop = 40;
   const lit = Math.min(1, t / 0.12) * (0.6 + 0.4 * Math.exp(-3 * t)), glow = 1 + flare * lit, size = 1 + 0.35 * flare * lit; // flares at once, then holds bright
-  // one motion, smooth the whole way (no stop or jump at either hand-off): the shake dies away as its last quarter second speeds up
-  // along the heading to the loop's own entry speed, and the loop's exit speed is the exit's. That last run ends K ahead
-  // of where the shake began, so the loop and the exit carry on from there.
-  const enter = loop * Math.PI / LOOP, exit = 3 * enter, RUN = 0.25, K = enter * RUN * 2 / 3;
+  // one motion, smooth the whole way (no jump at either hand-off, and no slow stretch): the shake keeps its full strength
+  // until its last swing, which draws back along the heading (a quarter of a swing, from rest) and launches straight into
+  // the loop at the loop's own entry speed, in its direction. The loop's exit speed is the exit's.
+  const enter = loop * Math.PI / LOOP, exit = 3 * enter, SWING = 0.1, BLEND = 0.1, back = enter * 2 * SWING / Math.PI;
   if (t < SHAKE) {
-    const a = shake * Math.sin(Math.PI * t / SHAKE) ** 4, q = Math.max(0, 1 - (SHAKE - t) / RUN), kick = enter * RUN * (q * q - q ** 3 / 3);
-    return [a * Math.sin(t * 55) + dx * kick, a * 0.6 * Math.sin(t * 43 + 1) + dy * kick, glow, size];
+    const a = shake * Math.sin(Math.min(Math.PI * t / SHAKE, Math.PI / 2)), b = Math.min(1, Math.max(0, (t - (SHAKE - SWING - BLEND)) / BLEND)), w = b * b * (3 - 2 * b);
+    const swing = -back * Math.cos(Math.min(1, Math.max(0, (t - (SHAKE - SWING)) / SWING)) * Math.PI / 2); // from rest at the back to full speed
+    return [(1 - w) * a * Math.sin(t * 55) + w * dx * swing, (1 - w) * a * 0.6 * Math.sin(t * 43 + 1) + w * dy * swing, glow, size];
   }
   const [nx, ny] = dx > 0 ? [dy, -dx] : [-dy, dx]; // up the screen, across its heading
   if (t < SHAKE + LOOP) { // forward, up and over, round and back to where it started, speeding up as it goes
-    const x = (t - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = K + loop * Math.sin(th), up = loop * (1 - Math.cos(th));
+    const x = (t - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
     return [dx * along + nx * up, dy * along + ny * up, glow, size];
   }
-  const v = t - SHAKE - LOOP, go = K + exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
+  const v = t - SHAKE - LOOP, go = exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
   return [dx * go, dy * go, glow, size];
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.

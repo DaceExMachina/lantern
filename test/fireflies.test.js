@@ -135,8 +135,19 @@ test('the merge has no jump or stall where the shake becomes the loop and the lo
       const jump = Math.hypot(...pos(join + 1e-6).map((v, i) => v - pos(join - 1e-6)[i]));
       assert.ok(jump < 1e-3, `heading ${d}, ${join.toFixed(2)}s: jumps ${jump} units`);
     }
-    const entry = fwd(win.run('SHAKE'));
-    for (let t = 0.5; t <= 1.5; t += 0.005) assert.ok(back(t) > entry / 2, `heading ${d}: at ${t.toFixed(3)}s it slows to ${back(t).toFixed(0)} units/s, entering the loop at ${entry.toFixed(0)}`);
+    // what the eye reads as a stall is a stretch of slow motion, not the instant a wiggle reverses: from the last reversal
+    // speed climbs into the loop, the shake is still lively just before it, and nothing crawls for long
+    const entry = fwd(win.run('SHAKE')), shake = win.run('SHAKE'), loopEnd = win.run('SHAKE + LOOP'), speed = [];
+    for (let t = shake - 0.25; t <= loopEnd; t += 0.001) speed.push([t, back(t + 1e-4)]); // 1ms apart
+    let rev = 0;
+    for (let i = 1; i < speed.length - 1; i++) if (speed[i][0] < shake && speed[i][1] <= speed[i - 1][1] && speed[i][1] < speed[i + 1][1]) rev = i;
+    assert.ok(rev > 0, `heading ${d}: the shake has a last reversal`);
+    for (let i = rev + 1; speed[i][0] <= shake + 0.1; i++) assert.ok(speed[i][1] >= speed[i - 1][1] * 0.99, `heading ${d}: from the last reversal (${speed[rev][0].toFixed(3)}s) speed dips at ${speed[i][0].toFixed(3)}s: ${speed[i - 1][1].toFixed(0)} to ${speed[i][1].toFixed(0)}`);
+    let slow = 0, longest = 0;
+    for (const [, v] of speed.slice(rev)) { slow = v < entry * 0.3 ? slow + 1 : 0; longest = Math.max(longest, slow); }
+    assert.ok(longest <= 60, `heading ${d}: it crawls (under 30% of the entry speed) for ${longest}ms`);
+    const before = speed.filter(([t]) => t < shake - 0.15).map(([, v]) => v);
+    assert.ok(before.reduce((a, v) => a + v) / before.length > entry * 1.2, `heading ${d}: the shake has calmed before the loop: ${(before.reduce((a, v) => a + v) / before.length).toFixed(0)} on average, entering the loop at ${entry.toFixed(0)}`);
   }
 });
 
