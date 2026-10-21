@@ -249,26 +249,14 @@ function swingLantern(elapsed, s) {
 // damping (a second), how hard the base's acceleration throws them (the lantern's swing is gentle, so 1, a plain weight,
 // would barely show),
 // and how strongly the wind, the turbulence (its licking edge, background.js) and a moth move it. Each is a pair: for an
-// idle ember (size 0.3) and for a full blaze (size 1), eased between by the flame's size (feelAt). An ember is small,
-// tight and jittery; a blaze is tall, looser, and bent further by the wind.
-const FEEL = { stiffness: [160, 70], falloff: [2, 3], damping: [9, 5], inertia: [8, 15], wind: [0.5, 1.3], turbulence: [1.1, 0.9], moth: [1.2, 1] };
+// idle ember (size 0.3) and for a full blaze (size 1), eased between by the flame's size (feelAt), as Dace dialled them in:
+// an ember small, tight and smooth-edged; a blaze looser at the tip, bent further by the wind, its edge licking hard.
+const FEEL = { stiffness: [160, 65], falloff: [2, 2.25], damping: [9.5, 18], inertia: [8, 15], wind: [0.5, 1.3], turbulence: [0, 1.85], moth: [1.55, 1] };
 /** @returns {Record<keyof FEEL, number>} */
 const feelAt = size => {
   const u = Math.max(0, Math.min(1, (size - 0.3) / 0.7)), t = u * u * (3 - 2 * u);
   return /** @type {any} */ (Object.fromEntries(Object.entries(FEEL).map(([k, [ember, full]]) => [k, ember + (full - ember) * t])));
 };
-// ponytail: temporary, for dialling in the flame's feel (an ember's and a blaze's, set with the Flame row's intensity);
-// bake the picks into FEEL and drop these
-for (const [k, min, max, step, title] of /** @type {[string, number, number, number, string][]} */ ([
-  ['stiffness', 10, 400, 5, 'How hard the flame springs back upright: higher snaps back quicker, lower sways slower and further'],
-  ['falloff', 1, 10, 0.25, 'How many times floppier the flame\'s tip is than its base: 1 bends as one piece, higher whips at the tip'],
-  ['damping', 0, 30, 0.5, 'How quickly the flame stops bobbing once it springs back: low rocks a while, high settles at once'],
-  ['inertia', -100, 100, 1, 'How far the lantern\'s swing throws the flame back as it starts and stops (negative leans it into the swing, as a real flame does)'],
-  ['wind', 0, 3, 0.05, 'How far the wind leans and stretches the flame, and how soon a gust tears its tip'],
-  ['turbulence', 0, 3, 0.05, 'How much the flame\'s edge licks and its middle wavers'],
-  ['moth', 0, 3, 0.05, 'How much a moth flying close pushes the flame aside and makes it waver'],
-])) for (const [i, at] of ['ember', 'full'].entries())
-  FEEL[k][i] = devSlider('Temporary', `flame${k}${at}`, `${k} (${at})`, min, max, step, FEEL[k][i], `${title}, for ${at === 'ember' ? 'an idle ember' : 'a full blaze'}`, v => { FEEL[k][i] = v; });
 // the chain: each point above the base, its offset from the base and its speed (the last is the tip), the base's last place
 // and speed (scene units), and the style it was set for. bent(i): how much of the tip's lean point i takes at rest.
 const bent = i => (i / CHAIN) ** 1.6;
