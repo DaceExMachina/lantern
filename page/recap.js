@@ -117,7 +117,7 @@ document.addEventListener('keydown', e => {
 }, true);
 
 function renderRecap(j, i) {
-  const d = j.days[i], key = dayKey(d.start), isToday = i === j.days.length - 1, pct = v => v == null ? '–' : `${v}%`;
+  const d = j.days[i], key = dayKey(d.start), isToday = i === j.days.length - 1;
   const title = isToday ? 'Today’s recap' : i === j.days.length - 2 ? 'Yesterday’s recap' : new Date(d.start).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
   tally = j.tally;
   const r = slices(d, j.spans, j.gauges, 160), earned = j.achievements.filter(a => a[1] === key), stars = daySessions(d, j.spans, j.prs);
@@ -125,14 +125,13 @@ function renderRecap(j, i) {
   const axis = r && starAxis(stars.slice(early).map(s => s.from), r.from, r.to, gutter);
   const change = d.staleChange == null ? '' : d.staleChange === 0 ? ', no change' : ` (${d.staleChange > 0 ? '+' : ''}${d.staleChange})`;
   const nums = [
-    ['lantern warm', pct(d.warmLantern)],
     ['answer time', d.medianWait == null ? '–' : ago(d.medianWait)],
     ['fireflies', `${d.merged} merged${d.open == null ? '' : `, ${d.open} open`}`],
     ['stale PRs', d.stale == null ? '–' : d.stale + change],
   ];
   $('recap').innerHTML = `<h3>${title} <button class="close" aria-label="Close">×</button></h3>
     ${d.warmMoths == null ? '<p class="dim">No moths that day. A quiet one.</p>' : `
-      <div class="headline"><b>${d.warmMoths}%</b><span>of moth time was warm</span></div>
+      ${headline(d)}
       ${r ? dayRibbon(r, isToday ? 'now' : clock(r.to)) : ''}
       <dl>${nums.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>
       ${r ? constellation(stars, early, gutter, axis) : ''}`}
