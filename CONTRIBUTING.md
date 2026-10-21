@@ -77,6 +77,8 @@ npm install && npm run check && npm test
 
 `npm test` uses Node's built-in test runner. It needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with a temporary home folder of its own, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, plus `expect` steps holding the sessions the page should have by that point.
 
+`test/saver.test.js` builds the screensaver and loads it in an off-screen window (`test/saver/main.swift`) to check it stops its page and quits when macOS ends the screensaver. That posts macOS's own "screensaver ended" notification to the whole Mac, so the test skips itself while a screensaver is running.
+
 When you change what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps to match. Read the diff before you commit it. If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
 
 ### Snapshots

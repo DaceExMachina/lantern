@@ -15,7 +15,7 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
     // Each display remembers its newest copy; an older one unloads its page so it stops drawing for nobody.
     private static var newest: [String: ObjectIdentifier] = [:]
     private let display: String
-    private var retired = false
+    private var running = false
     private var page: URL!
     private static var count = 0
     private let name: String // "#3 preview" or "#4 {{0, 0}, {2560, 1440}}", to tell copies apart in the log
@@ -46,6 +46,31 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         page = URL(string: "http://127.0.0.1:\(port)/?\(mode)")!
         Self.newest[display] = ObjectIdentifier(self)
         note("init \(mode) preview=\(isPreview)")
+        start()
+        // Since macOS 14 the screensaver's host process (legacyScreenSaver) stays running after the screensaver ends, and
+        // often never calls stopAnimation, so the page would keep drawing for nobody (60% CPU for days, measured). macOS
+        // posts this when the screensaver ends: stop the page, then quit the host a moment later, as Aerial does. macOS
+        // starts a fresh host next time. Not for the preview in System Settings, which lives on after the screensaver.
+        if !isPreview {
+            DistributedNotificationCenter.default().addObserver(
+                forName: .init("com.apple.screensaver.willstop"), object: nil, queue: .main) { [weak self] _ in
+                self?.stop("screensaver ended")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { exit(0) }
+            }
+        }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    // The page runs only while the view is animating and in a window, so every way macOS ends a screensaver stops it.
+    override func startAnimation() { super.startAnimation(); start() }
+    override func stopAnimation() { super.stopAnimation(); stop("stopAnimation") }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); if window == nil { stop("left its window") } else { start() } }
+
+    private func start() {
+        guard !running, Self.newest[display] == ObjectIdentifier(self) else { return }
+        running = true
+        failures = 0; retrying = false // a retry left waiting by stop() would block new ones
         load()
         // Every 10s, check the page is still drawing. This runs on its own timer, so it keeps going even if macOS stops
         // calling animateOneFrame (the page then draws from its own timer, see page/main.js).
@@ -54,7 +79,19 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         health = timer
     }
 
-    required init?(coder: NSCoder) { nil }
+    // Drop the web view (and with it the page's web process) and the timer.
+    private func stop(_ why: String) {
+        guard running else { return }
+        let w = window
+        note("stop: \(why) (window=\(w?.windowNumber ?? -1) visible=\(w?.isVisible ?? false) "
+            + "onscreen=\(w?.occlusionState.contains(.visible) ?? false))")
+        running = false
+        health?.invalidate()
+        health = nil
+        web?.navigationDelegate = nil
+        web?.removeFromSuperview()
+        web = nil
+    }
 
     private func note(_ s: String) { logger.log("\(self.name, privacy: .public) \(s, privacy: .public)") }
 
@@ -93,13 +130,13 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
     // Load the page again after something went wrong (the server not answering yet, the web process dying, a page that
     // stopped drawing), waiting 2, 4, 8, 16, then 30s between tries so a server that's down isn't hammered.
     private func retry(_ why: String) {
-        guard !retired, !retrying else { return }
+        guard running, !retrying else { return }
         failures += 1
         let delay = min(30, 1 << min(failures, 5))
         note("retry in \(delay)s: \(why)")
         retrying = true
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in
-            guard let self, !self.retired else { return }
+            guard let self, self.running else { return }
             self.retrying = false
             self.load()
         }
@@ -141,15 +178,8 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
 
     // An older copy on the same display unloads its page so it stops drawing for nobody (see `newest`).
     private func retireIfStale() -> Bool {
-        if retired { return true }
-        guard Self.newest[display] != ObjectIdentifier(self) else { return false }
-        let w = window
-        note("retire (window=\(w?.windowNumber ?? -1) visible=\(w?.isVisible ?? false) onscreen=\(w?.occlusionState.contains(.visible) ?? false))")
-        retired = true
-        health?.invalidate()
-        web?.removeFromSuperview()
-        web = nil
-        return true
+        if running && Self.newest[display] != ObjectIdentifier(self) { stop("retire") }
+        return !running
     }
 
     // The web view never fires requestAnimationFrame inside a screensaver, so drive the page from the screensaver's clock.
