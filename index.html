@@ -39,7 +39,7 @@
     --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
     --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s;
   }
-  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: 14px/1.4 var(--font-serif); }
+  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: var(--text-md)/1.4 var(--font-serif); }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -57,7 +57,7 @@
   #quiet.on svg path:first-child { fill: currentColor; } /* a full moon... well, a filled one, while quiet is on */
   .corner:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   .flyup { inset: auto var(--space-3) 52px auto; margin: 0; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
-    padding: var(--space-3) 14px; color: var(--ink); font-size: 12.5px; line-height: 1.5; box-shadow: var(--shadow-lg); }
+    padding: var(--space-3) 14px; color: var(--ink); font-size: var(--text-sm); line-height: 1.5; box-shadow: var(--shadow-lg); }
   .flyup:popover-open { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 72px); overflow-y: auto; }
   #help { border-top: 1px solid var(--line-soft); padding-top: 10px; }
   #help summary { cursor: pointer; color: var(--accent-violet); }
@@ -108,13 +108,13 @@
   #stats, #recap { inset: var(--space-5) 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
   #stats:popover-open { gap: var(--space-4); }
   #recap:popover-open { gap: var(--space-3); }
-  #stats h3 { margin: 0; font-size: 13px; font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
-  #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
+  #stats h3 { margin: 0; font-size: 13px; font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  #stats h4 { margin: var(--space-4) 0 0; font-size: var(--text-xs); font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: var(--tracking-label); text-transform: uppercase; }
   #statsBody { display: flex; flex-direction: column; gap: var(--space-4); container-type: inline-size; }
   #statsWeek { display: flex; flex-direction: column; gap: var(--space-2); } /* a heading, then its content; each heading after the first starts a new section */
   #statsWeek h4:first-child { margin-top: 0; }
   :is(#stats, #recap) .headline { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-  :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, 40px); line-height: 1; font-weight: var(--weight-bold); color: var(--accent-warm); font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, var(--text-display)); line-height: 1; font-weight: var(--weight-bold); color: var(--accent-warm); font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .headline span { display: block; margin-top: var(--space-1); color: var(--ink-soft); }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
   #stats .ribbon svg { height: 68px; }
@@ -122,7 +122,7 @@
   :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: var(--ink-strong); pointer-events: none; }
   :is(#stats, #recap) [data-v] { display: inline-block; font-weight: var(--weight-regular); color: var(--ink); font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
-  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: 11px; margin-top: calc(-1 * var(--space-1)); }
+  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: var(--text-xs); margin-top: calc(-1 * var(--space-1)); }
   /* The legend's four moth states in a plain grid, 2 by 2 when there's room, else 1 across. A column is 16em: the swatch,
      "snoozed / sleeping" (the longest label) and a 5.4em slot that fits "188h 58m", the longest value, so nothing wraps.
      Four across would need about 700px, more than the panel has. */
@@ -135,8 +135,8 @@
   /* the stats panel's six numbers: 3 by 2 when there's room (380px), else 2 by 3 */
   #stats dl { grid-template-columns: repeat(2, 1fr); }
   @container (min-width: 380px) { #stats dl { grid-template-columns: repeat(3, 1fr); } }
-  :is(#stats, #recap) dt { color: var(--ink-dim); font-size: 11px; }
-  :is(#stats, #recap) dd { margin: 0; color: var(--ink-strong); font-size: 16px; font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) dt { color: var(--ink-dim); font-size: var(--text-xs); }
+  :is(#stats, #recap) dd { margin: 0; color: var(--ink-strong); font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
   #stats .day .none { border: 1px dashed var(--line-soft); border-radius: var(--radius-sm); box-sizing: border-box; }
@@ -146,7 +146,7 @@
   #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--accent-warm-surface); color: var(--accent-warm-ink); white-space: nowrap; }
   #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   .badgeTip { position: fixed; z-index: var(--z-overlay); pointer-events: none; max-width: 240px; padding: var(--space-2) 10px; border: 1px solid var(--line);
-    border-radius: var(--radius-lg); background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: 1.45;
+    border-radius: var(--radius-lg); background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: var(--leading);
     opacity: 0; transition: opacity .12s; }
   .badgeTip.show { opacity: 1; }
   .badgeTip b { color: var(--ink-strong); font-weight: var(--weight-bold); }
@@ -156,7 +156,7 @@
   #stats .shelf { margin-top: var(--space-2); }
   #stats .shelf summary { cursor: pointer; color: var(--accent-violet); font-size: 12px; margin-bottom: var(--space-2); }
   #stats .shelf summary:hover { color: var(--ink-hover); }
-  #stats .day { all: unset; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-dim); min-width: 0; }
+  #stats .day { all: unset; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: var(--text-xs); color: var(--ink-dim); min-width: 0; }
   #stats button.day { cursor: pointer; border-radius: 4px; }
   #stats button.day:hover span, #stats button.day:hover b { color: var(--ink-hover); }
   #stats button.day:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
@@ -188,7 +188,7 @@
   #gh h3 { margin: 0 0 var(--space-1); font-size: 13px; color: var(--ink-strong); display: flex; align-items: center; gap: var(--space-1-5); }
   #gh h3 svg { color: var(--accent-violet); }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin: 3px 0; }
-  #gh .code { font: 600 20px/1.2 var(--font-mono); letter-spacing: .12em; color: var(--ink-strong); margin: var(--space-1-5) 0; }
+  #gh .code { font: 600 var(--text-xl)/1.2 var(--font-mono); letter-spacing: .12em; color: var(--ink-strong); margin: var(--space-1-5) 0; }
   #gh button { all: unset; cursor: pointer; color: var(--accent-violet); text-decoration: underline dotted; text-underline-offset: 3px; }
   #gh button:hover, #gh a:hover, #help a:hover { color: var(--ink-hover); }
   #gh a, #help a { color: var(--accent-violet); }
@@ -200,7 +200,7 @@
   .panel #status .next { padding: var(--space-1-5) 0; margin: calc(-1 * var(--space-1-5)) 0; }
   #status .next:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
-  .panel footer { --corners: 86px; font-size: 11px; padding: var(--space-1-5) 0; } /* room for the quiet, stats and menu buttons */
+  .panel footer { --corners: 86px; font-size: var(--text-xs); padding: var(--space-1-5) 0; } /* room for the quiet, stats and menu buttons */
   .panel .corner { padding: 0 var(--space-1); }
   .panel .corner:last-child { padding-right: var(--space-1-5); }
   .panel .flyup { right: var(--space-1-5); bottom: 36px; width: min(260px, calc(100vw - 12px)); }
