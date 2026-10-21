@@ -39,7 +39,7 @@
     --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
     --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s;
   }
-  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: 14px/1.4 Georgia, 'Times New Roman', serif; }
+  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: 14px/1.4 var(--font-serif); }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -63,7 +63,7 @@
   #help summary { cursor: pointer; color: var(--accent-violet); }
   #help summary:hover { color: var(--ink-hover); }
   #help p { margin: var(--space-1-5) 0 0; }
-  #help b { color: var(--ink-hover); font-weight: 600; }
+  #help b { color: var(--ink-hover); font-weight: var(--weight-bold); }
   #help .key { white-space: nowrap; }
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 var(--space-0-5) 0 var(--space-1-5); }
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
@@ -108,19 +108,19 @@
   #stats, #recap { inset: var(--space-5) 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
   #stats:popover-open { gap: var(--space-4); }
   #recap:popover-open { gap: var(--space-3); }
-  #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
-  #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: 500; color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
+  #stats h3 { margin: 0; font-size: 13px; font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
+  #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
   #statsBody { display: flex; flex-direction: column; gap: var(--space-4); container-type: inline-size; }
   #statsWeek { display: flex; flex-direction: column; gap: var(--space-2); } /* a heading, then its content; each heading after the first starts a new section */
   #statsWeek h4:first-child { margin-top: 0; }
   :is(#stats, #recap) .headline { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-  :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, 40px); line-height: 1; font-weight: 600; color: var(--accent-warm); font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, 40px); line-height: 1; font-weight: var(--weight-bold); color: var(--accent-warm); font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .headline span { display: block; margin-top: var(--space-1); color: var(--ink-soft); }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
   #stats .ribbon svg { height: 68px; }
   :is(#stats, #recap) .ribbon { position: relative; touch-action: pan-y; }
   :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: var(--ink-strong); pointer-events: none; }
-  :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: var(--ink); font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) [data-v] { display: inline-block; font-weight: var(--weight-regular); color: var(--ink); font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
   :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: 11px; margin-top: calc(-1 * var(--space-1)); }
   /* The legend's four moth states in a plain grid, 2 by 2 when there's room, else 1 across. A column is 16em: the swatch,
@@ -140,7 +140,7 @@
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
   #stats .day .none { border: 1px dashed var(--line-soft); border-radius: var(--radius-sm); box-sizing: border-box; }
-  #stats .day b { color: var(--ink); font-weight: 500; }
+  #stats .day b { color: var(--ink); font-weight: var(--weight-regular); }
   :is(#stats, #recap) .dim { color: var(--ink-dim); margin: 0; }
   :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--accent-warm-surface); color: var(--accent-warm-ink); white-space: nowrap; }
@@ -149,7 +149,7 @@
     border-radius: var(--radius-lg); background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: 1.45;
     opacity: 0; transition: opacity .12s; }
   .badgeTip.show { opacity: 1; }
-  .badgeTip b { color: var(--ink-strong); font-weight: 600; }
+  .badgeTip b { color: var(--ink-strong); font-weight: var(--weight-bold); }
   .badgeTip .dim { color: var(--ink-dim); }
   #stats .badge.unearned { background: none; color: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--line-soft); }
   #stats .badge small { opacity: .7; font-size: 10px; }
@@ -163,7 +163,7 @@
   #stats h3 .link { all: unset; cursor: pointer; float: right; text-transform: none; letter-spacing: 0; color: var(--accent-violet); font-size: 12px; }
   #stats h3 .link:hover { color: var(--ink-hover); }
   /* the daily recap: the stats panel's look */
-  #recap h3 { margin: 0; font-size: 15px; font-weight: 500; color: var(--ink-strong); display: flex; justify-content: space-between; }
+  #recap h3 { margin: 0; font-size: 15px; font-weight: var(--weight-regular); color: var(--ink-strong); display: flex; justify-content: space-between; }
   #recap .close { all: unset; cursor: pointer; color: var(--ink-dim); font-size: 18px; line-height: 1; }
   #recap .close:hover { color: var(--ink-hover); }
   #recap dl { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
@@ -188,7 +188,7 @@
   #gh h3 { margin: 0 0 var(--space-1); font-size: 13px; color: var(--ink-strong); display: flex; align-items: center; gap: var(--space-1-5); }
   #gh h3 svg { color: var(--accent-violet); }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); margin: 3px 0; }
-  #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: var(--ink-strong); margin: var(--space-1-5) 0; }
+  #gh .code { font: 600 20px/1.2 var(--font-mono); letter-spacing: .12em; color: var(--ink-strong); margin: var(--space-1-5) 0; }
   #gh button { all: unset; cursor: pointer; color: var(--accent-violet); text-decoration: underline dotted; text-underline-offset: 3px; }
   #gh button:hover, #gh a:hover, #help a:hover { color: var(--ink-hover); }
   #gh a, #help a { color: var(--accent-violet); }
@@ -217,9 +217,9 @@
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
     display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: var(--space-3) 30px 13px;
-    border-radius: var(--radius-pill); text-align: center; color: #2B2440; opacity: 0; font-family: Georgia, 'Times New Roman', serif; } /* the book pages' face */
-  #flash .pill b { font-size: 16.8px; font-weight: 700; }
-  #flash .pill span { font-size: 14.4px; font-weight: 700; color: #3A2E52; }
+    border-radius: var(--radius-pill); text-align: center; color: #2B2440; opacity: 0; font-family: var(--font-serif); } /* the book pages' face */
+  #flash .pill b { font-size: 16.8px; font-weight: var(--weight-bold); }
+  #flash .pill span { font-size: 14.4px; font-weight: var(--weight-bold); color: #3A2E52; }
   #flash .pill:focus-visible { outline: 1px solid var(--focus); outline-offset: 4px; }
   .panel #flash .pill { top: var(--space-3); padding: var(--space-2) 20px; max-width: calc(100vw - 24px); }
   .panel #flash .pill b { font-size: 14.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
