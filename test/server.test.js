@@ -467,7 +467,9 @@ const STATE_TABLE = [
   // both hooks are posted async, so the old turn's Stop can land after the new prompt
   ['a late Stop from the turn before', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, { ...STOP, prompt_id: P1 }], 'working', ''],
   ['a late API error from the turn before', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, ev('StopFailure', { prompt_id: P1 })], 'working', ''],
-  ['the new turn\'s own Stop', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, { ...STOP, prompt_id: P1 }, { ...STOP, prompt_id: P2 }], 'waiting', 'Finished its turn'],
+  ['the new turn\'s own Stop', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, { ...STOP, prompt_id: P1 }, { ...ASK, prompt_id: P2 }], 'waiting', 'Asks: Should I merge it?'],
+  ['a Stop from a prompt whose UPS was lost', [{ ...UPS, prompt_id: P1 }, { ...STOP, prompt_id: P2 }], 'waiting', 'Finished its turn'],
+  ['a Stop with no prompt_id after a prompt with one', [{ ...UPS, prompt_id: P1 }, STOP], 'waiting', 'Finished its turn'],
   ['a Stop with no prompt seen (a restart mid-turn)', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} }), { ...STOP, prompt_id: P1 }], 'waiting', 'Finished its turn'],
   ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
 ];
