@@ -1387,35 +1387,23 @@ test('an agent whose model lands after its SubagentStart gets it at its next hoo
   await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT, agent_type: 'opus-implement' });
   await until(async () => (await s1(base)).subagents[0]?.model === 'Opus 5.5', 'the model from the next hook');
 });
-// Claude Code before 2.1.300, and the Claude app, write no api-request lines; the model attachment is there in every one.
-test('an agent from an older Claude Code, with no API request lines, still gets its model', async t => {
+// Which line answers for the model: with the replies and request lines gone, only the model attachment can (its
+// identity's name, with a note like "(1M context)" cut); with the attachment gone (a fork), only its first reply.
+const headLines = HEAD.split('\n').filter(l => !l.includes('"type":"api-request'));
+const attachmentOnly = headLines.filter(l => !l.includes('"type":"assistant"')).join('\n'), fork = headLines.filter(l => !l.includes('"type":"model","identity"')).join('\n');
+test('the model comes from the model attachment, or a fork\'s first reply, and a note in brackets is dropped', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, agentEnv(600));
   const dir = path.join(home, '.claude/projects/-w/s1/subagents');
   fs.mkdirSync(dir, { recursive: true });
-  const older = HEAD.split('\n').filter(l => !l.includes('"type":"api-request')).join('\n');
-  assert.ok(!older.includes('api-request') && older.includes('"type":"assistant"'), 'shaped like an older transcript');
-  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), older);
-  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.meta.json`), HEAD_META);
+  assert.ok(!attachmentOnly.includes('"model":"claude') && attachmentOnly.includes('"marketingName":"Opus 5.5"'), 'only the attachment names it');
+  assert.ok(fork.includes('"model":"claude-opus-5-5"') && !fork.includes('marketingName'), 'only the reply names it');
+  fs.writeFileSync(path.join(dir, 'agent-aattach.jsonl'), attachmentOnly.replace('"marketingName":"Opus 5.5"', '"marketingName":"Sonnet 5.5"'));
+  fs.writeFileSync(path.join(dir, 'agent-anoted.jsonl'), attachmentOnly.replace('"marketingName":"Opus 5.5"', '"marketingName":"Opus 5.5 (1M context)"'));
+  fs.writeFileSync(path.join(dir, 'agent-afork.jsonl'), fork.replace('"model":"claude-opus-5-5"', '"model":"claude-haiku-4-5-20251001"'));
   await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
-  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT, agent_type: 'opus-implement' });
-  await until(async () => (await s1(base)).subagents[0]?.model === 'Opus 5.5', 'the older agent\'s model');
-});
-// A forked agent's transcript has no model attachment, so its first reply's model stands in, by name. And a name with a
-// note ("Opus 5.5 (1M context)") is cut to the name.
-test('a fork agent gets its model from its first reply, and a model\'s note in brackets is dropped', async t => {
-  let home;
-  const base = await serve(t, {}, h => home = h, agentEnv(600));
-  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
-  fs.mkdirSync(dir, { recursive: true });
-  const lines = HEAD.split('\n').filter(l => !l.includes('"type":"api-request'));
-  const fork = lines.filter(l => !l.includes('"type":"model","identity"')).join('\n'), noted = lines.join('\n').replace('"marketingName":"Opus 5.5"', '"marketingName":"Opus 5.5 (1M context)"');
-  assert.ok(fork.includes('"model":"claude-opus-5-5"') && !fork.includes('marketingName'), 'shaped like a fork');
-  fs.writeFileSync(path.join(dir, 'agent-afork.jsonl'), fork);
-  fs.writeFileSync(path.join(dir, 'agent-anoted.jsonl'), noted);
-  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
-  for (const id of ['afork', 'anoted']) await agentFire(base, home, { ...agentTool, agent_id: id });
-  await until(async () => (await s1(base)).subagents.map(a => a.model).join() === 'Opus 5.5,Opus 5.5', 'both agents\' models by name');
+  for (const id of ['aattach', 'anoted', 'afork']) await agentFire(base, home, { ...agentTool, agent_id: id });
+  await until(async () => (await s1(base)).subagents.map(a => a.model).join() === 'Sonnet 5.5,Opus 5.5,Haiku 4.5', 'each agent\'s model by name');
 });
 test('an agent found after a restart gets its model and real start time too', async t => {
   const id = UUID(4), dir = `.claude/projects/-work-4/${id}/subagents`;
@@ -1430,25 +1418,22 @@ test('an agent found after a restart gets its model and real start time too', as
 });
 
 // About 1 in 200 agents switch models mid-run; the card shows the one it's on now, the newest in its transcript's tail,
-// read again on its hooks every LANTERN_AGENT_MODEL_SECONDS.
+// which every sweep reads again. A tail with no model in it (a huge tool result) leaves the model as it was: the
+// attachment near the start is only for an agent with no model yet, since after a switch it names the old one. A reply
+// Claude Code made up (<synthetic>, an API error) names none.
 const reply = model => JSON.stringify({ type: 'assistant', message: { role: 'assistant', model, content: [{ type: 'text', text: 'redacted' }] } });
-test('an agent that switches models shows the newer one, at seeding and on a later hook', async t => {
-  const id = UUID(5), seeded = `.claude/projects/-work-5/${id}/subagents/agent-${HEAD_AGENT}.jsonl`;
+const filler = JSON.stringify({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', content: 'x'.repeat(140 * 1024) }] } }); // past the 128 KB tail
+test('an agent that switches models shows the one it\'s on now, through a huge tool result and a made-up reply', async t => {
+  const id = UUID(5), file = `.claude/projects/-work-5/${id}/subagents/agent-${HEAD_AGENT}.jsonl`;
   let home;
-  const base = await serve(t, { ...transcript(id, [user('Build it')]), [seeded]: HEAD + reply('claude-sonnet-5') + '\n' }, h => home = h, { ...agentEnv(600), LANTERN_AGENT_MODEL_SECONDS: '0.3' });
-  await until(async () => (await snapshot(base)).sessions.find(x => x.id === id)?.subagents[0]?.model === 'Sonnet 5', 'the seeded agent\'s newer model');
-  // a hooked one, on Opus 5.5, then switching to Haiku 4.5
-  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), HEAD);
-  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.meta.json`), HEAD_META);
-  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
-  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT });
-  await until(async () => (await s1(base)).subagents[0]?.model === 'Opus 5.5', 'the hooked agent\'s first model');
-  fs.appendFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), reply('claude-haiku-4-5-20251001') + '\n');
-  await wait(400); // past the throttle
-  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT });
-  await until(async () => (await s1(base)).subagents[0]?.model === 'Haiku 4.5', 'the model it switched to, from its next hook');
+  const base = await serve(t, { ...transcript(id, [user('Build it')]), [file]: HEAD + filler + '\n' }, h => home = h, agentEnv(600));
+  const model = async () => (await snapshot(base)).sessions.find(x => x.id === id)?.subagents[0]?.model;
+  await until(async () => await model() === 'Opus 5.5', 'its first model, from the start, with no model in the tail');
+  fs.appendFileSync(path.join(home, file), reply('claude-sonnet-5') + '\n' + reply('<synthetic>') + '\n');
+  await until(async () => await model() === 'Sonnet 5', 'the model it switched to, from a sweep');
+  fs.appendFileSync(path.join(home, file), filler + '\n');
+  await wait(600); // several sweeps
+  assert.strictEqual(await model(), 'Sonnet 5', 'still the model it switched to, not the one it started on');
 });
 
 test('page files always revalidate: Cache-Control no-cache, and a 304 when the ETag still matches', async t => {
