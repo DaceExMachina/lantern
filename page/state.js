@@ -128,7 +128,7 @@ let hovered = null, hideTimer;
 // A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
 function hoverArea(m, at) {
   // clicking brings the session's terminal tab (or Claude app session) to the front (a subagent focuses its parent session)
-  const zone = hoverZone(m, () => post('/focus', { id: m.key }), at);
+  const zone = hoverZone(m, () => post('/focus', { id: m.key }), 48, at);
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
   // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight
   // to for good. A snoozed moth rests on the lantern without turning it violet.

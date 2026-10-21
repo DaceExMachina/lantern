@@ -56,8 +56,8 @@ function prRows(prs) {
 /** @typedef {{ x: number, y: number, r: number, off: boolean, target: any, onClick: () => void, cardAt?: string, menu?: () => void }} Zone */
 /** @type {Set<Zone>} */
 const zones = new Set();
-function hoverZone(target, onClick, cardAt) {
-  const zone = { x: 0, y: 0, r: 48, off: false, target, onClick, cardAt };
+function hoverZone(target, onClick, r, cardAt) {
+  const zone = { x: 0, y: 0, r, off: false, target, onClick, cardAt };
   zones.add(zone);
   return zone;
 }
@@ -73,15 +73,14 @@ function zoneAt(zones, x, y) {
   return best;
 }
 function enterZone(a) {
-  if (!a) return;
   clearTimeout(hideTimer);
   if (hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
   hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
-function clickZone(a, shift) { (shift && a?.menu || a?.onClick)?.call(a); clearTimeout(hideTimer); hideCard(); }
+function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (The card's own click runs the action.)
-function tapZone(zone) { if (hovered === zone?.target) hideCard(); else enterZone(zone); }
+function tapZone(zone) { if (hovered === zone.target) hideCard(); else enterZone(zone); }
 function hideCard() { hovered = held = shown = null; $('card').classList.remove('show'); }
 
 function renderCard() {

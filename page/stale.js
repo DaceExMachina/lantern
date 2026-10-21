@@ -15,7 +15,7 @@ const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
 function makeWisp(p) {
   const rand = seeded(hash(p.url));
   // hovering shows the PR's card; clicking (or clicking the card) opens it
-  const card = { stale: p, zone: null }, zone = card.zone = Object.assign(hoverZone(card, () => open(p.url, '_blank', 'noopener')), { r: 12 });
+  const card = { stale: p, zone: null }, zone = card.zone = hoverZone(card, () => open(p.url, '_blank', 'noopener'), 12);
   const d = { p, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30,
     born: staleSeeded ? 0 : 1, gone: undefined };
@@ -35,7 +35,7 @@ function makeGhost(o) {
   const m = { o, zone: null, prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0,
     rate: 0.88 + seeded(hash(o.id + ':wings'))() * 0.24 }; // a living moth's wingbeat, at its own speed
   const card = { ghost: m, zone: null };
-  m.zone = card.zone = Object.assign(hoverZone(card, () => post('/resume', { id: m.o.id })), { r: 20 });
+  m.zone = card.zone = hoverZone(card, () => post('/resume', { id: m.o.id }), 20);
   return m;
 }
 // Each frame the ghosts leave their wings in ghostWings for the shader, as triangles (x, y, opacity per corner): each

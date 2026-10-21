@@ -140,12 +140,10 @@ for (const type of ['pointerdown', 'pointermove']) $('scene').addEventListener(t
   if (z) { inZone = true; enterZone(z); } else leaveZones();
 });
 $('scene').addEventListener('pointerleave', e => isTouch(e) || leaveZones());
-// a click on an area runs it; a tap shows its card, and a tap anywhere else puts the card away
-addEventListener('click', e => {
-  const z = zoneFor(e);
-  if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey);
-  else if (isTouch(e) && !(/** @type {Element} */ (e.target)).closest('#card')) hideCard();
-});
+// A click on an area runs it, and a tap shows its card. It listens on the scene itself: iOS only sends a tap's click to an
+// element with a click listener of its own. A tap anywhere else puts the card away.
+$('scene').addEventListener('click', e => { const z = zoneFor(e); if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey); });
+addEventListener('click', e => { if (isTouch(e) && !zoneFor(e) && !(/** @type {Element} */ (e.target)).closest('#card')) hideCard(); });
 $('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
