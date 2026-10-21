@@ -74,6 +74,8 @@ Using a terminal Lantern doesn't know yet? [CONTRIBUTING.md](../CONTRIBUTING.md#
 
 Choose Lantern in System Settings > Wallpaper > Screen Saver, under Other. It shows the live page full screen, so the app has to be running.
 
+macOS keeps a screensaver's process running after the screensaver ends. Lantern unloads its page at that point and quits the process a couple of seconds later, so nothing keeps drawing in the background. macOS starts a fresh one next time.
+
 With more than one display, the biggest gets the lantern and the rest get the background and drifting specks. The light spills across onto the other displays, lined up with where they actually sit. The screensaver shows whichever lantern you picked in any other Lantern window.
 
 If the page stops drawing (the server isn't answering, its web process crashed, or the GPU reset), the screensaver loads it again, waiting a little longer each time, up to 30 seconds. To see what it did, for example after a black screen:
