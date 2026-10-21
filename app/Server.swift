@@ -516,7 +516,9 @@ final class LanternServer {
         // Every process the session runs in has to say idle (one busy in a terminal while the app's sits idle is busy), and
         // only status files that name this session count: a pid can be reused.
         let statuses = (s["pids"] as? [Int] ?? []).compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
-        guard !statuses.isEmpty, statuses.allSatisfy({ $0.busy == false }) else { return }
+        // a status it doesn't recognise says nothing either way, as in bySession
+        let known = statuses.compactMap { $0.busy }
+        guard !known.isEmpty, known.allSatisfy({ !$0 }) else { return }
         if str(s["turn"]) == "running" || truthy(s["awaits"]) { s["turn"] = "idle"; s["awaits"] = false }
     }
 

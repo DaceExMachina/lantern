@@ -624,16 +624,35 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
 
 // Claude Code's sessions/<pid>.json says whether a running session is busy or idle, and that wins over the transcript;
 // without a status there (older versions, or one it doesn't know), the transcript's last turn decides.
+// One session in two processes, one idle and one with a status Claude Code added later: the unknown one says nothing, so
+// Claude Code says idle, the way bySession merges the same mix. A compaction's check then lands it.
+test('check() reads an idle process beside one with an unrecognised status as idle', async t => {
+  const id = UUID(5), file = `.claude/projects/-work/${id}.jsonl`, other = process.ppid;
+  const status = (pid, st) => ({ [`.claude/sessions/${pid}.json`]: JSON.stringify({ pid, sessionId: id, cwd: '/work', status: st }) });
+  let home;
+  const base = await serve(t, { [file]: jsonl([user('Fix it')]), ...status(process.pid, 'idle'), ...status(other, 'something-new') }, h => home = h);
+  const hook = (pid, ev) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(pid) },
+    body: JSON.stringify({ session_id: id, cwd: '/work', transcript_path: path.join(home, file), ...ev }) });
+  await hook(process.pid, { hook_event_name: 'UserPromptSubmit', prompt: 'go' });
+  await hook(other, { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} });
+  await hook(process.pid, { hook_event_name: 'SessionStart', source: 'compact' });
+  const s = (await snapshot(base)).sessions.find(x => x.id === id);
+  assert.deepStrictEqual({ pids: s.pids.slice().sort(), state: s.state }, { pids: [process.pid, other].sort(), state: 'idle' });
+});
+
 test('a live session seeds from Claude Code\'s own status when it gives one, and from its transcript when not', async t => {
   const midTurn = [user('Fix it')], finished = [user('Fix it'), answer('Fixed.'), turnEnd];
   // idle mid-turn: no finished turn to wait on, so it's at the prompt (as check() reads Claude Code's idle)
-  const cases = [['idle', midTurn, 'idle'], ['idle', finished, 'waiting'], ['busy', finished, 'working'], [undefined, midTurn, 'working'], ['something-new', midTurn, 'working']];
+  // with a fresh unfinished agent transcript (the last true): Claude Code idle means nothing is pending, so it doesn't wait on it
+  const cases = [['idle', midTurn, 'idle'], ['idle', finished, 'waiting'], ['busy', finished, 'working'], [undefined, midTurn, 'working'], ['something-new', midTurn, 'working'],
+    ['idle', finished, 'waiting', true], [undefined, finished, 'paused', true]];
   const procs = cases.map(() => spawn('sleep', ['60']));
   t.after(() => procs.forEach(p => p.kill()));
   const file = i => `.claude/projects/-work/${UUID(i)}.jsonl`;
   const base = await serve(t, Object.assign({ 'no-bin/ps': `#!/bin/sh\n${procs.map(p => `echo "${p.pid} claude"`).join('\n')}\n` },
-    ...cases.map(([status, lines], i) => ({
+    ...cases.map(([status, lines, , agent], i) => ({
       [file(i)]: jsonl(lines),
+      ...agent ? { [`.claude/projects/-work/${UUID(i)}/subagents/agent-a1.jsonl`]: jsonl([user('Audit it')]) } : {},
       [`.claude/sessions/${procs[i].pid}.json`]: JSON.stringify({ pid: procs[i].pid, sessionId: UUID(i), cwd: '/work', ...(status ? { status } : {}) }),
     }))), home => {
     fs.chmodSync(path.join(home, 'no-bin/ps'), 0o755);
@@ -951,7 +970,7 @@ test('stats: a refresh that lands while a joining session reads its PRs back lea
   const talk = JSON.stringify(answer('Then gh pr create opens it.')) + '\n';
   let home = '';
   const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 3600000, Date.now() - 60000]], appeared(id, 1)),
-    [file]: talk.repeat(LONG_READ) + jsonl([user('Fix it'), ...made]) }, h => {
+    [file]: talk.repeat(200000) + jsonl([user('Fix it'), ...made]) }, h => {
     home = h;
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
     fs.utimesSync(path.join(h, file), dayAgo, dayAgo);
@@ -965,7 +984,6 @@ test('stats: a refresh that lands while a joining session reads its PRs back lea
   assert.deepStrictEqual(s.github.map(p => p.url), [prUrl(1)]);
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });
-const LONG_READ = 200000;
 
 // A session that joins while a refresh is out (adopted, say) isn't in that refresh's answer. Until one looks at it, it
 // keeps the PRs it owned rather than dropping them as strays. Here s2 works outside any git repo, so no refresh ever looks

@@ -18,7 +18,7 @@ func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
 
 /// Running processes grouped by the transcript they write: one session can run in several (the Claude app's and a terminal
 /// `claude --resume` of it). It's busy when any of them says so, idle when the ones that say anything all say idle, and
-/// unknown when none says (check() reads the same mix the same way).
+/// unknown when none says. check() reads the same mix the same way.
 func bySession(_ procs: [(file: String, pid: Int?, busy: Bool?)]) -> [(file: String, pids: [Int], busy: Bool?)] {
     var out = Ordered<(pids: [Int], busy: Bool?)>()
     for p in procs {

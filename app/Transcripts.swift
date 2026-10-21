@@ -351,7 +351,7 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
     let agents = liveSubagents(dir)
-    s["awaits"] = str(s["turn"]) == "ended" && agents.count > 0
+    s["awaits"] = str(s["turn"]) == "ended" && agents.count > 0 && busy != false // Claude Code idle: nothing is pending
     s["agentsAwaited"] = agents.keys
     if str(s["turn"]) == "ended" { s["waitingSince"] = st.mtime } // it's been waiting since its transcript last changed
     return (s, agents)
