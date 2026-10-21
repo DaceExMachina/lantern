@@ -44,13 +44,6 @@ const lanternFlies = new Map(); // reviews requested from me hang around the lan
 //   from when this window noticed, since the server has no time for that.
 // One flying off is removed only once it and its bloom are wholly outside the window.
 const ARRIVE = 2; // seconds to fly in
-const MERGE = { flare: 1.6, shake: 7, loop: 40, speed: 1 }; // the merge's tuning, on the dev panel (Temporary)
-for (const [key, label, min, max, step, title] of [
-  ['flare', 'merge flare', 0, 4, 0.1, 'How much brighter a merged firefly flares, and stays until it is off the window'],
-  ['shake', 'merge shake', 0, 20, 0.5, 'How far it shakes in place as it flares'],
-  ['loop', 'merge loop', 0, 100, 2, 'The loop-de-loop\'s radius'],
-  ['speed', 'merge speed', 0.2, 3, 0.1, 'How fast the whole merge plays'],
-]) MERGE[key] = devSlider('Temporary', 'merge' + key, label, min, max, step, MERGE[key], title, v => { MERGE[key] = v; });
 const LEAVING = new Set(['merged', 'closed']);
 const viewBox = () => VIEW.box || [40, 20, 600, 600];
 const offScreen = (x, y, r) => { const [bx, by, bw, bh] = viewBox(); return x < bx - r || x > bx + bw + r || y < by - r || y > by + bh + r; };
@@ -63,28 +56,27 @@ function nearestEdge(x, y) {
 // step): [dx, dy, a factor on its brightness, one on its bloom's size]
 function leaveStep(kind, t, [dx, dy]) {
   if (kind === 'closed') { const go = 30 * t + 250 * t * t; return [dx * go, dy * go, 1 - 0.45 * Math.min(1, t / 0.4), 1]; }
-  const { flare, shake, loop, speed } = MERGE, u = t * speed, SHAKE = 0.6, FAST = 1.3, LOOP = 1 / FAST; // the loop runs 30% faster than it first did
-  const lit = Math.min(1, u / 0.12) * (0.6 + 0.4 * Math.exp(-3 * u)), glow = 1 + flare * lit, size = 1 + 0.35 * flare * lit; // flares at once, then holds bright
+  const flare = 1.6, shake = 7, loop = 40, SHAKE = 0.6, FAST = 1.3, LOOP = 1 / FAST; // the loop runs 30% faster than it first did
+  const lit = Math.min(1, t / 0.12) * (0.6 + 0.4 * Math.exp(-3 * t)), glow = 1 + flare * lit, size = 1 + 0.35 * flare * lit; // flares at once, then holds bright
   // one motion, smooth the whole way (no stop or jump at either hand-off): the shake dies away as its last swing draws back
   // along the heading and shoots into the loop at the loop's own entry speed, and the loop's exit speed is the exit's
   const enter = loop * Math.PI / LOOP, exit = 3 * enter;
-  if (u < SHAKE) {
-    const a = shake * Math.sin(Math.PI * u / SHAKE) ** 2, q = Math.max(0, 1 - (SHAKE - u) / 0.12), kick = -enter * 0.12 * q * q * (1 - q);
-    return [a * Math.sin(u * 55) + dx * kick, a * 0.6 * Math.sin(u * 43 + 1) + dy * kick, glow, size];
+  if (t < SHAKE) {
+    const a = shake * Math.sin(Math.PI * t / SHAKE) ** 2, q = Math.max(0, 1 - (SHAKE - t) / 0.12), kick = -enter * 0.12 * q * q * (1 - q);
+    return [a * Math.sin(t * 55) + dx * kick, a * 0.6 * Math.sin(t * 43 + 1) + dy * kick, glow, size];
   }
   const [nx, ny] = dx > 0 ? [dy, -dx] : [-dy, dx]; // up the screen, across its heading
-  if (u < SHAKE + LOOP) { // forward, up and over, round and back to where it started, speeding up as it goes
-    const x = (u - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
+  if (t < SHAKE + LOOP) { // forward, up and over, round and back to where it started, speeding up as it goes
+    const x = (t - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
     return [dx * along + nx * up, dy * along + ny * up, glow, size];
   }
-  const v = u - SHAKE - LOOP, go = exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
+  const v = t - SHAKE - LOOP, go = exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
   return [dx * go, dy * go, glow, size];
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
 // Its circling, wobble, wind and swell run off the wall clock too, so every window has each firefly in the same spot.
 function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
   const s = now / 1000;
-  if (flyTry.size) { want = new Map(want); for (const [url, t] of flyTry) if (t.flies === flies) want.set(url, { ...want.get(url), ...t }); }
   for (const [url, p] of want) if (!flies.has(url) && !LEAVING.has(p.need)) {
     const rand = seeded(hash(url)); // the same firefly path in every window
     const f = { a: rand() * 6.28, r: rMin + rand() * (rMax - rMin), w: (0.3 + rand() * 0.3) * (rand() < 0.5 ? -1 : 1), ph: rand() * 10,
@@ -130,20 +122,3 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
     addFlyLight(x, y, size, glow, f.col);
   }
 }
-
-// The dev panel's firefly tries (Temporary): each button plays one effect now on a random firefly (a moth's if one is out), else a made-up PR around the lantern. A try stands in for that PR's data until "back to live".
-const flyTry = new Map();
-let tryAt = null; // { flies, url, need }: the firefly the tries play on, and its need when picked
-function tryFly(change) {
-  // a random firefly each press (never the same twice running when there are others), so the effect plays from every side
-  const all = [...moths.values()].flatMap(m => m.flies ? [...m.flies].filter(([, f]) => !f.leave).map(([url, f]) => ({ flies: m.flies, url, need: f.p.need })) : []);
-  const others = all.filter(c => c.url !== tryAt?.url);
-  const pool = others.length ? others : all;
-  tryAt = pool.length ? pool[Math.floor(Math.random() * pool.length)] : { flies: lanternFlies, url: 'https://github.com/demo/lantern/pull/1', need: 'waiting' };
-  flyTry.set(tryAt.url, { flies: tryAt.flies, seen: 0, need: tryAt.need, ...change(Date.now()) });
-}
-devButton('Temporary', 'firefly: merge', 'A firefly plays a merge: flare, shake, loop-de-loop, off the far side', () => tryFly(now => ({ need: 'merged', was: tryAt.need, since: now })));
-devButton('Temporary', 'firefly: close', 'A firefly plays a close without merging: dim, off the nearest edge', () => tryFly(now => ({ need: 'closed', was: tryAt.need, since: now })));
-devButton('Temporary', 'firefly: arrive', 'A firefly flies in as a new PR', () => tryFly(now => ({ seen: now })));
-devButton('Temporary', 'firefly: turn green', 'A firefly turns ready to merge', () => tryFly(now => ({ need: 'ready', was: tryAt.need === 'ready' ? 'waiting' : tryAt.need, since: now })));
-devButton('Temporary', 'firefly: back to live', 'Drop the tries; the firefly shows its PR as it really is', () => { flyTry.clear(); tryAt = null; });
