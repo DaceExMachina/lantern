@@ -352,6 +352,10 @@ const STATE_TABLE = [
   ['an automatic compact mid-turn, then its session start', [UPS, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' }), ev('SessionStart', { source: 'compact' })], 'working', ''],
   ['a manual compact, then its session start', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), ev('SessionStart', { source: 'compact' })], 'idle', ''],
   ['a manual compact while waiting on a task', [UPS, { ...STOP, ...TASK }, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), ev('SessionStart', { source: 'compact' })], 'paused', 'Waiting on 1 background task'],
+  // a /compact that never reports back (Esc, or it failed): the next turn takes over, as it always did before
+  ['a lost manual compact, then a turn', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), UPS, STOP], 'waiting', 'Finished its turn'],
+  ['a lost manual compact, then a question', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), UPS, ASK], 'waiting', 'Asks: Should I merge it?'],
+  ['a lost manual compact, then a permission request', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), UPS, ev('PermissionRequest', { tool_name: 'Bash' })], 'waiting', 'Wants permission to use Bash'],
   ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
 ];
 test('the state table: what each run of hook events leaves a session showing', async t => {

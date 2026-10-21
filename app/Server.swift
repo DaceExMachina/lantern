@@ -289,7 +289,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "compacting"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -456,7 +456,9 @@ final class LanternServer {
         case "PreCompact":
             s["activity"] = "Compacting the conversation"
             stats.event("compact", id, ["trigger": e["trigger"] ?? NSNull()])
-            if str(e["trigger"]) == "manual" { s["compacting"] = true } // a model call really is running; an automatic one runs inside a turn
+            // a model call really is running; any next event overwrites it, so a compaction that never reports back (Esc, a
+            // failure) heals at the next turn. An automatic one runs inside a turn and changes nothing.
+            if str(e["trigger"]) == "manual" { s["turn"] = "compacting" }
         case "PostCompact":
             s["activity"] = ""
             check(&s)
@@ -487,8 +489,7 @@ final class LanternServer {
     /// ran happens at the prompt, so it answers a finished turn (idle, not waiting), while a turn that handed over to
     /// background work still waits on it, and an automatic compaction leaves the turn it ran inside as it was.
     func check(_ s: inout JSON) {
-        if truthy(s["compacting"]) && str(s["turn"]) == "ended" && !truthy(s["awaits"]) { s["turn"] = "idle"; s["note"] = "" }
-        s["compacting"] = nil
+        if str(s["turn"]) == "compacting" { s["turn"] = truthy(s["awaits"]) ? "ended" : "idle"; if !truthy(s["awaits"]) { s["note"] = "" } }
         // Every process the session runs in has to say idle (one busy in a terminal while the app's sits idle is busy), and
         // only status files that name this session count: a pid can be reused.
         let statuses = (s["pids"] as? [Int] ?? []).compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
@@ -510,8 +511,8 @@ final class LanternServer {
     @discardableResult func derive(_ s: inout JSON, _ id: String) -> Bool {
         let before = (str(s["state"]), str(s["note"]))
         s["resting"] = nil
-        switch truthy(s["compacting"]) ? "running" : str(s["turn"]) {
-        case "running": s["state"] = "working"
+        switch str(s["turn"]) {
+        case "running", "compacting": s["state"] = "working"
         case "idle": s["state"] = "idle"
         case "ended" where truthy(s["awaits"]):
             let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
