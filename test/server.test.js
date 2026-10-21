@@ -155,10 +155,11 @@ test('a subagent whose transcript ends in a finished turn is dropped once quiet,
   const base = await serve(t, {}, h => home = h, agentEnv(600));
   await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
   await agentFire(base, home, agentTool);
-  await wait(500); // quiet past the check threshold, transcript not there yet: still going
-  assert.deepStrictEqual(await agentIds(base), ['a1']);
   const dir = path.join(home, '.claude/projects/-w/s1/subagents');
   fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), jsonl([user('Audit it')]));
+  await wait(500); // quiet past the check threshold, its transcript unfinished: still going
+  assert.deepStrictEqual(await agentIds(base), ['a1']);
   fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), jsonl([user('Audit it'), answer('Done.'), turnEnd]));
   await until(async () => (await agentIds(base)).length === 0, 'the finished subagent to be dropped');
 });
@@ -179,6 +180,57 @@ test('a subagent whose transcript ends in a hand-back is dropped once quiet, lon
   assert.deepStrictEqual(await agentIds(base), ['a1']);
   fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), [JSON.stringify(user('Audit it')), call('SubagentHandback'), result].join('\n') + '\n');
   await until(async () => (await agentIds(base)).length === 0, 'the handed-back subagent to be dropped');
+});
+
+// A hand-back can share its message with other calls: Claude Code writes the message one line per block, so the transcript
+// ends on the Bash call's line, the SubagentHandback line, then both results (agent aac33e1a05c9e0ff4's real tail,
+// test/fixtures/handback). Reading back over every result to the message that made the calls finds the hand-back, in
+// either order of its lines (the second agent has them swapped).
+test('an agent whose hand-back shares its message with other calls is finished', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const real = fs.readFileSync(path.join(__dirname, 'fixtures/handback/agent-aac33e1a05c9e0ff4.jsonl'), 'utf8').trim().split('\n');
+  const swapped = [...real.slice(0, 3), real[4], real[3], ...real.slice(5)];
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), real.slice(0, 4).join('\n') + '\n'); // still going: mid-message
+  fs.writeFileSync(path.join(dir, 'agent-a2.jsonl'), real.slice(0, 4).join('\n') + '\n');
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  for (const a of ['a1', 'a2']) await agentFire(base, home, { ...agentTool, agent_id: a });
+  await wait(500); // quiet past the check, transcripts unfinished
+  assert.deepStrictEqual((await agentIds(base)).sort(), ['a1', 'a2']);
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), real.join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'agent-a2.jsonl'), swapped.join('\n') + '\n');
+  await until(async () => (await agentIds(base)).length === 0, 'both handed-back agents to be dropped');
+});
+
+// One rule for an agent being alive, on every sweep: its transcript is unfinished and recent, or a hook was heard from it
+// within LANTERN_AGENT_CHECK_SECONDS. A hooked agent whose transcript isn't there stays only that long.
+test('a hooked agent with no transcript stays while it was just heard from, then goes', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, { LANTERN_AGENT_EXPIRE_SECONDS: '600', LANTERN_AGENT_CHECK_SECONDS: '1.5', LANTERN_SWEEP_SECONDS: '0.1' });
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, agentTool);
+  await wait(700); // several sweeps, inside the check window
+  assert.deepStrictEqual(await agentIds(base), ['a1']);
+  await until(async () => (await agentIds(base)).length === 0, 'the agent to go once the check window passes');
+});
+
+// An agent found from its transcript (no hooks since a restart) keeps its session paused while it writes: each sweep takes
+// the transcript's latest time as when it was last heard from.
+test('an agent known only from its transcript keeps its session paused while it keeps writing', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, { ...bg(0.6, 0.1), LANTERN_AGENT_CHECK_SECONDS: '0.2' });
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents'), file = path.join(dir, 'agent-a1.jsonl');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, jsonl([user('Audit it')]));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await until(async () => (await agentIds(base)).join() === 'a1', 'the sweep to find the agent');
+  await agentFire(base, home, { ...stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it' }) });
+  for (const end = Date.now() + 2000; Date.now() < end; await wait(200)) { // well past the 0.6s agent freshness
+    fs.appendFileSync(file, jsonl([user('more')]));
+    assert.strictEqual((await s1(base)).state, 'paused');
+  }
 });
 
 // Claude Code fires no hook on a rename, so the sweep notices the new custom-title.json by itself, in a session that's
