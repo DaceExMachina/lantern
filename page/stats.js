@@ -75,25 +75,31 @@ function ribbon(r, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
 }
 
-// A day's ribbon with its axis and legend, for the stats panel and the recap. `end` labels the right edge.
+// A day's ribbon with its axis and a legend of the moth states (idle is the resting grey, left out), for the stats panel and the recap. `end` labels the right edge.
 const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
-  <div class="legend">${['working', 'waiting', 'snoozed', 'sleeping'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
-    <span><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
-    <span><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div></div>`;
+  <div class="legend">${['working', 'waiting', 'snoozed', 'sleeping'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}</div></div>`;
+
+// The two headline stats, for the stats panel and the recap. They measure different things: the lantern's warm share
+// is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed and sleeping
+// ones aside), moths flying is of all session time summed over the sessions (waiting, snoozed and sleeping count as landed).
+const pct = v => v == null ? '–' : `${v}%`;
+const headline = d => `<div class="headline">
+  <div title="Of the time the app ran, outside quiet hours, the lantern was warm: no session was waiting on you (snoozed and sleeping ones don't count as waiting)."><b>${pct(d.warmLantern)}</b><span>lantern warm</span><small>no session waiting on you</small></div>
+  <div title="Of all session time, added up across sessions, moths were flying: not waiting on you, snoozed or sleeping. Two sessions running for an hour is two hours."><b>${pct(d.warmMoths)}</b><span>moths flying</span><small>of moth time, not waiting</small></div></div>`;
 
 // Hovering (or touching) a dayRibbon: a line follows the pointer and the legend's values show that moment; leaving
 // puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change. It returns
 // `moment(t)`, which shows time t (or the totals, for null) as a hover would, and `onMoment` hears each one: the recap
 // moves its constellation's line and lights the star that started then, and drives the ribbon from the constellation.
 const ribbonTaps = new WeakMap(); // each popover's tap-elsewhere listener, dropped when it draws a new ribbon
-function followRibbon(box, r, day, onMoment = t => {}) {
+function followRibbon(box, r, onMoment = t => {}) {
   const el = box.querySelector('.ribbon');
   const show = s => {
     const t = s && clock(s.a), b = s && states(s), out = s
-      ? { at: t, lamp: lampOf(s) || 'off', flying: s.flying == null ? '–' : `${Math.round(100 * s.flying)}%`,
+      ? { at: t,
           ...Object.fromEntries(Object.entries(b).map(([k, n]) => [k, String(Math.round(n))])) }
-      : { at: '', lamp: day.warmLantern == null ? '–' : `${day.warmLantern}% warm`, flying: day.warmMoths == null ? '–' : `${day.warmMoths}%`,
+      : { at: '',
           ...Object.fromEntries(Object.keys(states(r.slices[0])).map(k => [k, ago(r.slices.reduce((ms, s) => ms + states(s)[k] * (s.b - s.a), 0))])) };
     for (const [k, v] of Object.entries(out)) for (const slot of box.querySelectorAll(`[data-v="${k}"]`)) slot.textContent = v;
   };
@@ -186,11 +192,10 @@ for (const root of [$('stats'), $('recap')]) {
 }
 
 function renderStats(j) {
-  const days = j.days, today = days[days.length - 1], pct = v => v == null ? '–' : `${v}%`;
+  const days = j.days, today = days[days.length - 1];
   const r = slices(today, j.spans, j.gauges, 160);
   const stale = today.stale == null ? '–' : today.stale + (today.staleChange ? ` (${today.staleChange > 0 ? '+' : ''}${today.staleChange})` : '');
   const nums = [
-    ['lantern warm', pct(today.warmLantern), 'time the lantern glowed warm, outside quiet hours'],
     ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
     ['slowest answers', today.slowWait == null ? '–' : ago(today.slowWait), 'one in ten waits lasted at least this long'],
     ['waits', today.waits, 'times a moth landed on the lantern for you'],
@@ -207,11 +212,10 @@ function renderStats(j) {
       : `<div class="day" title="nothing recorded"><span>${name}</span><i class="none"></i><b>–</b></div>`;
   }).join('');
   $('statsBody').innerHTML = `
-    <div class="headline">${today.warmMoths == null ? '<span>No moths yet today. Your first session starts the day.</span>'
-      : `<b>${today.warmMoths}%</b><span>of moth time today was warm: flying, not waiting on you</span>`}</div>
+    ${today.warmMoths == null ? '<p class="dim">No moths yet today. Your first session starts the day.</p>' : headline(today)}
     ${r ? dayRibbon(r, today.end >= Date.now() - MIN ? 'now' : clock(r.to)) : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
-  if (r) followRibbon($('statsBody').querySelector('.dayRibbon'), r, today);
+  if (r) followRibbon($('statsBody').querySelector('.dayRibbon'), r);
   tally = j.tally;
   const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
   $('statsWeek').innerHTML = `
