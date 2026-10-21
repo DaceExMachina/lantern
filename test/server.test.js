@@ -285,6 +285,42 @@ test('Stop ignores a finished subagent and the shell task it started (the 7791 z
   assert.deepStrictEqual({ ...merge, note: merge.note.replace(/\d+m$/, 'Nm') }, { state: 'idle', note: '1 background task open for Nm', tasks: ['Merge it'] });
 });
 
+// Dace's jwt session (Oct 20, 21:03Z), from its real transcript (test/fixtures/jwt, text redacted): a turn ended with
+// background agents still running (turn_duration's pendingBackgroundAgentCount 6; the compaction's task_status lines name
+// five running), then he ran /compact. PostCompact (manual) and the SessionStart (source compact) after every compaction
+// both landed the moth as idle, and nothing brought it back while the agents worked. They now check instead: Claude Code
+// says busy (agents pending), the agents are alive, so it's still waiting on them.
+test('a manual /compact while agents run leaves the session paused on them (the jwt compaction)', async t => {
+  const id = '61917df1-4b2c-4e20-b413-cc6c479afa20', file = `.claude/projects/-Users-user-work-project/${id}.jsonl`;
+  const running = ['ab48c6bbdab5b2cef', 'a1a58c2621ca3b061', 'a4845b0c0d3254c53', 'a1172ab480410edb2', 'aa05709913f843fbc'], done = 'ae931c800df033296';
+  let home;
+  const base = await serve(t, {
+    [file]: fs.readFileSync(path.join(__dirname, 'fixtures/jwt', `${id}.jsonl`), 'utf8'),
+    [`.claude/sessions/${process.pid}.json`]: JSON.stringify({ pid: process.pid, sessionId: id, cwd: '/Users/user/work/project', kind: 'interactive', entrypoint: 'cli', status: 'busy' }),
+  }, h => home = h);
+  const hook = (hook_event_name, more = {}) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(process.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name, cwd: '/Users/user/work/project', transcript_path: path.join(home, file), ...more }) });
+  const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return [s.state, s.note]; };
+  await hook('UserPromptSubmit', { prompt: 'run the audits' });
+  for (const a of [...running, done]) await hook('SubagentStart', { agent_id: a, agent_type: 'opus-audit' });
+  await hook('SubagentStop', { agent_id: done, agent_type: 'opus-audit' });
+  await hook('Stop', { last_assistant_message: 'Five audits are running.', background_tasks: [...running.map(a => ({ id: a, type: 'subagent', status: 'running', description: 'Audit', agent_type: 'opus-audit' })),
+    { id: done, type: 'subagent', status: 'completed', description: 'Audit', agent_type: 'opus-audit' }] });
+  assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 5 agents']);
+  await hook('PreCompact', { trigger: 'manual' });
+  assert.deepStrictEqual((await shown())[0], 'working');
+  await hook('PostCompact', { trigger: 'manual' });
+  assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 5 agents']);
+  await hook('SessionStart', { source: 'compact' });
+  assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 5 agents']);
+  // a later turn whose Stop never reached the lantern, then a compaction: Claude Code's status says idle (no turn, nothing
+  // pending), which is definitive, so the check lands it rather than leaving it working
+  await hook('UserPromptSubmit', { prompt: 'ok resume' });
+  fs.writeFileSync(path.join(home, `.claude/sessions/${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: id, cwd: '/Users/user/work/project', status: 'idle' }));
+  await hook('SessionStart', { source: 'compact' });
+  assert.deepStrictEqual((await shown())[0], 'idle');
+});
+
 // Every way a run of hook events leaves a session's state, note and waitingSince, as one table: the events in order, then
 // what the page shows. Each row runs as its own session on one server.
 const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...more });
@@ -313,6 +349,9 @@ const STATE_TABLE = [
   ['a manual compact, started', [UPS, STOP, ev('PreCompact', { trigger: 'manual' })], 'working', 'Finished its turn'],
   ['a manual compact, done', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' })], 'idle', ''],
   ['an automatic compact mid-turn', [UPS, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'working', ''],
+  ['an automatic compact mid-turn, then its session start', [UPS, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' }), ev('SessionStart', { source: 'compact' })], 'working', ''],
+  ['a manual compact, then its session start', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), ev('SessionStart', { source: 'compact' })], 'idle', ''],
+  ['a manual compact while waiting on a task', [UPS, { ...STOP, ...TASK }, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), ev('SessionStart', { source: 'compact' })], 'paused', 'Waiting on 1 background task'],
   ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
 ];
 test('the state table: what each run of hook events leaves a session showing', async t => {
