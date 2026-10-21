@@ -139,3 +139,23 @@ test('the merge has no jump or stall where the shake becomes the loop and the lo
     for (let t = 0.5; t <= 1.5; t += 0.005) assert.ok(back(t) > entry / 2, `heading ${d}: at ${t.toFixed(3)}s it slows to ${back(t).toFixed(0)} units/s, entering the loop at ${entry.toFixed(0)}`);
   }
 });
+
+test('the dev panel\'s play merge button plays a merge on a firefly of a moth', () => {
+  const win = window(), lights = [], flies = win.run('new Map()'), live = new Map([[URL, { need: 'draft', seen: 0, since: 0 }]]), now = Date.now();
+  win.run('step')(flies, live, [150, 320], now); // a moth's firefly, circling
+  win.run('moths').set('m', { flies });
+  win.run("devRows.find(r => r.label === 'play merge').onChange()");
+  for (let i = 1; i < 1200; i++) {
+    const light = win.run('step')(flies, live, [150, 320], now + i * FRAME); // the moth's PR is still a draft, as far as the server says
+    if (!light) break;
+    lights.push(light);
+  }
+  assert.ok(lights.length > 60 && lights.length < 240, `it plays and goes: ${lights.length} frames`);
+  assert.ok(Math.max(...lights.map(l => l[3])) > 1.1, 'a merge flares');
+});
+
+test('a session with more than 10 PRs keeps the ones flying off, then the ones that need me, inside the cut', () => {
+  const win = window(), prs = [...Array(12)].map((_, i) => ({ url: `${URL}/${i}`, need: i === 11 ? 'merged' : i === 10 ? 'ready' : 'waiting' }));
+  const kept = win.run(`byUrgency(${JSON.stringify(prs)})`).slice(0, 10).map(p => p.need);
+  assert.deepStrictEqual([...kept.slice(0, 2)], ['merged', 'ready'], `the merging one is first, then the one that needs me: ${kept}`);
+});

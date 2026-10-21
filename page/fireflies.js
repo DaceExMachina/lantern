@@ -45,6 +45,9 @@ const lanternFlies = new Map(); // reviews requested from me hang around the lan
 // One flying off is removed only once it and its bloom are wholly outside the window.
 const ARRIVE = 2; // seconds to fly in
 const LEAVING = new Set(['merged', 'closed']);
+// A moth's PRs in the order its fireflies are kept (it shows at most 10): ones flying off first so a merge isn't cut,
+// then the ones that need me, then the rest.
+const byUrgency = prs => { const rank = p => LEAVING.has(p.need) ? 0 : ['ready', 'failing', 'changes'].includes(p.need) ? 1 : 2; return [...prs].sort((a, b) => rank(a) - rank(b)); };
 const SHAKE = 0.6, LOOP = 1 / 1.3; // a merge's shake, then its loop (30% faster than it first was), in seconds
 const viewBox = () => VIEW.box || [40, 20, 600, 600];
 const offScreen = (x, y, r) => { const [bx, by, bw, bh] = viewBox(); return x < bx - r || x > bx + bw + r || y < by - r || y > by + bh + r; };
@@ -79,6 +82,7 @@ function leaveStep(kind, t, [dx, dy]) {
 // Its circling, wobble, wind and swell run off the wall clock too, so every window has each firefly in the same spot.
 function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
   const s = now / 1000;
+  if (flyTry.size) { want = new Map(want); for (const [url, t] of flyTry) if (t.flies === flies) want.set(url, { ...want.get(url), ...t }); }
   for (const [url, p] of want) if (!flies.has(url) && !LEAVING.has(p.need)) {
     const rand = seeded(hash(url)); // the same firefly path in every window
     const f = { a: rand() * 6.28, r: rMin + rand() * (rMax - rMin), w: (0.3 + rand() * 0.3) * (rand() < 0.5 ? -1 : 1), ph: rand() * 10,
@@ -124,3 +128,17 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
     addFlyLight(x, y, size, glow, f.col);
   }
 }
+
+// The dev panel's "play merge": a random firefly of a moth's (never the one it last played on when there are others) plays
+// a merge now, from wherever it is in the window. A try stands in for that PR's data until the next press puts it back as
+// it really is.
+const flyTry = new Map();
+let tryUrl = '';
+devButton('Fireflies', 'play merge', 'A random firefly plays a merge: flare, shake, loop-de-loop, off the far side', () => {
+  const all = [...moths.values()].flatMap(m => m.flies ? [...m.flies].filter(([, f]) => !f.leave).map(([url, f]) => ({ flies: m.flies, url, need: f.p.need })) : []);
+  const pool = all.filter(c => c.url !== tryUrl), pick = (pool.length ? pool : all)[Math.floor(Math.random() * (pool.length || all.length))];
+  if (!pick) return;
+  flyTry.clear();
+  tryUrl = pick.url;
+  flyTry.set(pick.url, { flies: pick.flies, seen: 0, need: 'merged', was: pick.need, since: Date.now() });
+});

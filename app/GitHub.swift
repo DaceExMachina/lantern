@@ -101,14 +101,15 @@ extension LanternServer {
         if refreshing { refreshAgain = true; return }
         refreshing = true
         let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
-        let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }
+        let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }, previous = lastResults
         DispatchQueue.global().async {
             // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
             // every time from a background process.
             let live = list.filter { !$0.1.isEmpty && git($0.1, ["rev-parse", "--is-inside-work-tree"]) != nil }
             var errors: [String: String] = [:]
+            let folders = tokens.isEmpty ? accountFolders(live.map(\.1)) : [], keys = tokens.isEmpty ? folders : tokens.map(\.0) // a query is a folder's gh or an account's token
             let queries: [() -> JSON?] = tokens.isEmpty
-                ? accountFolders(live.map(\.1)).map { cwd in { ghGraphql(cwd) } }
+                ? folders.map { cwd in { ghGraphql(cwd) } }
                 : tokens.map { login, token in {
                     let r = fetch("https://api.github.com/graphql", method: "POST", headers: ["Authorization": "Bearer \(token)", "User-Agent": "lantern-pr"], body: ["query": prQuery(PR_GQL)])
                     if r.status == 401 { DispatchQueue.main.sync { errors[login] = "expired" }; return nil } // the token was revoked or expired: reconnect
@@ -118,8 +119,11 @@ extension LanternServer {
                 } }
             var results = [JSON?](repeating: nil, count: queries.count)
             DispatchQueue.concurrentPerform(iterations: queries.count) { i in let r = queries[i](); DispatchQueue.main.sync { results[i] = r } }
+            // a query that failed (a network blip, an expired token) keeps what it found last time, so its PRs neither vanish and fly
+            // back in, nor hold up every other account's
+            let answers = results.enumerated().map { $1 ?? previous[keys[$0]] }
             var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:]
-            for data in results {
+            for data in answers {
                 for p in (data?["closed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { closed[str(p["url"])] = str(p["state"]) }
                 for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
                     wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))"]
@@ -155,13 +159,12 @@ extension LanternServer {
             DispatchQueue.main.async {
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
                 let t = now()
-                // a failed query would make every PR look gone (and fly off, then back in), so only a complete answer updates the lists and the log
-                if results.allSatisfy({ $0 != nil }) {
-                    self.stale = dead
-                    self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
-                    for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
-                    if !results.isEmpty { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
-                }
+                self.lastResults = Dictionary(zip(keys, answers).compactMap { k, a in a.map { (k, $0) } }, uniquingKeysWith: { a, _ in a })
+                self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
+                self.stale = dead
+                for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
+                // a query that failed with nothing from before would make its PRs look gone, so then nothing is logged
+                if !answers.isEmpty && answers.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
                 self.saveGitHubCache()
                 self.refreshing = false

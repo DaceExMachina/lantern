@@ -759,9 +759,7 @@ function mothFireflies(m, dt, s) {
   const want = new Map(), gh = m.session.github;
   if (m.leaving) {} // nothing: they all drift off
   else if (gh) {
-    const needs = p => ['ready', 'failing', 'changes'].includes(p.need);
-    const rank = p => LEAVING.has(p.need) ? 0 : needs(p) ? 1 : 2;
-    for (const p of [...gh].sort((a, b) => rank(a) - rank(b))) want.set(p.url, p); // one flying off first, then needy, so the cap keeps them
+    for (const p of byUrgency(gh)) want.set(p.url, p);
   }
   else {
     const youLinks = new Set((m.session.forYou?.you || []).map(p => p.url).filter(Boolean));

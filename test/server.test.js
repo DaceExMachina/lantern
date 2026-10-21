@@ -1167,6 +1167,35 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
     changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
+// One GitHub query failing (an expired token, a blip) must not freeze the others or make its own PRs vanish and fly back in:
+// it keeps what it found last time while everything else refreshes. Two top folders under home are two queries.
+test('a failing GitHub query keeps its own PRs while another folder\'s change still lands', async t => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), gh = path.join(dir, 'gh');
+  const answer = (file, n, isDraft) => fs.writeFileSync(path.join(dir, file), JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: [{ ...prNode(n, iso(Date.now())), isDraft }] } } }));
+  answer('work.json', 11, true); answer('projects.json', 21, true);
+  fs.writeFileSync(gh, `#!/bin/sh\ncase "$(pwd)" in */work/*) f='${dir}/work';; *) f='${dir}/projects';; esac\n[ -f "$f.fail" ] && exit 1\nexec /bin/cat "$f.json"\n`, { mode: 0o755 });
+  const ids = { work: UUID(7), projects: UUID(8) }, pr = { work: 11, projects: 21 };
+  const files = Object.fromEntries(Object.entries(ids).map(([name, id]) => [`.claude/projects/-${name}/${id}.jsonl`, jsonl([user('Fix it'),
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(pr[name]) + '\n' }] } }])]));
+  let home = '';
+  const base = await serve(t, files, h => { home = h; for (const name of Object.keys(ids)) {
+    const repo = path.join(h, name, 'repo');
+    fs.mkdirSync(repo, { recursive: true });
+    execFileSync('git', ['-C', repo, 'init', '-q', '-b', 'feat']);
+  } }, { LANTERN_GH: gh });
+  for (const [name, id] of Object.entries(ids)) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: path.join(home, name, 'repo'), transcript_path: path.join(home, `.claude/projects/-${name}/${id}.jsonl`), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const prs = async name => (await snapshot(base)).sessions.find(x => x.id === ids[name])?.github;
+  const first = await until(async () => { const w = await prs('work'), p = await prs('projects'); return w?.length === 1 && p?.length === 1 && { work: w, projects: p }; }, 'both folders to be asked');
+  fs.writeFileSync(path.join(dir, 'work.fail'), ''); // the work query fails from now on, and the projects one reports its PR as ready for review
+  answer('projects.json', 21, false);
+  await post(base, '/settings', { github: true });
+  const projects = await until(async () => { const p = await prs('projects'); return p?.[0]?.need === 'waiting' && p; }, 'the other folder\'s change to land');
+  assert.strictEqual(projects[0].was, 'draft');
+  assert.deepStrictEqual(await prs('work'), first.work, 'the failed query\'s PR is kept just as it was: not gone, not new');
+});
+
 // Séance and Ghostbuster count PRs, not events: one PR revived five times this week is one revival, and one PR leaving the
 // stale list merged five times yesterday is one. Five different PRs closed today do make a Ghostbuster.
 test('stats: Séance and Ghostbuster count each PR once', async t => {
