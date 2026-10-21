@@ -81,7 +81,7 @@ test('the flame\'s spring settles: kicked, it swings past upright and comes to r
   const ctx = context();
   ctx.run(`applyStyle('candle')`);
   const rest = step(ctx, 5).tip; // the clock held at 5: a steady wind and wobble, so it has somewhere to settle
-  for (let i = 0; i < 120; i++) step(ctx, 5);
+  for (let i = 0; i < 600; i++) step(ctx, 5); // ten seconds: even the loosest spring has come to rest
   const settled = step(ctx, 5).tip;
   ctx.run('flameSpring.vx += 400');
   const xs = Array.from({ length: 300 }, () => step(ctx, 5).tip[0] - settled[0]);
@@ -106,4 +106,16 @@ test('when the lantern swings off, its flame lags behind and leans back, then ri
   let f;
   for (let i = 0; i < 300; i++) f = step(ctx, 5);
   assert.ok(Math.abs(lean(f)) < 0.05, `upright again: ${lean(f)}`);
+});
+
+test('the flame feels like an ember when idle and a blaze at full, easing between with its size', () => {
+  const ctx = context(), FEEL = ctx.run('FEEL'), at = size => ctx.run(`feelAt(${size})`);
+  for (const [k, [ember, full]] of Object.entries(FEEL)) {
+    assert.ok(ember !== full, `${k}: an ember and a blaze differ, so the test can tell`);
+    assert.strictEqual(at(0.3)[k], ember, `${k} at an idle ember`); assert.strictEqual(at(0.1)[k], ember, `${k} below it`);
+    assert.strictEqual(at(1)[k], full, `${k} at full`);
+    const mid = at(0.65)[k];
+    assert.ok(Math.abs(mid - (ember + full) / 2) < 1e-9, `${k} half way at half way: ${mid}`);
+    assert.ok(Math.abs(at(0.4)[k] - ember) < Math.abs(mid - ember) / 6, `${k} eases out of the ember, not straight: ${at(0.4)[k]}`);
+  }
 });

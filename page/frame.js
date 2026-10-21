@@ -245,9 +245,17 @@ function swingLantern(elapsed, s) {
 // When the lantern swings, its base's acceleration throws the weight back (inertia), so the flame lags, leans and settles.
 // FEEL: the spring's stiffness (a second squared) and damping (a second), how hard the base's acceleration throws it (the
 // lantern's swing is gentle, so 1, a plain weight, would barely show),
-// and how strongly the wind, the turbulence (its licking edge, background.js) and a moth move it.
-const FEEL = { stiffness: 90, damping: 6, inertia: 40, wind: 1, turbulence: 1, moth: 1 };
-// ponytail: temporary, for dialling in the flame's feel; bake the picks into FEEL and drop these
+// and how strongly the wind, the turbulence (its licking edge, background.js) and a moth move it. Each is a pair: for an
+// idle ember (size 0.3) and for a full blaze (size 1), eased between by the flame's size (feelAt). An ember is small,
+// tight and jittery; a blaze is tall, looser, and bent further by the wind.
+const FEEL = { stiffness: [160, 70], damping: [9, 5], inertia: [25, 50], wind: [0.5, 1.3], turbulence: [1.1, 0.9], moth: [1.2, 1] };
+/** @returns {Record<keyof FEEL, number>} */
+const feelAt = size => {
+  const u = Math.max(0, Math.min(1, (size - 0.3) / 0.7)), t = u * u * (3 - 2 * u);
+  return /** @type {any} */ (Object.fromEntries(Object.entries(FEEL).map(([k, [ember, full]]) => [k, ember + (full - ember) * t])));
+};
+// ponytail: temporary, for dialling in the flame's feel (an ember's and a blaze's, set with the Flame row's intensity);
+// bake the picks into FEEL and drop these
 for (const [k, min, max, step, title] of /** @type {[string, number, number, number, string][]} */ ([
   ['stiffness', 10, 400, 5, 'How hard the flame springs back upright: higher snaps back quicker, lower sways slower and further'],
   ['damping', 0, 30, 0.5, 'How quickly the flame stops bobbing once it springs back: low rocks a while, high settles at once'],
@@ -255,7 +263,8 @@ for (const [k, min, max, step, title] of /** @type {[string, number, number, num
   ['wind', 0, 3, 0.05, 'How far the wind leans and stretches the flame, and how soon a gust tears its tip'],
   ['turbulence', 0, 3, 0.05, 'How much the flame\'s edge licks and its middle wavers'],
   ['moth', 0, 3, 0.05, 'How much a moth flying close pushes the flame aside and makes it waver'],
-])) FEEL[k] = devSlider('Temporary', `flame${k}`, `flame ${k}`, min, max, step, FEEL[k], title, v => { FEEL[k] = v; });
+])) for (const [i, at] of ['ember', 'full'].entries())
+  FEEL[k][i] = devSlider('Temporary', `flame${k}${at}`, `${k} (${at})`, min, max, step, FEEL[k][i], `${title}, for ${at === 'ember' ? 'an idle ember' : 'a full blaze'}`, v => { FEEL[k][i] = v; });
 // the spring: the tip's offset from the base and its speed, the base's last place and speed (scene units), and the style
 // it was set for
 const flameSpring = { x: NaN, y: 0, vx: 0, vy: 0, bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
@@ -263,7 +272,7 @@ const flameSpring = { x: NaN, y: 0, vx: 0, vy: 0, bx: 0, by: 0, bvx: 0, bvy: 0, 
 // scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
 function stepFlame(dt, s, flame) {
   const [fx, fy, fk] = style.flame, k = flame.size * fk, [bx, by] = rot(fx + farSlide / 2, fy), sp = flameSpring; // at the middle depth (farSlide)
-  const gust = GUST(s) * FEEL.wind, wind = gust * (style.flameWind || 0); // the wind's lean, in the flame's units
+  const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * (style.flameWind || 0); // the wind's lean, in the flame's units
   // an ember guttering: as it dims below 0.6 its height jumps about, by up to a quarter at its dimmest
   const gutter = Math.max(0, Math.min(1, (0.6 - flame.size) / 0.3));
   const h = 96 * k * (1 + wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
@@ -275,12 +284,12 @@ function stepFlame(dt, s, flame) {
     const n = Math.max(0, 1 - Math.hypot(m.x - bx - sp.x / 2, m.y - by - sp.y / 2) / (50 * fk));
     if (n > 0) { near = Math.max(near, n); push += n * n * (m.x > bx + sp.x / 2 ? -1 : 1); }
   }
-  const tx = (wobble(s, 2) * 9 + wind) * k + FEEL.moth * (0.3 * push + 0.15 * near * Math.sin(s * 29)) * h;
+  const tx = (wobble(s, 2) * 9 + wind) * k + feel.moth * (0.3 * push + 0.15 * near * Math.sin(s * 29)) * h;
   if (dt > 0) {
     const bvx = (bx - sp.bx) / dt, bvy = (by - sp.by) / dt, ax = (bvx - sp.bvx) / dt, ay = (bvy - sp.bvy) / dt;
     Object.assign(sp, { bx, by, bvx, bvy });
-    sp.vx += (FEEL.stiffness * (tx - sp.x) - FEEL.inertia * ax) * dt; sp.vy += (FEEL.stiffness * (-h - sp.y) - FEEL.inertia * ay) * dt;
-    const keep = Math.exp(-FEEL.damping * dt);
+    sp.vx += (feel.stiffness * (tx - sp.x) - feel.inertia * ax) * dt; sp.vy += (feel.stiffness * (-h - sp.y) - feel.inertia * ay) * dt;
+    const keep = Math.exp(-feel.damping * dt);
     sp.vx *= keep; sp.vy *= keep; sp.x += sp.vx * dt; sp.y += sp.vy * dt;
   }
   // never past its tallest, leaning over more than 0.6 of that, or squashed under 0.4 of its height
@@ -291,7 +300,7 @@ function stepFlame(dt, s, flame) {
   // the blue at its root swells and brightens with the flicker, breathes, and leans a little with the tip (a sixth as far,
   // since it's the root): its middle, x and up from the base, and its radii, in the flame's units, and its opacity
   const breathe = 1 + 0.05 * Math.sin(s * 1.7), { flick } = flame;
-  return { ...flame, base: [bx, by], tip: [bx + sp.x, by + sp.y], tear, turb: FEEL.turbulence * (1 + 1.5 * gutter + tear) + 2 * FEEL.moth * near,
+  return { ...flame, base: [bx, by], tip: [bx + sp.x, by + sp.y], tear, turb: feel.turbulence * (1 + 1.5 * gutter + tear) + 2 * feel.moth * near,
     blue: [wobble(s, 5) * 1.2 + sp.x / k / 6, 4, 10 * flick * breathe, 5 * flick * (2 - breathe), 0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick] };
 }
 // A paper lantern's flame, in the SVG: layered tongues that lean and stretch independently, ember-small when idle
