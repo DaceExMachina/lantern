@@ -94,7 +94,7 @@ Open the settings menu (the compass icon at the bottom right) and click **Connec
 
 The app can only read pull requests, checks and statuses, and only on accounts and orgs where it's installed. [Install it](https://github.com/apps/lantern-pr/installations/new) on your account and any orgs whose PRs you want to see (the settings menu links there too). An org admin may need to approve. Lantern keeps the token in your macOS Keychain, and you can connect more than one account. Disconnecting deletes the token from the Keychain. To cut Lantern off completely, revoke the app in your GitHub settings.
 
-Every two minutes Lantern asks GitHub, once per account, for your open PRs and the reviews requested from you. Merged and closed PRs drop out.
+Every two minutes Lantern asks GitHub, once per account, for your open PRs and the reviews requested from you. Merged and closed PRs drop out. When [ghbus](https://github.com/DaceExMachina/lantern-pr) is running on your Mac (at `127.0.0.1:8788`, or wherever `LANTERN_GHBUS_URL` points), changes show within a couple of seconds instead, and the two-minute check slows to every ten minutes as a backstop.
 
 Rather use your own `gh`? With no account connected, turn it on with:
 
