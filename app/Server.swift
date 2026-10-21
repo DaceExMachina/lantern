@@ -289,7 +289,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -411,18 +411,27 @@ final class LanternServer {
         case "SessionStart":
             s["turn"] = "idle"
         case "Stop":
-            // Three ways a turn ends: agents still running and nothing to ask (not waiting on me), agents running but
-            // it asked me something, or fully stopped. Only the first one leaves me alone.
-            let running = (e["background_tasks"] as? [JSON] ?? []).filter { !truthy($0["status"]) || str($0["status"]) == "running" }
-            let q = questionIn(e["last_assistant_message"])
-            let tasks = running.isEmpty ? "" : "\(running.count) background task\(running.count > 1 ? "s" : "")"
-            s["tasks"] = Array(running.map { $0["description"] }.filter(truthy).prefix(4)).map { $0! }
-            // when each task was first seen running (the payload has no start time), kept across turns so a dev server stays old
-            let since = s["taskSince"] as? [String: Double] ?? [:]
-            s["taskSince"] = Dictionary(running.enumerated().map { i, t in
-                let key = str(or(t["id"], or(t["description"], "\(i)")))
-                return (key, since[key] ?? now())
-            }) { a, _ in a }
+            // Three ways a turn ends: background work still open and nothing to ask (not waiting on me), work open but
+            // it asked me something, or fully stopped. Only the first one leaves me alone. Only work whose finishing wakes
+            // this session counts. The payload lists every running task in the session, with no owner and no start time,
+            // and Claude Code keeps a finished subagent there for good (the zombie that kept a session "Waiting on 1
+            // background task" for 14 hours), so: a subagent counts while the agents map (hooks, and reconcile() reading
+            // its transcript) still has it alive, and a shell, monitor or workflow task only when this session's own
+            // transcript started it. A task a subagent started is in that subagent's transcript, and its end wakes the subagent.
+            let known = s["taskSince"] as? [String: Double] ?? [:]
+            var since: [String: Double] = [:], described: [Any] = [], awaited: [String] = []
+            for t in e["background_tasks"] as? [JSON] ?? [] where !truthy(t["status"]) || str(t["status"]) == "running" {
+                let tid = str(t["id"])
+                if str(t["type"]) == "subagent" { if agents[id]![tid] != nil { awaited.append(tid) }; continue }
+                // when it started, from the transcript line that started it, so a restart doesn't make an old server fresh
+                guard Re("^[A-Za-z0-9_-]+$").test(tid), let at = known[tid] ?? dir.flatMap({ taskStart($0 + ".jsonl", tid) }) else { continue }
+                since[tid] = at
+                if truthy(t["description"]) { described.append(t["description"]!) }
+            }
+            s["taskSince"] = since
+            s["agentsAwaited"] = awaited
+            s["tasks"] = Array(described.prefix(4))
+            let q = questionIn(e["last_assistant_message"]), open = openWork(s, id)
             s["forYou"] = forYou(e["last_assistant_message"])
             if wordsOn {
                 let said = s["prose"] as? [String] ?? [], fresh = prose(e["last_assistant_message"]).filter { !said.contains($0) }
@@ -430,8 +439,8 @@ final class LanternServer {
             }
             s["error"] = false
             s["turn"] = "ended"
-            s["awaits"] = !running.isEmpty && q.isEmpty
-            if !truthy(s["awaits"]) { s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
+            s["awaits"] = !open.isEmpty && q.isEmpty
+            if !truthy(s["awaits"]) { s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (open.isEmpty ? "" : " (\(open) still running)") }
         case "StopFailure":
             s["turn"] = "ended"
             s["awaits"] = false
@@ -466,6 +475,14 @@ final class LanternServer {
         }
     }
 
+    /// The agents a turn handed over to that are still alive.
+    func awaitedAgents(_ s: JSON, _ id: String) -> [JSON] { (s["agentsAwaited"] as? [String] ?? []).compactMap { agents[id]?[$0] } }
+    /// The background work a turn handed over to that's still open, in words: its own tasks and its live agents.
+    func openWork(_ s: JSON, _ id: String) -> String {
+        let n = (s["taskSince"] as? [String: Double] ?? [:]).count, a = awaitedAgents(s, id).count
+        return [n > 0 ? "\(n) background task\(n == 1 ? "" : "s")" : nil, a > 0 ? "\(a) agent\(a == 1 ? "" : "s")" : nil].compactMap { $0 }.joined(separator: " and ")
+    }
+
     /// A session's state, worked out in one place from what the events recorded: `turn` (running; ended, with `awaits`
     /// when it handed over to background work; blocked on me; or idle at the prompt). A turn that handed over is paused
     /// (working) while a task is fresh or an agent was heard from lately, and otherwise rests as idle, open but quiet.
@@ -478,12 +495,12 @@ final class LanternServer {
         case "idle": s["state"] = "idle"
         case "ended" where truthy(s["awaits"]):
             let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
-            let heard = (agents[id]?.items.compactMap { $0.1["last"] as? Double } ?? []).max() ?? 0
-            let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS
-            let tasks = "\(since.count) background task\(since.count == 1 ? "" : "s")"
+            let heard = awaitedAgents(s, id).compactMap { $0["last"] as? Double }.max() ?? 0
+            let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS, work = openWork(s, id)
             s["state"] = busy ? "paused" : "idle"
             if !busy { s["resting"] = true }
-            s["note"] = busy ? "Waiting on \(tasks)" : "\(tasks) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest opened, or an agent last spoke
+            s["note"] = busy ? "Waiting on \(work)" : work.isEmpty ? "Its background work finished"
+                : "\(work) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest started, or an agent last spoke
         default: s["state"] = "waiting" // a turn that ended without handing over, or one blocked on me (a permission, a question)
         }
         // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
