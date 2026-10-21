@@ -355,7 +355,9 @@ final class LanternServer {
         }
         s["unconfirmed"] = false
         if truthy(e["cwd"]) { s["cwd"] = e["cwd"] }
-        if let pid = e["pid"] as? String, Re("^[0-9]+$").test(pid) { s["pid"] = Int(pid) ?? Double(pid)! } // the Claude Code process the hook ran under ($PPID)
+        // the Claude Code process the hook ran under ($PPID). One session can run in several (the Claude app and a terminal
+        // `claude --resume`), so each one goes in `pids`, the latest hook's last (focusing uses it).
+        if let pid = e["pid"] as? String, Re("^[0-9]{1,9}$").test(pid), let p = Int(pid) { s["pids"] = (s["pids"] as? [Int] ?? []).filter { $0 != p } + [p] }
         let iterm = ((e["iterm"] as? String) ?? "").components(separatedBy: ":").last! // ITERM_SESSION_ID looks like w0t1p0:<uuid>
         if UUID_RE.test(iterm) { s["iterm"] = iterm }
         // which terminal (or app) runs it, so a click can bring the right window to the front; see focusTerminal
@@ -487,8 +489,10 @@ final class LanternServer {
     func check(_ s: inout JSON) {
         if truthy(s["compacting"]) && str(s["turn"]) == "ended" && !truthy(s["awaits"]) { s["turn"] = "idle"; s["note"] = "" }
         s["compacting"] = nil
-        // (the status file has to name this session: a pid can be reused)
-        guard truthy(s["pid"]), let status = sessionFile(str(s["pid"])), status.file.hasSuffix("/\(str(s["id"])).jsonl"), status.busy == false else { return }
+        // Every process the session runs in has to say idle (one busy in a terminal while the app's sits idle is busy), and
+        // only status files that name this session count: a pid can be reused.
+        let statuses = (s["pids"] as? [Int] ?? []).compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
+        guard !statuses.isEmpty, statuses.allSatisfy({ $0.busy == false }) else { return }
         if str(s["turn"]) == "running" || truthy(s["awaits"]) { s["turn"] = "idle"; s["awaits"] = false }
     }
 
@@ -531,10 +535,10 @@ final class LanternServer {
         reconcile()
         for (id, var s) in sessions.items {
             if derive(&s, id) { sessions[id] = s; changed = true }
-            // with its process known, only that decides: a closed session goes, an open one stays however quiet it's been
-            if truthy(s["pid"]) {
-                let pid = pid_t(str(s["pid"])) ?? 0
-                if kill(pid, 0) != 0 && errno != EPERM { sessions[id] = nil; agents[id] = nil; changed = true }
+            // with its processes known, only they decide: a session goes once every one has closed, and stays however quiet
+            if let pids = s["pids"] as? [Int], !pids.isEmpty {
+                let alive = pids.filter { kill(pid_t($0), 0) == 0 || errno == EPERM }
+                if alive.isEmpty { sessions[id] = nil; agents[id] = nil; changed = true } else if alive != pids { sessions[id]!["pids"] = alive }
                 continue
             }
             // a session only seen on disk gets the normal timeout until it proves it's alive with a real event

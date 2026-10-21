@@ -16,20 +16,33 @@ func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
     return FileManager.default.fileExists(atPath: f) ? (f, ["busy": true, "idle": false][str(j["status"])]) : nil
 }
 
-// The transcripts of running terminal `claude`s, however long they've been quiet, each with its process when known.
+/// Running processes grouped by the transcript they write: one session can run in several (the Claude app's and a terminal
+/// `claude --resume` of it). It's busy when any of them says so, idle when they all do, and unknown when none says.
+func bySession(_ procs: [(file: String, pid: Int?, busy: Bool?)]) -> [(file: String, pids: [Int], busy: Bool?)] {
+    var out = Ordered<(pids: [Int], busy: Bool?)>()
+    for p in procs {
+        var x = out[p.file] ?? ([], nil)
+        if let pid = p.pid { x.pids.append(pid) }
+        if p.busy == true || x.busy == nil { x.busy = p.busy }
+        out[p.file] = x
+    }
+    return out.items.map { ($0.0, $0.1.pids, $0.1.busy) }
+}
+
+// The transcripts of running terminal `claude`s, however long they've been quiet, each with its processes when known.
 // Claude Code names a process's session in sessions/<pid>.json. Without that (older versions), each process writes into
 // the project folder named after its working folder, so the newest transcripts there (one per process) stand in.
-func liveTranscripts() -> [(file: String, pid: Int?, busy: Bool?)] {
+func liveTranscripts() -> [(file: String, pids: [Int], busy: Bool?)] {
     var live: [(file: String, pid: Int?, busy: Bool?)] = [], rest: [String] = []
     for pid in claudePids() { if let f = sessionFile(pid) { live.append((f.file, Int(pid), f.busy)) } else { rest.append(pid) } }
-    if rest.isEmpty { return live }
+    if rest.isEmpty { return bySession(live) }
     var count = Ordered<Int>()
     for line in run("lsof", ["-a", "-d", "cwd", "-p", rest.joined(separator: ","), "-Fn"]).out.components(separatedBy: "\n") where line.hasPrefix("n") {
         let d = String(line.dropFirst()).projectName
         count[d] = (count[d] ?? 0) + 1
     }
     let named = Set(live.map(\.file))
-    return live + count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).filter { !named.contains($0) }.prefix(n).map { ($0, nil, nil) } }
+    return bySession(live) + count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).filter { !named.contains($0) }.prefix(n).map { ($0, [], nil) } }
 }
 
 // The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session
@@ -82,7 +95,7 @@ func terminalBinary(_ pid: String) -> String? {
 /// which can look its tabs up. Falls back to just bringing the terminal app forward. Every value used here was checked
 /// against a pattern when it arrived, and none of them goes through a shell.
 func focusElsewhere(_ s: JSON) -> Bool {
-    let term = s["term"] as? String ?? "", app = s["app"] as? String ?? "", pid = truthy(s["pid"]) ? str(s["pid"]) : ""
+    let term = s["term"] as? String ?? "", app = s["app"] as? String ?? "", pid = (s["pids"] as? [Int])?.last.map(String.init) ?? ""
     let open = { (args: [String]) in run("open", args).ok }
     // The Claude app opens one of its sessions from its own link (it ignores the link when its entry points are switched off,
     // and opening it still brings the app forward). Sessions seeded at startup don't say where they run, so check those too.
