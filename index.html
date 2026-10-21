@@ -45,6 +45,10 @@
     /* layout */
     --dock-width: 380px;
   }
+  /* thin scrollbars tinted to the app on every scroller. The standard properties are all WebKit needs now; the ::-webkit-scrollbar
+     pseudo-elements are ignored once scrollbar-color is set, and without it they'd turn macOS's overlay bars into space-taking ones */
+  * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  *:hover { scrollbar-color: var(--ink-faint) transparent; }
   html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: var(--text-md)/1.4 var(--font-serif); }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr) auto; } /* the scene, the pinned sidebar beside it, the footer under both */
   footer { grid-column: 1 / -1; }
