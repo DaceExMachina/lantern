@@ -30,7 +30,8 @@ function sync() {
   for (const s of shown) {
     live.add(s.id);
     if (!moths.has(s.id)) moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
-    moths.get(s.id).session = s;
+    // whatever an earlier snapshot said, the server sends it now, so it isn't leaving: every window shows the latest snapshot
+    Object.assign(moths.get(s.id), { session: s, leaving: false });
     // A session another session started (the Claude app's side sessions) is a satellite: it orbits its parent's moth,
     // smaller, with its thread to the parent; it still lands on the lantern on its own when it needs you.
     const m = moths.get(s.id);
@@ -44,7 +45,7 @@ function sync() {
       const k = s.id + '/' + a.id;
       live.add(k);
       if (!moths.has(k)) moths.set(k, Object.assign(makeSubMoth(k, s.id, supervisor.test(a.type) ? SIZE.supervisor : SIZE.subagent), { key: k }));
-      Object.assign(moths.get(k), { session: s, type: a.type });
+      Object.assign(moths.get(k), { session: s, type: a.type, leaving: false });
     }
   }
   for (const [k, m] of moths) if (!live.has(k)) m.leaving = true;
