@@ -816,7 +816,10 @@ function perchAt(home, along) {
   const ox = 340 + side * half(mid) / 3, len = Math.hypot(home[0] - ox, home[1] - mid), ux = (home[0] - ox) / len, uy = (home[1] - mid) / len;
   const on = t => { const y = mid + uy * t, out = Math.abs(ox + ux * t - 340); return Math.abs(y - mid) <= spread && out >= half(y) / 3 && out <= half(y); };
   let end = 0;
-  while (on(end + 1)) end++; // ponytail: walks the line a unit at a time, a few hundred steps at most
+  // Walk the line a unit at a time (a few hundred steps at most), then halve in on its exact end. The spot is redone every
+  // frame as the lantern sways, so an end rounded to a whole unit would make a landed moth jump as the swing tips it over.
+  while (on(end + 1)) end++;
+  for (let step = 0.5; step > 1e-3; step /= 2) if (on(end + step)) end += step;
   const t = end * (0.25 + 0.75 * along), x = ox + ux * t, y = mid + uy * t;
   // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
   // up or down by how the lantern bulges at this height
