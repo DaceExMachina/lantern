@@ -91,8 +91,9 @@ test('a firefly is in the same spot in every window, and a merged one takes the 
 
 test('a merged firefly near the top edge plays its whole loop before it can be removed', () => {
   // its loop dips off the top of the window and back; only the exit takes it away for good
-  const win = window(), { at } = play(win, [340, 10], merged), exitAt = win.run('(SHAKE + LOOP) * 1000');
-  assert.ok(at - T0 >= exitAt, `removed at ${at - T0}ms, before the exit starts at ${exitAt.toFixed(0)}ms`);
+  const win = window(), { at, fly } = play(win, [340, 10], merged);
+  const exit = win.run(`exitAt(${fly.leave.start})`) * 1000;
+  assert.ok(at - T0 >= exit, `removed at ${at - T0}ms, before the exit starts at ${exit.toFixed(0)}ms`);
 });
 
 test('a moth leaving mid-merge does not cut the merge short or make its firefly jump', () => {
@@ -123,31 +124,22 @@ test('a reopened PR fades up from the closed colour, not the fallback blue', () 
   assert.deepStrictEqual(col.map(v => v.toFixed(3)), hex('closed').map(v => v.toFixed(3)), 'it starts from the closed colour');
 });
 
-// The merge is one motion: the shake's last run speeds up into the loop, and the loop's last speed carries into the exit.
-// Position over time has no jump and no stall at either hand-off.
-test('the merge has no jump or stall where the shake becomes the loop and the loop becomes the exit', () => {
+// The merge is one continuous motion: the shake, the loop and the exit overlap, each fading out as the next fades in, both
+// already moving. Over each overlap it never comes near a stop, and nowhere does its velocity jump.
+test('the merge is one motion: no jump, and no rest point where the shake becomes the loop or the loop the exit', () => {
   const win = window(), h = 1e-4;
-  for (const d of [[1, 0], [-1, 0], [0.6, 0.8]]) {
-    const at = t => win.run(`leaveStep('merged', ${t}, [${d}])`), pos = t => at(t).slice(0, 2);
-    const back = t => Math.hypot(...pos(t).map((v, i) => v - pos(t - h)[i])) / h, fwd = t => Math.hypot(...pos(t + h).map((v, i) => v - pos(t)[i])) / h;
-    for (const join of [win.run('SHAKE'), win.run('SHAKE + LOOP')]) {
-      assert.ok(Math.abs(back(join) / fwd(join) - 1) < 0.02, `heading ${d}, ${join.toFixed(2)}s: speed ${back(join).toFixed(1)} going in, ${fwd(join).toFixed(1)} coming out`);
-      const jump = Math.hypot(...pos(join + 1e-6).map((v, i) => v - pos(join - 1e-6)[i]));
-      assert.ok(jump < 1e-3, `heading ${d}, ${join.toFixed(2)}s: jumps ${jump} units`);
+  for (const d of [[1, 0], [-1, 0], [0.92, -0.38], [-0.94, 0.34], [0.6, 0.8]]) {
+    const start = win.run(`loopStart([${d}])`), exitAt = win.run(`exitAt(${start})`), blend = win.run('BLEND');
+    const pos = t => win.run(`leaveStep('merged', ${t}, [${d}], ${start})`).slice(0, 2);
+    const vel = t => [pos(t + h), pos(t - h)].reduce((a, b) => a.map((v, i) => (v - b[i]) / (2 * h))), speed = t => Math.hypot(...vel(t));
+    let worst = 0;
+    for (let t = 0.3; t < exitAt + blend + 0.2; t += 0.001) worst = Math.max(worst, Math.hypot(...vel(t + 0.001).map((v, i) => v - vel(t)[i])));
+    assert.ok(worst < 40, `heading ${d}: its velocity jumps by ${worst.toFixed(0)} units/s in a millisecond`);
+    for (const [from, whole] of [[start, speed(start + blend)], [exitAt, speed(exitAt + blend)]]) { // each overlap against the speed of the motion taking over
+      let slowest = Infinity, at;
+      for (let t = from; t <= from + blend; t += 0.001) if (speed(t) < slowest) { slowest = speed(t); at = t; }
+      assert.ok(slowest > whole * 0.5, `heading ${d}: over the overlap from ${from.toFixed(2)}s it slows to ${slowest.toFixed(0)} units/s at ${at.toFixed(3)}s, with ${whole.toFixed(0)} once the next motion has taken over`);
     }
-    // what the eye reads as a stall is a stretch of slow motion, not the instant a wiggle reverses: from the last reversal
-    // speed climbs into the loop, the shake is still lively just before it, and nothing crawls for long
-    const entry = fwd(win.run('SHAKE')), shake = win.run('SHAKE'), loopEnd = win.run('SHAKE + LOOP'), speed = [];
-    for (let t = shake - 0.25; t <= loopEnd; t += 0.001) speed.push([t, back(t + 1e-4)]); // 1ms apart
-    let rev = 0;
-    for (let i = 1; i < speed.length - 1; i++) if (speed[i][0] < shake && speed[i][1] <= speed[i - 1][1] && speed[i][1] < speed[i + 1][1]) rev = i;
-    assert.ok(rev > 0, `heading ${d}: the shake has a last reversal`);
-    for (let i = rev + 1; speed[i][0] <= shake + 0.1; i++) assert.ok(speed[i][1] >= speed[i - 1][1] * 0.99, `heading ${d}: from the last reversal (${speed[rev][0].toFixed(3)}s) speed dips at ${speed[i][0].toFixed(3)}s: ${speed[i - 1][1].toFixed(0)} to ${speed[i][1].toFixed(0)}`);
-    let slow = 0, longest = 0;
-    for (const [, v] of speed.slice(rev)) { slow = v < entry * 0.3 ? slow + 1 : 0; longest = Math.max(longest, slow); }
-    assert.ok(longest <= 60, `heading ${d}: it crawls (under 30% of the entry speed) for ${longest}ms`);
-    const before = speed.filter(([t]) => t < shake - 0.15).map(([, v]) => v);
-    assert.ok(before.reduce((a, v) => a + v) / before.length > entry * 1.2, `heading ${d}: the shake has calmed before the loop: ${(before.reduce((a, v) => a + v) / before.length).toFixed(0)} on average, entering the loop at ${entry.toFixed(0)}`);
   }
 });
 
