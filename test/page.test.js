@@ -41,6 +41,26 @@ test('landing spots stay out of the middle third of the lantern, and on it', () 
   }
 });
 
+// frame.js works a landed moth's spot out afresh every frame from its home turned back by the sway, so the spot has to
+// move smoothly as the sway does, or a moth sleeping on a swinging lantern jitters
+test('a landing spot slides smoothly as the lantern sways, never jumping', () => {
+  // the homes in windows as wide as tall or wider (in the half-width one the top home's line runs nearly straight up
+  // the middle, and a swing can tip its spot over to another stretch of paper), a little way out along their lines
+  for (const key of styles) for (const h of homes.filter((_, i) => i % 3 < 2)) {
+    const r = 0.1;
+    // the farthest the spot moves in one 200th of a degree of sway, over a 1.5 degree swing each way: a slide moves it
+    // 0.07 at most (where its line grazes the edge of the paper), a jump a quarter unit or more
+    const [d, sway] = run(`style = STYLES.${key}; (() => { let worst = [0, 0], prev;
+      for (let i = -300; i <= 300; i++) {
+        const [x, y] = perchAt(rot(${h[0]}, ${h[1]}, -i / 200), ${r}), d = prev ? Math.hypot(x - prev[0], y - prev[1]) : 0;
+        if (d > worst[0]) worst = [d, i / 200];
+        prev = [x, y];
+      }
+      return worst; })()`);
+    assert.ok(d < 0.15, `${key}: home ${h.map(Math.round)}, along ${r}: the spot jumps ${d.toFixed(3)} at ${sway} degrees`);
+  }
+});
+
 test('the candle is the fourth lantern in the menu', () => {
   assert.deepStrictEqual(styles, ['barrel', 'chochin', 'moroccan', 'candle']);
   assert.strictEqual(run('STYLES.candle.name'), 'Pillar candle');
