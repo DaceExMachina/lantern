@@ -366,6 +366,64 @@ test('a manual /compact while agents run leaves the session paused on them (the 
   assert.deepStrictEqual((await shown())[0], 'idle');
 });
 
+// An Esc interrupt fires no Stop, and a /compact cancelled before it reported back sends no PostCompact: Claude Code's
+// status turns idle while Lantern still says working. The sweep looks once the hooks have been quiet past their usual lag
+// (LANTERN_STATUS_LAG_SECONDS) and lands it; while the status says busy (a turn, or a /compact still running) it leaves it.
+// The transcript only has to exist, since the status file points at it (it's the real desktop interrupt tail from
+// test/fixtures/desktop-turns.jsonl, which only seeding reads).
+test('a working session lands once Claude Code says idle and the hooks have gone quiet: an Esc interrupt, a cancelled /compact', async t => {
+  const tails = {}; let name;
+  for (const line of fs.readFileSync(path.join(__dirname, 'fixtures/desktop-turns.jsonl'), 'utf8').trim().split('\n')) {
+    const j = JSON.parse(line);
+    if (j.__case) tails[name = j.__case] = []; else tails[name].push(line);
+  }
+  const id = UUID(4), file = `.claude/projects/-Users-user/${id}.jsonl`, status = `.claude/sessions/${process.pid}.json`;
+  const setStatus = (h, st) => fs.writeFileSync(path.join(h, status), JSON.stringify({ pid: process.pid, sessionId: id, cwd: '/Users/user', status: st }));
+  let home;
+  const base = await serve(t, { [file]: tails.interrupted.join('\n') + '\n', [status]: '' }, h => { home = h; setStatus(h, 'busy'); },
+    { LANTERN_SWEEP_SECONDS: '0.1', LANTERN_STATUS_LAG_SECONDS: '2' });
+  const hook = ev => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(process.pid) },
+    body: JSON.stringify({ session_id: id, cwd: '/Users/user', transcript_path: path.join(home, file), ...ev }) });
+  const state = async () => (await snapshot(base)).sessions.find(s => s.id === id).state;
+  await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'go' });
+  await wait(2500); // past the lag, Claude Code busy: still working
+  assert.strictEqual(await state(), 'working');
+  await hook({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {} });
+  setStatus(home, 'idle'); // Esc: no Stop comes
+  await wait(500); // five sweeps, inside the lag
+  assert.strictEqual(await state(), 'working', 'within the lag a Stop may still be on its way');
+  await until(async () => await state() === 'idle', 'the sweep to land the interrupted turn');
+  // a /compact cancelled before it reported back: the same look lands it
+  setStatus(home, 'busy');
+  await hook({ hook_event_name: 'PreCompact', trigger: 'manual' });
+  await wait(2500); // past the lag, the compaction still running (busy): not landed
+  assert.strictEqual(await state(), 'working');
+  setStatus(home, 'idle');
+  await until(async () => await state() === 'idle', 'the sweep to land the cancelled compaction');
+});
+
+// A process that ended leaves its last status file behind. Here the session ran in two processes; the one that said idle
+// ends, and the one still running has no status file: nothing alive says idle, so it stays working.
+test('an ended process\'s leftover idle status doesn\'t land a session still running elsewhere', async t => {
+  const proc = spawn('sleep', ['60']);
+  t.after(() => proc.kill());
+  const id = UUID(6), file = `.claude/projects/-Users-user/${id}.jsonl`, status = `.claude/sessions/${proc.pid}.json`;
+  const setStatus = (h, st) => fs.writeFileSync(path.join(h, status), JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/Users/user', status: st }));
+  let home;
+  const base = await serve(t, { [file]: jsonl([user('go')]), [status]: '' }, h => { home = h; setStatus(h, 'busy'); },
+    { LANTERN_SWEEP_SECONDS: '0.1', LANTERN_STATUS_LAG_SECONDS: '1' });
+  const hook = (pid, ev) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(pid) },
+    body: JSON.stringify({ session_id: id, cwd: '/Users/user', transcript_path: path.join(home, file), ...ev }) });
+  const shown = async () => (await snapshot(base)).sessions.find(s => s.id === id);
+  await hook(proc.pid, { hook_event_name: 'UserPromptSubmit', prompt: 'go' });
+  await hook(process.pid, { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} }); // the other process, no status file
+  await wait(1500); // past the lag
+  setStatus(home, 'idle'); // its last word, then it ends
+  const gone = new Promise(r => proc.once('exit', r)); proc.kill(); await gone;
+  await until(async () => (await shown()).pids.join() === String(process.pid), 'the sweep to drop the ended process');
+  assert.strictEqual((await shown()).state, 'working');
+});
+
 // Every way a run of hook events leaves a session's state, note and waitingSince, as one table: the events in order, then
 // what the page shows. Each row runs as its own session on one server.
 const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...more });
