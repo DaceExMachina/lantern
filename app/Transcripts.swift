@@ -410,9 +410,10 @@ extension LanternServer {
     /// Corrects the in-memory state against what's on disk, for the things a lost hook event leaves wrong. Called by the
     /// sweep; reads happen off the main queue, and `then` runs on the main queue once they've landed. Today it covers
     /// subagents: each session's are rebuilt from one rule (alive while their transcript is unfinished and recent, or a
-    /// hook was just heard), whatever the session's state, since background agents run on while it waits on me. A lost SubagentStop, a restart and a quiet agent all come out right.
+    /// hook was just heard), whatever the session's state, since background agents run on while it waits on me. A lost
+    /// SubagentStop, a restart and a quiet agent all come out right.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
-    func reconcile(then: @escaping () -> Void) {
+    func reconcile(retried: Bool = false, then: @escaping () -> Void) {
         struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
@@ -420,6 +421,7 @@ extension LanternServer {
                         modelled: Set(agents[id]?.items.filter { truthy($0.1["model"]) }.map(\.0) ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
         guard !looks.isEmpty else { return then() }
+        let started = now()
         DispatchQueue.global().async {
             let app = appSessions() // the Claude app keeps the title it shows in its own file for the session
             let results = looks.map { l -> (String, Set<String>, Ordered<JSON>, Double, Any?) in
@@ -429,6 +431,7 @@ extension LanternServer {
                 let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
                 return (l.id, l.had, liveSubagents(l.dir, modelled: l.modelled), written, title)
             }
+            if READ_DELAY_SECONDS > 0 { Thread.sleep(forTimeInterval: READ_DELAY_SECONDS) }
             DispatchQueue.main.async {
                 var changed = false
                 for (id, had, live, written, title) in results where self.sessions[id] != nil {
@@ -456,6 +459,9 @@ extension LanternServer {
                     self.agents[id] = kept
                 }
                 if changed { self.broadcast() }
+                // Reads this old (the server stalled while they were out) would judge an agent that kept writing as quiet,
+                // so read once more before settling. Only once, so a disk that's always slow can't loop.
+                if !retried && now() - started > AGENT_CHECK_MS { return self.reconcile(retried: true, then: then) }
                 then()
             }
         }
