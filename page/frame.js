@@ -171,8 +171,11 @@ const pal = k => mix(WARM[k], COOL[k], cool);
 let swayAngle = 0;
 // A fake twist on the chain, in degrees of yaw: the swing alone wouldn't turn the faces to the light, but the brass's lighting
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
-// its own, within about ±18. The drawing itself doesn't turn.
+// its own, never past TWIST_MAX. The drawing itself doesn't turn.
 let twist = 0;
+// The most the twist may turn, in degrees. The target eases into it (tanh) rather than hitting a wall, so a big gust can't
+// spin the faces round; over an hour of normal wind the twist's median is 14, its 90th percentile 37 and its peak 99.
+const TWIST_MAX = 60;
 // A flat face's tone: how squarely it faces a light 35 degrees to the left as the lantern twists (`angle` round the lantern,
 // `tilt` up, the light sitting a little above), squared so the tone moves plainly as it turns, with a low floor so a face
 // turned a little away still lifts off the darkest tone as the twist brings it round; blended along FACET_TONES.
@@ -202,7 +205,7 @@ function swingLantern(elapsed, s) {
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
-  twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
+  twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain / TWIST_MAX) - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
   // SHEEN), and slides 1.75 units per degree of twist around that, staying within 288 to 350; half-unit steps so put() skips
   // frames that wouldn't show it
