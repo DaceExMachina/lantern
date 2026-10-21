@@ -5,6 +5,10 @@
 // The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust, the fireflies' light) is drawn by a WebGL shader on a canvas
 // behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
 const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
+// Everything on it is soft (glow, smoke, dust, the shimmer), so it's drawn at this share of the screen's resolution and
+// the browser scales it up: at 0.6 that's about a third of the pixels and of the GPU time, and it looks the same, the
+// far wall's lace included (below 0.5 that starts to soften). fitView sizes it.
+const bgScale = 0.6;
 // A GPU reset (sleep, a display change, the GPU process restarting) loses the context and every shader and buffer on it.
 // Asking for it back (preventDefault) and reloading once it's restored rebuilds them all from scratch.
 $('bg').addEventListener('webglcontextlost', e => e.preventDefault());
@@ -240,7 +244,7 @@ void main() {
   vec2 at = a.xy - heat(a.xy); // seen through the hot air, bent the other way to the room behind it
   gl_Position = vec4((at.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (at.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0);
   float lit = uNear * glow(a.xy); // the far specks stay a faint, even layer
-  gl_PointSize = max(a.z * (1.0 + 2.5 * lit) * uRes.x / uBox.z + 1.0, 1.5 * uDpr); // never under 1.5 CSS px, at any size or scale
+  gl_PointSize = max(a.z * (1.0 + 2.5 * lit) * uRes.x / uBox.z + 1.0, 1.5 * uDpr); // never under 1.5 CSS px, at any size or scale (uDpr: the canvas's pixels per CSS px)
   vS = pow(light(a.xy), uCatch); vA = a.w * mix(1.0, DIM + LIT * lit, uNear) * mix(vS, 1.0, uDebug); vD = uDebug;
 }`, `
 precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
@@ -268,7 +272,7 @@ void main() {
 }`);
 const fliesBuf = gl.createBuffer();
 // the fireflies' light over the background and dust (a point bigger than the GPU allows, 511px on a Mac, is drawn at
-// that size, so in a window over about 2400px wide the widest swells stop growing)
+// that size, so on a canvas over about 2400px wide the widest swells stop growing)
 function drawFlies(w, h, box) {
   gl.blendFunc(gl.ONE, gl.ONE); // light adds up
   gl.useProgram(FLIES.p);
@@ -396,7 +400,7 @@ function drawBackground(v) {
   gl.useProgram(DUST.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, dustBuf); gl.bufferData(gl.ARRAY_BUFFER, dustData, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
-  gl.uniform4f(DUST.u.uBox, x, y, w, h); gl.uniform2f(DUST.u.uRes, c.width, c.height); gl.uniform1f(DUST.u.uDpr, devicePixelRatio || 1); gl.uniform3fv(DUST.u.uCol, rgb(v.dustCol));
+  gl.uniform4f(DUST.u.uBox, x, y, w, h); gl.uniform2f(DUST.u.uRes, c.width, c.height); gl.uniform1f(DUST.u.uDpr, (devicePixelRatio || 1) * bgScale); gl.uniform3fv(DUST.u.uCol, rgb(v.dustCol));
   setLight(DUST.u, v);
   // the near specks catch the light, except on a second display: there no moths cast shadows, and a lantern's cap
   // fan can cover the whole screen, so gating would leave it nearly empty of dust

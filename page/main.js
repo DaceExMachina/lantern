@@ -111,7 +111,7 @@ let rafAt = 0;
 const loop = t => { rafAt = performance.now(); frame(t); requestAnimationFrame(loop); };
 requestAnimationFrame(loop);
 window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 100) { rafAt = now - 86; frame(now); } }; // at most ~70 fps
-setInterval(lanternTick, 16);
+setInterval(() => document.hidden || lanternTick(), 16); // not while the page is hidden (a minimised or covered window, a closed panel): rAF stops then too
 
 setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
