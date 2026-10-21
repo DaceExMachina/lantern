@@ -142,6 +142,54 @@
   .E .astep { color: #B8C6E6; font-size: 11.5px; padding-left: 12px; margin-top: 1px !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   .E .ameta { padding-left: 12px; font-size: 10px; color: #6F6188; margin-top: 1px !important; }
   .E .ameta b { font-weight: normal; color: #9D8FB5; }
+
+  /* the pin on E's card: dim until hovered, filled once pinned */
+  .card .pin { all: unset; cursor: pointer; flex: none; margin-top: 3px; color: #6F6188; line-height: 0; }
+  .card .pin:hover, .card .pin.on { color: #FFC266; }
+  .card .pin:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; border-radius: 3px; }
+
+  /* ---- the pinned sidebar ---- */
+  .frames { display: flex; flex-wrap: wrap; gap: 24px; }
+  .frame { flex: 1 1 560px; max-width: 864px; }
+  .frame .label { font-size: 11px; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
+  .screen { position: relative; width: 100%; aspect-ratio: 1440 / 900; overflow: hidden; border: 1px solid #3A3050; border-radius: 8px; }
+  .screen > .win { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; display: flex; background: #1E1930; }
+  .win .scene { flex: 1; position: relative; background: center / cover no-repeat; }
+  .win .ring { position: absolute; width: 74px; height: 74px; margin: -37px 0 0 -37px; border-radius: 50%; border: 1.5px solid rgba(255, 194, 102, .75); box-shadow: 0 0 18px rgba(255, 194, 102, .35); }
+  .win .ring::after { content: ''; position: absolute; right: -4px; top: -4px; width: 14px; height: 14px; border-radius: 50%; background: #FFC266 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z' fill='%231E1930'/%3E%3C/svg%3E") center / 9px no-repeat; }
+  .sb { position: relative; max-width: none; width: 380px; height: 900px; box-sizing: border-box; display: flex; flex-direction: column; padding: 0; cursor: default;
+    border-radius: 0; border: none; border-left: 1px solid #4A3B68; background: rgba(30, 24, 46, .97); box-shadow: none; font-size: 13px; }
+  .sb.float { position: absolute; right: 20px; top: 20px; height: auto; max-height: 800px; width: 360px; border: 1px solid #4A3B68; border-radius: 12px; background: rgba(30, 24, 46, .9); box-shadow: 0 12px 40px rgba(0,0,0,.5); backdrop-filter: blur(8px); }
+  .sb .top { padding: 14px 16px 10px; border-bottom: 1px solid #3A3050; flex: none; }
+  .sb .top h3 { font-size: 16px; margin: 0; align-items: center; }
+  .sb .unpin { all: unset; cursor: pointer; color: #8F7FA6; font-size: 11.5px; flex: none; }
+  .sb .unpin:hover { color: #F0E8FF; }
+  .sb .where { margin-top: 4px; color: #8F7FA6; font-size: 11.5px; overflow-wrap: anywhere; }
+  .sb .body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 16px 16px; scrollbar-width: thin; scrollbar-color: #4A3B68 transparent; }
+  .sb .sec { margin-top: 14px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; display: flex; justify-content: space-between; }
+  .sb .sec .r { text-transform: none; letter-spacing: 0; }
+  .sb .prompt { margin-top: 4px; }
+  .sb .ag { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(20, 16, 32, .55); border: 1px solid #3A3050; }
+  .sb .ag .arow { margin: 0; align-items: flex-start; }
+  .sb .ag .arow .live { margin-top: 6px; }
+  .sb .ag .job { color: #F5E9FF; flex: 1; }
+  .sb .ag .ameta { padding: 0; margin-top: 2px !important; font-size: 11px; }
+  .sb .ag .now { margin-top: 6px !important; color: #D6E0F5; }
+  .sb .ag .now::before { content: 'now  '; color: #8F7FA6; font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+  .sb .ag ol { list-style: none; margin: 4px 0 0; padding: 0; font-size: 11.5px; color: #8F7FA6; }
+  .sb .ag li { display: flex; gap: 8px; margin: 1px 0; }
+  .sb .ag li span:first-child { flex: 1; }
+  .sb .grp { margin-top: 10px; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #B8AACB; }
+  .sb .grp i { width: 7px; height: 7px; border-radius: 50%; }
+  .sb a.pr2 { display: block; border: none; color: inherit; margin: 2px -8px 0; padding: 4px 8px; border-radius: 6px; }
+  .sb a.pr2:hover { background: rgba(195, 178, 255, .1); }
+  .sb a.pr2 .ti { color: #E8DCF2; white-space: normal; overflow: visible; }
+  .sb a.pr2 .me { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #8F7FA6; margin-top: 1px; }
+  .sb a.pr2 .me b { color: #C3B2FF; font-weight: normal; }
+  .sb .open { all: unset; cursor: pointer; display: block; text-align: center; margin: 10px 16px 14px; padding: 6px 0; border-radius: 8px; border: 1px solid #4A3B68; background: #2B2440; color: #C3B2FF; font-size: 12px; flex: none; }
+  .sb .open:hover { color: #F0E8FF; border-color: #8C78C8; }
+  .alone { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .alone .sb { border: 1px solid #4A3B68; border-radius: 12px; height: 900px; }
 </style>
 </head>
 <body>
@@ -161,6 +209,17 @@
       <ul><li>Titles without memorising numbers, and room to read the step.</li><li>Tallest of the new ones with agents; an open 10-PR list is long.</li></ul></div>
   </div>
   <div id="cases"></div>
+  <h2>Pinned sidebar</h2>
+  <p class="lede">The hover card stays compact (E). On a wide window, the pin on E's card (or a click on the moth's ring while hovering it) pins one session, and its full detail opens beside the scene: nothing truncated, every PR as a two-line row grouped by state, each agent with its model, type, elapsed time, current step in full and its last few steps. The pinned moth gets a warm ring with a pin badge. Pinning another session swaps it; unpin, Escape or the pin again closes it. Below are the docked and floating variants in a 1440×900 window (scaled to fit), then the sidebar alone at full size.</p>
+  <div class="frames" id="frames"></div>
+  <h2>The sidebar at full size</h2>
+  <div class="alone" id="alone"></div>
+  <div class="pitches">
+    <div class="pitch"><b>Docked (left frame).</b> A 380px column on the right; the scene shrinks to the rest and re-centres the lantern. Nothing covers the moths, and the window reads as two panes. Needs the window at least <b>1200px</b> wide so the scene keeps about 820px; below that the pin is hidden and the hover card is all there is (a pin stays remembered and comes back when the window widens).</div>
+    <div class="pitch"><b>Floating (right frame).</b> The same content in a glass panel pinned to the top right over the full scene, as tall as it needs up to the window, scrolling inside. The scene doesn't move, but the panel covers the moths and fireflies on that side. Works down to about <b>980px</b>; below that, hover card only.</div>
+    <div class="pitch"><b>Never shown</b> in the iTerm panel or the screensaver, which are too small or have no pointer. <b>What the server would need:</b> the pinned session in settings (so every window agrees, like E's toggle), the last three or so steps per agent (today it keeps only the latest <code>activity</code>), the agent's model and start time from its transcript (see the notes), and the PR's repo, which the URL already has. The step history and times here are mocked; the rest is real.</div>
+    <div class="pitch"><b>What it unlocks over the card.</b> The full prompt and message, every PR uncapped with its repo and full title, grouped by state with counts, agents with history, the full working directory, when it started and how long it's waited, and an "Open session" button, since clicking the sidebar shouldn't jump to the terminal the way the card does.</div>
+  </div>
   <h2>Notes</h2>
   <div class="pitches">
     <div class="pitch"><b>What agents can tell us.</b> Each agent sends its <i>description</i> (the dispatch line), its <i>type</i> (<code>opus-implement</code>, so the model comes for free), its latest <i>activity</i> (the last tool call's description, which already carries the task tag, like "[shader-flame] Fix halo line"), and <i>last</i> (when we last heard from it). The new directions pull the tag out as a chip and show the step without it. <b>Elapsed time isn't stored yet</b>: the server would need to record <code>started</code> on an agent's first event (one line in Server.swift). The times here show what that would look like.</div>
@@ -196,9 +255,9 @@ const CASES = [
       { url: gh('DaceExMachina/lantern', 132), label: '#132', need: 'failing', title: "Cap the Moroccan's twist (TWIST_MAX), with temporary dev sliders" },
     ],
     subagents: [
-      { type: 'opus-implement', description: 'Lantern: shader flame with physics', activity: '[shader-flame] Fix halo line and rename flame program', started: now - 41 * min, last: now - 2e3, model: 'claude-opus-5-5' },
-      { type: 'opus-implement', description: 'Lantern state plan: PRs 1,2,3,5,7', activity: '[state-plan] Review diff, run check and full tests', started: now - 18 * min, last: now - 16e3, model: 'claude-opus-5-5' },
-      { type: 'sonnet-implement', description: '[state-fixtures] Extract real transcript shapes for Lantern state fixtures', activity: '[state-fixtures] Inspect the API error example and the compaction lines around it', started: now - 7 * min, last: now - 1e3, model: 'claude-sonnet-5-5' },
+      { type: 'opus-implement', description: 'Lantern: shader flame with physics', activity: '[shader-flame] Fix halo line and rename flame program', started: now - 41 * min, last: now - 2e3, model: 'claude-opus-5-5', steps: [['Re-run the flame shader check', 3], ['Read the halo blend in background.js', 6], ['Run check and the flame tests', 9]] },
+      { type: 'opus-implement', description: 'Lantern state plan: PRs 1,2,3,5,7', activity: '[state-plan] Review diff, run check and full tests', started: now - 18 * min, last: now - 16e3, model: 'claude-opus-5-5', steps: [['Dispatch the state-fixtures agent', 4], ['Commit PR 3: the state store split', 7], ['Run the full test suite', 11]] },
+      { type: 'sonnet-implement', description: '[state-fixtures] Extract real transcript shapes for Lantern state fixtures', activity: '[state-fixtures] Inspect the API error example and the compaction lines around it', started: now - 7 * min, last: now - 1e3, model: 'claude-sonnet-5-5', steps: [['List the subagent transcripts', 1], ['Grep for api_error lines', 2], ['Read a compaction boundary', 4]] },
     ] } },
   { label: '2. Needs you, a question, 10 PRs', s: {
     title: 'update backgrounds', cwd: '/Users/dace/momentum/api', state: 'waiting', started: now - 26 * 3600e3, last: now - 7 * min,
@@ -326,6 +385,8 @@ function D(s) {
 const modelName = m => m ? m.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/^(\w)(\w*)-(.*)$/, (_, a, b, v) => a.toUpperCase() + b + ' ' + v.replace(/-/g, '.')) : '';
 const prOpen = {}; // ponytail: per-session flag in the page; the real one lives in the server's settings
 const isOpen = s => prOpen[s.title] ?? s.github.length <= 3;
+const PIN = '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+const headPin = s => { const [chip, cls] = chipOf(s); return `<h3><span class="name">${esc(s.title)}</span><button class="pin${s.title === 'update backgrounds' ? ' on' : ''}" title="Pin to the sidebar" aria-label="Pin ${esc(s.title)} to the sidebar">${PIN}</button><span class="${cls}">${chip}</span></h3>`; };
 function E(s) {
   const prs = sorted(s.github), a = s.subagents.map(agent), sum = summary(prs).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().replace(/ (\d)/g, ' · $1');
   const agents = s.subagents.map((raw, i) => { const g = a[i]; return `<div class="arow" title="${esc(raw.description)}"><span class="live${g.quiet ? ' quiet' : ''}"></span>${g.tag ? `<span class="tag">${esc(g.tag)}</span>` : ''}<span class="ell job">${esc(g.name)}</span><span class="t">${g.time}</span></div><div class="astep">${esc(g.step)}</div><div class="ameta"><b>${modelName(raw.model)}</b> · ${esc(raw.type)}</div>`; }).join('')
@@ -334,7 +395,7 @@ function E(s) {
     + (isOpen(s) ? prs.map(p => `<a class="pr2" href="${p.url}" target="_blank" rel="noopener"><div class="ti">${esc(p.title)}</div><div class="me"><i style="background:${col(p.need)}"></i><b>${esc(p.label)}</b>${NEED[p.need]}</div></a>`).join('')
       : `<div class="chips">${prs.map(p => `<a href="${p.url}" target="_blank" rel="noopener" data-title="${esc(p.title)}" style="--c:${col(p.need)}"><i style="background:${col(p.need)}"></i>${esc(p.label)}</a>`).join('')}</div>`) : '';
   const tray = a.length || loose(s).length || prs.length ? `<div class="tray">${a.length || loose(s).length ? `<div class="head"><span>Agents</span><span class="r">${s.subagents.length}</span></div>${agents}` : ''}${prBlock}${foot(s)}</div>` : foot(s);
-  return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), tray].join('');
+  return [headPin(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), tray].join('');
 }
 // a chip names itself in the header while hovered
 document.addEventListener('mouseover', e => {
@@ -382,6 +443,37 @@ for (const c of CASES) {
     base ||= h;
   }
 }
+// ---- the pinned sidebar ----
+const repoPr = p => `${p.url.split('/')[4]}#${p.url.split('/')[6]}`;
+const GROUP = { failing: 'Checks failing', changes: 'Changes requested', ready: 'Ready to merge', waiting: 'In review', draft: 'Drafts', merged: 'Merged', closed: 'Closed' };
+function sidebar(s, cls = '') {
+  const prs = sorted(s.github), home = s.cwd.replace('/Users/dace', '~');
+  const waited = s.state === 'waiting' ? ` · waiting ${short(now - s.last)}` : '';
+  const agents = s.subagents.map(raw => { const g = agent(raw); return `<div class="ag"><div class="arow"><span class="live${g.quiet ? ' quiet' : ''}"></span>${g.tag ? `<span class="tag">${esc(g.tag)}</span>` : ''}<span class="job">${esc(g.name)}</span><span class="t">${g.time}</span></div>`
+    + `<div class="ameta"><b>${modelName(raw.model)}</b> · ${esc(raw.type)} · heard ${short(now - raw.last)} ago</div><div class="now">${esc(g.step)}</div>`
+    + (raw.steps ? `<ol>${raw.steps.map(([t, m]) => `<li><span>${esc(t)}</span><span>${m}m ago</span></li>`).join('')}</ol>` : '') + '</div>'; }).join('')
+    + loose(s).map(t => `<div class="arow" style="margin-top:8px"><span class="live quiet"></span>${looseRow(t)}</div>`).join('');
+  const groups = ORDER.filter(k => prs.some(p => p.need === k)).map(k => { const g = prs.filter(p => p.need === k);
+    return `<div class="grp"><i style="background:${col(k)}"></i>${GROUP[k]} · ${g.length}</div>` + g.map(p => `<a class="pr2" href="${p.url}" target="_blank" rel="noopener"><div class="ti">${esc(p.title)}</div><div class="me"><b>${esc(repoPr(p))}</b>${NEED[p.need]}</div></a>`).join(''); }).join('');
+  const [chip, ccls] = chipOf(s);
+  return `<aside class="card E sb ${cls}"><div class="top"><h3><span class="name">${esc(s.title)}</span><span class="${ccls}">${chip}</span><button class="unpin" title="Unpin">Unpin ✕</button></h3>`
+    + `<div class="where">${esc(home)}</div><div class="where">started ${short(now - s.started)} ago · active ${short(now - s.last)} ago${waited}</div></div>`
+    + `<div class="body">${stateLine(s)}${nowLine(s)}${ask(s)}${msg(s)}`
+    + (s.prompt ? `<div class="sec"><span>Your last message</span></div><div class="prompt">“${esc(s.prompt)}”</div>` : '')
+    + (agents ? `<div class="sec"><span>Agents</span><span class="r">${s.subagents.length} running</span></div>${agents}` : '')
+    + (prs.length ? `<div class="sec"><span>PRs</span><span class="r">${prs.length}</span></div>${groups}` : '')
+    + `</div><button class="open">Open session</button></aside>`;
+}
+const PINNED = CASES[1].s, WORKING = CASES[0].s;
+document.getElementById('frames').innerHTML =
+  `<div class="frame"><div class="label">Docked right sidebar</div><div class="screen"><div class="win"><div class="scene" style="background-image:url(scene-1060.jpg)"><span class="ring" style="left:618px;top:470px"></span></div>${sidebar(PINNED)}</div></div></div>`
+  + `<div class="frame"><div class="label">Floating pinned panel</div><div class="screen"><div class="win"><div class="scene" style="background-image:url(scene-1440.jpg)"><span class="ring" style="left:812px;top:470px"></span></div>${sidebar(PINNED, 'float')}</div></div></div>`;
+document.getElementById('alone').innerHTML = sidebar(PINNED) + sidebar(WORKING);
+// each frame shows a 1440×900 window scaled to the frame's width
+const fit = () => document.querySelectorAll('.screen').forEach(sc => { sc.firstChild.style.transform = `scale(${sc.clientWidth / 1440})`; });
+fit(); addEventListener('resize', fit);
+// E's pin jumps to the sidebar mockups
+document.addEventListener('click', e => { if (e.target.closest('.card .pin')) { e.stopPropagation(); document.getElementById('frames').scrollIntoView({ behavior: 'smooth' }); } }, true);
 </script>
 </body>
 </html>
