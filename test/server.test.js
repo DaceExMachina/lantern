@@ -1173,7 +1173,7 @@ test('a failing GitHub query keeps its own PRs while another folder\'s change st
   const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), gh = path.join(dir, 'gh');
   const answer = (file, n, isDraft, title = `PR ${n}`) => fs.writeFileSync(path.join(dir, file), JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: [{ ...prNode(n, iso(Date.now())), isDraft, title }] } } }));
   answer('work.json', 11, true); answer('projects.json', 21, true);
-  fs.writeFileSync(gh, `#!/bin/sh\ncase "$(pwd)" in */work/*) f='${dir}/work';; *) f='${dir}/projects';; esac\n[ -f "$f.fail" ] && exit 1\nexec /bin/cat "$f.json"\n`, { mode: 0o755 });
+  fs.writeFileSync(gh, `#!/bin/sh\ncase "$(pwd)" in */work/*) f='${dir}/work';; *) f='${dir}/projects';; esac\n[ -f "$f.slow" ] && /bin/sleep 1.5\n[ -f "$f.fail" ] && exit 1\nexec /bin/cat "$f.json"\n`, { mode: 0o755 });
   const ids = { work: UUID(7), projects: UUID(8) }, pr = { work: 11, projects: 21 };
   const files = Object.fromEntries(Object.entries(ids).map(([name, id]) => [`.claude/projects/-${name}/${id}.jsonl`, jsonl([user('Fix it'),
     { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
@@ -1182,7 +1182,7 @@ test('a failing GitHub query keeps its own PRs while another folder\'s change st
   const base = await serve(t, files, h => { home = h; for (const dir of ['work/aaa', 'work/repo', 'projects/repo']) { // aaa: another session in the work folder, that goes
     fs.mkdirSync(path.join(h, dir), { recursive: true });
     execFileSync('git', ['-C', path.join(h, dir), 'init', '-q', '-b', 'feat']);
-  } }, { LANTERN_GH: gh, LANTERN_GH_KEEP_SECONDS: '3' });
+  } }, { LANTERN_GH: gh, LANTERN_GH_KEEP_SECONDS: '4' });
   await post(base, '/event', { session_id: UUID(6), hook_event_name: 'UserPromptSubmit', cwd: path.join(home, 'work/aaa'), prompt: 'go' });
   for (const [name, id] of Object.entries(ids)) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: path.join(home, name, 'repo'), transcript_path: path.join(home, `.claude/projects/-${name}/${id}.jsonl`), prompt: 'go' });
   await post(base, '/settings', { github: true });
@@ -1191,7 +1191,7 @@ test('a failing GitHub query keeps its own PRs while another folder\'s change st
   await post(base, '/event', { session_id: UUID(6), hook_event_name: 'SessionEnd' }); // the work query was asked from aaa so far, and now from repo: the same query
   fs.writeFileSync(path.join(dir, 'work.fail'), ''); // the work query fails from now on, and the projects one reports its PR as ready for review
   answer('projects.json', 21, false);
-  await wait(1200); // a kept answer may be up to 3s old (LANTERN_GH_KEEP_SECONDS), so this one is
+  await wait(1200); // a kept answer may be up to 4s old (LANTERN_GH_KEEP_SECONDS), so this one is
   const refresh = async title => { // a refresh, done once the projects PR carries this title
     answer('projects.json', 21, false, title);
     await post(base, '/settings', { github: true });
@@ -1200,22 +1200,33 @@ test('a failing GitHub query keeps its own PRs while another folder\'s change st
   const projects = await refresh('PR 21 v1');
   assert.strictEqual(projects[0].was, 'draft');
   assert.deepStrictEqual(await prs('work'), first.work, 'the failed query\'s PR is kept just as it was: not gone, not new');
-  // GitHub turned off and on again while the query still fails: nothing to keep, so work's PR is gone
+  // the query comes back
+  const comesBack = async () => {
+    fs.unlinkSync(path.join(dir, 'work.fail'));
+    await post(base, '/settings', { github: true });
+    const w = await until(async () => { const w = await prs('work'); return w?.length === 1 && w; }, 'work\'s PR to come back');
+    fs.writeFileSync(path.join(dir, 'work.fail'), '');
+    return w;
+  };
+  await comesBack();
+  // GitHub turned off and on again while the query fails, and while a refresh that began before is still running (a slow
+  // query): that refresh must not put its old answer back, so there's nothing to keep and work's PR is gone
+  fs.writeFileSync(path.join(dir, 'work.slow'), '');
+  await post(base, '/settings', { github: true }); // a refresh starts, and takes a while
+  await wait(300);
+  fs.unlinkSync(path.join(dir, 'work.slow')); // (the one running keeps its pause)
   await post(base, '/settings', { github: false });
   await until(async () => (await prs('work')) === undefined, 'GitHub off to clear the lists');
   await post(base, '/settings', { github: true });
   await until(async () => (await prs('work'))?.length === 0, 'work\'s PR to be gone after off and on');
-  // the query comes back, then fails again: kept for 3s from its last good answer, not from the last failure
-  fs.unlinkSync(path.join(dir, 'work.fail'));
-  await post(base, '/settings', { github: true });
-  const back = await until(async () => { const w = await prs('work'); return w?.length === 1 && w; }, 'work\'s PR to come back');
-  fs.writeFileSync(path.join(dir, 'work.fail'), '');
-  await wait(1200);
+  // the query comes back, then fails again: kept for 4s from its last good answer, not from the last failure
+  const back = await comesBack();
+  await wait(1000);
   await refresh('PR 21 v2');
-  assert.deepStrictEqual(await prs('work'), back, 'about 1s on, still kept');
-  await wait(2000);
+  assert.deepStrictEqual(await prs('work'), back, 'about 1s on, still kept (it keeps 4s)');
+  await wait(3200);
   await refresh('PR 21 v3');
-  assert.deepStrictEqual(await prs('work'), [], 'about 3s on, no longer kept, though it was kept 2s ago');
+  assert.deepStrictEqual(await prs('work'), [], 'over 4s on, no longer kept, though it was kept 3s ago');
 });
 
 // Séance and Ghostbuster count PRs, not events: one PR revived five times this week is one revival, and one PR leaving the

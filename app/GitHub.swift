@@ -100,6 +100,7 @@ extension LanternServer {
         if accounts.count == 0 && !truthy(settings["github"]) { return }
         if refreshing { refreshAgain = true; return }
         refreshing = true
+        let epoch = githubEpoch
         let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
         let tokens = accounts.items.map { ($0.0, str($0.1["token"])) }, previous = lastResults
         DispatchQueue.global().async {
@@ -161,8 +162,12 @@ extension LanternServer {
                         "need": prNeed(p), "updatedAt": p["updatedAt"]!]
             }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }
             DispatchQueue.main.async {
-                // turned off while this ran: don't bring the PRs back
-                guard self.accounts.count > 0 || truthy(self.settings["github"]) else { self.refreshing = false; self.refreshAgain = false; return }
+                // turned off (and perhaps on again) while this ran: its answer was built from what was there before, so don't bring that back
+                guard epoch == self.githubEpoch, self.accounts.count > 0 || truthy(self.settings["github"]) else {
+                    self.refreshing = false
+                    if self.refreshAgain { self.refreshAgain = false; self.refreshGitHub() } // one asked for since is a fresh start
+                    return
+                }
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
                 let t = now()
                 // fresh answers are remembered with their time; a kept one keeps its old time, so it ages out
@@ -195,7 +200,7 @@ extension LanternServer {
         DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
     }
 
-    func clearGitHub() { lastResults = [:]; reviews = []; stale = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
+    func clearGitHub() { githubEpoch += 1; lastResults = [:]; reviews = []; stale = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
 
     // Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain.
     func loadAccounts() {

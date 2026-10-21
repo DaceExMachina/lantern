@@ -169,6 +169,7 @@ final class LanternServer {
     func staleOut() -> [JSON] { stale.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
+    var githubEpoch = 0 // counts clearGitHub, so a refresh that began before one can tell its answer is out of date
     var lastResults: [String: (at: Double, data: JSON)] = [:] // each GitHub query's last answer, by top folder or account (GitHub.swift refreshGitHub)
     var refreshing = false, refreshAgain = false // a refresh asked for while one runs goes once more straight after it
     var mirror: URL? // a preview's: the live app's /events, whose sessions it shows instead of finding its own (see follow())
