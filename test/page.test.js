@@ -488,3 +488,21 @@ test('the twist never passes TWIST_MAX, even with the sway held at the extreme',
   assert.ok(held > max * 0.9 && held <= max, `held at 8 degrees the twist reaches ${held}, up to ${max}`);
   assert.ok(peak(-8) <= max, 'and the same swung the other way');
 });
+
+test('the twist trails the swing by about 0.3 s, keeping its weight', () => {
+  run(`applyStyle('moroccan'); swing.a = NaN; twist = 0`);
+  // ten minutes of normal wind at 60 frames a second, the first ten seconds left out while the swing gets going
+  const [sway, tw] = run(`(() => { const a = [], t = [];
+    for (let i = 0; i < 36600; i++) { swingLantern(1 / 60, i / 60); if (i >= 600) { a.push(swayAngle); t.push(twist); } }
+    return [a, t]; })()`);
+  const mean = x => x.reduce((p, q) => p + q, 0) / x.length, ma = mean(sway), mt = mean(tw);
+  const corr = k => sway.slice(0, sway.length - k).reduce((c, v, i) => c + (v - ma) * (tw[i + k] - mt), 0);
+  // the lag is where the twist best matches the swing, searched up to two seconds behind it
+  const ks = Array.from({ length: 121 }, (_, k) => k), lag = ks.reduce((b, k) => corr(k) > corr(b) ? k : b, 0) * 1000 / 60;
+  const rms = Math.sqrt(mean(tw.map(v => v * v)));
+  assert.ok(corr(Math.round(lag * 60 / 1000)) > 0 && rms > 5, `the swing drives the twist (it turns ${rms.toFixed(1)} degrees rms)`);
+  // 1.2 a second had it 617 ms behind, which read as a delay
+  assert.ok(lag >= 200 && lag <= 400, `the twist trails the swing by ${lag.toFixed(0)} ms`);
+  // and it turns as far as it did then (19 degrees rms), quicker but no twitchier
+  assert.ok(rms > 16 && rms < 22, `the twist turns ${rms.toFixed(1)} degrees rms`);
+});
