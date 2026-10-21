@@ -733,7 +733,7 @@ function mothZones(m, needsMe) {
     put(m.flyZone, 'cx', m.fx.toFixed(1)); put(m.flyZone, 'cy', m.fy.toFixed(1)); put(m.flyZone, 'r', 62);
     m.flyZone.style.display = needsMe && m.flies.size && !m.leaving ? '' : 'none';
   }
-  if (m.leaving) m.zone.style.pointerEvents = 'none';
+  m.zone.style.pointerEvents = m.leaving ? 'none' : ''; // back on for a moth that came back (state.js sync)
 }
 
 // Glide toward the target on the ghosts' spring (stale.js's settle), so a new target (taking off, landing, a hop,
