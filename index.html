@@ -87,14 +87,15 @@
   :is(#stats, #recap) .ribbon { position: relative; touch-action: pan-y; }
   :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
   :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
-  :is(#stats, #recap) .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
   :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
-  /* The legend's four items: 4 across when they fit, 2 by 2 when narrow. Idle is only in the ribbon, as the grey. */
+  /* The legend's five moth states, each value under its label (five labels and values side by side would need 600px, the panel
+     has 524): all in one row when it fits (430px), else rows of equal 100px cells with the last row centred. */
   :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
-  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(2, auto); justify-content: space-between; gap: 4px 14px; margin-top: 0; }
-  @container (min-width: 520px) { :is(#stats, #recap) .legend { grid-template-columns: repeat(4, auto); } }
-  :is(#stats, #recap) .legend span { white-space: nowrap; }
+  :is(#stats, #recap) .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 10px; margin-top: 0; }
+  :is(#stats, #recap) .legend span { width: 100px; white-space: nowrap; }
+  :is(#stats, #recap) .legend [data-v] { display: block; padding-left: 18px; } /* under the label, past the swatch */
+  @container (min-width: 430px) { :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(5, 1fr); } :is(#stats, #recap) .legend span { width: auto; } }
   :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
   :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
   :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }

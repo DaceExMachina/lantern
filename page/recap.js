@@ -142,7 +142,7 @@ function renderRecap(j, i) {
   // little from the ribbon's. A moment lights the star that started within 4 ribbon pixels of it (tight, so a cluster of
   // starts doesn't flicker between stars), unless one is pinned or the pointer is on a star.
   const starLine = $('recap').querySelector('.starsBox .cursor'), ribbonEl = box?.querySelector('.ribbon');
-  const moment = box && followRibbon(box, r, t => {
+  const moment = box && followRibbon(box, r, d, t => {
     if (starLine) { starLine.hidden = t == null; if (t != null) starLine.style.left = `${axis.x(t) / 6}%`; }
     if (pickedStar != null || onStar) return;
     const near = 4 * (r.to - r.from) / ribbonEl.clientWidth;
