@@ -155,22 +155,31 @@ function bakeFarWall() {
 // The front's pierced design (#cutouts in MOROCCAN_DEFS) baked into a picture, the brass opaque and the holes clear, and
 // used as an alpha mask in its place. The lantern sways, so it repaints every frame, and WebKit redraws a vector mask and
 // turns it into luminance each time: about a third of the GPU process's CPU on the Moroccan at 2560x1440. It's baked at
-// the screen's pixels per unit, and again when that changes (fitView); until it's ready the vector mask stands in.
-let cutouts = { k: 0, pic: '' }, cutoutsBake = 0;
+// the screen's pixels per unit. A resize only rescales the picture on show; once the window settles it's baked again at the
+// new size (if that's off by 10% or more), and swapped in only when decoded, so the lace never blinks to the vector mask.
+// Until the first bake is ready the vector mask stands in.
+let cutouts = { k: 0, pic: '' }, cutoutsMask = null, cutoutsTimer = 0;
 function bakeCutouts() {
   const m = $('cutouts');
   if (!m || !VIEW.px) return; // not the Moroccan, or not laid out yet
-  const k = VIEW.px * (devicePixelRatio || 1); // device pixels a unit
-  const swap = () => { m.style.maskType = 'alpha'; m.innerHTML = `<image href="${cutouts.pic}" x="260" y="120" width="160" height="380" preserveAspectRatio="none"/>`; };
-  if (cutouts.k === k) return swap();
-  const bake = ++cutoutsBake, c = document.createElement('canvas'), img = new Image();
-  c.width = Math.ceil(160 * k); c.height = Math.ceil(380 * k);
-  img.onload = () => {
-    if (bake !== cutoutsBake) return; // a newer size is on its way
-    c.getContext('2d')?.drawImage(img, 0, 0); cutouts = { k, pic: c.toDataURL() }; swap();
-  };
-  img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 120 160 380" width="${c.width}" height="${c.height}" preserveAspectRatio="none">
+  const show = m => { cutoutsMask = m; m.style.maskType = 'alpha'; m.innerHTML = `<image href="${cutouts.pic}" x="260" y="120" width="160" height="380" preserveAspectRatio="none"/>`; };
+  if (cutouts.pic && m !== cutoutsMask) show(m); // a fresh mask (a style switch): the picture we have, at once
+  clearTimeout(cutoutsTimer);
+  const bake = async () => {
+    const k = VIEW.px * (devicePixelRatio || 1); // device pixels a unit
+    if (Math.abs(k / cutouts.k - 1) < 0.1) return;
+    cutouts.k = k; // asked for, so a second call at this size doesn't bake it again
+    const c = document.createElement('canvas'), img = new Image(), pic = new Image();
+    c.width = Math.ceil(160 * k); c.height = Math.ceil(380 * k);
+    img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 120 160 380" width="${c.width}" height="${c.height}" preserveAspectRatio="none">
     <defs>${LACE_TILE('lace', '#fff')}${LACE_CLIPS}${CUTOUTS('m')}</defs><rect x="260" y="120" width="160" height="380" fill="#fff" mask="url(#m)"/></svg>`);
+    try { await img.decode(); c.getContext('2d')?.drawImage(img, 0, 0); pic.src = c.toDataURL(); await pic.decode(); } catch { return; }
+    if (cutouts.k !== k) return; // a newer size is on its way
+    cutouts.pic = pic.src;
+    const now = $('cutouts'); // the style may have changed while it baked
+    if (now) show(now);
+  };
+  if (cutouts.pic) cutoutsTimer = setTimeout(bake, 200); else bake(); // the first one at once
 }
 const MOROCCAN_DEFS = `${SHEENS}${GORE_DEFS}${MOROCCAN_LIGHT_DEFS}${LACE_TILE('lace', '#fff')}
 ${LACE_CLIPS}${CUTOUTS('cutouts')}`;
