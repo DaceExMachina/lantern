@@ -83,7 +83,7 @@ const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribb
 const pct = v => v == null ? '–' : `${v}%`;
 const LAMP_WORD = { warm: 'warm', violet: 'waiting', quiet: 'quiet' }; // the lantern's headline while hovering (no lamp at all reads "off")
 const headline = d => `<div class="headline">
-  <div><b data-v="lamp">${pct(d.warmLantern)}</b><span>warm lantern</span></div>
+  <div><b data-v="lamp">${pct(d.warmLantern)}</b><span>lantern warmth</span></div>
   <div><b data-v="flying">${pct(d.warmMoths)}</b><span>moths flying</span></div></div>`;
 
 // Hovering (or touching) a dayRibbon: a line follows the pointer and the legend's values show that moment; leaving
