@@ -131,3 +131,26 @@ test('the open card isn\'t redrawn while a finger is on it', () => {
   tick();
   assert.strictEqual(draws, 2);
 });
+
+test('a card under the pointer or keyboard focus isn\'t redrawn, unless its session\'s state or snooze changes (its own pill)', () => {
+  const { page, every, fire } = withCard();
+  let draws = 0, over = true;
+  page.renderCard = () => draws++;
+  const handlers = page.document.getElementById('card'); // the card withCard made: its matches answers for pointer and focus alike
+  handlers.matches = sel => over && sel.includes(':hover') && sel.includes(':focus-visible');
+  const tick = () => every(500).forEach(f => f());
+  page.s = { id: 's1', state: 'waiting', snoozed: false };
+  vm.runInContext('hovered = { session: s }', page);
+  tick();
+  assert.strictEqual(draws, 1, 'a new card is drawn');
+  tick();
+  assert.strictEqual(draws, 1, 'not redrawn under the pointer, or while a control has keyboard focus');
+  vm.runInContext('hovered = { session: { ...s, snoozed: true } }', page); // the pill was clicked and the server says so
+  tick();
+  assert.strictEqual(draws, 2, 'redrawn, so the pill now offers what comes next');
+  tick();
+  assert.strictEqual(draws, 2);
+  over = false;
+  tick();
+  assert.strictEqual(draws, 3, 'away from the card it redraws as before');
+});

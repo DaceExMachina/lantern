@@ -119,7 +119,9 @@ function sessionRows(s) {
     // finished one just drops out, whatever order the server's list comes in
     const agents = [...s.subagents].sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || String(a.id).localeCompare(String(b.id)));
     for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
-    for (const t of loose) zone.append(agentRow({ job: t, last: 0, model: 'shell', started: s.taskStarted?.[t] }, now)); // its kind where an agent's model goes
+    // its kind where an agent's model goes; keyed by place, as two can share a description (and so a start: taskStarted is
+    // by description)
+    loose.forEach((t, i) => zone.append(agentRow({ id: `shell ${i}`, job: t, last: 0, model: 'shell', started: s.taskStarted?.[t] }, now)));
   }
   if (side.length) {
     tray.push(make('div', 'head', 'Side sessions', make('span', 'r', String(side.length))));
@@ -170,7 +172,7 @@ const rank = (/** @type {string} */ need) => (ORDER.indexOf(need) + 1) || ORDER.
 function prSummary(prs) {
   const n = {};
   for (const p of prs) n[p.need] = (n[p.need] || 0) + 1;
-  return Object.keys(n).sort((a, b) => rank(a) - rank(b)).map(k => `${n[k]} ${SHORT[k] || k}${k === 'draft' && n[k] > 1 ? 's' : ''}`).join(' · ');
+  return Object.keys(n).sort((a, b) => rank(a) - rank(b)).map(k => `${n[k]} ${k === 'changes' && n[k] === 1 ? 'change requested' : SHORT[k] || k}${k === 'draft' && n[k] > 1 ? 's' : ''}`).join(' · ');
 }
 function prBlock(s) {
   const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = prList[s.id] ?? prs.length <= 3;
@@ -238,11 +240,14 @@ function placeCard() {
   pt.x = zone.x; pt.y = zone.y;
   const ctm = document.querySelector('svg').getScreenCTM(), p = pt.matrixTransform(ctm), c = $('card');
   const gap = zone.r * ctm.a * 0.7; // clear of the hover area, which covers the moth
+  // it stays above the footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits there
+  const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - 16)}px`;
+  if (c.style.maxHeight !== most) c.style.maxHeight = most;
   const a = holdAnchor(zone, p.x, p.y);
-  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > innerHeight - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
+  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   // while the pointer is on it (opening an agent, say), it stays put rather than flipping above its moth, moving up only
   // as far as it must to stay on screen
-  const to = { x: Math.max(8, x), y: Math.max(8, shown && c.matches(':hover') ? Math.min(shown.y, innerHeight - 8 - c.offsetHeight) : y) };
+  const to = { x: Math.max(8, x), y: Math.max(8, Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
   shown = shown ? { x: shown.x + (to.x - shown.x) * 0.2, y: shown.y + (to.y - shown.y) * 0.2 } : to; // a new card starts in place
   c.style.transform = `translate(${shown.x}px, ${shown.y}px)`;
 }

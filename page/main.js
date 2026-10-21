@@ -117,9 +117,15 @@ window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 10
 const SAVER = Q.has('screensaver');
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
-// redraw the open card, but not under the pointer (links, a scroll) or a finger (a swipe through its body)
-let touching = false;
-setInterval(() => hovered && !touching && !$('card').matches(':hover') && renderCard(), 500);
+// Redraw the open card, but not under the pointer (links, a scroll), a finger (a swipe through its body) or keyboard focus.
+// Except when its session's state or snooze changes, say from its own pill: then always, so the pill says what it'll do
+// next (a same-session redraw keeps the scroll).
+let touching = false, drawnAs = '';
+setInterval(() => {
+  if (!hovered) return;
+  const s = hovered.session, as = s ? `${s.id} ${s.state} ${!!s.snoozed} ${!!s.forGood}` : '';
+  if (as !== drawnAs || !touching && !$('card').matches(':hover, :has(:focus-visible)')) { drawnAs = as; renderCard(); }
+}, 500);
 $('card').addEventListener('touchstart', () => { touching = true; }, { passive: true });
 for (const type of ['touchend', 'touchcancel']) $('card').addEventListener(type, () => { touching = false; });
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));

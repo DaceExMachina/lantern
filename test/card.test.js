@@ -264,3 +264,13 @@ test('every control is an outer button or link that fills its zone, around an in
   const listed = faced(show(s));
   assert.ok(listed.length > 6 && listed.every(([, n, c]) => n === 1 && c === 'face'), 'list rows and overflow links');
 });
+
+test('one PR with changes requested reads singular, and two shell commands with the same description open separately', () => {
+  const { show } = load();
+  const card = show(session({ github: [pr(3, 'ready'), pr(4, 'changes')] }));
+  assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · 1 change requested · 1 ready');
+  assert.strictEqual(text(find(show(session({ github: [pr(1, 'changes'), pr(2, 'changes')] })), 'ph')[0]), 'PRs · 2 changes requested');
+  const s = session({ state: 'paused', tasks: ['npm test', 'npm test'] }), rows = () => find(show(s), 'agent');
+  rows()[1].onclick();
+  assert.deepStrictEqual(rows().map(r => r.className), ['agent', 'agent open'], 'only the one clicked');
+});

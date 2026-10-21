@@ -151,7 +151,7 @@
   #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   /* a badge's tip, and an overflow PR's on a moth's card: at most the window less 16px, padding and border included. Its
      width is its own (max-content), not what's left beside it, so the width tipSpot measures is the one it keeps. */
-  .badgeTip { position: fixed; z-index: var(--z-overlay); pointer-events: none; width: max-content; max-width: min(240px, calc(100vw - 38px)); padding: var(--space-2) 10px; border: 1px solid var(--line);
+  .badgeTip { --pad-x: 10px; position: fixed; z-index: var(--z-overlay); pointer-events: none; width: max-content; max-width: min(240px, calc(100vw - 2 * var(--space-2) - 2 * var(--pad-x) - 2px)); padding: var(--space-2) var(--pad-x); border: 1px solid var(--line);
     border-radius: var(--radius-lg); background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: var(--leading);
     opacity: 0; transition: opacity .12s; }
   .badgeTip.show { opacity: 1; }
@@ -252,7 +252,7 @@
   :is(#card, .starCard) a:hover { color: var(--ink-hover); border-color: var(--focus); }
   select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-0-5) var(--space-1-5); }
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity var(--fade); max-width: 300px;
-    background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3) var(--space-3); color: var(--ink);
+    background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3); color: var(--ink);
     font-size: var(--text-sm); line-height: var(--leading); box-shadow: var(--shadow-lg); backdrop-filter: var(--blur-glass); }
   #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking a stale PR's or a ghost's card opens it, like clicking its moth */
   #card.show:has(h3 .open) { cursor: default; } /* a session's opens from its header */
@@ -260,7 +260,7 @@
   /* Every control on the card is an outer button or link that fills its zone: the padding around it, out to the card's
      edges and up to its neighbours, so the hit areas touch with no dead space. Its .face inside is the visible part
      (the pill, the hover tint), the size it always was, lit while the pointer is anywhere in the zone. */
-  :where(#card :is(button, a):is(.open, .chip, .agent, .tog, .pr2, .ov)) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
+  :where(#card :is(button, a):is(.open, .chip, .agent, .tog, .pr2, .ov), #card .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
   #card :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
   #card .face { display: block; border-radius: var(--radius-md); }
   /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill */
@@ -310,16 +310,16 @@
   #card .arow { display: flex; gap: var(--space-1-5); align-items: center; }
   #card .agent .arow .job { flex: 1; min-width: 0; margin-top: 0; } /* the job on the first line, when there's no tag or model */
   #card .arow .t { flex: none; margin-left: auto; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-  #card .arow .model { color: var(--ink-dim); font-size: var(--text-xs); }
+  #card .arow .model { color: var(--ink-dim); }
   #card .arow :is(.tag, .model) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long tag or model gives way to the time */
-  #card .live { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-warm-ink); box-shadow: 0 0 var(--space-1-5) var(--accent-warm); animation: live 1.6s ease-in-out infinite; }
+  #card .live { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-warm-ink); box-shadow: 0 0 var(--space-1-5) var(--accent-warm); animation: live 1.6s ease-in-out infinite; } /* the glow and pulse have no blur or motion token yet, so they borrow the space scale and keep 1.6s */
   #card .live.quiet { background: var(--accent-violet-line); box-shadow: none; animation: none; }
   @keyframes live { 50% { opacity: .35; } }
-  #card .tag { font-size: var(--text-xs); color: var(--focus); background: var(--surface-raised); border: 1px solid var(--line-soft); border-radius: var(--space-1); padding: 0 var(--space-1); }
+  #card .tag { color: var(--focus); background: var(--surface-raised); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 0 var(--space-1); }
   #card .agent :is(.job, .astep) { display: block; margin-top: var(--space-0-5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #card .agent.open :is(.job, .astep) { white-space: normal; overflow-wrap: anywhere; }
   #card .agent .job { color: var(--ink-strong); }
-  #card .agent .astep { font-size: var(--text-xs); color: var(--ink-soft); }
+  #card .agent .astep { color: var(--ink-soft); }
   /* PRs: a header summing them up (or the hovered chip's title), the toggle, then chips or two-line rows */
   /* the header line is the card's own font, so a hovered chip's title (bare text in .ph) takes no more height than the
      smaller summary (.sum) it replaces */
@@ -336,7 +336,7 @@
   #card .tog:focus-visible { outline: 1px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
   /* the gaps between chips are the chips': half each, so they touch */
   #card .chips { display: flex; flex-wrap: wrap; margin: var(--space-0-5) calc(-1 * var(--space-0-5)) 0; }
-  #card .chips a { all: unset; cursor: pointer; padding: var(--space-0-5); }
+  #card .chips a { padding: var(--space-0-5); }
   #card .chips .face { display: inline-flex; align-items: center; gap: var(--space-1); border: 1px solid var(--line-soft); background: var(--surface-raised); border-radius: var(--radius-pill); padding: 0 var(--space-2) 0 var(--space-1-5); font-size: var(--text-xs); color: var(--ink); }
   #card .chips a:hover .face { border-color: var(--accent-violet-line); color: var(--ink-strong); }
   #card :is(.chips, .me) i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
@@ -345,11 +345,10 @@
   #card .phead + a.pr2 { margin-top: var(--space-0-5); }
   #card a.pr2 .face { padding: var(--space-1) var(--space-1-5); }
   #card :is(a.pr2, a.ov, .chips a) { border: none; } /* the card's link underline is on a face, where there is one */
-  #card .pr2 .me { margin-top: var(--space-1); }
   #card a.pr2:hover .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
   #card .pr2 .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #card .pr2 .me { display: flex; gap: var(--space-1-5); align-items: center; font-size: var(--text-xs); color: var(--ink-dim); }
-  #card .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; } /* like an agent's time */
+  #card .pr2 .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
+  #card .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; } /* like an agent's time */
   #card .pr2 .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
   #card .more { font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
   /* an overflow link's zone takes the comma after it, so the links touch */
