@@ -145,7 +145,7 @@ function frame(t) {
   drawShine(s, flame);
   drawHeat(s, flame.size);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), rot(...style.light), [125, 170], dt, s);
+  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), lightAt(), [125, 170], dt, s);
   for (const [k, m] of moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
@@ -173,6 +173,12 @@ let swayAngle = 0;
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
 // its own, within about ±18. The drawing itself doesn't turn.
 let twist = 0;
+// How far the twist slides the Moroccan's far wall across, in units (0 without one; the front stays put). The flame, its
+// burner cup and its light sit at the lantern's middle depth, so they slide half as far (#inside, lightAt): they parallax
+// between the front and the far wall.
+let farSlide = 0;
+// where the lantern's light is in the scene this frame, swinging with it and slid to its middle depth
+const lightAt = () => rot(style.light[0] + farSlide / 2, style.light[1]);
 // A flat face's tone: how squarely it faces a light 35 degrees to the left as the lantern twists (`angle` round the lantern,
 // `tilt` up, the light sitting a little above), squared so the tone moves plainly as it turns, with a low floor so a face
 // turned a little away still lifts off the darkest tone as the twist brings it round; blended along FACET_TONES.
@@ -203,6 +209,8 @@ function swingLantern(elapsed, s) {
   swayAngle = style.stands ? 0 : swing.a;
   put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
   twist += ((swayAngle * 7 + Math.sin(s * 0.23) * 4) * twistGain - twist) * dt * 1.2; // twistGain: lanterns.js, ?twist=
+  farSlide = style.farWall ? -twist * 0.2 : 0;
+  put($('inside'), 'transform', `translate(${(farSlide / 2).toFixed(2)} 0)`);
   // the brass highlight rests at x 319, a third of the way from the middle toward the lit left edge (its stops sit at 325, lanterns.js
   // SHEEN), and slides 1.75 units per degree of twist around that, staying within 288 to 350; half-unit steps so put() skips
   // frames that wouldn't show it
@@ -375,7 +383,7 @@ function smoke(now, s, strength, tip) {
 // the flame's outer tongue's tip in the scene (drawFlame's), leaning with its wobble and the wind
 function flameTip(s, size) {
   const [fx, fy, fk] = style.flame, wind = windLean(s);
-  return [fx + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
+  return [fx + farSlide / 2 + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
 }
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
 // The hot air rising off the lantern this frame (style.heat), for drawLight, the background and the tip smoke leaves from:
@@ -434,7 +442,7 @@ function drawLeaves(s) {
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
 // dust, and the moths' shadows.
 function drawLight(dt, s, { size, flick, pulse }) {
-  const [gx, gy] = rot(...style.light);
+  const [gx, gy] = lightAt();
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
   // standing candle's flame instead, since its body runs down below)
@@ -480,11 +488,11 @@ function drawLight(dt, s, { size, flick, pulse }) {
     flame: [...style.flame.slice(0, 2), ...flameTip(s, size)],
     rim: style.shadeFromHolder && !remote ? [style.flame[0], style.holder[1], style.holder[0]] : [0, 0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
-    bandO: rot(340 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
-    // the Moroccan's far wall (background.js drawFarWall), slid against the twist, its brass lifted five sixths of
+    bandO: rot(340 + farSlide / 2 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
+    // the Moroccan's far wall (background.js drawFarWall), slid by the twist (farSlide), its brass lifted five sixths of
     // the way to the flame's colour at five sixths the brightness, and toward the flame's core as it burns brighter: the
     // room behind it brightens with the flame too, and a wall that didn't would fade into it at full flame
-    farWall: style.farWall && !AMBIENT ? { shift: twist * 0.2, heat, col: mix(mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6), pal('core'), 0.65 * strength) } : null,
+    farWall: style.farWall && !AMBIENT ? { slide: farSlide, heat, col: mix(mix(mix('#8A6A32', pal('paper'), 5 / 6), '#000000', 1 / 6), pal('core'), 0.65 * strength) } : null,
     bands: !remote ? measureBands().map(([y, h, r]) => [(y - flameY) / r, (h + 18 * size * style.flame[2]) / r]) : [],
   });
 }
@@ -811,7 +819,7 @@ function mothColour(m, needsMe, upPts, sidePts, dt) {
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
-  const a = -m.tilt * Math.PI / 180, [lx, ly] = rot(...style.light), fx = lx - m.x, fy = ly - m.y;
+  const a = -m.tilt * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
   const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
   for (const [path, pts] of [[m.up, upPts], [m.side, sidePts]]) {
     const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);

@@ -16,7 +16,7 @@ const attrs = {}, els = {
   ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
 };
 // the flame's parts, which drawFlame writes to
-for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase']) {
+for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase', 'inside']) {
   const a = {};
   els[id] = { getAttribute: k => a[k] ?? null, setAttribute: (k, v) => { a[k] = v; } };
 }
@@ -138,6 +138,24 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
   assert.strictEqual(c.caps, undefined, 'no caps: nothing above the flame');
   assert.strictEqual(c.dim, undefined, 'the flame is bare');
   assert.ok(!/class="band"/.test(c.back + c.front), 'no solid bands');
+});
+
+test('the Moroccan\'s flame, burner cup and light sit between its front and far wall as it twists', () => {
+  run(`applyStyle('moroccan'); twistGain = 6`);
+  assert.match(els.lantern.innerHTML, /<g id="inside">[\s\S]*id="flame"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame and the burner cup are in #inside');
+  run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, { size: 0.8, flick: 1, pulse: 1 })`);
+  const twist = run('twist'), wall = page.background.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
+  assert.ok(Math.abs(twist) > 5 && Math.abs(wall) > 1, `a big twist: ${twist}, sliding the far wall ${wall}`);
+  const flame = +els.inside.getAttribute('transform').match(/^translate\((\S+) 0\)$/)[1];
+  // the light, turned back into the lantern's own frame, slid along with the flame
+  const light = run(`rot(...background.lightC, -swayAngle)[0] - style.light[0]`);
+  for (const [what, x] of [['flame', flame], ['light', light]]) {
+    assert.ok(Math.min(0, wall) < x && x < Math.max(0, wall), `${what} slides ${x}, between the front (0) and the far wall (${wall})`);
+    assert.ok(Math.abs(x - wall / 2) < 0.01, `${what} sits half way: ${x} of ${wall}`);
+  }
+  run(`twistGain = 3; applyStyle('barrel'); swingLantern(1 / 60, 50)`);
+  assert.strictEqual(els.inside.getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
 });
 
 // background.js's rimShade, run as JS on drawLight's uniforms: it's written in scalars, so it reads as JS once typed

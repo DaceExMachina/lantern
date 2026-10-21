@@ -2,7 +2,8 @@
 // randomness.
 
 // ---- lantern styles -----------------------------------------------------------------------------------------
-// Each style is drawn behind and in front of one shared flame. `flame` places the flame's base and sets its size,
+// Each style is drawn behind and in front of one shared flame, with `inside` (if any) just in front of the flame; the flame
+// and `inside` slide together as #inside (frame.js farSlide). `flame` places the flame's base and sets its size,
 // `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
@@ -710,9 +711,9 @@ const STYLES = {
     back: `<defs>${MOROCCAN_DEFS}</defs>${PAPER_GRAD('.55')}
 <!-- its inside is the far wall, drawn by the background (bakeFarWall); the air's glow kept to half, so the lit wall shows through it -->
       <g opacity=".5"><ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/></g>`,
+    inside: `<path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>`, // the burner cup
     front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
-      <path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>
       <g mask="url(#cutouts)">
         ${ONION_FILL('bottom', BOTTOM)}
         ${ONION_FILL('dome', DOME)}
@@ -779,7 +780,7 @@ function applyStyle(key) {
   const [fx, fy, fk] = style.flame;
   $('lantern').innerHTML = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
     : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
-    + `<g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>`
+    + `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>${style.inside || ''}</g>`
     + style.front;
   drawHang();
   bakeFarWall(); bakeCutouts();
