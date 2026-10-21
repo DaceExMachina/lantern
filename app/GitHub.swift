@@ -5,11 +5,9 @@ import Foundation
 
 let GH = [ProcessInfo.processInfo.environment["LANTERN_GH"], HOME + "/.local/bin/gh", "/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
     .compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0) } ?? "gh" // an app's PATH is minimal, so look in the usual places
-// ghbus (github.com/DaceExMachina/lantern-pr) streams GitHub's webhooks on this Mac. While it's connected, its events
-// trigger refreshes and the poll is only a backstop; without it the poll is all there is.
+// ghbus (github.com/DaceExMachina/lantern-pr) streams GitHub's webhooks on this Mac: its events make a refresh come sooner.
+// The two-minute poll stays as it is, since a stream that's up doesn't prove webhooks are reaching it.
 let GHBUS = ProcessInfo.processInfo.environment["LANTERN_GHBUS_URL"] ?? "http://127.0.0.1:8788/events"
-let GH_POLL = Double(ProcessInfo.processInfo.environment["LANTERN_GH_POLL_SECONDS"] ?? "") ?? 2 * 60
-let GH_LIVE_POLL = Double(ProcessInfo.processInfo.environment["LANTERN_GH_LIVE_POLL_SECONDS"] ?? "") ?? 10 * 60
 let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
 func prQuery(_ fields: String) -> String {
@@ -199,10 +197,6 @@ extension LanternServer {
         }
     }
 
-    func pollGitHub() {
-        ghPoll?.invalidate()
-        ghPoll = Timer.scheduledTimer(withTimeInterval: ghbusLive ? GH_LIVE_POLL : GH_POLL, repeats: true) { _ in self.refreshGitHub() }
-    }
     // a burst of events (a CI run's checks finishing together, say) is one refresh
     func refreshSoon() {
         if ghbusDue { return }
@@ -217,23 +211,25 @@ extension LanternServer {
         let session = URLSession(configuration: config)
         let url = URL(string: GHBUS + "?event=pull_request,pull_request_review,pull_request_review_comment,issue_comment,check_run,check_suite,status")!
         Task {
-            var backoff = 1.0
+            var backoff = 1.0, answered = 200 // the last answer logged, so one that keeps coming back is said once
             while true {
-                if let (lines, response) = try? await session.bytes(from: url), (response as? HTTPURLResponse)?.statusCode == 200 {
-                    backoff = 1
-                    await MainActor.run {
-                        print("ghbus connected at \(GHBUS): GitHub changes show as they happen")
-                        self.ghbusLive = true; self.pollGitHub()
-                        if !self.lastResults.isEmpty { self.refreshSoon() } // a reconnect: catch up on what went by meanwhile (startup does its own)
+                if let (lines, response) = try? await session.bytes(from: url) {
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                    if status != 200 {
+                        if status != answered { answered = status; print("ghbus answered \(status) at \(GHBUS); trying again quietly") }
+                    } else {
+                        // it counts as connected once it says something (a ping, at least), so one that closes straight away keeps backing off
+                        var heard = false
+                        do {
+                            for try await line in lines.lines {
+                                if !heard { heard = true; backoff = 1; answered = 200; print("ghbus connected at \(GHBUS): GitHub changes show as they happen") }
+                                guard line.hasPrefix("data: "), let e = parse(Data(line.utf8.dropFirst(6))) as? JSON else { continue }
+                                if str(e["event"]) == "issue_comment" && ((e["payload"] as? JSON)?["issue"] as? JSON)?["pull_request"] == nil { continue } // an issue's, not a PR's
+                                await MainActor.run { self.refreshSoon() }
+                            }
+                        } catch {}
+                        if heard { print("ghbus lost: GitHub changes show at the next two-minute check until it's back") }
                     }
-                    do {
-                        for try await line in lines.lines where line.hasPrefix("data: ") {
-                            guard let e = parse(Data(line.utf8.dropFirst(6))) as? JSON else { continue }
-                            if str(e["event"]) == "issue_comment" && ((e["payload"] as? JSON)?["issue"] as? JSON)?["pull_request"] == nil { continue } // an issue's, not a PR's
-                            await MainActor.run { self.refreshSoon() }
-                        }
-                    } catch {}
-                    await MainActor.run { print("ghbus lost: polling GitHub every \(Int(GH_POLL))s until it's back"); self.ghbusLive = false; self.pollGitHub() }
                 }
                 try? await Task.sleep(nanoseconds: UInt64(backoff * 1e9))
                 backoff = min(backoff * 2, 30)
