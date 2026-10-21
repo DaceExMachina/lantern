@@ -43,6 +43,7 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
     TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
   const child = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'ignore'] });
   t.after(() => child.kill());
+  t.server = child; // for a test that stalls it (SIGSTOP)
   let out = '';
   child.stdout.on('data', chunk => out += chunk);
   return until(() => out.match(/^Lantern lit at (\S+)$/m)?.[1], 'the server to start');
@@ -230,20 +231,25 @@ test('a hooked agent with no transcript stays while it was just heard from, then
 });
 
 // An agent found from its transcript (no hooks since a restart) keeps its session paused while it writes: each sweep takes
-// the transcript's latest time as when it was last heard from.
-test('an agent known only from its transcript keeps its session paused while it keeps writing', async t => {
+// the transcript's latest time as when it was last heard from, read before the sweep judges the session. The server is
+// stopped (SIGSTOP) past the agent's freshness while the agent goes on writing, as a busy machine can stall it: the first
+// sweep after must read the new writes before it decides, or the session rests for a sweep while its agent works.
+test('an agent known only from its transcript keeps its session paused while it keeps writing, across a stalled server', async t => {
   let home;
-  const base = await serve(t, {}, h => home = h, { ...bg(0.6, 0.1), LANTERN_AGENT_CHECK_SECONDS: '0.2' });
+  const base = await serve(t, {}, h => home = h, { ...bg(1, 0.1), LANTERN_AGENT_CHECK_SECONDS: '0.2' });
   const dir = path.join(home, '.claude/projects/-w/s1/subagents'), file = path.join(dir, 'agent-a1.jsonl');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, jsonl([user('Audit it')]));
   await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
   await until(async () => (await agentIds(base)).join() === 'a1', 'the sweep to find the agent');
   await agentFire(base, home, { ...stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it' }) });
-  for (const end = Date.now() + 2000; Date.now() < end; await wait(200)) { // well past the 0.6s agent freshness
-    fs.appendFileSync(file, jsonl([user('more')]));
-    assert.strictEqual((await s1(base)).state, 'paused');
-  }
+  await until(async () => (await s1(base)).state === 'paused', 'the session to pause on its agent');
+  t.server.kill('SIGSTOP');
+  for (const end = Date.now() + 1500; Date.now() < end; await wait(200)) fs.appendFileSync(file, jsonl([user('more')])); // past the 1s freshness
+  fs.appendFileSync(file, jsonl([user('more')]));
+  t.server.kill('SIGCONT');
+  // a few sweeps, well inside the freshness of that last write
+  for (const end = Date.now() + 300; Date.now() < end; await wait(20)) assert.strictEqual((await s1(base)).state, 'paused');
 });
 
 // Claude Code fires no hook on a rename, so the sweep notices the new custom-title.json by itself, in a session that's
@@ -1052,13 +1058,15 @@ const sql = (db, q) => JSON.parse(execFileSync('sqlite3', ['-json', db, q], { en
 // on branch feat whose origin is o/r: a session working there is one the refresh looks at.
 const prUrl = n => `https://github.com/o/r/pull/${n}`, iso = t => new Date(t).toISOString().replace(/\.\d+Z$/, 'Z'); // GitHub's form, no milliseconds
 const prNode = (n, updatedAt, headRefName = `b${n}`) => ({ url: prUrl(n), number: n, title: `PR ${n}`, state: 'OPEN', isDraft: true, updatedAt, headRefName, repository: { name: 'r', nameWithOwner: 'o/r' } });
-function ghRepo(mine) {
-  const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), repo = path.join(dir, 'repo'), gh = path.join(dir, 'gh');
+// With `held`, gh answers one query for each call to `answer()`, so a test decides when each refresh lands.
+function ghRepo(mine, held = false) {
+  const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), repo = path.join(dir, 'repo'), gh = path.join(dir, 'gh'), go = path.join(dir, 'go');
   fs.writeFileSync(path.join(dir, 'prs.json'), JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: mine } } }));
-  fs.writeFileSync(gh, `#!/bin/sh\nexec /bin/cat '${path.join(dir, 'prs.json')}'\n`, { mode: 0o755 });
+  if (!held) fs.writeFileSync(go, '');
+  fs.writeFileSync(gh, `#!/bin/sh\nwhile [ ! -e '${go}' ]; do /bin/sleep 0.05; done\n${held ? `/bin/rm '${go}'\n` : ''}exec /bin/cat '${path.join(dir, 'prs.json')}'\n`, { mode: 0o755 });
   fs.mkdirSync(repo);
   for (const args of [['init', '-q', '-b', 'feat'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], ['remote', 'add', 'origin', 'https://github.com/o/r.git']]) execFileSync('git', ['-C', repo, ...args]);
-  return { gh, repo };
+  return { gh, repo, answer: () => fs.writeFileSync(go, '') };
 }
 // The log line a refresh writes when a session takes on a PR.
 const appeared = (session, n) => `INSERT INTO events (time, kind, session, data) VALUES (${Date.now() - 3600000}, 'pr', '${session}', '{"url":"${prUrl(n)}","change":"appeared","need":"draft"}');`;
@@ -1101,12 +1109,13 @@ test('stats: a session the hooks bring back still owns the PRs it created', asyn
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });
 
-// The race that test can't reach: a refresh that lands while the joining session is still reading its PRs back. Until the
-// read is done, refreshes leave the session out; otherwise that refresh gives it no PRs and logs the one it made as a
-// stray. A long transcript full of `gh pr create` mentions (each one parsed) keeps the read going, and a second session in
-// another checkout, owning nothing, shows when a refresh has landed.
-test('stats: a refresh that lands while a joining session reads its PRs back leaves its PRs alone', async t => {
-  const id = UUID(8), file = `.claude/projects/-work-8/${id}.jsonl`, { gh, repo } = ghRepo([prNode(1, iso(Date.now()))]);
+// The race that test can't reach: a refresh that goes out while the joining session is still reading its PRs back, and
+// lands after. Refreshes leave a session out until its read is done; otherwise that refresh gives it no PRs and logs the
+// one it made as a stray. A long transcript full of `gh pr create` mentions (each one parsed) keeps the read going while
+// the refresh goes out, and gh holds each refresh's answer until the test lets it go. A second session in another checkout,
+// owning nothing, shows when the refresh has landed.
+test('stats: a refresh that goes out while a joining session reads its PRs back leaves its PRs alone', async t => {
+  const id = UUID(8), file = `.claude/projects/-work-8/${id}.jsonl`, { gh, repo, answer: ghAnswer } = ghRepo([prNode(1, iso(Date.now()))], true);
   const other = fs.mkdtempSync(path.join(tmp, 'other-'));
   for (const args of [['init', '-q', '-b', 'quiet'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], ['remote', 'add', 'origin', 'https://github.com/o/r.git']]) execFileSync('git', ['-C', other, ...args]);
   const made = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --draft --fill' } }] } },
@@ -1122,9 +1131,12 @@ test('stats: a refresh that lands while a joining session reads its PRs back lea
   await post(base, '/event', { session_id: 's2', hook_event_name: 'UserPromptSubmit', cwd: other, prompt: 'go' });
   await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
   await post(base, '/settings', { github: true });
-  const landed = await until(async () => { const s = (await snapshot(base)).sessions; return s.find(x => x.id === 's2')?.github && s; }, 'a refresh to land');
-  assert.deepStrictEqual(landed.find(x => x.id === id).created ?? [], [], 'the refresh landed while the PR read was still going');
-  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length), 'a refresh to look at the session', 60000);
+  await until(async () => (await snapshot(base)).sessions.find(x => x.id === id)?.created?.length, 'the PR read to finish', 60000);
+  ghAnswer();
+  const landed = await until(async () => { const s = (await snapshot(base)).sessions; return s.find(x => x.id === 's2')?.github && s; }, 'the refresh to land');
+  assert.strictEqual(landed.find(x => x.id === id).github, undefined, 'the refresh went out while the PR read was still going, so it left the session out');
+  ghAnswer(); // the refresh the finished read asked for
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length), 'a refresh to look at the session');
   assert.deepStrictEqual(s.github.map(p => p.url), [prUrl(1)]);
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });

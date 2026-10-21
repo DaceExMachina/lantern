@@ -580,10 +580,10 @@ final class LanternServer {
 
 
     // A closed terminal tab or a killed process can skip SessionEnd, so a session whose Claude process is gone ends here.
-    func sweep() {
+    func sweep() { reconcile(then: settle) } // judged on what reconcile just read, or an agent's newest writes are a sweep late
+    func settle() {
         let t = now()
         var changed = false
-        reconcile()
         for (id, var s) in sessions.items {
             // A turn can end with no Stop (an Esc interrupt, a /compact cancelled before it reported back). Once Claude Code
             // says idle and the hooks have been quiet past their usual lag, look.
