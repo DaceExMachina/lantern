@@ -1340,6 +1340,117 @@ test('a preview takes only the sessions from the app\'s stream, and reconnects w
   assert.ok(![...seen].some(ids => ids.includes('pr')), `the PR list showed up as sessions: ${[...seen].join(' | ')}`);
 });
 
+// The card shows how long each PR has been open, from its createdAt, through gh (the token path asks the same query).
+test('a session\'s PRs carry when each was opened', async t => {
+  const opened = iso(Date.now() - 3 * 86400000), { gh, repo } = ghRepo([{ ...prNode(1, iso(Date.now()), 'feat'), createdAt: opened }]);
+  // GitHub answers only what's asked: without createdAt in the query, the PR comes back without it
+  const asked = path.join(path.dirname(gh), 'asked');
+  fs.writeFileSync(asked, `#!/bin/sh\ncase "$*" in *createdAt*) exec '${gh}' ;; *) exec /usr/bin/sed 's/,"createdAt":"[^"]*"//' '${path.join(path.dirname(gh), 'prs.json')}' ;; esac\n`, { mode: 0o755 });
+  const base = await serve(t, {}, () => {}, { LANTERN_GH: asked });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === 's1' && x.github?.length), 'the session\'s PR');
+  assert.deepStrictEqual(s.github.map(p => [p.url, p.createdAt]), [[prUrl(1), opened]]);
+});
+// What the card shows of an agent: its job from the meta file, its model by name from its transcript's `model` attachment (a real
+// one's first 19 lines, test/fixtures/agent-head, text redacted: attachment.identity.marketingName, 8 lines in), and its
+// start from when the transcript was made.
+const HEAD_AGENT = 'a9aa21de9d268559e', HEAD = fs.readFileSync(path.join(__dirname, `fixtures/agent-head/agent-${HEAD_AGENT}.jsonl`), 'utf8');
+const HEAD_META = JSON.stringify({ agentType: 'opus-implement', description: 'Build card direction E into the real card' });
+const headOf = a => a && [a.description, a.type, a.model, Math.round(a.started)];
+const headWant = file => ['Build card direction E into the real card', 'opus-implement', 'Opus 5.5', Math.round(fs.statSync(file).birthtimeMs)];
+test('a hooked agent gets its job, model and start time from its meta file and transcript head', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), HEAD);
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.meta.json`), HEAD_META);
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT, agent_type: 'opus-implement' });
+  const got = await until(async () => { const a = (await s1(base)).subagents[0]; return a?.model && a; }, 'the agent\'s model');
+  assert.deepStrictEqual(headOf(got), headWant(path.join(dir, `agent-${HEAD_AGENT}.jsonl`)));
+});
+test('an agent whose model lands after its SubagentStart gets it at its next hook', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.meta.json`), HEAD_META);
+  const head = HEAD.split('\n'), model = head.findIndex(l => l.includes('"type":"model","identity"'));
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), head.slice(0, model).join('\n') + '\n'); // before its model is written
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'SubagentStart', cwd: '/w', agent_id: HEAD_AGENT, agent_type: 'opus-implement' });
+  const first = await until(async () => { const a = (await s1(base)).subagents[0]; return a?.description && a; }, 'the agent\'s job');
+  assert.strictEqual(first.model, undefined, 'not written yet');
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), HEAD);
+  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT, agent_type: 'opus-implement' });
+  await until(async () => (await s1(base)).subagents[0]?.model === 'Opus 5.5', 'the model from the next hook');
+});
+// Claude Code before 2.1.300, and the Claude app, write no api-request lines; the model attachment is there in every one.
+test('an agent from an older Claude Code, with no API request lines, still gets its model', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  const older = HEAD.split('\n').filter(l => !l.includes('"type":"api-request')).join('\n');
+  assert.ok(!older.includes('api-request') && older.includes('"type":"assistant"'), 'shaped like an older transcript');
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), older);
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.meta.json`), HEAD_META);
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT, agent_type: 'opus-implement' });
+  await until(async () => (await s1(base)).subagents[0]?.model === 'Opus 5.5', 'the older agent\'s model');
+});
+// A forked agent's transcript has no model attachment, so its first reply's model stands in, by name. And a name with a
+// note ("Opus 5.5 (1M context)") is cut to the name.
+test('a fork agent gets its model from its first reply, and a model\'s note in brackets is dropped', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  const lines = HEAD.split('\n').filter(l => !l.includes('"type":"api-request'));
+  const fork = lines.filter(l => !l.includes('"type":"model","identity"')).join('\n'), noted = lines.join('\n').replace('"marketingName":"Opus 5.5"', '"marketingName":"Opus 5.5 (1M context)"');
+  assert.ok(fork.includes('"model":"claude-opus-5-5"') && !fork.includes('marketingName'), 'shaped like a fork');
+  fs.writeFileSync(path.join(dir, 'agent-afork.jsonl'), fork);
+  fs.writeFileSync(path.join(dir, 'agent-anoted.jsonl'), noted);
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  for (const id of ['afork', 'anoted']) await agentFire(base, home, { ...agentTool, agent_id: id });
+  await until(async () => (await s1(base)).subagents.map(a => a.model).join() === 'Opus 5.5,Opus 5.5', 'both agents\' models by name');
+});
+test('an agent found after a restart gets its model and real start time too', async t => {
+  const id = UUID(4), dir = `.claude/projects/-work-4/${id}/subagents`;
+  let home;
+  const base = await serve(t, { ...transcript(id, [user('Build it')]), [`${dir}/agent-${HEAD_AGENT}.jsonl`]: HEAD, [`${dir}/agent-${HEAD_AGENT}.meta.json`]: HEAD_META }, h => {
+    home = h;
+    const later = new Date(Date.now() + 60e3); // its last write differs from when it was made (an earlier mtime would move the birth back too)
+    fs.utimesSync(path.join(h, `${dir}/agent-${HEAD_AGENT}.jsonl`), later, later);
+  });
+  const got = await until(async () => { const a = (await snapshot(base)).sessions.find(x => x.id === id)?.subagents[0]; return a?.model && a; }, 'the seeded agent\'s model');
+  assert.deepStrictEqual(headOf(got), headWant(path.join(home, `${dir}/agent-${HEAD_AGENT}.jsonl`)));
+});
+
+// About 1 in 200 agents switch models mid-run; the card shows the one it's on now, the newest in its transcript's tail,
+// read again on its hooks every LANTERN_AGENT_MODEL_SECONDS.
+const reply = model => JSON.stringify({ type: 'assistant', message: { role: 'assistant', model, content: [{ type: 'text', text: 'redacted' }] } });
+test('an agent that switches models shows the newer one, at seeding and on a later hook', async t => {
+  const id = UUID(5), seeded = `.claude/projects/-work-5/${id}/subagents/agent-${HEAD_AGENT}.jsonl`;
+  let home;
+  const base = await serve(t, { ...transcript(id, [user('Build it')]), [seeded]: HEAD + reply('claude-sonnet-5') + '\n' }, h => home = h, { ...agentEnv(600), LANTERN_AGENT_MODEL_SECONDS: '0.3' });
+  await until(async () => (await snapshot(base)).sessions.find(x => x.id === id)?.subagents[0]?.model === 'Sonnet 5', 'the seeded agent\'s newer model');
+  // a hooked one, on Opus 5.5, then switching to Haiku 4.5
+  const dir = path.join(home, '.claude/projects/-w/s1/subagents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), HEAD);
+  fs.writeFileSync(path.join(dir, `agent-${HEAD_AGENT}.meta.json`), HEAD_META);
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT });
+  await until(async () => (await s1(base)).subagents[0]?.model === 'Opus 5.5', 'the hooked agent\'s first model');
+  fs.appendFileSync(path.join(dir, `agent-${HEAD_AGENT}.jsonl`), reply('claude-haiku-4-5-20251001') + '\n');
+  await wait(400); // past the throttle
+  await agentFire(base, home, { ...agentTool, agent_id: HEAD_AGENT });
+  await until(async () => (await s1(base)).subagents[0]?.model === 'Haiku 4.5', 'the model it switched to, from its next hook');
+});
+
 test('page files always revalidate: Cache-Control no-cache, and a 304 when the ETag still matches', async t => {
   const base = await serve(t);
   for (const url of ['/', '/index.html', '/page/pencil.js', '/icon.png']) {

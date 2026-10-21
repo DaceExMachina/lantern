@@ -17,6 +17,8 @@ let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_
 // An agent whose transcript hasn't moved this long is assumed gone (its SubagentStop never came), finished or not.
 let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
 // An agent heard from by a hook this recently is alive whatever its transcript says (it may not be written yet).
+// An agent's model is read again on its hooks at most this often, since a few switch models mid-run.
+let AGENT_MODEL_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_MODEL_SECONDS"] ?? "") ?? 5) * 1000
 let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
 // How long after its last hook event a session Claude Code calls idle may still be waiting for that turn's Stop to arrive.
 // How long a GitHub query that fails (a blip) keeps its last answer, so its PRs don't vanish and fly back in.
@@ -160,7 +162,7 @@ final class LanternServer {
     let settingsFile: String, githubCache: String
     var settings: JSON = ["style": "barrel"]
     var sessions = Ordered<JSON>() // session_id -> what the hover card shows, as JSON
-    var agents: [String: Ordered<JSON>] = [:] // session_id -> agent_id -> { type, description, activity, tries, last }
+    var agents: [String: Ordered<JSON>] = [:] // session_id -> agent_id -> { type, description, model, activity, tries, started, last }
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
     var stale: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
@@ -420,12 +422,18 @@ final class LanternServer {
             let aid = str(e["agent_id"])
             if ev == "SubagentStop" { agents[id]![aid] = nil }
             else {
-                var a = agents[id]![aid] ?? ["type": "", "description": "", "activity": "", "tries": 0]
-                // its meta file may not be written yet on the very first event, so try a few times
-                if !truthy(a["description"]), let dir {
-                    let tries = a["tries"] as? Int ?? 0
-                    a["tries"] = tries + 1
-                    if tries < 3 && Re("^[A-Za-z0-9_-]+$").test(aid) { loadAgentMeta(id, aid, "\(dir)/subagents/agent-\(aid).meta.json") }
+                // started: when its transcript was made, as seeding has it (now, on a SubagentStart that beats the file)
+                var a = agents[id]![aid] ?? ["type": "", "description": "", "activity": "", "tries": 0,
+                                             "started": dir.flatMap { fileTimes("\($0)/subagents/agent-\(aid).jsonl")?.birth } ?? now()]
+                // its meta file and model attachment may not be written yet on its first event (SubagentStart), so the next few
+                // events try again. After that its model is read again at most every AGENT_MODEL_MS, as some agents switch
+                // models mid-run.
+                if let dir, Re("^[A-Za-z0-9_-]+$").test(aid) {
+                    let tries = a["tries"] as? Int ?? 0, missing = !truthy(a["description"]) || !truthy(a["model"])
+                    if missing && tries < 3 || now() - ((a["read"] as? Double) ?? 0) >= AGENT_MODEL_MS {
+                        a["tries"] = tries + 1; a["read"] = now()
+                        loadAgentMeta(id, aid, dir)
+                    }
                 }
                 a["type"] = or(e["agent_type"], a["type"])
                 if ev == "PreToolUse" { a["activity"] = describe(e["tool_name"] as? String, e["tool_input"] as? JSON ?? [:]) }
