@@ -239,6 +239,43 @@ test('a background task open past the threshold with no agent activity rests aft
   assert.strictEqual((await s1(base)).state, 'idle');
 });
 
+// Every way a run of hook events leaves a session's state, note and waitingSince, as one table: the events in order, then
+// what the page shows. Each row runs as its own session on one server.
+const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...more });
+const STOP = ev('Stop', { last_assistant_message: 'Done.' }), ASK = ev('Stop', { last_assistant_message: 'Should I merge it?' });
+const TASK = { background_tasks: [SERVER] }, UPS = ev('UserPromptSubmit', { prompt: 'go' });
+const STATE_TABLE = [
+  ['a prompt', [UPS], 'working', ''],
+  ['a tool call', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} })], 'working', ''],
+  ['a finished turn', [UPS, STOP], 'waiting', 'Finished its turn'],
+  ['a turn ending on a question', [UPS, ASK], 'waiting', 'Asks: Should I merge it?'],
+  ['a turn ending with a task running', [UPS, { ...STOP, ...TASK }], 'paused', 'Waiting on 1 background task'],
+  ['a question with a task running', [UPS, { ...ASK, ...TASK }], 'waiting', 'Asks: Should I merge it? (1 background task still running)'],
+  ['an API error', [UPS, ev('StopFailure')], 'waiting', 'Turn ended with an API error'],
+  ['a permission request', [UPS, ev('PermissionRequest', { tool_name: 'Bash' })], 'waiting', 'Wants permission to use Bash'],
+  ['a permission prompt', [UPS, ev('Notification', { notification_type: 'permission_prompt', message: 'Claude needs your permission' })], 'waiting', 'Claude needs your permission'],
+  ['an idle nudge after a turn', [UPS, STOP, ev('Notification', { notification_type: 'idle_prompt', message: 'Claude is waiting' })], 'waiting', 'Claude is waiting'],
+  ['an idle nudge while waiting on a task', [UPS, { ...STOP, ...TASK }, ev('Notification', { notification_type: 'idle_prompt', message: 'Claude is waiting' })], 'paused', 'Waiting on 1 background task'],
+  ['some other notification', [UPS, STOP, ev('Notification', { notification_type: 'auth_success', message: 'Signed in' })], 'waiting', 'Finished its turn'],
+  ['a tool call after a permission request', [UPS, ev('PermissionRequest', { tool_name: 'Bash' }), ev('PostToolUse', { tool_name: 'Bash' })], 'working', ''],
+  ['a new prompt after waiting on a task', [UPS, { ...STOP, ...TASK }, UPS], 'working', ''],
+  ['a subagent firing while waiting on a task', [UPS, { ...STOP, ...TASK }, { ...agentTool, cwd: '/w' }], 'paused', 'Waiting on 1 background task'],
+  ['a subagent firing after a finished turn', [UPS, STOP, { ...agentTool, cwd: '/w' }], 'waiting', 'Finished its turn'],
+  ['a session start', [ev('SessionStart', { source: 'startup' })], 'idle', undefined],
+  ['a session start after a turn', [UPS, STOP, ev('SessionStart', { source: 'resume' })], 'idle', 'Finished its turn'],
+  ['a manual compact, started', [UPS, STOP, ev('PreCompact', { trigger: 'manual' })], 'working', 'Finished its turn'],
+  ['a manual compact, done', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' })], 'idle', ''],
+  ['an automatic compact mid-turn', [UPS, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'working', ''],
+  ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
+];
+test('the state table: what each run of hook events leaves a session showing', async t => {
+  const base = await serve(t);
+  for (const [name, events] of STATE_TABLE) for (const e of events) await post(base, '/event', { ...e, session_id: name });
+  const sessions = (await snapshot(base)).sessions;
+  const got = STATE_TABLE.map(([name]) => { const s = sessions.find(x => x.id === name); return [name, s.state, s.note, s.state === 'waiting' ? s.waitingSince > 0 : s.waitingSince]; });
+  assert.deepStrictEqual(got, STATE_TABLE.map(([name, , state, note]) => [name, state, note, state === 'waiting' ? true : 0]));
+});
+
 // What an open page receives after its first load: the SSE blocks sent while `during(blocks)` runs, then 600ms more (the
 // quiet that "nothing else was sent" assertions need; anything that must arrive waits for it inside `during`).
 async function streamed(base, during) {
