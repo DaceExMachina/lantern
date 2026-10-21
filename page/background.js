@@ -379,13 +379,13 @@ function drawFarWall({ slide, col, heat }, w, h, box) {
 // The candle's and the Moroccan's flame (frame.js stepFlame moves it; a paper lantern's stays in the SVG, drawFlame), drawn
 // last, over the far wall, on a quad round it. Layered tongues as the SVG's (outer, middle, core, 34, 24 and 13 wide), in
 // its halo, the blue root over them, all in the flame's own units (a unit is uBase.z in the scene, x across, y up from its
-// base). Each tongue stands on one spine, bent over to the tip's lean (uShape.x, at the outer tongue's tip uShape.y up, the
-// tip frame.js passes on to the smoke, heat and rim shadow). Noise rising up through it licks at its edges and bends its
-// middle (uShape.z, the tip and base stay put), and a strong gust (uShape.w) tears at its top half.
+// base). Each tongue stands on one spine, frame.js's chain (uSpine: each point's offset across, evenly up to the outer
+// tongue's tip uShape.x up, the tip frame.js passes on to the smoke, heat and rim shadow). Noise rising up through it licks
+// at its edges and bends its middle (uShape.y, the tip and base stay put), and a strong gust (uShape.z) tears at its top half.
 const BARE_FLAME = program(`attribute vec2 a; uniform vec4 uBox; varying vec2 vP;
 void main() { vP = a; gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0); }`, `
 precision highp float;
-uniform vec4 uBase, uShape, uBlue; uniform float uPx, uAlpha, uBlueA; uniform vec3 uHaloC, uOuterC, uMidC, uCoreC, uBlueC;
+uniform vec4 uBase, uBlue; uniform vec3 uShape; uniform float uSpine[${CHAIN + 1}]; uniform float uPx, uAlpha, uBlueA; uniform vec3 uHaloC, uOuterC, uMidC, uCoreC, uBlueC;
 varying vec2 vP;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) { // smooth value noise, -1 to 1
@@ -402,6 +402,17 @@ float flameHalf(float t) {
   float u = (t - 0.3) / 0.7;
   return pow(1.0 - u, 1.1) * (1.0 + 0.9 * u); // full shoulders, a sharp tip
 }
+// How far across the spine is t of the way up it: a smooth curve (Catmull-Rom) through the chain's points, evenly spaced
+// up it, passing through each one: the base's at 0, the tip's at 1.
+float spineX(float t) {
+  float u = clamp(t, 0.0, 1.0) * ${glf(CHAIN)}, s = min(floor(u), ${glf(CHAIN - 1)}), f = u - s, a = 0.0, b = 0.0, c = 0.0, d = 0.0;
+  for (int j = 0; j <= ${CHAIN}; j++) {
+    float v = uSpine[j], i = float(j);
+    if (i == s - 1.0) a = v; if (i == s) b = v; if (i == s + 1.0) c = v; if (i == s + 2.0) d = v;
+  }
+  if (s == 0.0) a = 2.0 * b - c; if (s == ${glf(CHAIN - 1)}) d = 2.0 * c - b; // past the ends, carry straight on
+  return 0.5 * (2.0 * b + (c - a) * f + (2.0 * a - 5.0 * b + 4.0 * c - d) * f * f + (3.0 * b - a - 3.0 * c + d) * f * f * f);
+}
 // How much of a tongue w wide and h tall covers q (x from the spine), its edge eased over a pixel (px, in flame units).
 // None where it has no width (above its tip, below its base): eased there, the spine's own pixel would show half covered,
 // a thin line straight up off the tip. Scalars and q.x, q.y only, so the test can run it as JS.
@@ -411,12 +422,12 @@ float tongue(vec2 q, float w, float h, float px) {
 }
 void main() {
   vec2 q = vec2(vP.x - uBase.x, uBase.y - vP.y) / uBase.z;
-  float h = uShape.y, time = uBase.w, px = uPx / uBase.z, t = clamp(q.y / h, 0.0, 1.0), mid = 4.0 * t * (1.0 - t);
+  float h = uShape.x, time = uBase.w, px = uPx / uBase.z, t = clamp(q.y / h, 0.0, 1.0), mid = 4.0 * t * (1.0 - t);
   float n1 = noise(vec2(q.x * 0.09, q.y * 0.06 - time * 3.0)), n2 = noise(vec2(q.x * 0.13 + 7.0, q.y * 0.1 - time * 5.0));
   vec2 root = q; // unbent, for the blue root
-  q.x -= uShape.x * pow(t, 1.6) + uShape.z * mid * (2.5 * n1 + 0.8 * n2);
-  float swell = 1.0 + uShape.z * 0.12 * mid * n2;
-  float tear = 1.0 - uShape.w * smoothstep(0.45, 0.9, t) * smoothstep(0.0, 0.5, noise(vec2(q.x * 0.05, q.y * 0.12 - time * 9.0)));
+  q.x -= spineX(t) + uShape.y * mid * (2.5 * n1 + 0.8 * n2);
+  float swell = 1.0 + uShape.y * 0.12 * mid * n2;
+  float tear = 1.0 - uShape.z * smoothstep(0.45, 0.9, t) * smoothstep(0.0, 0.5, noise(vec2(q.x * 0.05, q.y * 0.12 - time * 9.0)));
   // the halo: a wide soft body and a tip, as the SVG's (lanterns.js FLAME), stretched with the flame
   float k = h / 96.0;
   float body = 0.96 * smoothstep(1.0, 0.4, length((q - vec2(0.0, 42.0 * k)) / vec2(49.0, 69.0 * k)));
@@ -431,14 +442,14 @@ void main() {
 }`);
 const flameQuad = gl.createBuffer();
 function drawBareFlame({ flame: [bx, by, tx, ty], fire: f }, w, box) {
-  const k = f.scale, lean = (tx - bx) / k, h = (by - ty) / k, u = BARE_FLAME.u;
-  const x0 = bx + (Math.min(0, lean) - 60) * k, x1 = bx + (Math.max(0, lean) + 60) * k, y0 = by - h * 1.45 * k, y1 = by + 30 * k;
+  const k = f.scale, h = (by - ty) / k, u = BARE_FLAME.u;
+  const x0 = bx + (Math.min(...f.spine) - 60) * k, x1 = bx + (Math.max(...f.spine) + 60) * k, y0 = by - h * 1.45 * k, y1 = by + 30 * k;
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // its colours come premultiplied
   gl.useProgram(BARE_FLAME.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, flameQuad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([x0, y0, x1, y0, x0, y1, x1, y1]), gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.uniform4f(u.uBox, ...box); gl.uniform1f(u.uPx, box[2] / w);
-  gl.uniform4f(u.uBase, bx, by, k, f.t); gl.uniform4f(u.uShape, lean, h, f.turb, f.tear);
+  gl.uniform4f(u.uBase, bx, by, k, f.t); gl.uniform3f(u.uShape, h, f.turb, f.tear); gl.uniform1fv(u['uSpine[0]'], f.spine);
   gl.uniform4f(u.uBlue, ...f.blue.slice(0, 4)); gl.uniform1f(u.uBlueA, f.blue[4]); gl.uniform1f(u.uAlpha, f.alpha);
   ['uHaloC', 'uOuterC', 'uMidC', 'uCoreC', 'uBlueC'].forEach((n, i) => gl.uniform3fv(u[n], rgb(f.cols[i])));
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
