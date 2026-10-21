@@ -161,6 +161,14 @@
       github: Array.from({ length: 10 }, (_, i) => pr(200 + i, needs[i % 5])) };
     const mid = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; };
     let row, body, tog, open;
+    const update = () => emit('message', [...sessionsAt(0), big]);
+    // the patched children against a fresh build of the same render (its morph caught, not run)
+    const fresh = (live, render) => {
+      let kids = []; const real = window.morph;
+      window.morph = (_, k) => { kids = k; }; render(); window.morph = real;
+      const now = [...live.childNodes];
+      return now.length === kids.length && now.every((n, i) => n.isEqualNode(kids[i]));
+    };
     return [
       () => { emit('message', [...sessionsAt(0), big]); }, run(0.1),
       () => { enterZone(moths.get('sess-big').zone); }, run(0.1),
@@ -196,10 +204,38 @@
         if (!tip.matches('.show') || Math.abs(t.bottom + 8 - a.top) > 1 && Math.abs(t.top - 8 - a.bottom) > 1) fail(`the tip is at ${t.top}-${t.bottom}, its link at ${a.top}-${a.bottom}`);
         ov.blur();
       },
+      () => { // an agent ends while a later one has focus: the focused row is still that agent's, and it all matches a fresh card
+        row = [...$('card').querySelectorAll('.agent')].find(r => r.textContent.includes('Agent 2')); row.focus();
+        big.subagents = big.subagents.filter(a => a.id !== 'b0'); update(); renderCard();
+        if ($('card').querySelectorAll('.agent').length !== 5) return fail('the agent never ended on the card');
+        if (!document.activeElement?.textContent.includes('Agent 2')) fail(`focus went to ${document.activeElement?.textContent} when an agent ended`);
+        if (!fresh($('card'), renderCard)) fail('after an agent ended, the patched card differs from a fresh one');
+        row.blur();
+      },
+      () => { // a PR above the focused one re-ranks below it, which moves the focused row
+        const rows = [...$('card').querySelectorAll('a.pr2')], focused = rows[1], url = focused?.href, above = rows[0].href;
+        if (!focused) return fail('no listed PRs to focus');
+        focused.focus();
+        big.github = big.github.map(p => p.url === above ? { ...p, need: 'changes' } : p); update(); renderCard();
+        if ($('card').querySelectorAll('a.pr2')[0].href !== url) return fail('the re-rank didn\'t move the focused row up');
+        if (document.activeElement?.href !== url) fail(`focus went to ${document.activeElement?.href || document.activeElement?.className} when a PR re-ranked`);
+        if (!fresh($('card'), renderCard)) fail('after a PR re-ranked, the patched card differs from a fresh one');
+        focused.blur();
+      },
       () => { // another session's card, after this one closes, starts at the top
         body = q('.cardBody'); body.scrollTop = 40;
         hideCard(); enterZone(moths.get('sess-alpha').zone);
         if (q('.cardBody').scrollTop !== 0) fail(`sess-alpha's card opened scrolled to ${q('.cardBody').scrollTop}`);
+        hideCard();
+      },
+      () => { // a pinned session ends, then comes back: the sidebar matches a fresh one each way (its class comes and goes)
+        pinned = [{ id: 'sess-big' }, { id: 'sess-alpha' }]; renderSidebar();
+        const stack = $('dock').children[0];
+        for (const alpha of [false, true]) {
+          emit('message', [...sessionsAt(0).filter(o => alpha || o.id !== 'sess-alpha'), big]); renderSidebar();
+          if (stack.children[1]?.classList.contains('ended') === alpha) return fail(`sess-alpha's section is ${stack.children[1]?.className || 'unclassed'} with it ${alpha ? 'back' : 'gone'}`);
+          if (!fresh(stack, renderSidebar)) fail(`with sess-alpha ${alpha ? 'back' : 'gone'}, the patched sidebar differs from a fresh one`);
+        }
       },
     ];
   };

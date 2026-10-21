@@ -7,7 +7,7 @@ import WebKit
 
 let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fixture = try! String(contentsOf: root.appendingPathComponent("test/snapshots/fixture.js"), encoding: .utf8)
-let SIZE = NSSize(width: 720, height: 420) // short, so the big card scrolls
+let SIZE = NSSize(width: 900, height: 420) // short, so the big card scrolls, and wide enough to pin (card.js PIN_MIN)
 
 final class Driver: NSObject, WKNavigationDelegate {
   let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -30000, y: -30000), size: SIZE), styleMask: .borderless, backing: .buffered, defer: false)

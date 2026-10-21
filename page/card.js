@@ -17,10 +17,11 @@ const keyed = (key, el) => { el.dataset.key = key; return el; };
 // Redraws build fresh nodes, then morph patches the live ones to match instead of swapping them in, so whatever the browser
 // holds on an element survives: hover, keyboard focus, scroll, and a press between mousedown and click. Children are
 // matched by tag and key (unkeyed ones in order), patched in place (attributes, the handlers below, text), and new ones go
-// in where they belong; whatever's left over goes. Elements only move when the order changes, since a move drops focus.
+// in where they belong; whatever's left over goes. Elements only move when the order changes, and a move drops focus,
+// so the focused element gets it back afterwards.
 const HANDLERS = ['onclick', 'onpointerenter', 'onpointerleave', 'onfocus', 'onblur']; // ponytail: the ones the card sets; add any new one here
 function morph(el, kids) {
-  const old = [...el.childNodes];
+  const old = [...el.childNodes], f = /** @type {HTMLElement | null} */ (document.activeElement);
   const next = kids.map(n => {
     const i = old.findIndex(o => o && o.nodeName === n.nodeName && o.dataset?.key === n.dataset?.key);
     if (i < 0) return n;
@@ -34,6 +35,7 @@ function morph(el, kids) {
   });
   for (const o of old) o?.remove();
   next.forEach((n, i) => { if (el.childNodes[i] !== n) el.insertBefore(n, el.childNodes[i] ?? null); });
+  if (f !== document.activeElement && f?.isConnected) f.focus({ preventScroll: true });
 }
 function link({ label, url }, text = label) {
   const a = document.createElement('a');
@@ -89,9 +91,10 @@ function enterZone(a) {
 function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (Tapping the card's header runs the action.)
 function tapZone(zone) { if (hovered === zone.target) hideCard(); else enterZone(zone); }
-function hideCard() { hovered = held = shown = null; openAgents.clear(); $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
+function hideCard() { hovered = held = shown = null; openAgents.clear(); prOver.card = ''; $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
 
 function renderCard() {
+  dropTip();
   const m = hovered, s = m?.session;
   if (m?.stale) return renderStaleCard(m.stale);
   if (m?.ghost) return renderGhostCard(m.ghost);
@@ -186,7 +189,10 @@ const SHORT = { ...NEED, ready: 'ready', failing: 'failing' };
 const PR_CAP = 4;
 /** @type {Record<string, boolean>} */
 let prList = {};
-let prOver = ''; // the url of the PR chip under the pointer, whose title the header shows
+const prOver = { card: '', dock: '' }; // the url of the PR chip under the pointer in each, whose title its header shows
+let tipFor = null; // the link #prTip was shown for
+// a redraw that took away the link the tip was showing for takes the tip too
+function dropTip() { if (!tipFor?.isConnected) $('prTip').classList.remove('show'); }
 const rank = (/** @type {string} */ need) => (ORDER.indexOf(need) + 1) || ORDER.length + 1;
 function prSummary(prs) {
   const n = {};
@@ -197,7 +203,7 @@ function prBlock(s, full = false) {
   // in the sidebar they're listed in full until that pin's own toggle (kept with the pin) turns them into chips
   const pin = full && pinned.find(p => p.id === s.id), cap = full ? Infinity : PR_CAP;
   const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = full ? !pin?.chips : prList[s.id] ?? prs.length <= 3;
-  const over = !open && prs.find(p => p.url === prOver), redraw = full ? renderSidebar : renderCard;
+  const where = full ? 'dock' : 'card', over = !open && prs.find(p => p.url === prOver[where]), redraw = full ? renderSidebar : renderCard;
   const ph = over ? make('span', 'ph title', over.title) : make('span', 'ph', make('span', 'sum', make('b', '', 'PRs'), ` · ${prSummary(prs)}`));
   const tog = make('button', 'tog'), label = open ? 'Show PRs as chips' : 'List PRs with their titles';
   tog.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
@@ -218,6 +224,7 @@ function prBlock(s, full = false) {
     a.onpointerenter = a.onfocus = e => {
       const tip = $('prTip'), el = /** @type {HTMLElement} */ (e.currentTarget);
       if (!cut(el)) return;
+      tipFor = el;
       tip.textContent = p.title;
       const at = tipSpot(tip, el);
       tip.style.left = `${at.left}px`; tip.style.top = `${at.top}px`;
@@ -229,8 +236,8 @@ function prBlock(s, full = false) {
   if (!open) return [head, make('div', 'chips', ...prs.map(p => {
     const a = keyed(p.url, link(p, ''));
     a.append(make('span', 'face', dot(p.need), p.label));
-    a.onpointerenter = () => { prOver = p.url; redraw(); };
-    a.onpointerleave = () => { prOver = ''; redraw(); };
+    a.onpointerenter = () => { prOver[where] = p.url; redraw(); };
+    a.onpointerleave = () => { prOver[where] = ''; redraw(); };
     return a;
   }))];
   return [head, ...prs.slice(0, cap).map(p => {
@@ -274,6 +281,7 @@ function setPins(/** @type {typeof pinned} */ pins) {
   if (hovered) renderCard(); // its pin shows the change
 }
 function renderSidebar() {
+  dropTip();
   for (const id of pinnedLast.keys()) if (!isPinned(id)) pinnedLast.delete(id);
   for (const o of sessions) if (isPinned(o.id)) pinnedLast.set(o.id, o);
   const ids = pinnable() ? pinned.map(p => p.id).filter(id => pinnedLast.has(id)) : [];

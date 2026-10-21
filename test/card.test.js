@@ -409,3 +409,11 @@ test('in the sidebar an agent is a plain row, shown in full, that leaves the car
   assert.strictEqual(l.run('openAgents.size'), 0);
   assert.deepStrictEqual(find(l.show(s), 'agent').map(r => [r.tag, r.className]), [['button', 'agent'], ['button', 'agent']], 'the card\'s are still buttons, closed');
 });
+
+test('every handler property the card and its stale cards set is one morph copies onto the live element', () => {
+  const { run } = load(), copied = run('HANDLERS');
+  const src = ['card', 'stale'].map(f => fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8')).join('\n');
+  const set = [...new Set([...src.matchAll(/\.(on[a-z]+) =/g)].map(m => m[1]))];
+  assert.ok(set.includes('onclick') && set.includes('onfocus'), `found ${set}`);
+  assert.deepStrictEqual(set.filter(h => !copied.includes(h)), [], 'set but not copied, so a redraw would keep the old handler');
+});
