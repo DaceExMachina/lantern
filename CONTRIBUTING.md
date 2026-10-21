@@ -111,6 +111,26 @@ It needs macOS, so it isn't part of `npm test` or CI. The pictures were made on 
 
 CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the type check and the tests on every pull request and push to main, and makes sure the app and the screensaver compile.
 
+## Design tokens
+
+The page has two kinds of look. The **UI chrome** (the footer, settings menu, cards, stats panel, recap, tips, dev panel and the badge's flash pill) is one design, and takes every colour, space, radius, type size, shadow and layer from the custom properties in index.html's `:root`. The **scene art** (the lantern drawings, moths, fireflies, wisps, smoke and the shaders) keeps its own palettes in the scene scripts, because each tone is tuned against its neighbours in the drawing.
+
+In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F7FA6`. If nothing fits, add a token here and in `:root` rather than a one-off value. `test/tokens.test.js` fails on a raw colour, a px value in spacing, radius, type or shadow, or a bare weight or z-index in UI CSS, in index.html's style attributes outside the scene's SVG, and in the UI scripts (`card`, `dev`, `github`, `main`, `notify`, `recap` and `stats`). Rules that predate the tokens are listed in `test/tokens-debt.json`. That list only shrinks: migrate a rule and the test tells you to delete its entry, and a new raw value anywhere fails. A new page script has to be named as UI or scene in the test. The hover card (`card.js` and the `#card` and `.starCard` rules) is held out for now while it is redesigned.
+
+| Group | Tokens |
+|---|---|
+| Night and surfaces | `--night` page background · `--surface` panels, menus and tips · `--surface-card` hover cards (with `--blur-glass`) · `--surface-raised` inputs and switches · `--surface-selected` a pressed switch · `--line` borders · `--line-soft` dividers |
+| Ink | `--ink-strong` headings and values · `--ink-hover` hovered links and controls · `--ink` panel text · `--ink-soft` page text and sub-lines · `--ink-dim` labels · `--ink-faint` unearned and empty things |
+| Accents | `--accent-violet` links and icons · `--accent-violet-line` link underlines · `--focus` focus outlines · `--accent` checked controls · `--accent-warm` the stats headline · `--accent-warm-ink` and `--accent-warm-surface` badges · `--warn-ink` warnings |
+| Session states | `--state-working`, `--state-waiting`, `--state-snoozed`, `--state-idle`, and the lantern's `--lantern-warm`, `--lantern-violet`, `--lantern-quiet` |
+| PR needs | `--pr-ready`, `--pr-failing`, `--pr-changes`, `--pr-draft`, `--pr-in-review`, `--pr-review` (a review asked of you), `--pr-mention` |
+| Spacing | `--space-0-5` 2px · `--space-1` 4px · `--space-1-5` 6px · `--space-2` 8px · `--space-3` 12px · `--space-4` 16px · `--space-5` 24px · `--space-6` 32px |
+| Radius | `--radius-sm` 3px · `--radius-md` 6px controls · `--radius-lg` 10px panels and cards · `--radius-pill` |
+| Type | `--font-serif` (Georgia) · `--font-mono` · `--text-xs` 11px labels · `--text-sm` 12.5px panel text · `--text-md` 14px · `--text-lg` 16px values · `--text-xl` 20px · `--text-display` 40px · `--weight-regular` and `--weight-bold` (Georgia has no other faces) · `--leading` · `--tracking-label` |
+| Elevation and motion | `--shadow-lg` · `--rim` a swatch's pale rim · `--blur-glass` · `--z-tip`, `--z-flash`, `--z-overlay` · `--fade` |
+
+The session-state and PR colours are drawn by the scene too, so they live in two places: `:root`, and `MOTHS`, `RIBBON` and `WARM` (stats.js and lanterns.js) and `FLY` (fireflies.js), where the scene blends them. The test fails if the two disagree, so change both together.
+
 ## Adding a terminal
 
 Each terminal needs its own way of bringing a session forward. The hook already sends `TERM_PROGRAM`, the terminal app's bundle id and a few terminal-specific ids with every event (see `COMMAND` in `install.js`). Add a case for your terminal next to the others in `focusElsewhere` in `app/Terminals.swift`, and a row to the table in [docs/setup.md](docs/setup.md#terminals-and-click-to-focus).

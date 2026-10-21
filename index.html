@@ -8,7 +8,37 @@
 <link rel="apple-touch-icon" href="/icon.png">
 <style>
   /* spacing scale on a 4px base; the stats panel and recap use it, the rest of the app moves over in a design-system pass */
-  :root { --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px; }
+  /* The design tokens: UI chrome (footer, menus, cards, stats, recap, tips, dev panel, the flash pill) takes every colour,
+     space, radius, type size, shadow and layer from here. Add a token rather than a one-off value; scene art keeps its
+     palettes in page/*.js. test/tokens.test.js enforces this, and that the state and PR colours match the scene's.
+     "Design tokens" in CONTRIBUTING.md lists them. */
+  :root {
+    /* night and surfaces */
+    --night: #1E1930; --surface: rgb(30 24 46 / .96); --surface-card: rgb(30 24 46 / .92);
+    --surface-raised: #2B2440; --surface-selected: #4A3B68; --line: #4A3B68; --line-soft: #3A2E52;
+    /* ink, brightest to faintest */
+    --ink-strong: #F5E9FF; --ink-hover: #F0E8FF; --ink: #D8CCE6; --ink-soft: #C9B8DA; --ink-dim: #8F7FA6; --ink-faint: #6B5C88;
+    /* accents */
+    --accent-violet: #C3B2FF; --accent-violet-line: #5B4A8A; --focus: #B9A8FF; --accent: var(--state-waiting);
+    --accent-warm: #FFC266; --accent-warm-ink: #FFE2BE; --accent-warm-surface: #5A3E2A; --warn-ink: #E8C8A8;
+    /* session states and the lantern: the same colours as lanterns.js and stats.js */
+    --state-working: #E9DCF0; --state-waiting: #7B5CFF; --state-snoozed: #B29CF8; --state-idle: #8B7FA2;
+    --lantern-warm: #F7913F; --lantern-violet: #7A63F0; --lantern-quiet: #3A3050;
+    /* what a PR needs: the same colours as FLY (fireflies.js) */
+    --pr-ready: #C8F48A; --pr-failing: #FF9E8C; --pr-changes: #FFAA6E; --pr-draft: #FFD27A; --pr-in-review: #8CCBFF;
+    --pr-review: #E8F48A; --pr-mention: #E8F48A;
+    /* spacing: one scale, 1 = 4px */
+    --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
+    /* radius */
+    --radius-sm: 3px; --radius-md: 6px; --radius-lg: 10px; --radius-pill: 99px;
+    /* type: Georgia has only a regular and a bold face, so 400 and 700 are the only weights */
+    --font-serif: Georgia, 'Times New Roman', serif; --font-mono: ui-monospace, monospace;
+    --text-xs: 11px; --text-sm: 12.5px; --text-md: 14px; --text-lg: 16px; --text-xl: 20px; --text-display: 40px;
+    --weight-regular: 400; --weight-bold: 700; --leading: 1.45; --tracking-label: .04em;
+    /* elevation, glass, layers, motion */
+    --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
+    --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s;
+  }
   html, body { margin: 0; height: 100%; background: #1E1930; color: #C9B8DA; font: 14px/1.4 Georgia, 'Times New Roman', serif; }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
@@ -147,7 +177,6 @@
   #recap .starCard h3 { grid-column: 1 / -1; display: block; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #recap .starCard > div { min-width: 0; }
   #recap .starCard > div + div { margin-top: 0; }
-  #recap  #recap .starCard .agents:first-child { margin-top: 0; }
   #recap .star.picked circle:last-child { stroke: #F5E9FF; stroke-width: 1.2; }
   #recap .starCard h3 .link { all: unset; cursor: pointer; border-bottom: 1px solid #5B4A8A; }
   #recap .starCard h3 .link:hover { color: #F0E8FF; border-color: #B9A8FF; }
