@@ -15,12 +15,9 @@ const attrs = {}, els = {
   textToggle: { disabled: false, parentElement: row() },
   ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
 };
-// the flame's parts, which drawFlame writes to
-for (const id of ['flame', 'fHalo', 'tongues', 'fOuter', 'fMid', 'fCore', 'fBase', 'inside']) {
-  const a = {};
-  els[id] = { getAttribute: k => a[k] ?? null, setAttribute: (k, v) => { a[k] = v; } };
-}
-els.fCore.getBBox = () => ({ x: 333, y: 352, width: 14, height: 30 }); // drawLight's flame core, somewhere in the tongue
+// #inside, which swingLantern slides
+const insideAttrs = {};
+els.inside = { getAttribute: k => insideAttrs[k] ?? null, setAttribute: (k, v) => { insideAttrs[k] = v; } };
 const document = { getElementById: id => els[id] ?? null, querySelectorAll: () => [] };
 // a plain window, no query string; the Moroccan's far wall counts as baked already (background.js isn't loaded)
 // background.js isn't loaded, so drawBackground only records what drawLight gives it, and there's no dust
@@ -88,16 +85,22 @@ test('moths land on the candle\'s wax: below its rim, above its dish and within 
   }
 });
 
+// background.js's flameHalf (a tongue's half-width up it), run as JS: it's written in scalars, so it reads as JS once typed
+const flameHalf = (() => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/);
+  assert.ok(src, 'background.js has flameHalf');
+  return new Function(src[0].replace('float flameHalf(float t)', 'return t =>').replace(/\bfloat /g, 'let ').replace(/\b(sqrt|pow)\(/g, 'Math.$1('))();
+})();
 test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', () => {
-  const [fx, fy, k] = run('STYLES.candle.flame'), FLAME_BASE = run('FLAME_BASE'), clear = 10, HOP = run('HOP');
-  // the outer tongue's outline at full size as it wobbles, sampled along its curves, in the scene
-  const flame = new Map();
-  for (let s = 0; s < 30; s += 0.05) {
-    run(`drawFlame(${s}, { size: 1, flick: 1, pulse: 1 })`);
-    const n = els.fOuter.getAttribute('d').match(/-?[\d.]+/g).map(Number);
-    for (let i = 2; i + 5 < n.length; i += 6) for (let t = 0; t <= 1; t += 0.05) {
-      const b = (p0, p1, p2, p3) => (1 - t) ** 3 * p0 + 3 * (1 - t) ** 2 * t * p1 + 3 * (1 - t) * t * t * p2 + t ** 3 * p3;
-      const x = fx + (b(n[i - 2], n[i], n[i + 2], n[i + 4]) - 340) * k, y = fy + (b(n[i - 1], n[i + 1], n[i + 3], n[i + 5]) - FLAME_BASE) * k;
+  const [fx, fy, k] = run('STYLES.candle.flame'), clear = 10, HOP = run('HOP'), tallest = 96 * run('FLAME_STRETCH');
+  // the outer tongue's outline at full size, as background.js BARE_FLAME draws it: at its tallest, leaning as far as
+  // stepFlame lets it either way, its middle bent and swollen by the most turbulence a gust and a moth give at full size
+  const turb = 4, flame = new Map();
+  for (const lean of [-0.6 * tallest, 0, 0.6 * tallest]) for (let t = -0.5; t <= 1; t += 0.005) {
+    if (!(flameHalf(t) > 0)) continue; // none of the tongue there
+    const mid = 4 * t * (1 - t), bend = lean * Math.max(0, t) ** 1.6, half = 0.72 * 34 * (1 + 0.12 * turb * mid) * flameHalf(t);
+    for (const side of [-1, 1]) for (const wander of [-1, 1]) {
+      const x = fx + (bend + wander * turb * mid * 3.3 + side * half) * k, y = fy - t * tallest * k;
       flame.set(`${Math.round(x)},${Math.round(y)}`, [x, y]); // one point a unit, enough to measure a 10-unit gap by
     }
   }
@@ -143,15 +146,15 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
 
 test('the Moroccan\'s flame, burner cup and light sit between its front and far wall as it twists', () => {
   run(`applyStyle('moroccan')`);
-  assert.match(els.lantern.innerHTML, /<g id="inside">[\s\S]*id="flame"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame and the burner cup are in #inside');
-  run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, { size: 0.8, flick: 1, pulse: 1 })`);
+  assert.match(els.lantern.innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
+  run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, flick: 1, pulse: 1 }))`);
   const twist = run('twist'), wall = page.background.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
   assert.ok(Math.abs(twist) > 5 && Math.abs(wall) > 1, `a big twist: ${twist}, sliding the far wall ${wall}`);
-  const flame = +els.inside.getAttribute('transform').match(/^translate\((\S+) 0\)$/)[1];
-  // the light, turned back into the lantern's own frame, slid along with the flame
-  const light = run(`rot(...background.lightC, -swayAngle)[0] - style.light[0]`);
-  for (const [what, x] of [['flame', flame], ['light', light]]) {
+  const inside = +els.inside.getAttribute('transform').match(/^translate\((\S+) 0\)$/)[1];
+  // the light and the shader's flame (its base), turned back into the lantern's own frame, slid along with the cup
+  const light = run(`rot(...background.lightC, -swayAngle)[0] - style.light[0]`), flame = run(`rot(...background.flame.slice(0, 2), -swayAngle)[0] - style.flame[0]`);
+  for (const [what, x] of [['the cup and sparks', inside], ['flame', flame], ['light', light]]) {
     assert.ok(Math.min(0, wall) < x && x < Math.max(0, wall), `${what} slides ${x}, between the front (0) and the far wall (${wall})`);
     assert.ok(Math.abs(x - wall / 2) < 0.01, `${what} sits half way: ${x} of ${wall}`);
   }
@@ -170,7 +173,7 @@ const rimShadeFrom = ({ flame: [fx, fy, tx, ty], rim: [x, y, z] }) => {
 test('the candle\'s rim shades the room below from its corners: lit outside the flame\'s base line, dark inside its tip line', () => {
   for (const key of styles) {
     run(`applyStyle('${key}'); swingLantern(1 / 60, 0.5)`);
-    run(`drawLight(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 })`);
+    run(`drawLight(1 / 60, 0.5, stepFlame(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 }))`);
     if (key !== 'candle') { assert.deepStrictEqual([...page.background.rim], [0, 0, 0], `${key}: no rim shadow`); continue; }
     const v = page.background, [bx, by, tx, ty] = v.flame, [cx, half, rimY] = v.rim, shade = rimShadeFrom(v);
     assert.deepStrictEqual([cx, half, rimY], [...run('[STYLES.candle.pillar.cx, STYLES.candle.pillar.r, STYLES.candle.pillar.rim]')], 'the pillar\'s rim');

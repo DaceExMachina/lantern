@@ -24,7 +24,6 @@ function context() {
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle;');
   for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow']) els[id] = node();
-  els.fCore = { getBBox: () => ({ x: 333, y: 352, width: 14, height: 30 }) }; // drawLight's flame core, somewhere in the tongue
   // the glint groups as the candle's markup draws them, each child with its attributes
   const back = run('STYLES.candle.back');
   for (const id of ['cdPedestalGlints', 'cdGrapeGlints']) {
@@ -37,8 +36,11 @@ function context() {
   }
   els.cdBronze = node(); // the bronze's gradient, its stops as drawn
   els.cdBronze.children = [...back.match(/id="cdBronze">(.*?)<\/linearGradient>/)[1].matchAll(/<stop\b/g)].map(() => node());
-  const flame = { size: 1, flick: 1, pulse: 1 };
-  return { els, run, flame, shine: s => { run('drawShine')(s, flame); run('drawHeat')(s, flame.size); }, lean: s => run(`(wobble(${s}, 3) * 6 + windLean(${s}) * 70 / 96) * 0.8`) };
+  // the flame as frame.js stepFlame gives it: its tip leaning `lean(s)` at its middle tongue (70 of the outer's 96 up)
+  const [fx, fy] = run('STYLES.candle.flame'), lean = s => 8 * Math.sin(s);
+  const flame = { size: 1, flick: 1, pulse: 1, base: [fx, fy], tip: [fx, fy - 77], turb: 1, tear: 0, blue: [0, 4, 10, 5, 0.5] };
+  const shine = s => { flame.tip = [fx + lean(s) * 96 / 70, fy - 77]; run('drawShine')(s, flame); run('drawHeat')(s, flame); };
+  return { els, run, flame, shine, lean };
 }
 // page times (s) where the flame leans well over to the left and to the right
 const leaning = ctx => {

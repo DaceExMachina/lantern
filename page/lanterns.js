@@ -4,7 +4,8 @@
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame, with `inside` (if any) just in front of the flame; the flame
 // and `inside` slide together as #inside (frame.js farSlide). `flame` places the flame's base and sets its size,
-// `light` is where the glow and threads come from, `paper` softens the flame as if it's behind paper, and `body`
+// `light` is where the glow and threads come from, `paper` draws the flame in the SVG softened as if it's behind paper
+// (any other's is drawn by the background's shader, background.js BARE_FLAME, under the whole SVG), and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
@@ -18,13 +19,12 @@
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
 // The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
 // two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
-// Behind paper, the tongues are softened; the halo is soft already.
+// Behind paper, the tongues are softened; the halo is soft already. Only a paper lantern draws it (frame.js drawFlame).
 const HALO_FADE = (id, stops) => `<radialGradient id="${id}">${stops.map(([o, a]) => `<stop offset="${o}" stop-color="currentColor" stop-opacity="${a}"/>`).join('')}</radialGradient>`;
-const FLAME = paper => `<g id="flame"><g id="fHalo" opacity="0.8">
+const FLAME = `<g id="flame"><g id="fHalo" opacity="0.8">
   ${HALO_FADE('haloBody', [[0.4, 0.96], [0.55, 0.77], [0.7, 0.36], [0.8, 0.13], [0.9, 0.03], [1, 0]])}<ellipse cx="340" cy="346" rx="49" ry="69" fill="url(#haloBody)"/>
   ${HALO_FADE('haloTip', [[0, 0.94], [0.2, 0.82], [0.4, 0.57], [0.55, 0.33], [0.7, 0.13], [0.8, 0.05], [1, 0]])}<ellipse cx="340" cy="304" rx="26.5" ry="49" fill="url(#haloTip)"/></g>
-  <g ${paper ? 'filter="url(#behindPaper)"' : ''}><g id="tongues"><path id="fOuter"/><path id="fMid"/><path id="fCore"/><ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g></g></g>
-  <g id="sparks"></g>`;
+  <g filter="url(#behindPaper)"><g id="tongues"><path id="fOuter"/><path id="fMid"/><path id="fCore"/><ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g></g></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
 const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop class="paperStop" offset="0" stop-opacity=".9"/><stop class="paperStop" offset="1" stop-opacity="0"/></radialGradient></defs>`;
 // The Moroccan: polished brass, pierced edge to edge with arabesque lace. Its lace and openings are one mask (#cutouts):
@@ -640,15 +640,15 @@ function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) 
   // the wick, over the flame's base so the flame burns round it, its tip an ember
   const front = `<path d="M${cx} ${rim}V${rim - 7}Q${cx} ${n(rim - 10.4)} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#1C1612" stroke-width="2.4" stroke-linecap="round"/>
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
-  // Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
-  // tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units. A landed moth's
+  // Moths land clear of the bare flame. At full size and stretched its tallest (96 by FLAME_STRETCH, frame.js stepFlame), the
+  // outer tongue dips 0.04 of its height below its base (background.js flameHalf), in the flame's own units. A landed moth's
   // wings reach from its perch on screen at most WING_REACH at the largest moth. So the wax's highest landing spot is a hop, that reach and 10 clear below the flame, and the body
   // starts where perchAt's highest spot (0.5 - PERCH_SPREAD of the way down) lands there.
   const reach = WING_REACH * Math.max(...Object.values(SIZE));
-  const highest = PILLAR.flame[1] + 0.04 * 96 * 1.08 * PILLAR.flame[2] + HOP + reach + 10, waxBottom = PILLAR.dish - 8;
+  const highest = PILLAR.flame[1] + 0.04 * 96 * FLAME_STRETCH * PILLAR.flame[2] + HOP + reach + 10, waxBottom = PILLAR.dish - 8;
   return {
     name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
-    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: 6, // in the open, the wind leans it hard (frame.js windLean)
+    flame: PILLAR.flame, light: [PILLAR.cx, PILLAR.eye], flameWind: 6, // in the open, the wind leans it hard (frame.js stepFlame)
     holder: [PILLAR.rim, PILLAR.r], shadeFromHolder: true, // seen from the flame the rim is the widest thing below it, so its corners cast the shadow
     // the wax alone, a straight cylinder
     body: { top: (highest - (0.5 - PERCH_SPREAD) * waxBottom) / (0.5 + PERCH_SPREAD), bottom: waxBottom, half: () => PILLAR.r },
@@ -783,7 +783,7 @@ function applyStyle(key) {
   const [fx, fy, fk] = style.flame;
   $('lantern').innerHTML = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
     : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
-    + `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${FLAME(style.paper)}</g>${style.inside || ''}</g>`
+    + `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${style.paper ? FLAME : ''}<g id="sparks"></g></g>${style.inside || ''}</g>`
     + style.front;
   drawHang();
   bakeFarWall(); bakeCutouts();

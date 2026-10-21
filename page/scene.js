@@ -9,7 +9,8 @@ const Q = new URLSearchParams(location.search);
 const AMBIENT = Q.has('ambient');
 // POST a JSON body to the server (settings, focus, snooze, and the rest)
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const CX = 340, CY = 330, FLAME_BASE = 388;
+// FLAME_STRETCH: the most a bare flame stretches past its height (frame.js stepFlame)
+const CX = 340, CY = 330, FLAME_BASE = 388, FLAME_STRETCH = 1.15;
 // the original two-petal moth, split into its wings as absolute quadratic curves from the joint at 0,0
 const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
 const WING_SIDE = [[0, 0], [12, -14], [18, -4], [14, 6], [0, 0]];

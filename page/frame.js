@@ -132,18 +132,16 @@ function frame(t) {
   level = fakeFlame ?? level + (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"; fakeFlame: lanterns.js, ?flame=
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
-  const flame = { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) };
-
   swingLantern(elapsed, s);
-  drawFlame(s, flame);
-  if (style.scorches) { // the outer tongue in the scene, for scorched moths to aim at (the flame's base is style.flame[1])
-    const b = /** @type {SVGGraphicsElement} */ ($('fOuter')).getBBox(), k = flame.size * style.flame[2];
-    tongue = { cx: style.flame[0] + (b.x + b.width / 2 - 340) * k, half: b.width / 2 * k, height: b.height * k };
-  } else tongue = null;
-  drawSparks(dt, s, flame.size);
+  const flame = stepFlame(dt, s, { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) });
+  if (style.paper) drawFlame(s, flame);
+  // the outer tongue in the scene, for scorched moths to aim at: its middle, half its widest (0.72 of its 34, background.js
+  // tongue) and its height
+  tongue = style.scorches ? { cx: (flame.base[0] + flame.tip[0]) / 2, half: 0.72 * 34 * flame.size * style.flame[2], height: flame.base[1] - flame.tip[1] } : null;
+  drawSparks(dt, s, flame);
   lightPaper(flame);
   drawShine(s, flame);
-  drawHeat(s, flame.size);
+  drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
   if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, 'review'])), lightAt(), [125, 170], dt, s);
   for (const [k, m] of moths) {
@@ -238,39 +236,115 @@ function swingLantern(elapsed, s) {
   if (style.knot) put($('knotTail'), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
 
-// How far the wind (GUST) leans the flame's outer tongue downwind, in the flame's units, by style.flameWind: it follows
-// the gust a moment late, fluttering while the gust changes. From the clock alone, so every window agrees.
-const windLean = s => style.flameWind ? style.flameWind * (GUST(s - 0.3) + (GUST(s) - GUST(s - 0.3)) * 2 * wobble(s * 3, 7)) : 0;
-// flame: layered tongues that lean and stretch independently, ember-small when idle, the taller ones bent further by the wind
+// ---- the flame ---------------------------------------------------------------------------------------------------
+// A bare flame (the candle's and the Moroccan's) is drawn by the background's shader (background.js BARE_FLAME), so the
+// SVG doesn't repaint it every frame. A paper lantern's stays in the SVG (drawFlame): its paper and session text, drawn
+// behind the flame, would hide one drawn under the SVG.
+// The bare flame's spine is a chain of CHAIN links from its base up to its tip (its outer tongue's), each point a weight on
+// a damped spring to the point below it, so a swing or a gust travels up it, base first and tip after: it can
+// bend into an S and whip, then settle. At rest the chain stands straight up, as tall as the flame burns, bent over by the
+// wind (style.flameWind) and stretched by it, and pushed aside by a moth flying close, each most at the tip. When the
+// lantern swings, its base's acceleration throws the weights back (inertia), the higher the harder.
+// FEEL: the springs' stiffness at the base (a second squared), how many times floppier the tip's is (falloff), their
+// damping (a second), how hard the base's acceleration throws them (the lantern's swing is gentle, so 1, a plain weight,
+// would barely show),
+// and how strongly the wind, the turbulence (its licking edge, background.js) and a moth move it. Each is a pair: for an
+// idle ember (size 0.3) and for a full blaze (size 1), eased between by the flame's size (feelAt), as Dace dialled them in:
+// an ember small, tight and smooth-edged; a blaze looser at the tip, bent further by the wind, its edge licking hard.
+const FEEL = { stiffness: [160, 65], falloff: [2, 2.25], damping: [9.5, 18], inertia: [8, 15], wind: [0.5, 1.3], turbulence: [0, 1.85], moth: [1.55, 1] };
+/** @returns {Record<keyof FEEL, number>} */
+const feelAt = size => {
+  const u = Math.max(0, Math.min(1, (size - 0.3) / 0.7)), t = u * u * (3 - 2 * u);
+  return /** @type {any} */ (Object.fromEntries(Object.entries(FEEL).map(([k, [ember, full]]) => [k, ember + (full - ember) * t])));
+};
+// the chain: each point above the base, its offset from the base and its speed (the last is the tip), the base's last place
+// and speed (scene units), and the style it was set for. bent(i): how much of the tip's lean point i takes at rest.
+const bent = i => (i / CHAIN) ** 1.6;
+const flameChain = { pts: /** @type {{ x: number, y: number, vx: number, vy: number }[]} */ ([]), bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
+// One frame of the flame, `dt` on, burning at `flame` (its size, flicker and pulse): that, with its base and tip in the
+// scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
+function stepFlame(dt, s, flame) {
+  const [fx, fy, fk] = style.flame, k = flame.size * fk, [bx, by] = rot(fx + farSlide / 2, fy), ch = flameChain; // at the middle depth (farSlide)
+  const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * (style.flameWind || 0); // the wind's lean, in the flame's units
+  // an ember guttering: as it dims below 0.6 its height jumps about, by up to a quarter at its dimmest
+  const gutter = Math.max(0, Math.min(1, (0.6 - flame.size) / 0.3));
+  const h = 96 * k * (1 + wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
+  const last = ch.pts[CHAIN - 1];
+  if (ch.style !== style || !(last?.x === last?.x && last?.y === last?.y) || Math.hypot(bx - ch.bx, by - ch.by) > 20) // a new lantern, a NaN, or the window resized
+    Object.assign(ch, { pts: Array.from({ length: CHAIN }, (_, j) => ({ x: 0, y: -h * (j + 1) / CHAIN, vx: 0, vy: 0 })), bx, by, bvx: 0, bvy: 0, style });
+  const pts = ch.pts, tip = pts[CHAIN - 1];
+  // a moth flying within 50 of a bare flame's middle pushes it away and makes it waver, the closer the more (one landed
+  // is still, and the Moroccan's brass keeps them off its flame)
+  const mid = pts[CHAIN / 2 - 1];
+  let near = 0, push = 0;
+  for (const m of style.scorches ? moths.values() : []) if (!m.wasLanded) {
+    const n = Math.max(0, 1 - Math.hypot(m.x - bx - mid.x, m.y - by - mid.y) / (50 * fk));
+    if (n > 0) { near = Math.max(near, n); push += n * n * (m.x > bx + mid.x ? -1 : 1); }
+  }
+  // the tip's lean at rest, which each link takes its share of (bent)
+  const lean = (wobble(s, 2) * 9 + wind) * k + feel.moth * (0.3 * push + 0.15 * near * Math.sin(s * 29)) * h;
+  if (dt > 0) {
+    const bvx = (bx - ch.bx) / dt, bvy = (by - ch.by) / dt, ax = (bvx - ch.bvx) / dt, ay = (bvy - ch.bvy) / dt;
+    Object.assign(ch, { bx, by, bvx, bvy });
+    // Each point springs toward where it stands at rest on the point below, damped as it moves against that point, from
+    // the base up, so a swing passes up the chain link by link. The base's acceleration throws each link by its share of
+    // the bend (the tip's the most), so the whole flame leans about as far as one spring would. In steps of at most 1/120
+    // of a second, so even the stiffest stays steady.
+    const n = Math.ceil(dt * 120), h1 = dt / n;
+    for (let step = 0; step < n; step++) pts.forEach((p, j) => {
+      const below = j ? pts[j - 1] : { x: 0, y: 0, vx: 0, vy: 0 }, stiff = feel.stiffness / feel.falloff ** (j / (CHAIN - 1));
+      const share = bent(j + 1) - bent(j), keep = Math.exp(-feel.damping * h1);
+      p.vx += (stiff * (below.x + lean * share - p.x) - feel.inertia * share * ax) * h1;
+      p.vy += (stiff * (below.y - h / CHAIN - p.y) - feel.inertia * share * ay) * h1;
+      p.vx = below.vx + (p.vx - below.vx) * keep; p.vy = below.vy + (p.vy - below.vy) * keep; // damped against the point below
+      p.x += p.vx * h1; p.y += p.vy * h1;
+    });
+  }
+  // never past its tallest, leaning over more than 0.6 of that, or the tip squashed under 0.4 of its height
+  const most = 96 * k * FLAME_STRETCH;
+  for (const p of pts) { p.x = Math.max(-0.6 * most, Math.min(0.6 * most, p.x)); p.y = Math.max(-most, Math.min(0, p.y)); }
+  tip.y = Math.min(-0.4 * 96 * k, tip.y);
+  // a gust past 1.4 tears at the tip, fully by 2.6 (one on the candle; the Moroccan's walls keep the wind to a third)
+  const tear = Math.max(0, Math.min(1, (Math.abs(gust) * (style.flameWind || 0) / 6 - 1.4) / 1.2));
+  // the blue at its root swells and brightens with the flicker, breathes, and leans with the chain's lowest link: its
+  // middle, x and up from the base, and its radii, in the flame's units, and its opacity
+  const breathe = 1 + 0.05 * Math.sin(s * 1.7), { flick } = flame;
+  // spine: each point's offset across from the base, in the flame's units, the base's 0 first (background.js spineX)
+  return { ...flame, base: [bx, by], tip: [bx + tip.x, by + tip.y], spine: [0, ...pts.map(p => p.x / k)], tear,
+    turb: feel.turbulence * (1 + 1.5 * gutter + tear) + 2 * feel.moth * near,
+    blue: [wobble(s, 5) * 1.2 + pts[0].x / k, 4, 10 * flick * breathe, 5 * flick * (2 - breathe), 0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick] };
+}
+// A paper lantern's flame, in the SVG: layered tongues that lean and stretch independently, ember-small when idle
 function drawFlame(s, { size, flick, pulse }) {
-  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]], wind = windLean(s);
+  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
   for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
     const n = $(id);
-    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08 + Math.abs(wind) * 0.004), wobble(s, k) * lean + wind * h / 96));
+    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
     put(n, 'fill', pal(id.slice(1).toLowerCase()));
   }
-  // the blue at its root swells and brightens with the flicker, breathes, and leans a little with the wind (a sixth as far
-  // as the outer tongue's tip, since it's the root)
+  // the blue at its root swells and brightens with the flicker, and breathes
   const base = $('fBase'), breathe = 1 + 0.05 * Math.sin(s * 1.7);
   put(base, 'fill', pal('base'));
-  put(base, 'cx', (340 + wobble(s, 5) * 1.2 + wind / 6).toFixed(2));
+  put(base, 'cx', (340 + wobble(s, 5) * 1.2).toFixed(2));
   put(base, 'rx', (10 * flick * breathe).toFixed(2)); put(base, 'ry', (5 * flick * (2 - breathe)).toFixed(2));
   put(base, 'opacity', (0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick).toFixed(3));
   const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
   put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
   // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
-  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-(wobble(s, 1) * 6 + wind * 118 / 96) / (118 * hh)) * 180 / Math.PI;
+  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-(wobble(s, 1) * 6) / (118 * hh)) * 180 / Math.PI;
   put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
   put($('fHalo'), 'color', pal('halo'));
   put($('flame'), 'opacity', pulse.toFixed(3));
 }
 
-// sparks float off the tip, more of them the busier things get; not from a paper lantern, whose flame is hidden behind paper
-function drawSparks(dt, s, size) {
+// sparks float off the tip, more of them the busier things get; not from a paper lantern, whose flame is hidden behind paper.
+// They're drawn in the flame's own units (#sparks), turned with the lantern and slid with #inside.
+function drawSparks(dt, s, { size, tip }) {
   sparkClock += style.paper ? 0 : dt * (0.4 + 5 * level);
+  const [fx, fy, fk] = style.flame, [tx, ty] = rot(...tip, -swayAngle);
   while (sparkClock > 1) {
     sparkClock--;
-    sparks.push({ x: 340 + (wobble(s, 2) * 6 + windLean(s)) * size, y: FLAME_BASE - 90 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
+    sparks.push({ x: 340 + (tx - farSlide / 2 - fx) / fk, y: FLAME_BASE + (ty - fy) / fk + 6 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
   }
   for (const p of sparks) { p.x += p.vx * dt + Math.sin(s * 4 + p.vy) * 0.3; p.y += p.vy * dt; p.life -= dt * 0.8; }
   while (sparks.length && sparks[0].life <= 0) sparks.shift();
@@ -384,26 +458,21 @@ function smoke(now, s, strength, tip) {
   }
   return { plumes, trail };
 }
-// the flame's outer tongue's tip in the scene (drawFlame's), leaning with its wobble and the wind
-function flameTip(s, size) {
-  const [fx, fy, fk] = style.flame, wind = windLean(s);
-  return [fx + farSlide / 2 + (wobble(s, 2) * 9 + wind) * size * fk, fy - 96 * (1 + wobble(s * 1.3, 2) * 0.08 + Math.abs(wind) * 0.004) * size * fk];
-}
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
 // The hot air rising off the lantern this frame (style.heat), for drawLight, the background and the tip smoke leaves from:
-// from style.heat.at, swinging with the lantern, or its bare flame's outer tongue's tip, as strong as the flame burns.
-function drawHeat(s, size) {
+// from style.heat.at, swinging with the lantern, or its bare flame's tip (stepFlame), as strong as the flame burns.
+function drawHeat(s, { size, tip }) {
   const h = style.heat;
   if (!h || AMBIENT) { heat = null; return; }
-  const [x, y] = h.at ? rot(...h.at) : flameTip(s, size);
+  const [x, y] = h.at ? rot(...h.at) : tip;
   heat = { x, y, k: h.k * size, t: s % (2 * Math.PI) };
 }
-function drawShine(s, { size, flick, pulse }) {
+function drawShine(s, { size, flick, pulse, base, tip }) {
   const shine = style.shine;
   if (!shine || AMBIENT) return;
   const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
-  // the flame's lean (its middle tongue's tip, drawFlame), in the scene
-  const wind = windLean(s), lean = (wobble(s, 3) * 6 + wind * 70 / 96) * size * fk;
+  // the flame's lean (its middle tongue's tip, about 70 of the outer's 96 up), in the scene
+  const lean = (tip[0] - base[0]) * 70 / 96;
   const pool = $('cdPoolGlint');
   put(pool, 'cx', (fx + lean * 0.6 + Math.sin(s * 5.3) * 0.6).toFixed(1)); put(pool, 'rx', (2.4 + 0.6 * flick + 0.3 * Math.sin(s * 7)).toFixed(1));
   put(pool, 'fill', core); put(pool, 'opacity', (0.55 * bright).toFixed(2));
@@ -445,7 +514,7 @@ function drawLeaves(s) {
 
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
 // dust, and the moths' shadows.
-function drawLight(dt, s, { size, flick, pulse }) {
+function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, blue }) {
   const [gx, gy] = lightAt();
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
@@ -474,8 +543,9 @@ function drawLight(dt, s, { size, flick, pulse }) {
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
   // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup or a candle's rim)
-  // throws a fan straight down, seen from the flame core's live centre so the fan breathes with it
-  const core = /** @type {SVGGraphicsElement} */ ($('fCore')).getBBox(), flameY = style.flame[1] + (core.y + core.height / 2 - FLAME_BASE) * size * style.flame[2];
+  // throws a fan straight down, seen from the flame core's middle (18 up its 40), in the lantern's own units, so the fan
+  // breathes with it
+  const flameY = style.flame[1] - 18 * size * style.flame[2];
   const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
     ringC: style.stands ? [gx, gy] : rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
@@ -489,10 +559,15 @@ function drawLight(dt, s, { size, flick, pulse }) {
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
-    flame: [...style.flame.slice(0, 2), ...flameTip(s, size)],
+    flame: [...base, ...tip],
+    // a bare flame, drawn by the shader (background.js drawBareFlame): its scale, the time, and stepFlame's turbulence,
+    // tearing and blue root, its opacity, and its colours (halo, tongues out to in, the blue)
+    fire: !style.paper && !AMBIENT ? { scale: size * style.flame[2], t: s % 3600, // ponytail: the noise jumps once an hour as the time wraps
+      spine, turb, tear, blue, alpha: pulse,
+      cols: ['halo', 'outer', 'mid', 'core', 'base'].map(pal) } : null,
     rim: style.shadeFromHolder && !remote ? [style.flame[0], style.holder[1], style.holder[0]] : [0, 0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
-    bandO: rot(340 + farSlide / 2 + (core.x + core.width / 2 - 340) * size * style.flame[2], flameY),
+    bandO: rot(style.flame[0] + farSlide / 2, flameY),
     // the Moroccan's far wall (background.js drawFarWall), slid by the twist (farSlide), its brass lifted five sixths of
     // the way to the flame's colour at five sixths the brightness, and toward the flame's core as it burns brighter: the
     // room behind it brightens with the flame too, and a wall that didn't would fade into it at full flame
