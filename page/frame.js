@@ -601,9 +601,11 @@ function mothTarget(k, m, dt, s) {
     m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
   }
   if (m.leaving) {
-    const ang = Math.atan2(m.y - CY, m.x - CX);
-    tx = CX + Math.cos(ang) * 600; ty = CY + Math.sin(ang) * 600; ease = 1.3;
-    if (Math.hypot(m.x - CX, m.y - CY) > 420) { dropMoth(k, m); return null; }
+    // it flies straight out from the lantern to past the window's far corner, and goes only once its wings are clear of every edge
+    const ang = Math.atan2(m.y - CY, m.x - CX), [bx, by, bw, bh] = VIEW.box || [40, 20, 600, 600], far = Math.hypot(bw, bh) / 2 + 100;
+    tx = CX + Math.cos(ang) * far; ty = CY + Math.sin(ang) * far; ease = 1.3;
+    const pad = WING_REACH * m.size;
+    if ((m.x < bx - pad || m.x > bx + bw + pad || m.y < by - pad || m.y > by + bh + pad) && !m.flies?.size) { dropMoth(k, m); return null; } // its fireflies drift off first
   } else if (parent) {
     // subagents circle their own session's moth
     m.a += m.speed * dt;
@@ -659,6 +661,9 @@ function mothTarget(k, m, dt, s) {
   }
   return { tx, ty, ease, flap, needsMe };
 }
+
+// How far a wing tip can reach from the moth's position, per unit of size, with the perspective (see wing3d)
+const WING_REACH = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))));
 
 function dropMoth(k, m) {
   m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove();
