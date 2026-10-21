@@ -81,6 +81,18 @@ npm install && npm run check && npm test
 
 When you change what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps to match. Read the diff before you commit it. If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
 
+### Fixing a session-state bug
+
+A session's state is decided in one place. Handlers and seeding only record facts (the turn, its background tasks and agents), `derive()` in `app/Server.swift` works out the state from them, and `check()` settles events that don't say what the session is doing by looking at Claude Code's status file, the live agents and tasks, and the transcript. So a state bug gets fixed there, with a test:
+
+1. Capture the real case as a fixture under `test/fixtures/`: the transcript lines, status files and hook payloads that produced it. Sanitize them and redact free text.
+2. Write a test that replays the fixture and fails on the current code.
+3. Fix it by recording a new fact or by changing `derive()` or `check()`. Never set `state` in a handler. `test/state-writes.test.js` fails if you do.
+4. Mutation-check the test: break the line the fix guards, confirm the test fails, then put it back.
+5. Get an independent audit before you merge.
+
+The zombie and jwt tests in `test/server.test.js` (fixtures in `test/fixtures/zombie` and `test/fixtures/jwt`) are the model.
+
 ### Snapshots
 
 ```bash

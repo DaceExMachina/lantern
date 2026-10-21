@@ -506,6 +506,7 @@ final class LanternServer {
     /// when it handed over to background work; blocked on me; or idle at the prompt). A turn that handed over is paused
     /// (working) while a task is fresh or an agent was heard from lately, and otherwise rests as idle, open but quiet.
     /// Runs after every event and on the sweep; says if what the page shows changed.
+    /// The only place `state` is set; fix state bugs here or in check() with a fixture test (CONTRIBUTING.md, "Fixing a session-state bug").
     @discardableResult func derive(_ s: inout JSON, _ id: String) -> Bool {
         let before = (str(s["state"]), str(s["note"]))
         s["resting"] = nil
