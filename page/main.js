@@ -117,22 +117,10 @@ window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 10
 const SAVER = Q.has('screensaver');
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
-// Redraw the open card, but not under the pointer (links, a scroll), a finger (a swipe through its body) or keyboard focus.
-// Except when its session's state or snooze changes, say from its own pill: then always, so the pill says what it'll do
-// next (a same-session redraw keeps the scroll).
-let touching = false, drawnAs = '';
-setInterval(() => {
-  if (!hovered) return;
-  const s = hovered.session, as = s ? `${s.id} ${s.state} ${!!s.snoozed} ${!!s.forGood}` : '';
-  if (as !== drawnAs || !touching && !$('card').matches(':hover, :has(:focus-visible)')) { drawnAs = as; renderCard(); }
-}, 500);
-// and the sidebar, under the pointer too, so pins, toggles and state changes show at once (its scroller keeps its scroll
-// through a redraw). Except mid-press, since a redraw between press and release swallows the click (WebKit), and while
-// a control in it has keyboard focus. It shows or goes as the window crosses PIN_MIN.
-setInterval(() => { if (!$('dock').matches(':active, :has(:focus-visible)')) renderSidebar(); }, 500);
+// Redraw the open card and the sidebar twice a second. They're patched in place (card.js morph), so hover, focus, scroll
+// and a press mid-click all survive the redraw. The sidebar shows or goes as the window crosses PIN_MIN.
+setInterval(() => { if (hovered) renderCard(); renderSidebar(); }, 500);
 addEventListener('resize', renderSidebar);
-$('card').addEventListener('touchstart', () => { touching = true; }, { passive: true });
-for (const type of ['touchend', 'touchcancel']) $('card').addEventListener(type, () => { touching = false; });
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
 // A session's card opens it from its header (card.js), or from a click on its body where the card covers its own moth (a
 // tall card in the iTerm panel). The other cards (a stale PR, a ghost) open from anywhere on them.

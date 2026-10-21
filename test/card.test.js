@@ -1,6 +1,7 @@
 // The moth's hover card (page/card.js): the PR header that sums the PRs up and names a hovered chip, the list capped at
 // the worst few, the per-session toggle from the server's settings, and the agent rows (job, time, model, a tag chip
-// only for a tagged step). Run in a vm context with a stub DOM holding only what the card builds.
+// only for a tagged step). Run in a vm context with a stub DOM holding only what the card builds. The stub can't patch
+// nodes, so morph swaps them in; test/morph.test.js checks the real patching in WebKit.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -25,14 +26,16 @@ const all = n => typeof n === 'string' ? [] : [n, ...n.children.flatMap(all)];
 const find = (n, cls) => all(n).filter(c => c.className.split(' ').includes(cls));
 
 function load() {
-  const card = node('div'), dock = node('aside'), body = node('body'), posts = [];
+  const card = node('div'), dock = node('aside'), body = node('body'), tip = node('div'), posts = [];
+  tip.className = 'badgeTip';
   dock.append(node('div')); // its scroller, from index.html
   body.matches = sel => sel.split(', ').some(c => body.className.split(' ').includes(c.slice(1))); // the .panel, .screensaver and .ambient modes
-  const page = vm.createContext({ document: { createElement: node, body }, innerWidth: 1440, $: id => id === 'dock' ? dock : card, clearTimeout() {}, hideTimer: 0, hovered: null, moths: new Map(), sessions: [], FLY: { ready: 'g', failing: 'r', changes: 'o', draft: 'y', quiet: 'b' },
+  const page = vm.createContext({ document: { createElement: node, body }, innerWidth: 1440, $: id => ({ dock, prTip: tip })[id] ?? card, clearTimeout() {}, hideTimer: 0, hovered: null, moths: new Map(), sessions: [], FLY: { ready: 'g', failing: 'r', changes: 'o', draft: 'y', quiet: 'b' },
     post: (url, body) => posts.push([url, body]) });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
+  vm.runInContext('morph = (el, kids) => el.replaceChildren(...kids)', page);
   const show = s => { page.hovered = { session: s }; vm.runInContext('renderCard()', page); return card; };
-  return { page, card, dock, body, posts, show, run: code => vm.runInContext(code, page) };
+  return { page, card, dock, body, tip, posts, show, run: code => vm.runInContext(code, page) };
 }
 const now = Date.now();
 const pr = (n, need) => ({ url: `https://github.com/o/r/pull/${n}`, label: `#${n}`, need, title: `PR ${n} title` });
@@ -46,30 +49,30 @@ test('the PR header sums them up, and a hovered chip puts its title there until 
   const chips = find(card, 'chips')[0].children;
   assert.strictEqual(chips.length, 11, 'more than three PRs start as chips');
   assert.deepStrictEqual(chips.slice(0, 3).map(text), ['#2', '#4', '#5'], 'worst first: ready, then in review, then drafts');
+  const header = () => text(find(card, 'ph')[0]);
   chips[1].onpointerenter();
-  assert.strictEqual(text(ph), 'PR 4 title');
-  chips[1].onpointerleave();
-  assert.strictEqual(text(ph), 'PRs · 1 ready · 2 in review · 8 drafts');
+  assert.strictEqual(header(), 'PR 4 title');
+  assert.strictEqual(header(), text(find(show(session({ github: TEN })), 'ph')[0]), 'and keeps it through a redraw');
+  find(card, 'chips')[0].children[1].onpointerleave();
+  assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
 });
 
 test('an open list shows the worst four, failing and changes requested first, then the rest as links', () => {
-  const { show, run } = load(), prs = [pr(1, 'draft'), pr(2, 'waiting'), pr(3, 'changes'), pr(4, 'ready'), pr(5, 'failing'), pr(6, 'draft')];
+  const { show, run, tip } = load(), prs = [pr(1, 'draft'), pr(2, 'waiting'), pr(3, 'changes'), pr(4, 'ready'), pr(5, 'failing'), pr(6, 'draft')];
   run('prList.s1 = true');
   const card = show(session({ github: prs }));
   assert.deepStrictEqual(find(card, 'pr2').map(a => a.href), [5, 3, 4, 2].map(n => pr(n).url));
   const [more] = find(card, 'more');
   assert.strictEqual(text(more), '2 more: #1#6', 'the commas are drawn after each link (CSS), so the links touch');
-  const [tip] = find(card, 'badgeTip'), overflow = more.children.filter(c => c.tag === 'a');
-  assert.strictEqual(tip.attrs.role, 'tooltip');
+  const overflow = more.children.filter(c => c.tag === 'a'), on = { currentTarget: overflow[1] };
   assert.strictEqual(overflow[1].title, undefined, 'no native title over the tip');
-  // near the window's right edge: the tip keeps 8px inside it, placed in the card's frame (the card is at 1100, 200)
-  card.rect = { left: 1100, top: 200 };
+  // near the window's right edge: the tip keeps 8px inside it
   overflow[1].rect = { left: 1400, right: 1420, top: 300, bottom: 315, width: 20 };
-  overflow[1].onfocus();
-  assert.deepStrictEqual([tip.style.left, tip.style.top], [`${1440 - 240 - 8 - 1100 - 1}px`, `${300 - 40 - 8 - 200 - 1}px`], 'keyboard focus shows it, clamped');
+  overflow[1].onfocus(on);
+  assert.deepStrictEqual([tip.style.left, tip.style.top], [`${1440 - 240 - 8}px`, `${300 - 40 - 8}px`], 'keyboard focus shows it, clamped');
   overflow[1].onblur();
   assert.strictEqual(tip.className, 'badgeTip', 'blur hides it');
-  overflow[1].onpointerenter();
+  overflow[1].onpointerenter(on);
   assert.deepStrictEqual([text(tip), tip.className], ['PR 6 title', 'badgeTip show'], 'hovering one past the cap shows its title in the badges\' tooltip');
   overflow[1].onpointerleave();
   assert.strictEqual(tip.className, 'badgeTip', 'and leaving hides it');
@@ -162,13 +165,10 @@ test('a background task that is one of the agents is listed once, as the agent',
   assert.deepStrictEqual(find(card, 'job').map(text), ['Build the card', 'preview server']);
 });
 
-test('the header stays outside the scrolling body, which keeps its scroll through a redraw but not into another session', () => {
+test('the header stays outside the scrolling body, which is keyed by its session', () => {
   const { show } = load();
   const card = show(session({ github: TEN }));
-  assert.deepStrictEqual(card.children.map(c => [c.tag, c.className]), [['h3', ''], ['div', 'cardBody']]);
-  card.children[1].scrollTop = 120;
-  assert.strictEqual(show(session({ github: TEN })).children[1].scrollTop, 120, 'the same session redrawn');
-  assert.strictEqual(show(session({ id: 's2', github: TEN })).children[1].scrollTop, 0, 'another session\'s card starts at the top');
+  assert.deepStrictEqual(card.children.map(c => [c.tag, c.className, c.dataset.key]), [['h3', '', undefined], ['div', 'cardBody', 's1']]);
 });
 
 test('an agent with no start time sorts after the timed ones, by id, and stays put', () => {
@@ -215,19 +215,20 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
 });
 
 test('no PR link shows a native "#n" title; a list row shows its title in the tip only when it is cut short', () => {
-  const { show, run } = load();
+  const { show, run, tip } = load();
   const titles = card => all(card).filter(n => n.tag === 'a').map(a => a.title);
   assert.deepStrictEqual(titles(show(session({ github: TEN }))).filter(Boolean), [], 'chips');
   run('prList.s1 = true');
   const card = show(session({ github: TEN }));
   assert.deepStrictEqual(titles(card).filter(Boolean), [], 'list rows and overflow links');
-  const [tip] = find(card, 'badgeTip'), [row] = find(card, 'pr2'), [ti] = find(row, 'ti');
-  card.rect = { left: 0, top: 0 }; row.rect = { left: 10, right: 200, top: 300, bottom: 330, width: 190 };
+  const [row] = find(card, 'pr2'), [ti] = find(row, 'ti'), on = { currentTarget: row };
+  row.rect = { left: 10, right: 200, top: 300, bottom: 330, width: 190 };
+  row.querySelector = () => ti;
   ti.scrollWidth = 150; ti.clientWidth = 190;
-  row.onpointerenter();
+  row.onpointerenter(on);
   assert.strictEqual(tip.className, 'badgeTip', 'it fits: no tip');
   ti.scrollWidth = 400;
-  row.onpointerenter();
+  row.onpointerenter(on);
   assert.deepStrictEqual([text(tip), tip.className], [text(ti), 'badgeTip show'], 'cut short: its full title');
   row.onpointerleave();
   assert.strictEqual(tip.className, 'badgeTip');

@@ -4,7 +4,8 @@
 // firefly, wisp and ghost. The harness calls __drive() until it returns 'done'; each other answer names a snapshot to take.
 // The page's query picks the scene: style=<lantern>, ambient for the second screen's view, hover to snap a hover card,
 // chrome to snap the menu, stats, recap, a card and the dev panel instead of the later scene (with /stats from statsLog),
-// pinned to dock sess-alpha and sess-bravo in the sidebar and check the scene refitted beside it.
+// pinned to dock sess-alpha and sess-bravo in the sidebar and check the scene refitted beside it. morph runs
+// test/morph.test.js's checks instead of taking pictures: its steps answer with the mouse events to send (test/morph/main.swift).
 (() => {
   let seed = 0x5eed;
   Math.random = () => { // mulberry32
@@ -152,6 +153,56 @@
         if (document.elementFromPoint(x, y)?.closest('.pin') !== pin) errs.push(`the pin's hit area misses its header's ${where}`);
     }
   };
+  // A big card (6 agents, 10 PRs) redrawn the way the 500ms tick does (main.js), checked to keep what the browser holds.
+  const morph = () => {
+    const now = Date.now(), q = sel => $('card').querySelector(sel), fail = msg => errs.push(msg); // $ isn't defined yet
+    const big = { id: 'sess-big', cwd: '/Users/x/projects/big', title: 'sess-big', state: 'working', activity: 'Editing', started: now - 50 * MIN, last: now,
+      subagents: Array.from({ length: 6 }, (_, i) => ({ id: `b${i}`, type: 'Explore', description: `Agent ${i}`, activity: `Step ${i}`, started: now - (9 - i) * MIN, last: now })),
+      github: Array.from({ length: 10 }, (_, i) => pr(200 + i, needs[i % 5])) };
+    const mid = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; };
+    let row, body, tog, open;
+    return [
+      () => { emit('message', [...sessionsAt(0), big]); }, run(0.1),
+      () => { enterZone(moths.get('sess-big').zone); }, run(0.1),
+      () => { // keyboard focus on an agent row, through three redraws
+        row = $('card').querySelectorAll('.agent')[2]; row.focus();
+        if (document.activeElement !== row) return fail('the agent row didn\'t take focus');
+        for (let i = 0; i < 3; i++) renderCard();
+        if (document.activeElement !== row || !row.isConnected) fail(`focus lost in a redraw: ${document.activeElement?.className}`);
+        row.blur();
+      },
+      () => { // scrolled down the body
+        body = q('.cardBody');
+        if (body.scrollHeight <= body.clientHeight) return fail('the card doesn\'t scroll, so the check would prove nothing');
+        body.scrollTop = 40; renderCard();
+        if (q('.cardBody').scrollTop !== 40) fail(`scroll lost in a redraw: ${q('.cardBody').scrollTop}`);
+        body.scrollTop = 0;
+      },
+      () => { // the pointer on an agent row: WebKit won't apply :hover in a window that isn't key, and this one never is, so
+        // check what hover hangs on, that the element under the pointer is still the same one after a redraw
+        const [x, y] = mid($('card').querySelectorAll('.agent')[1]), under = document.elementFromPoint(x, y);
+        if (!under?.closest('.agent')) return fail(`no agent row under its own middle: ${under?.className}`);
+        renderCard();
+        if (document.elementFromPoint(x, y) !== under || !under.isConnected) fail('a redraw swapped the element under the pointer, which loses its hover');
+      },
+      () => { tog = q('.tog'); tog.scrollIntoView({ block: 'nearest' }); open = !!prList['sess-big']; return `down ${mid(tog).join(' ')}`; },
+      () => { renderCard(); return `up ${mid(tog).join(' ')}`; }, // the tick lands between press and release
+      () => { if (!!prList['sess-big'] === open) fail('a press on the PR toggle across a redraw didn\'t toggle'); },
+      () => { // the PRs are listed now: an overflow link's tip, after a redraw, sits beside the link on screen
+        renderCard();
+        const ov = q('.ov'), tip = $('prTip');
+        ov.scrollIntoView({ block: 'nearest' }); ov.focus();
+        const a = ov.getBoundingClientRect(), t = tip.getBoundingClientRect();
+        if (!tip.matches('.show') || Math.abs(t.bottom + 8 - a.top) > 1 && Math.abs(t.top - 8 - a.bottom) > 1) fail(`the tip is at ${t.top}-${t.bottom}, its link at ${a.top}-${a.bottom}`);
+        ov.blur();
+      },
+      () => { // another session's card, after this one closes, starts at the top
+        body = q('.cardBody'); body.scrollTop = 40;
+        hideCard(); enterZone(moths.get('sess-alpha').zone);
+        if (q('.cardBody').scrollTop !== 0) fail(`sess-alpha's card opened scrolled to ${q('.cardBody').scrollTop}`);
+      },
+    ];
+  };
   const steps = [
     () => {
       catchScorch();
@@ -167,7 +218,8 @@
     ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), hits, () => { hideCard(); },
       // a stale PR's card and a ghost's, with their pills
       () => { enterZone([...wisps.values()][0].zone); }, snap('stale'), () => { hideCard(); enterZone([...ghosts.values()][0].zone); }, snap('ghost'), () => { hideCard(); }] : []),
-    ...(Q.has('chrome') || Q.has('pinned') ? [] : [
+    ...(Q.has('morph') ? morph() : []),
+    ...(Q.has('chrome') || Q.has('pinned') || Q.has('morph') ? [] : [
       () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
       run(14), snap('t20'), // T = LAST
     ]),
