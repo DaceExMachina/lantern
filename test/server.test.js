@@ -495,6 +495,27 @@ test('a transcript ending on lines that aren\'t a turn seeds from the last turn:
     Object.fromEntries(kinds.map(([kind]) => [kind, ['waiting', 'working']])));
 });
 
+// The Claude app's transcripts never get a turn_duration marker, so only their own lines say how a turn ended. Real tails
+// from Dace's desktop sessions (test/fixtures/desktop-turns.jsonl, text redacted): a finished turn ends on end_turn and
+// stop_hook_summary; an Esc interrupt ends on a list-shaped "[Request interrupted by
+// user]" line with no Stop after it, so it's back at the prompt with nothing asked (idle); a side-session event is a
+// string-shaped <system-reminder> with no origin, which isn't a prompt; and a typed prompt (origin.kind human) is a turn
+// starting, even one whose text starts with a <system-reminder> (306 of them in one of Dace's transcripts; the last case is
+// a finished turn, then the typed prompt reshaped that way). Seeded with no process, the transcript is all there is.
+test('desktop transcripts seed from their own turn ends: finished waits, an interrupt idles, a side-session event isn\'t a prompt', async t => {
+  const cases = {}; let name;
+  for (const line of fs.readFileSync(path.join(__dirname, 'fixtures/desktop-turns.jsonl'), 'utf8').trim().split('\n')) {
+    const j = JSON.parse(line);
+    if (j.__case) cases[name = j.__case] = []; else cases[name].push(line);
+  }
+  const names = Object.keys(cases), file = i => `.claude/projects/-Users-user/${UUID(i)}.jsonl`;
+  const base = await serve(t, Object.fromEntries(names.map((n, i) => [file(i), cases[n].join('\n') + '\n'])));
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === names.length && s; }, 'every transcript to be seeded');
+  assert.deepStrictEqual(Object.fromEntries(names.map((n, i) => [n, sessions.find(s => s.id === UUID(i)).state])),
+    { finished: 'waiting', interrupted: 'idle', 'interrupted-tool-use': 'idle', 'finished-then-side-session': 'waiting', 'typed-prompt': 'working',
+      'typed-prompt-starting-with-a-reminder': 'working' }); // origin.kind human says it's a prompt, whatever its text starts with
+});
+
 // The transcript only stands in when no hook has said: a session the hooks already know keeps its state when adoption
 // finds its process and reads a transcript that says otherwise (here one that hasn't caught up with the Stop yet).
 test('adoption never overrides the state a hook gave a session with what its transcript says', async t => {

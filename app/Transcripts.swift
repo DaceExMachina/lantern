@@ -166,15 +166,18 @@ func readTitle(_ dir: String, _ current: Any?) -> Any? {
     return (last("customTitle") ?? last("aiTitle")).flatMap { parse(Data($0.utf8)) } ?? current
 }
 
-struct Turn { var done = false, compacted = false, text: String?, cwd: Any? }
-// User lines that don't start a turn: local slash commands (/rename, /clear) and their output, `!` shell lines, and a
-// background task's "finished" notice, which only starts a turn once Claude picks it up.
-let NOT_A_PROMPT = Re("^\\s*<(command-name|local-command-|bash-|task-notification)")
-// How the last turn ended: a finished turn (end_turn, then a turn_duration marker) means it's waiting for me. The
-// transcript is only read when no hook has said (seeding, adopting, subagents), and only the lines that mark a turn count:
-// a prompt, a tool's result, an assistant message, the turn_duration marker and a compaction. Everything else Claude Code
-// writes (attachments, titles, local commands, meta reminders, hook summaries, kinds it adds later) is skipped, so a
-// session renamed after its turn still reads as waiting.
+/// `idle`: it ended with nothing asked (a compaction, or an interrupt), so it's at the prompt rather than waiting on me.
+struct Turn { var done = false, idle = false, text: String?, cwd: Any? }
+// User lines without an origin that don't start a turn: local slash commands (/rename, /clear) and their output, `!` shell
+// lines, a background task's "finished" notice (which only starts a turn once Claude picks it up), and the Claude app's
+// side-session events. Lines with an origin say what they are: only `human` is a prompt.
+let NOT_A_PROMPT = Re("^\\s*<(command-name|local-command-|bash-|task-notification|system-reminder)")
+// How the last turn ended: a finished turn (end_turn, then in a terminal a turn_duration marker) means it's waiting for
+// me. The transcript is only read when no hook has said (seeding, adopting, subagents), and terminal and desktop sessions
+// read the same way: the Claude app never writes turn_duration, and needn't, since end_turn is there either way (and the
+// stop_hook_summary both write follows an end_turn every time). Only the lines that mark a turn count: a prompt, a tool's
+// result, an assistant message, the turn_duration marker, an interrupt and a compaction. Everything else Claude Code writes (attachments, titles, local commands, meta reminders, kinds it adds
+// later) is skipped, so a session renamed after its turn still reads as waiting.
 func lastTurn(_ lines: [String]) -> Turn {
     var ended = false // a turn_duration marker comes after the final message, so keep looking back for its text
     var answered = false // the last line is a tool's result: done only if that tool was a subagent's hand-back
@@ -182,9 +185,13 @@ func lastTurn(_ lines: [String]) -> Turn {
         guard let j = parse(Data(line.utf8)) as? JSON else { continue }
         let type = str(j["type"]), subtype = str(j["subtype"]), content = (j["message"] as? JSON)?["content"]
         let compact = truthy(j["isCompactSummary"]) || subtype == "compact_boundary"
-        guard type == "assistant" || type == "user" && !truthy(j["isMeta"]) && !NOT_A_PROMPT.test((content as? String) ?? "")
+        let origin = (j["origin"] as? JSON)?["kind"] as? String
+        // Esc: no Stop and no end marker follow, just this line ("[Request interrupted by user]", or "... for tool use")
+        let interrupt = type == "user" && (content as? [JSON] ?? []).contains { str($0["text"]).hasPrefix("[Request interrupted by user") }
+        guard type == "assistant" || type == "user" && !truthy(j["isMeta"]) && (origin.map { $0 == "human" } ?? !NOT_A_PROMPT.test((content as? String) ?? ""))
               || subtype == "turn_duration" || compact else { continue }
         if subtype == "turn_duration" { ended = true; continue }
+        if interrupt && !ended { return Turn(done: true, idle: true, cwd: j["cwd"]) }
         if type == "assistant" {
             let msg = j["message"] as? JSON
             let text = ((msg?["content"] as? [JSON]) ?? []).filter { str($0["type"]) == "text" }.map { str($0["text"]) }.joined(separator: "\n")
@@ -195,7 +202,7 @@ func lastTurn(_ lines: [String]) -> Turn {
             return Turn(done: ended || str(msg?["stop_reason"]) == "end_turn", text: text, cwd: j["cwd"])
         }
         if ended { return Turn(done: true, cwd: j["cwd"]) }
-        if compact { return Turn(done: true, compacted: true, cwd: j["cwd"]) } // stopped right after a compact
+        if compact { return Turn(done: true, idle: true, cwd: j["cwd"]) } // stopped right after a compact
         if !answered, (content as? [JSON] ?? []).contains(where: { str($0["type"]) == "tool_result" }) { answered = true; continue }
         return Turn(done: false, cwd: j["cwd"]) // a prompt, or a second tool result: mid-turn
     }
@@ -330,9 +337,9 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
     let lines = tail(file)
     var turn = lastTurn(lines)
-    if let busy { turn.done = !busy; turn.compacted = turn.compacted && !busy }
-    var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "turn": turn.compacted ? "idle" : turn.done ? "ended" : "running",
-                   "note": turn.done && !turn.compacted ? "Finished its turn, waiting for you" : "",
+    if let busy { turn.done = !busy; turn.idle = turn.idle && !busy }
+    var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "turn": turn.idle ? "idle" : turn.done ? "ended" : "running",
+                   "note": turn.done && !turn.idle ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
                    "unconfirmed": !live]
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
