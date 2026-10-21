@@ -119,12 +119,35 @@
   .D .chips i { width: 6px; height: 6px; border-radius: 50%; }
   .D .foot { margin-top: 6px; }
   .D .arow .ell { flex: 1; }
+
+  /* E: D's two zones and chips, B's two-line rows behind a toggle, and roomier agent rows */
+  .E .phead { display: flex; gap: 6px; align-items: baseline; margin-top: 8px; font-size: 11px; color: #8F7FA6; }
+  .E .tray .arow + .phead, .E .tray .astep + .phead, .E .tray .ameta + .phead { margin-top: 10px; }
+  .E .ph { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .E .ph b { font-weight: normal; letter-spacing: .04em; text-transform: uppercase; }
+  .E .ph.title { color: #F5E9FF; font-size: 11.5px; }
+  .E .tog { all: unset; cursor: pointer; flex: none; color: #C3B2FF; font-size: 11px; padding: 0 2px; }
+  .E .tog:hover { color: #F0E8FF; }
+  .E .tog:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; border-radius: 3px; }
+  .E .tray > .pr2:first-of-type { margin-top: 4px; }
+  .E a.pr2 { display: block; border: none; color: inherit; margin: 2px -6px 0; padding: 3px 6px; border-radius: 6px; }
+  .E a.pr2:hover { background: rgba(195, 178, 255, .1); }
+  .E a.pr2 .ti { color: #E8DCF2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .E a.pr2 .me { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #8F7FA6; }
+  .E a.pr2 .me i { width: 6px; height: 6px; border-radius: 50%; }
+  .E a.pr2 .me b { color: #C3B2FF; font-weight: normal; }
+  .E .arow { margin-top: 6px; }
+  .E .arow .job { flex: 1; color: #E8DCF2; }
+  /* the step may take two lines before it's cut */
+  .E .astep { color: #B8C6E6; font-size: 11.5px; padding-left: 12px; margin-top: 1px !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .E .ameta { padding-left: 12px; font-size: 10px; color: #6F6188; margin-top: 1px !important; }
+  .E .ameta b { font-weight: normal; color: #9D8FB5; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Moth hover card: four directions</h1>
-  <p class="lede">Each row is one real session (from <code>/events</code>, lightly adjusted to hit each case), drawn by today's card and by four new directions. The number beside each label is the card's height in px; green is shorter than today, orange taller. Every card is live: hover the PR rows and strips.</p>
+  <h1>Moth hover card: five directions</h1>
+  <p class="lede">Each row is one real session (from <code>/events</code>, lightly adjusted to hit each case), drawn by today's card and by five new directions. The number beside each label is the card's height in px; green is shorter than today, orange taller. Every card is live: hover the PR rows, strips and chips, and use E's ▸ list / ▾ chips toggle. E's label also gives its height with the PRs the other way.</p>
   <div class="pitches">
     <div class="pitch"><b>A. Tidy.</b> Today's layout with the clutter taken out. The redundant status line goes, the message becomes a quoted block, agents get their own tinted tray with a live step line, and each PR is one row with a coloured status chip on the right; the whole row is the link.
       <ul><li>Smallest change from today; shorter in every case.</li><li>Ten PRs is still ten lines.</li></ul></div>
@@ -134,12 +157,16 @@
       <ul><li>The 10-PR card shrinks the most.</li><li>A hover-to-reveal step for the titles.</li></ul></div>
     <div class="pitch"><b>D. Two zones.</b> The top is what it wants from you (state, question, message). A dark tray below holds the work: agents one line each (tag, live step, time), then PRs as small chips coloured by state, titles on hover.
       <ul><li>Most glanceable, and the agents are clearly their own thing.</li><li>PR titles only appear on hover.</li></ul></div>
+    <div class="pitch"><b>E. Combined (Dace's pick).</b> D's two zones and question box. PRs collapse to D's chips under a summary header; hovering a chip puts its title in the header. The toggle (▸ list / ▾ chips) opens B's two-line rows, and it's remembered per session. Agents get more room: job, tag and time on one line, the step on up to two more, then the model (from the agent's transcript) and its type, small and dim.
+      <ul><li>Titles without memorising numbers, and room to read the step.</li><li>Tallest of the new ones with agents; an open 10-PR list is long.</li></ul></div>
   </div>
   <div id="cases"></div>
   <h2>Notes</h2>
   <div class="pitches">
     <div class="pitch"><b>What agents can tell us.</b> Each agent sends its <i>description</i> (the dispatch line), its <i>type</i> (<code>opus-implement</code>, so the model comes for free), its latest <i>activity</i> (the last tool call's description, which already carries the task tag, like "[shader-flame] Fix halo line"), and <i>last</i> (when we last heard from it). The new directions pull the tag out as a chip and show the step without it. <b>Elapsed time isn't stored yet</b>: the server would need to record <code>started</code> on an agent's first event (one line in Server.swift). The times here show what that would look like.</div>
     <div class="pitch"><b>Duplicates in today's card.</b> Background agents show twice: once under "Running:" (from <code>tasks</code>) and again under "Agents". The new directions list only the tasks that aren't an agent (like "[brass-depth] Restart the preview server"). The status line repeats the pill for "Finished its turn…" and "Waiting on N background tasks", and "Sleeping until you wake it" and "Snoozed until…" repeat a sleeping or snoozed pill, so those drop. Lines that add something ("Asks: …", "Wants permission to use Bash", an API error) stay.</div>
+    <div class="pitch"><b>Model, job and type in E, without the naming convention.</b> The <i>model</i> comes from the agent's own transcript (<code>subagents/agent-&lt;id&gt;.jsonl</code>): every assistant line carries <code>message.model</code>. Checked on Dace's real transcripts, including general-purpose and Explore agents (<code>claude-sonnet-5</code>, <code>claude-opus-4-8</code>, <code>claude-haiku-4-5-20251001</code>). The first one sits around line 16 to 19, about 300 KB in, because the opening lines carry the big prompt attachments, so it's one read of the file's head per agent, once, cached alongside the description <code>loadAgentMeta</code> already reads. That file's first line also has a <code>timestamp</code>, which gives a real start time for the elapsed column, even for agents found after a restart. The <i>job</i> is the launch description from <code>agent-&lt;id&gt;.meta.json</code>, and the <i>type</i> is shown as is. The values in case 1 are the real ones.</div>
+    <div class="pitch"><b>E's toggle state.</b> Here it's a per-session flag in the page (defaulting to the list for three PRs or fewer, chips above that). The real one would live in Lantern's server settings, keyed by session, so the app, the iTerm panel and every preview agree. The toggle stops the click from reaching the card, which otherwise opens the session.</div>
     <div class="pitch"><b>Status vs. message.</b> Today both render as violet, weight 500, the same size. In the new directions the state line is small and dim with a glyph, the question sits in a violet-tinted box, and the "You:" message is a quote in the card's bright ink with a violet rule on its left.</div>
   </div>
 </main>
@@ -152,7 +179,7 @@ const ORDER = ['failing', 'changes', 'ready', 'waiting', 'draft', 'merged', 'clo
 const col = n => FLY[n] || FLY.quiet;
 const now = Date.now(), min = 60e3;
 const ago = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
-const short = ms => ms < 60e3 ? `${Math.round(ms / 1e3)}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : `${Math.floor(ms / 3600e3)}h`;
+const short = ms => ms < 60e3 ? `${Math.round(ms / 1e3)}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const project = s => s.cwd.split('/').filter(Boolean).pop();
 const gh = (repo, n) => `https://github.com/${repo}/pull/${n}`;
@@ -163,15 +190,15 @@ const CASES = [
     title: 'lantern', cwd: '/Users/dace/projects/lantern', state: 'working', started: now - 192 * min, last: now - 4e3,
     activity: 'Starting agent: Lantern: moth hover card redesign mockups',
     prompt: 'Also It would be neat if we could redesign our hover cards for the moths. make them more digestable at a glance. Could we make the agents section a bit more separate and distinct?',
-    tasks: ['Lantern: shader flame with physics', 'Lantern state plan: PRs 1,2,3,5,7', 'Lantern: moth hover card redesign mockups', '[brass-depth] Restart the preview server'],
+    tasks: ['Lantern: shader flame with physics', 'Lantern state plan: PRs 1,2,3,5,7', '[brass-depth] Restart the preview server'],
     github: [
       { url: gh('DaceExMachina/lantern', 131), label: '#131', need: 'waiting', title: "Sit the Moroccan's flame and burner cup at the lantern's middle depth" },
       { url: gh('DaceExMachina/lantern', 132), label: '#132', need: 'failing', title: "Cap the Moroccan's twist (TWIST_MAX), with temporary dev sliders" },
     ],
     subagents: [
-      { type: 'opus-implement', description: 'Lantern: shader flame with physics', activity: '[shader-flame] Fix halo line and rename flame program', started: now - 41 * min, last: now - 2e3 },
-      { type: 'opus-implement', description: 'Lantern state plan: PRs 1,2,3,5,7', activity: '[state-plan] Review diff, run check and full tests', started: now - 18 * min, last: now - 16e3 },
-      { type: 'opus-implement', description: 'Lantern: moth hover card redesign mockups', activity: '[card-mockups] Snapshot live sessions from events stream', started: now - 3 * min, last: now - 1e3 },
+      { type: 'opus-implement', description: 'Lantern: shader flame with physics', activity: '[shader-flame] Fix halo line and rename flame program', started: now - 41 * min, last: now - 2e3, model: 'claude-opus-5-5' },
+      { type: 'opus-implement', description: 'Lantern state plan: PRs 1,2,3,5,7', activity: '[state-plan] Review diff, run check and full tests', started: now - 18 * min, last: now - 16e3, model: 'claude-opus-5-5' },
+      { type: 'sonnet-implement', description: '[state-fixtures] Extract real transcript shapes for Lantern state fixtures', activity: '[state-fixtures] Inspect the API error example and the compaction lines around it', started: now - 7 * min, last: now - 1e3, model: 'claude-sonnet-5-5' },
     ] } },
   { label: '2. Needs you, a question, 10 PRs', s: {
     title: 'update backgrounds', cwd: '/Users/dace/momentum/api', state: 'waiting', started: now - 26 * 3600e3, last: now - 7 * min,
@@ -294,20 +321,65 @@ function D(s) {
   return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), tray].join('');
 }
 
-const DIRS = [['Today', current], ['A. Tidy', A], ['B. Two-line PRs', B], ['C. Summed-up PRs', C], ['D. Two zones', D]];
+// ---- E: D's zones, chips that name themselves in the header, B's rows behind a toggle, roomier agents ----
+// "claude-opus-5-5" → "Opus 5.5", "claude-haiku-4-5-20251001" → "Haiku 4.5", "claude-sonnet-5" → "Sonnet 5"
+const modelName = m => m ? m.replace(/^claude-/, '').replace(/-\d{8}$/, '').replace(/^(\w)(\w*)-(.*)$/, (_, a, b, v) => a.toUpperCase() + b + ' ' + v.replace(/-/g, '.')) : '';
+const prOpen = {}; // ponytail: per-session flag in the page; the real one lives in the server's settings
+const isOpen = s => prOpen[s.title] ?? s.github.length <= 3;
+function E(s) {
+  const prs = sorted(s.github), a = s.subagents.map(agent), sum = summary(prs).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().replace(/ (\d)/g, ' · $1');
+  const agents = s.subagents.map((raw, i) => { const g = a[i]; return `<div class="arow" title="${esc(raw.description)}"><span class="live${g.quiet ? ' quiet' : ''}"></span>${g.tag ? `<span class="tag">${esc(g.tag)}</span>` : ''}<span class="ell job">${esc(g.name)}</span><span class="t">${g.time}</span></div><div class="astep">${esc(g.step)}</div><div class="ameta"><b>${modelName(raw.model)}</b> · ${esc(raw.type)}</div>`; }).join('')
+    + loose(s).map(t => `<div class="arow">${'<span class="live quiet"></span>' + looseRow(t)}</div>`).join('');
+  const prBlock = prs.length ? `<div class="phead"><span class="ph" data-sum="${esc(sum)}"><b>PRs</b> · ${esc(sum)}</span><button class="tog" aria-expanded="${isOpen(s)}">${isOpen(s) ? '▾ chips' : '▸ list'}</button></div>`
+    + (isOpen(s) ? prs.map(p => `<a class="pr2" href="${p.url}" target="_blank" rel="noopener"><div class="ti">${esc(p.title)}</div><div class="me"><i style="background:${col(p.need)}"></i><b>${esc(p.label)}</b>${NEED[p.need]}</div></a>`).join('')
+      : `<div class="chips">${prs.map(p => `<a href="${p.url}" target="_blank" rel="noopener" data-title="${esc(p.title)}" style="--c:${col(p.need)}"><i style="background:${col(p.need)}"></i>${esc(p.label)}</a>`).join('')}</div>`) : '';
+  const tray = a.length || loose(s).length || prs.length ? `<div class="tray">${a.length || loose(s).length ? `<div class="head"><span>Agents</span><span class="r">${s.subagents.length}</span></div>${agents}` : ''}${prBlock}${foot(s)}</div>` : foot(s);
+  return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), tray].join('');
+}
+// a chip names itself in the header while hovered
+document.addEventListener('mouseover', e => {
+  const chip = e.target.closest('.E .chips a'); if (!chip) return;
+  const ph = chip.closest('.card').querySelector('.ph');
+  ph.textContent = chip.dataset.title; ph.classList.add('title'); ph.style.color = '';
+});
+document.addEventListener('mouseout', e => {
+  const chip = e.target.closest('.E .chips a'); if (!chip || chip.contains(e.relatedTarget)) return;
+  const ph = chip.closest('.card').querySelector('.ph');
+  ph.innerHTML = `<b>PRs</b> · ${esc(ph.dataset.sum)}`; ph.classList.remove('title');
+});
+document.addEventListener('click', e => {
+  const tog = e.target.closest('.E .tog'); if (!tog) return;
+  e.stopPropagation(); // the card's own click opens the session
+  const card = tog.closest('.card'), s = CASES[card.dataset.case].s;
+  prOpen[s.title] = !isOpen(s);
+  card.innerHTML = E(s); label(card);
+}, true); // capture, so it stops before the card sees the click
+
+const DIRS = [['Today', current, 'T'], ['A. Tidy', A, 'A'], ['B. Two-line PRs', B, 'B'], ['C. Summed-up PRs', C, 'C'], ['D. Two zones', D, 'D'], ['E. Combined', E, 'D E']];
+// a card's height beside its label, against today's; E also gives its height with the PRs the other way
+function label(card) {
+  const col = card.parentElement, tag = col.querySelector('.h'), base = +col.dataset.base, h = card.offsetHeight;
+  let txt = base ? `${h}px (${h - base >= 0 ? '+' : ''}${h - base})` : `${h}px`;
+  if (card.classList.contains('E') && card.querySelector('.tog')) {
+    const s = CASES[card.dataset.case].s; prOpen[s.title] = !isOpen(s); card.innerHTML = E(s);
+    const other = card.offsetHeight; prOpen[s.title] = !isOpen(s); card.innerHTML = E(s);
+    txt += ` · ${isOpen(s) ? 'chips' : 'list'} ${other}`;
+  }
+  tag.textContent = txt;
+  if (base) tag.className = 'h ' + (h > base ? 'more' : 'less');
+  return h;
+}
 const root = document.getElementById('cases');
 for (const c of CASES) {
   const h = document.createElement('h2'); h.textContent = c.label; root.append(h);
   const row = document.createElement('div'); row.className = 'row'; root.append(row);
-  let base;
-  for (const [name, fn] of DIRS) {
-    const col = document.createElement('div'); col.className = 'col';
-    col.innerHTML = `<div class="label"><span>${name}</span><span class="h"></span></div><div class="card ${name[0]}">${fn(c.s)}</div>`;
+  let base = 0;
+  for (const [name, fn, cls] of DIRS) {
+    const col = document.createElement('div'); col.className = 'col'; col.dataset.base = base;
+    col.innerHTML = `<div class="label"><span>${name}</span><span class="h"></span></div><div class="card ${cls}" data-case="${CASES.indexOf(c)}">${fn(c.s)}</div>`;
     row.append(col);
-    const card = col.querySelector('.card'), hgt = Math.round(card.offsetHeight), tag = col.querySelector('.h');
-    base ??= hgt;
-    tag.textContent = name === 'Today' ? `${hgt}px` : `${hgt}px (${hgt - base >= 0 ? '+' : ''}${hgt - base})`;
-    if (name !== 'Today') tag.classList.add(hgt > base ? 'more' : 'less');
+    const h = label(col.querySelector('.card'));
+    base ||= h;
   }
 }
 </script>
