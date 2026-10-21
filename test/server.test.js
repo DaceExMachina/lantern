@@ -40,11 +40,13 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
   // Port 0: the server takes whichever port is free and says which once it's listening, so no other process can take
   // it first and a slow start only takes longer.
   const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
+    LANTERN_GHBUS_URL: 'http://127.0.0.1:1/events', // nothing listens there, so it never reaches the real ghbus (see fakeGhbus)
     TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
   const child = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'ignore'] });
   t.after(() => child.kill());
   t.server = child; // for a test that stalls it (SIGSTOP)
   let out = '';
+  t.output = () => out;
   child.stdout.on('data', chunk => out += chunk);
   return until(() => out.match(/^Lantern lit at (\S+)$/m)?.[1], 'the server to start');
 }
@@ -1375,6 +1377,87 @@ test('a session\'s PRs carry when each was opened', async t => {
   await post(base, '/settings', { github: true });
   const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === 's1' && x.github?.length), 'the session\'s PR');
   assert.deepStrictEqual(s.github.map(p => [p.url, p.createdAt]), [[prUrl(1), opened]]);
+});
+// A stand-in ghbus: an event stream the server subscribes to. `send` writes an event to every open stream; `drop` ends them
+// and refuses new ones, as when ghbus stops.
+async function fakeGhbus(t) {
+  const streams = new Set();
+  let up = true;
+  const server = http.createServer((req, res) => {
+    if (!up) return req.socket.destroy();
+    res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+    res.write(': hello\n\n');
+    streams.add(res);
+    res.on('close', () => streams.delete(res));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  let id = 0;
+  return {
+    url: `http://127.0.0.1:${/** @type {import('net').AddressInfo} */ (server.address()).port}/events`,
+    send: (event, payload = {}) => { id++; for (const r of streams) r.write(`id: ${id}\ndata: ${JSON.stringify({ id, event, payload })}\n\n`); },
+    drop: () => { up = false; for (const r of streams) r.destroy(); },
+  };
+}
+// A server with GitHub on and one session owning a PR, whose stand-in gh counts its calls: one per refresh. Resolves once
+// the first refresh has landed; `settled` waits out the others startup asks for (seeding asks for one too).
+async function counted(t, extra = {}) {
+  const { gh, repo } = ghRepo([prNode(1, iso(Date.now()), 'feat')]), log = path.join(path.dirname(gh), 'calls'), counting = path.join(path.dirname(gh), 'counting');
+  fs.writeFileSync(counting, `#!/bin/sh\necho >> '${log}'\nexec '${gh}' "$@"\n`, { mode: 0o755 });
+  const base = await serve(t, {}, () => {}, { LANTERN_GH: counting, ...extra });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  await until(async () => (await snapshot(base)).sessions.find(x => x.id === 's1' && x.github?.length), 'the first refresh');
+  const calls = () => fs.existsSync(log) ? fs.readFileSync(log, 'utf8').length : 0;
+  return { base, calls };
+}
+const settled = async calls => {
+  for (let n = -1, tries = 0; n !== calls(); await wait(2000)) if (n = calls(), ++tries > 5) throw new Error('refreshes kept coming');
+};
+const lines = (t, re) => t.output().split('\n').filter(l => re.test(l));
+
+test('a ghbus event about a PR refreshes GitHub within a couple of seconds, an issue\'s comment doesn\'t', async t => {
+  const bus = await fakeGhbus(t), { calls } = await counted(t, { LANTERN_GHBUS_URL: bus.url });
+  await until(() => lines(t, /^ghbus connected/).length, 'the server to subscribe');
+  await settled(calls);
+  const before = calls();
+  bus.send('issue_comment', { issue: { number: 3 } });
+  await wait(2500); // longer than the 1.5s a refresh waits for the rest of a burst
+  assert.strictEqual(calls(), before, 'a comment on an issue changes nothing Lantern shows');
+  bus.send('pull_request_review', { pull_request: { number: 1 } });
+  await until(() => calls() > before, 'the event to refresh', 5000);
+});
+
+test('a burst of ghbus events is one refresh', async t => {
+  const bus = await fakeGhbus(t), { calls } = await counted(t, { LANTERN_GHBUS_URL: bus.url });
+  await until(() => lines(t, /^ghbus connected/).length, 'the server to subscribe');
+  await settled(calls);
+  const before = calls();
+  for (let i = 0; i < 10; i++) bus.send('check_run');
+  await until(() => calls() > before, 'the burst to refresh', 5000);
+  await wait(2500);
+  assert.strictEqual(calls(), before + 1);
+});
+
+test('the GitHub poll slows while ghbus is connected and speeds up again when it goes, saying so once each', async t => {
+  const bus = await fakeGhbus(t), { calls } = await counted(t, { LANTERN_GHBUS_URL: bus.url, LANTERN_GH_POLL_SECONDS: '0.5', LANTERN_GH_LIVE_POLL_SECONDS: '600' });
+  await until(() => lines(t, /^ghbus connected/).length, 'the server to subscribe');
+  await settled(calls); // which also says no 0.5s poll while connected
+  const before = calls();
+  await wait(2000);
+  assert.strictEqual(calls(), before, 'no 0.5s poll while connected');
+  bus.drop();
+  await until(() => calls() >= before + 2, 'the 0.5s poll to come back', 5000);
+  await wait(2000); // a few refused reconnects
+  assert.deepStrictEqual(lines(t, /ghbus/).map(l => l.split(':')[0]), ['ghbus connected at http', 'ghbus lost'], 'one line on connect, one on losing it, none per retry');
+});
+
+test('without ghbus the server polls GitHub as before and logs nothing about it', async t => {
+  const { base, calls } = await counted(t, { LANTERN_GH_POLL_SECONDS: '0.5' }); // serve's ghbus address has nothing listening
+  const before = calls();
+  await until(() => calls() >= before + 2, 'the 0.5s poll', 5000);
+  assert.ok((await snapshot(base)).sessions.length, 'the server still answers');
+  assert.deepStrictEqual(lines(t, /ghbus/), []);
 });
 // What the card shows of an agent: its job from the meta file, its model by name from its transcript's `model` attachment (a real
 // one's first 19 lines, test/fixtures/agent-head, text redacted: attachment.identity.marketingName, 8 lines in), and its
