@@ -14,9 +14,9 @@ let TITLE_EVERY_MS = 15.0 * 1000
 // from this recently; past both, it's left open but quiet (a dev server, a stuck agent) and rests like an idle one.
 let TASK_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_TASK_FRESH_SECONDS"] ?? "") ?? 30 * 60) * 1000
 let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_FRESH_SECONDS"] ?? "") ?? 5 * 60) * 1000
-// A subagent not heard from this long is assumed finished (its SubagentStop never came) and stops orbiting.
+// An agent whose transcript hasn't moved this long is assumed gone (its SubagentStop never came), finished or not.
 let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
-// Only a subagent quiet this long gets its transcript read to see if it finished; busier ones are plainly alive.
+// An agent heard from by a hook this recently is alive whatever its transcript says (it may not be written yet).
 let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
 // How long after its last hook event a session Claude Code calls idle may still be waiting for that turn's Stop to arrive.
 let STATUS_LAG_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_STATUS_LAG_SECONDS"] ?? "") ?? 10) * 1000
