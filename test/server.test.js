@@ -225,6 +225,38 @@ test('a subagent whose start the hooks missed is found from its transcript by th
   await until(async () => (await agentIds(base)).join() === 'a9', 'the unannounced subagent to be found');
 });
 
+// An agent quiet for minutes mid tool call (af195bdf112f280e9's real tail, test/fixtures/quiet-agent) is still alive.
+const QUIET_AGENT = fs.readFileSync(path.join(__dirname, 'fixtures/quiet-agent/agent-af195bdf112f280e9.jsonl'), 'utf8');
+const quietFor = (h, file, ms) => { const at = new Date(Date.now() - ms); fs.utimesSync(path.join(h, file), at, at); };
+test('a restart brings back an agent that has been quiet for minutes mid tool call', async t => {
+  const id = UUID(3), dir = `.claude/projects/-work-3/${id}/subagents`, agent = `${dir}/agent-af195bdf112f280e9.jsonl`;
+  // finished agents touched as recently stay gone: one ended its turn, one handed back
+  const ended = `${dir}/agent-aended.jsonl`, handed = `${dir}/agent-ahanded.jsonl`;
+  const call = { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'SubagentHandback', input: {} }] } };
+  const result = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } };
+  const base = await serve(t, { ...transcript(id, [user('Run the audits'), answer('Two audits are running.')]), [agent]: QUIET_AGENT,
+    [agent.replace('.jsonl', '.meta.json')]: JSON.stringify({ agentType: 'sonnet-implement', description: 'Audit it' }),
+    [ended]: jsonl([user('Audit it'), answer('Done.')]), [handed]: jsonl([user('Audit it'), call, result]) },
+  h => { for (const f of [agent, ended, handed]) quietFor(h, f, 3 * 60 * 1000); });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the session to be seeded');
+  assert.deepStrictEqual(s.subagents.map(a => [a.id, a.type, a.description]), [['af195bdf112f280e9', 'sonnet-implement', 'Audit it']]);
+});
+test('the sweep finds a quiet agent the hooks never announced, in a session that is waiting on me', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  const dir = '.claude/projects/-w/s1';
+  fs.mkdirSync(path.join(home, dir, 'subagents'), { recursive: true });
+  fs.writeFileSync(path.join(home, dir + '.jsonl'), jsonl([user('hi'), answer('Should I go on?')]));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Should I go on?' });
+  assert.strictEqual((await s1(base)).state, 'waiting');
+  const agent = `${dir}/subagents/agent-af195bdf112f280e9.jsonl`;
+  fs.writeFileSync(path.join(home, agent), QUIET_AGENT);
+  quietFor(home, agent, 3 * 60 * 1000);
+  await until(async () => (await agentIds(base)).join() === 'af195bdf112f280e9', 'the sweep to find the quiet agent');
+  await wait(500); // five sweeps derive the state with the agent in the map
+  assert.strictEqual((await s1(base)).state, 'waiting'); // an agent it didn't hand over to doesn't stop it waiting on me
+});
+
 test('a background shell task younger than the threshold keeps its session working', async t => {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h, bg(0.1, 60));
