@@ -366,6 +366,40 @@ test('a manual /compact while agents run leaves the session paused on them (the 
   assert.deepStrictEqual((await shown())[0], 'idle');
 });
 
+// An Esc interrupt fires no Stop: the transcript ends on "[Request interrupted by user]" (the real desktop tail in
+// test/fixtures/desktop-turns.jsonl) and Claude Code's status turns idle, while Lantern still says working. The sweep looks
+// once the hooks have been quiet past their usual lag (LANTERN_STATUS_LAG_SECONDS), and lands it, as it does a /compact
+// cancelled before it reported back. Busy leaves it working.
+test('an interrupted turn with no Stop lands once Claude Code says idle and the hooks have gone quiet', async t => {
+  const tails = {}; let name;
+  for (const line of fs.readFileSync(path.join(__dirname, 'fixtures/desktop-turns.jsonl'), 'utf8').trim().split('\n')) {
+    const j = JSON.parse(line);
+    if (j.__case) tails[name = j.__case] = []; else tails[name].push(line);
+  }
+  const id = UUID(4), file = `.claude/projects/-Users-user/${id}.jsonl`, status = `.claude/sessions/${process.pid}.json`;
+  const setStatus = (h, st) => fs.writeFileSync(path.join(h, status), JSON.stringify({ pid: process.pid, sessionId: id, cwd: '/Users/user', status: st }));
+  let home;
+  const base = await serve(t, { [file]: tails.interrupted.join('\n') + '\n', [status]: '' }, h => { home = h; setStatus(h, 'busy'); },
+    { LANTERN_SWEEP_SECONDS: '0.1', LANTERN_STATUS_LAG_SECONDS: '2' });
+  const hook = ev => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(process.pid) },
+    body: JSON.stringify({ session_id: id, cwd: '/Users/user', transcript_path: path.join(home, file), ...ev }) });
+  const state = async () => (await snapshot(base)).sessions.find(s => s.id === id).state;
+  await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'go' });
+  await wait(2500); // past the lag, Claude Code busy: still working
+  assert.strictEqual(await state(), 'working');
+  await hook({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: {} });
+  setStatus(home, 'idle'); // Esc: no Stop comes
+  await wait(500); // five sweeps, inside the lag
+  assert.strictEqual(await state(), 'working', 'within the lag a Stop may still be on its way');
+  await until(async () => await state() === 'idle', 'the sweep to land the interrupted turn');
+  // a /compact cancelled before it reported back: the same look lands it
+  setStatus(home, 'busy');
+  await hook({ hook_event_name: 'PreCompact', trigger: 'manual' });
+  assert.strictEqual(await state(), 'working');
+  setStatus(home, 'idle');
+  await until(async () => await state() === 'idle', 'the sweep to land the cancelled compaction');
+});
+
 // Every way a run of hook events leaves a session's state, note and waitingSince, as one table: the events in order, then
 // what the page shows. Each row runs as its own session on one server.
 const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...more });

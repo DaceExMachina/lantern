@@ -18,6 +18,8 @@ let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_
 let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
 // Only a subagent quiet this long gets its transcript read to see if it finished; busier ones are plainly alive.
 let AGENT_CHECK_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_CHECK_SECONDS"] ?? "") ?? 2 * 60) * 1000
+// How long after its last hook event a session Claude Code calls idle may still be waiting for that turn's Stop to arrive.
+let STATUS_LAG_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_STATUS_LAG_SECONDS"] ?? "") ?? 10) * 1000
 let WAITING_NOTIFICATIONS: Set<String> = ["permission_prompt", "idle_prompt", "elicitation_dialog", "agent_needs_input"]
 let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 // Claude Code's config folder: CLAUDE_CONFIG_DIR, or `claudeDir` in Lantern's settings.json (an app opened from the Dock
@@ -513,13 +515,17 @@ final class LanternServer {
     /// background work still waits on it, and an automatic compaction leaves the turn it ran inside as it was.
     func check(_ s: inout JSON) {
         if str(s["turn"]) == "compacting" { if truthy(s["awaits"]) { s["turn"] = "ended" } else { s["turn"] = "idle"; s["note"] = "" } }
-        // Every process the session runs in has to say idle (one busy in a terminal while the app's sits idle is busy), and
-        // only status files that name this session count: a pid can be reused.
-        let statuses = (s["pids"] as? [Int] ?? []).compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
-        // a status it doesn't recognise says nothing either way, as in bySession
+        if claudeIdle(s), str(s["turn"]) == "running" || truthy(s["awaits"]) { s["turn"] = "idle"; s["awaits"] = false }
+    }
+    /// Whether Claude Code says the session is idle: no turn running and nothing pending. Every live process it runs in that
+    /// says anything has to say so (one busy in a terminal while the app's sits idle is busy; a status it doesn't recognise
+    /// says nothing either way, as in bySession). Only status files of processes still running, and that name this
+    /// session, count: an ended process leaves its last status behind, and a pid can be reused.
+    func claudeIdle(_ s: JSON) -> Bool {
+        let statuses = (s["pids"] as? [Int] ?? []).filter { kill(pid_t($0), 0) == 0 || errno == EPERM }
+            .compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
         let known = statuses.compactMap { $0.busy }
-        guard !known.isEmpty, known.allSatisfy({ !$0 }) else { return }
-        if str(s["turn"]) == "running" || truthy(s["awaits"]) { s["turn"] = "idle"; s["awaits"] = false }
+        return !known.isEmpty && known.allSatisfy { !$0 }
     }
 
     /// The background work a turn handed over to that's still open, in words: its own tasks and its live agents.
@@ -561,6 +567,9 @@ final class LanternServer {
         var changed = false
         reconcile()
         for (id, var s) in sessions.items {
+            // A turn can end with no Stop (an Esc interrupt, a /compact cancelled before it reported back). Once Claude Code
+            // says idle and the hooks have been quiet past their usual lag, look.
+            if str(s["state"]) == "working" && t - ((s["last"] as? Double) ?? 0) > STATUS_LAG_MS && claudeIdle(s) { check(&s) }
             if derive(&s, id) { sessions[id] = s; changed = true }
             // with its processes known, only they decide: a session goes once every one has closed, and stays however quiet
             if let pids = s["pids"] as? [Int], !pids.isEmpty {
