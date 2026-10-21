@@ -3,10 +3,9 @@
 
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // The middle and bottom strips use the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working
-// in flight, waiting on the lantern, snoozed (a landed moth only half way to the calling colour), and sleeping (snoozed
-// for good: half way on from snoozed to a resting moth's grey).
-const SNOOZED = mix(MOTH_IDLE, MOTH_CALL, 0.5);
-const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: SNOOZED, sleeping: mix(SNOOZED, MOTH_RESTING, 0.5), idle: MOTH_RESTING };
+// in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour; snoozed for good,
+// sleeping, counts as snoozed here, since the two can't be told apart on the graph).
+const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
 const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', mark: '#D8CCE6' };
 
 // the day a time falls on (yyyy-MM-dd): a day starts at the day rollover (dayStart) and is named for the date it starts on
@@ -44,17 +43,14 @@ const lampOf = s => s.ran < .5 ? null : s.quiet > .5 ? 'quiet' : s.violet > .5 ?
 // A slice's sessions alive by state. The working count is a gauge, so it only fills what the waits leave.
 function states(s) {
   const working = Math.max(0, Math.min(s.working ?? 0, s.alive - s.waiting));
-  return { working, waiting: s.waiting - s.snoozed - s.sleeping, snoozed: s.snoozed, sleeping: s.sleeping, idle: Math.max(0, s.alive - s.waiting - working) };
+  return { working, waiting: s.waiting - s.snoozed - s.sleeping, snoozed: s.snoozed + s.sleeping, idle: Math.max(0, s.alive - s.waiting - working) };
 }
 
-// The colour of a slice's landed moths: waiting, snoozed and sleeping blended by their shares.
-function landed(s) {
-  const rest = s.snoozed + s.sleeping;
-  return mix(MOTHS.waiting, mix(MOTHS.snoozed, MOTHS.sleeping, rest ? s.sleeping / rest : 0), s.waiting ? rest / s.waiting : 0);
-}
+// The colour of a slice's landed moths: waiting and snoozed blended by their shares.
+const landed = s => mix(MOTHS.waiting, MOTHS.snoozed, s.waiting ? (s.snoozed + s.sleeping) / s.waiting : 0);
 
 // Three strips a hair apart, top to bottom: the sessions alive stacked by state in the moths' colours (working, waiting,
-// snoozed, sleeping, then the idle rest, rising from the strip below), the share of moths flying vs landed (blending the same
+// snoozed (sleeping too), then the idle rest, rising from the strip below), the share of moths flying vs landed (blending the same
 // colours by share), and the lantern (warm or violet, quiet dim) as tall as the moths strip. Small ticks under the
 // lantern strip mark sessions starting.
 function ribbon(r, w, h) {
@@ -75,17 +71,17 @@ function ribbon(r, w, h) {
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
 }
 
-// A day's ribbon with its axis and a legend of the moth states, each value under its label, for the stats panel and the recap. `end` labels the right edge.
+// A day's ribbon with its axis and a legend of the moth states (snoozed counts sleeping too) with their times, for the stats panel and the recap. `end` labels the right edge.
 const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
-  <div class="legend">${['working', 'waiting', 'snoozed', 'sleeping', 'idle'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
+  <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k === 'snoozed' ? 'snoozed / sleeping' : k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
 
 // The two headline stats, for the stats panel and the recap. They measure different things: the lantern's warm share
 // is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed and sleeping
 // ones aside), moths flying is of all session time summed over the sessions (waiting, snoozed and sleeping count as landed).
 // Hovering the ribbon swaps them for that moment's lantern colour and share of moths flying (see followRibbon).
 const pct = v => v == null ? '–' : `${v}%`;
-const LAMP_NOTE = 'no session waiting on you', FLYING_NOTE = 'of moth time, not waiting';
+const LAMP_NOTE = 'no session waiting', FLYING_NOTE = 'of moth time';
 const headline = d => `<div class="headline">
   <div title="Of the time the app ran, outside quiet hours, the lantern was warm: no session was waiting on you (snoozed and sleeping ones don't count as waiting)."><b data-v="lamp">${pct(d.warmLantern)}</b><span>lantern warm</span><small data-v="lampNote">${LAMP_NOTE}</small></div>
   <div title="Of all session time, added up across sessions, moths were flying: not waiting on you, snoozed or sleeping. Two sessions running for an hour is two hours."><b data-v="flying">${pct(d.warmMoths)}</b><span>moths flying</span><small data-v="flyingNote">${FLYING_NOTE}</small></div></div>`;
@@ -201,8 +197,7 @@ function renderStats(j) {
     ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
     ['slowest answers', today.slowWait == null ? '–' : ago(today.slowWait), 'one in ten waits lasted at least this long'],
     ['waits', today.waits, 'times a moth landed on the lantern for you'],
-    ['snoozed', today.snoozedMs ? ago(today.snoozedMs) : '–', 'moth time spent waiting while snoozed (by hand or in quiet hours)'],
-    ['sleeping', today.sleepingMs ? ago(today.sleepingMs) : '–', 'moth time spent waiting while sleeping (snoozed for good)'],
+    ['snoozed', today.snoozedMs || today.sleepingMs ? ago(today.snoozedMs + today.sleepingMs) : '–', 'moth time spent waiting while snoozed, by hand or in quiet hours, or snoozed for good (sleeping)'],
     ['merged', today.merged, 'fireflies that flew home (merged PRs)'],
     ['in flight', today.open ?? '–', 'open PRs your sessions own'],
     ['stale PRs', stale, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],

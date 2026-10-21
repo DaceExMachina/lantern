@@ -1,5 +1,5 @@
 // Snoozed vs sleeping (snoozed for good): which status bar count a session lands in (restOf, page/state.js), and how
-// the stats ribbon splits a day's waiting between waiting, snoozed and sleeping (slices and states, page/stats.js).
+// the stats ribbon splits a day's waiting between waiting and snoozed, sleeping counted as snoozed (slices and states, page/stats.js).
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -26,11 +26,12 @@ test('snoozed for good counts as sleeping whatever the session is doing; a plain
   for (const [s, want] of cases) assert.strictEqual(restOf(s), want, JSON.stringify(s));
 });
 
-test('the ribbon takes snoozed and sleeping time out of waiting, each in its own band', () => {
+test('the ribbon takes snoozed and sleeping time out of waiting, as one snoozed band', () => {
   const MIN = 60000, t0 = Date.now() - 2 * 3600000, day = { start: t0, end: t0 + 60 * MIN };
   const spans = [['alive', t0, t0 + 60 * MIN, false], ['waiting', t0, t0 + 40 * MIN], ['snoozed', t0, t0 + 10 * MIN], ['sleeping', t0 + 10 * MIN, t0 + 30 * MIN]];
   const r = run('slices')(day, spans, [], 1);
   assert.strictEqual(r.slices.length, 1, 'one slice for the hour');
-  const got = run('states')(r.slices[0]), want = { working: 0, waiting: 1 / 6, snoozed: 1 / 6, sleeping: 2 / 6, idle: 2 / 6 };
+  const got = run('states')(r.slices[0]), want = { working: 0, waiting: 1 / 6, snoozed: 3 / 6, idle: 2 / 6 };
   for (const k in want) assert.ok(Math.abs(got[k] - want[k]) < 1e-9, `${k}: ${got[k]}, not ${want[k]}`);
+  assert.deepStrictEqual(Object.keys(got), Object.keys(want), 'no separate sleeping band');
 });
