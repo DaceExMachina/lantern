@@ -289,7 +289,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "compacting"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -409,7 +409,9 @@ final class LanternServer {
         // Events record what happened (the turn's `turn` and what it handed over to, `awaits`); derive() turns that into the state.
         switch ev {
         case "SessionStart":
-            s["turn"] = "idle"
+            // after every compaction, automatic ones mid-turn included, so that one only says to look; any other start
+            // (startup, resume, clear) is a process at its prompt
+            if str(e["source"]) == "compact" { check(&s) } else { s["turn"] = "idle" }
         case "Stop":
             // Three ways a turn ends: background work still open and nothing to ask (not waiting on me), work open but
             // it asked me something, or fully stopped. Only the first one leaves me alone. Only work whose finishing wakes
@@ -447,15 +449,15 @@ final class LanternServer {
             s["note"] = "Turn ended with an API error"
             s["error"] = true // the moth lands singed
             stats.event("api_error", id)
-        // A /compact you run yourself ends back at the prompt with no Stop after it, so put the session back to idle.
-        // An automatic compact carries on with whatever the session was doing (working mid-turn, or waiting), so leave that.
+        // A /compact you run yourself ends back at the prompt with no Stop after it, and an automatic one carries on with
+        // whatever the session was doing, so neither end sets the state: PostCompact (and the SessionStart after it) check().
         case "PreCompact":
             s["activity"] = "Compacting the conversation"
             stats.event("compact", id, ["trigger": e["trigger"] ?? NSNull()])
-            if str(e["trigger"]) == "manual" { s["turn"] = "running" }
+            if str(e["trigger"]) == "manual" { s["compacting"] = true } // a model call really is running; an automatic one runs inside a turn
         case "PostCompact":
             s["activity"] = ""
-            if str(e["trigger"]) == "manual" { s["turn"] = "idle"; s["note"] = "" }
+            check(&s)
         case "PermissionRequest":
             s["turn"] = "blocked"
             s["note"] = "Wants permission to use \(truthy(e["tool_name"]) ? str(e["tool_name"]) : "a tool")"
@@ -477,6 +479,19 @@ final class LanternServer {
 
     /// The agents a turn handed over to that are still alive.
     func awaitedAgents(_ s: JSON, _ id: String) -> [JSON] { (s["agentsAwaited"] as? [String] ?? []).compactMap { agents[id]?[$0] } }
+    /// For an event that doesn't say what the session is doing now (a compaction ending): look, rather than guess.
+    /// Claude Code's own status comes first: "idle" means no turn is running and nothing is pending, which is definitive;
+    /// "busy" (a turn, or agents still pending) or no status at all leave it to what the events recorded. A /compact Dace
+    /// ran happens at the prompt, so it answers a finished turn (idle, not waiting), while a turn that handed over to
+    /// background work still waits on it, and an automatic compaction leaves the turn it ran inside as it was.
+    func check(_ s: inout JSON) {
+        if truthy(s["compacting"]) && str(s["turn"]) == "ended" && !truthy(s["awaits"]) { s["turn"] = "idle"; s["note"] = "" }
+        s["compacting"] = nil
+        // (the status file has to name this session: a pid can be reused)
+        guard truthy(s["pid"]), let status = sessionFile(str(s["pid"])), status.file.hasSuffix("/\(str(s["id"])).jsonl"), status.busy == false else { return }
+        if str(s["turn"]) == "running" || truthy(s["awaits"]) { s["turn"] = "idle"; s["awaits"] = false }
+    }
+
     /// The background work a turn handed over to that's still open, in words: its own tasks and its live agents.
     func openWork(_ s: JSON, _ id: String) -> String {
         let n = (s["taskSince"] as? [String: Double] ?? [:]).count, a = awaitedAgents(s, id).count
@@ -490,7 +505,7 @@ final class LanternServer {
     @discardableResult func derive(_ s: inout JSON, _ id: String) -> Bool {
         let before = (str(s["state"]), str(s["note"]))
         s["resting"] = nil
-        switch str(s["turn"]) {
+        switch truthy(s["compacting"]) ? "running" : str(s["turn"]) {
         case "running": s["state"] = "working"
         case "idle": s["state"] = "idle"
         case "ended" where truthy(s["awaits"]):
