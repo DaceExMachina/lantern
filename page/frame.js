@@ -143,7 +143,7 @@ function frame(t) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, { ...r, need: 'review' }])), lightAt(), [125, 170], dt, s);
+  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, { ...r, need: 'review' }])), lightAt(), [125, 170], dt);
   for (const [k, m] of moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
@@ -767,7 +767,7 @@ function mothFireflies(m, dt, s) {
     for (const url of m.session.created || []) if (youLinks.has(url)) want.set(url, { need: 'mention' });
   }
   const home = stretch(m.home);
-  swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt, s);
+  swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt);
   // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
   // middle of the swarm straight toward its perch, along the line that lies on (perchAt), so no two ever cross
   m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);

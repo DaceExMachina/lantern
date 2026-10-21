@@ -1,6 +1,6 @@
 // How a PR's firefly leaves (page/fireflies.js swarm): merged, closed and just gone each take their own way out, one
 // flying off goes only once it and its bloom are wholly outside the window, and the path is the same in every window,
-// timed from when the server saw the change. Plain classic scripts run in a vm context.
+// timed from when the server saw the change, in the same spot. Plain classic scripts run in a vm context.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -15,7 +15,7 @@ function window(kx = 1, ky = 1) {
   const run = code => vm.runInContext(code, page);
   run(`Object.assign(VIEW, { kx: ${kx}, ky: ${ky}, box: [${340 - 300 * kx}, ${320 - 300 * ky}, ${600 * kx}, ${600 * ky}] })`);
   // one frame at wall clock `now`: the firefly's light [x, y, radius, brightness], or null once it's gone
-  run(`var step = (flies, want, home, now) => { flyLightN = 0; swarm(flies, want, home, [34, 55], 1 / 60, now / 1000 - ${T0 / 1000}, now); return flyLightN ? [...flyLights.slice(0, 4)] : null; }`);
+  run(`var step = (flies, want, home, now) => { flyLightN = 0; swarm(flies, want, home, [34, 55], 1 / 60, now); return flyLightN ? [...flyLights.slice(0, 4)] : null; }`);
   return { run, box: run('VIEW.box'), flies: run('new Map()') };
 }
 // A draft PR's firefly circles `home` from `from` (ms before T0), then from T0 the server says `then` (null: it's not in
@@ -38,7 +38,7 @@ test('merged, closed and just gone each leave their own way', () => {
   { // merged: a flare, a loop up and over, then out the far (right) side, still bright
     const win = window(), [bx, , bw] = win.box, { lights, at } = play(win, left, merged);
     assert.ok(at, 'it goes in the end');
-    assert.ok(Math.max(...lights.map(l => l[3])) > 1.5, 'it flares brighter than a firefly ever swells');
+    assert.ok(Math.max(...lights.map(l => l[3])) > 1.1, 'it flares brighter than a firefly ever swells (1 at most)');
     assert.ok(Math.min(...lights.map(l => l[1])) < lights[0][1] - 50, 'it loops up');
     const last = lights.at(-1);
     assert.ok(last[0] > bx + bw, `it leaves through the right edge: ${last}`);
@@ -51,10 +51,10 @@ test('merged, closed and just gone each leave their own way', () => {
     assert.ok(lights.at(-1)[3] < 0.6, 'it dims');
     assert.ok(lights.at(-1)[0] < bx, `it leaves through the left edge: ${lights.at(-1)}`);
   }
-  { // gone: it drifts a little way out and fades where it is, over 2.5s
-    const win = window(), [bx, by, bw, bh] = win.box, { lights, at } = play(win, left, null), [x, y, , glow] = lights.at(-1);
+  { // gone: it drifts a little way out from its circle and fades, over 2.5s
+    const win = window(), { lights, at } = play(win, left, null), [x, y, , glow] = lights.at(-1);
     assert.ok(at >= T0 + 2500 && at < T0 + 2500 + 2 * FRAME, `it goes after 2.5s: ${at - T0}ms`);
-    assert.ok(x > bx && x < bx + bw && y > by && y < by + bh, 'still in the window as it fades');
+    assert.ok(Math.hypot(x - left[0], y - left[1]) < 55 + 70 * 2.5 + 25, `only drifting, not flying off: ${x},${y}`); // its circle, the drift, the wobble
     assert.ok(glow < 0.05, `faded out: ${glow}`);
   }
 });
@@ -73,15 +73,18 @@ for (const [name, kx, ky] of [['square', 1, 1], ['wide', 3, 1], ['tall', 1, 3]])
   });
 }
 
-test('a merged firefly takes the same path in every window, timed from when the server saw it', () => {
-  // two windows that have had the firefly for different lengths of time (so it's at different points on its circle),
-  // one hearing of the merge half a second late: from then on, the two move exactly in step
+test('a firefly is in the same spot in every window, and a merged one takes the same path, timed from when the server saw it', () => {
+  // two windows that have had the firefly for different lengths of time, one hearing of the merge half a second late:
+  // both draw it in the same place, circling and then flying off
   const a = play(window(), [150, 320], merged, { from: 5000 }), b = play(window(), [150, 320], merged, { from: 1000, late: 500 });
-  const skip = Math.ceil(500 / FRAME), n = Math.min(a.lights.length, b.lights.length) - skip;
-  assert.ok(n > 60, `both fly for a while: ${n} frames`);
-  const [dx, dy] = [a.lights[skip][0] - b.lights[skip][0], a.lights[skip][1] - b.lights[skip][1]];
-  for (let i = skip; i < skip + n; i++) {
-    assert.ok(Math.abs(a.lights[i][0] - b.lights[i][0] - dx) < 1e-3 && Math.abs(a.lights[i][1] - b.lights[i][1] - dy) < 1e-3, `frame ${i}: out of step`); // the lights are 32-bit
+  assert.ok(a.lights.length > 60 && b.lights.length === a.lights.length, `both fly for a while and go together: ${a.lights.length}, ${b.lights.length} frames`);
+  const circling = window(), live = new Map([[URL, { need: 'draft', seen: 0, since: 0 }]]), other = window();
+  for (let i = 0; i < 300; i++) circling.run('step')(circling.flies, live, [150, 320], T0 + i * FRAME); // one window's had it 5s
+  const here = circling.run('step')(circling.flies, live, [150, 320], T0 + 300 * FRAME), there = other.run('step')(other.flies, live, [150, 320], T0 + 300 * FRAME);
+  assert.ok(Math.hypot(here[0] - there[0], here[1] - there[1]) < 1e-3, `circling in the same spot: ${here} vs ${there}`);
+  const skip = Math.ceil(500 / FRAME);
+  for (let i = skip; i < a.lights.length; i++) {
+    assert.ok(Math.hypot(a.lights[i][0] - b.lights[i][0], a.lights[i][1] - b.lights[i][1]) < 1e-3, `frame ${i}: ${a.lights[i]} vs ${b.lights[i]}`); // the lights are 32-bit
     assert.ok(Math.abs(a.lights[i][3] - b.lights[i][3]) < 1e-5, `frame ${i}: brightness`);
   }
 });

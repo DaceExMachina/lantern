@@ -75,7 +75,9 @@ function leaveStep(kind, t, [dx, dy]) {
   return [dx * go, dy * go, glow, size];
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
-function swarm(flies, want, [cx, cy], [rMin, rMax], dt, s, now = Date.now()) {
+// Its circling, wobble, wind and swell run off the wall clock too, so every window has each firefly in the same spot.
+function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
+  const s = now / 1000;
   if (flyTry.size) { want = new Map(want); for (const [url, t] of flyTry) if (t.flies === flies) want.set(url, { ...want.get(url), ...t }); }
   for (const [url, p] of want) if (!flies.has(url) && !LEAVING.has(p.need)) {
     const rand = seeded(hash(url)); // the same firefly path in every window
@@ -93,12 +95,12 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, s, now = Date.now()) {
     }
     const t = f.leave ? (now - f.leave.at) / 1000 : 0, gone = f.leave?.kind === 'gone';
     if (gone && t >= 2.5 || t > 15) { flies.delete(url); continue; }
-    if (!f.leave) f.a += f.w * dt; // a leaving one stops circling where it is
+    const a = f.a + f.w * Math.min(s, f.leave ? f.leave.at / 1000 : s); // a leaving one stops circling where it was
     // the one a landed moth's thread is tied to (f.near) eases in to a small orbit near the cluster's middle, still moving
     f.k = (f.k ?? 1) + ((f.near ? 0.2 : 1) - (f.k ?? 1)) * Math.min(1, dt * 1.5);
     const r = (f.r + (gone ? 70 * t : 0)) * f.k;
     // the wind carries it about half as far as the dust, each a moment ahead of the next (frame.js's GUST)
-    let x = cx + Math.cos(f.a) * r + Math.sin(s * 0.9 + f.ph) * 6 + GUST(s - 0.03 * f.ph) * 7, y = cy + Math.sin(f.a) * r * 0.7 + Math.cos(s * 1.3 + f.ph) * 5;
+    let x = cx + Math.cos(a) * r + Math.sin(s * 0.9 + f.ph) * 6 + GUST(s - 0.03 * f.ph) * 7, y = cy + Math.sin(a) * r * 0.7 + Math.cos(s * 1.3 + f.ph) * 5;
     const swell = fireflySwell(s, f.ph, f.p.need === 'failing' ? 2.6 : 1.1); // and the bloom widens as it swells
     let size = FIREFLY_BLOOM * (0.75 + 0.45 * swell), glow = 0.6 + 0.4 * swell;
     if (!f.leave) {
