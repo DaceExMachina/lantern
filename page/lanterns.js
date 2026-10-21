@@ -38,8 +38,6 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 // one flat tone from this ramp (dark to lit), chosen by how squarely it faces the light (frame.js), so the shine steps from
 // face to face as the lantern twists. The onion dome and drop keep their leaning gradients.
 const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
-// the lighting's fake twist (frame.js): its strength, 0 to freeze it (?twist=, default 3)
-let twistGain = Q.has('twist') ? +(Q.get('twist') || 0) : 3;
 // the dev panel's flame (dev.js): hold it at a brightness, 0 (idle ember) to 1 (five sessions working), whatever is running,
 // and force its colour warm or violet, whatever the sessions say (frame.js)
 let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
@@ -158,7 +156,7 @@ function bakeFarWall() {
 // the screen's pixels per unit. A resize only rescales the picture on show; once the window settles it's baked again at the
 // new size (if that's off by 10% or more), and swapped in only when decoded, so the lace never blinks to the vector mask.
 // Until the first bake is ready the vector mask stands in.
-let cutouts = { k: 0, pic: '' }, cutoutsMask = null, cutoutsTimer = 0;
+let cutouts = { k: 0, want: 0, pic: '' }, cutoutsMask = null, cutoutsTimer = 0;
 function bakeCutouts() {
   const m = $('cutouts');
   if (!m || !VIEW.px) return; // not the Moroccan, or not laid out yet
@@ -168,14 +166,14 @@ function bakeCutouts() {
   const bake = async () => {
     const k = VIEW.px * (devicePixelRatio || 1); // device pixels a unit
     if (Math.abs(k / cutouts.k - 1) < 0.1) return;
-    cutouts.k = k; // asked for, so a second call at this size doesn't bake it again
+    cutouts.want = k; // the newest size asked for
     const c = document.createElement('canvas'), img = new Image(), pic = new Image();
     c.width = Math.ceil(160 * k); c.height = Math.ceil(380 * k);
     img.src = 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="260 120 160 380" width="${c.width}" height="${c.height}" preserveAspectRatio="none">
     <defs>${LACE_TILE('lace', '#fff')}${LACE_CLIPS}${CUTOUTS('m')}</defs><rect x="260" y="120" width="160" height="380" fill="#fff" mask="url(#m)"/></svg>`);
     try { await img.decode(); c.getContext('2d')?.drawImage(img, 0, 0); pic.src = c.toDataURL(); await pic.decode(); } catch { return; }
-    if (cutouts.k !== k) return; // a newer size is on its way
-    cutouts.pic = pic.src;
+    if (cutouts.want !== k) return; // a newer size is on its way
+    cutouts.k = k; cutouts.pic = pic.src; // only once it's baked, so a failed bake tries again at the next resize
     const now = $('cutouts'); // the style may have changed while it baked
     if (now) show(now);
   };
@@ -644,11 +642,9 @@ function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) 
     <path d="M${n(cx + 0.6)} ${n(rim - 9.4)}Q${n(cx + 1.2)} ${rim - 11} ${cx + 2.5} ${rim - 11.5}" fill="none" stroke="#B8461E" stroke-width="2.4" stroke-linecap="round"/>`;
   // Moths land clear of the bare flame. At full size and stretched tallest by its wobble (96 by 1.08, drawFlame), the outer
   // tongue dips 0.04 of its height below its base (flamePath's bottom curve), in the flame's own units. A landed moth's
-  // wings reach from its perch on screen at most w·EYE/√(EYE² − w²) (wing3d), w the wing point furthest from the joint, at
-  // the largest moth. So the wax's highest landing spot is a hop, that reach and 10 clear below the flame, and the body
+  // wings reach from its perch on screen at most WING_REACH at the largest moth. So the wax's highest landing spot is a hop, that reach and 10 clear below the flame, and the body
   // starts where perchAt's highest spot (0.5 - PERCH_SPREAD of the way down) lands there.
-  const reach = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))))
-    * Math.max(...Object.values(SIZE));
+  const reach = WING_REACH * Math.max(...Object.values(SIZE));
   const highest = PILLAR.flame[1] + 0.04 * 96 * 1.08 * PILLAR.flame[2] + HOP + reach + 10, waxBottom = PILLAR.dish - 8;
   return {
     name: 'Pillar candle', stands: { half: PEDESTAL.r, top: PILLAR.dish }, paper: false, scorches: true, // a bare flame, standing on the crown
@@ -754,8 +750,6 @@ const STYLES = {
   },
   candle: makeCandle(),
 };
-// ponytail: temporary, for dialling in the Moroccan's shimmer; bake the pick into its heat.k and drop this
-STYLES.moroccan.heat.k = devSlider('Temporary', 'moroccanheat', 'Moroccan heat', 0, 2, 0.05, STYLES.moroccan.heat.k, 'How strongly the air above the Moroccan shimmers at full flame', v => { STYLES.moroccan.heat.k = v; });
 // The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
 const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
   cerulean: ['#4385B1', '#29567A', '#0D2A44'], madder: ['#A8433A', '#712A25', '#36110E'], ochre: ['#C08A2E', '#82601F', '#3B280A'],

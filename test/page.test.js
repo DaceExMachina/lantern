@@ -30,9 +30,10 @@ for (const f of ['scene', 'dev', 'lanterns', 'pencil', 'state', 'frame']) vm.run
 const run = code => vm.runInContext(code, page);
 
 const styles = [...run('Object.keys(STYLES)')]; // an array of this realm, so deepStrictEqual compares its items
-// every home for 3, 7 and 16 sessions, and the same in a window half as wide again (as stretch puts them on screen)
+// every home for 3, 7 and 16 sessions, and the same in a window half as wide again and in one half as wide (as stretch
+// puts them on screen). In the narrow one the top home's line runs nearly straight up, into the lantern's middle third.
 const homes = [3, 7, 16].flatMap(n => Array.from({ length: n }, (_, i) => run(`ringHome(${i}, ${n})`)))
-  .flatMap(([x, y]) => [[x, y], [340 + (x - 340) * 1.5, y]]);
+  .flatMap(([x, y]) => [[x, y], [340 + (x - 340) * 1.5, y], [340 + (x - 340) * 0.5, y]]);
 // where a moth for the session at home h lands, `along` of the way out its line on the paper
 const perch = (key, [hx, hy], along) => run(`style = STYLES.${key}; perchAt([${hx}, ${hy}], ${along})`);
 
@@ -141,7 +142,7 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
 });
 
 test('the Moroccan\'s flame, burner cup and light sit between its front and far wall as it twists', () => {
-  run(`applyStyle('moroccan'); twistGain = 6`);
+  run(`applyStyle('moroccan')`);
   assert.match(els.lantern.innerHTML, /<g id="inside">[\s\S]*id="flame"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame and the burner cup are in #inside');
   run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, { size: 0.8, flick: 1, pulse: 1 })`);
   const twist = run('twist'), wall = page.background.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide
@@ -154,7 +155,7 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
     assert.ok(Math.min(0, wall) < x && x < Math.max(0, wall), `${what} slides ${x}, between the front (0) and the far wall (${wall})`);
     assert.ok(Math.abs(x - wall / 2) < 0.01, `${what} sits half way: ${x} of ${wall}`);
   }
-  run(`twistGain = 3; applyStyle('barrel'); swingLantern(1 / 60, 50)`);
+  run(`applyStyle('barrel'); swingLantern(1 / 60, 50)`);
   assert.strictEqual(els.inside.getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
 });
 
