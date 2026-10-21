@@ -12,7 +12,7 @@ const stub = new Proxy(function () {}, { get: (_, k) => k === Symbol.toPrimitive
 // a window on the lantern, `kx` times as wide as it is tall
 function open(kx = 1) {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document: stub,
-    hoverZone: () => ({}), areas: { get: () => ({}) }, alertMe() {} }); // the hover cards (card.js) and notifications aren't loaded
+    hoverZone: () => ({ style: {}, getAttribute() {}, setAttribute() {} }), areas: { get: () => ({}) }, alertMe() {} }); // the hover cards (card.js) and notifications aren't loaded
   for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => JSON.parse(vm.runInContext(`JSON.stringify((() => { ${code} })())`, page) ?? 'null');
   run(`VIEW.kx = ${kx}`);
@@ -167,10 +167,14 @@ test('two windows opened at different times show the same sessions and agents', 
   const snap = (docs, ...agents) => JSON.stringify([{ id: 'api', state: 'paused', subagents: agents.map(id => ({ id, type: 'sonnet-implement' })) },
     ...docs ? [{ id: 'docs', state: 'waiting', subagents: [] }] : []]);
   const shows = w => w.run(`return [...moths].filter(([, m]) => !m.leaving).map(([k]) => k).sort()`);
+  // a frame's hover areas follow each snapshot (frame.js mothZones), and a leaving moth's turns off
+  const zones = w => w.run('for (const m of moths.values()) if (m.zone) mothZones(m, false)');
   const early = open();
-  for (const s of [snap(true, 'a1', 'a2'), snap(false, 'a1'), snap(true, 'a1', 'a2')]) early.run(`raw = ${s}; sync()`); // docs and a2 gone for one
+  for (const s of [snap(true, 'a1', 'a2'), snap(false, 'a1'), snap(true, 'a1', 'a2')]) { early.run(`raw = ${s}; sync()`); zones(early); } // docs and a2 gone for one
   const late = open();
   late.run(`raw = ${snap(true, 'a1', 'a2')}; sync()`);
   assert.deepStrictEqual(shows(late), ['api', 'api/a1', 'api/a2', 'docs']);
   assert.deepStrictEqual(shows(early), shows(late));
+  // and the ones that came back can be hovered and clicked again (main.js zoneFor skips areas with pointer events off)
+  assert.deepStrictEqual(early.run(`return [...moths].filter(([, m]) => m.zone?.style.pointerEvents === 'none').map(([k]) => k)`), []);
 });
