@@ -63,15 +63,21 @@ function nearestEdge(x, y) {
 // step): [dx, dy, a factor on its brightness, one on its bloom's size]
 function leaveStep(kind, t, [dx, dy]) {
   if (kind === 'closed') { const go = 30 * t + 250 * t * t; return [dx * go, dy * go, 1 - 0.45 * Math.min(1, t / 0.4), 1]; }
-  const { flare, shake, loop, speed } = MERGE, u = t * speed, SHAKE = 0.6, LOOP = 1;
+  const { flare, shake, loop, speed } = MERGE, u = t * speed, SHAKE = 0.6, FAST = 1.3, LOOP = 1 / FAST; // the loop runs 30% faster than it first did
   const lit = Math.min(1, u / 0.12) * (0.6 + 0.4 * Math.exp(-3 * u)), glow = 1 + flare * lit, size = 1 + 0.35 * flare * lit; // flares at once, then holds bright
-  if (u < SHAKE) { const a = shake * Math.sin(Math.PI * u / SHAKE); return [a * Math.sin(u * 55), a * 0.6 * Math.sin(u * 43 + 1), glow, size]; }
+  // one motion, smooth the whole way (no stop or jump at either hand-off): the shake dies away as its last swing draws back
+  // along the heading and shoots into the loop at the loop's own entry speed, and the loop's exit speed is the exit's
+  const enter = loop * Math.PI / LOOP, exit = 3 * enter;
+  if (u < SHAKE) {
+    const a = shake * Math.sin(Math.PI * u / SHAKE) ** 2, q = Math.max(0, 1 - (SHAKE - u) / 0.12), kick = -enter * 0.12 * q * q * (1 - q);
+    return [a * Math.sin(u * 55) + dx * kick, a * 0.6 * Math.sin(u * 43 + 1) + dy * kick, glow, size];
+  }
   const [nx, ny] = dx > 0 ? [dy, -dx] : [-dy, dx]; // up the screen, across its heading
   if (u < SHAKE + LOOP) { // forward, up and over, round and back to where it started, speeding up as it goes
-    const th = 2 * Math.PI * ((u - SHAKE) / LOOP) ** 2, along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
+    const x = (u - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
     return [dx * along + nx * up, dy * along + ny * up, glow, size];
   }
-  const v = u - SHAKE - LOOP, go = 4 * Math.PI * loop / LOOP * v + 450 * v * v; // carrying on at the loop's last speed, and faster
+  const v = u - SHAKE - LOOP, go = exit * v + 450 * FAST * FAST * v * v; // carrying on at the loop's last speed, and faster
   return [dx * go, dy * go, glow, size];
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
@@ -125,15 +131,15 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
   }
 }
 
-// The dev panel's firefly tries (Temporary): each button plays one effect now on a firefly, the first moth's first if
-// one is out, else a made-up PR around the lantern. A try stands in for that PR's data until "back to live".
+// The dev panel's firefly tries (Temporary): each button plays one effect now on a random firefly (a moth's if one is out), else a made-up PR around the lantern. A try stands in for that PR's data until "back to live".
 const flyTry = new Map();
 let tryAt = null; // { flies, url, need }: the firefly the tries play on, and its need when picked
 function tryFly(change) {
-  if (!tryAt || tryAt.flies !== lanternFlies && ![...moths.values()].some(m => m.flies === tryAt.flies)) {
-    const m = [...moths.values()].find(m => m.flies?.size && !m.leaving), f = m && [...m.flies.entries()].find(([, f]) => !f.leave);
-    tryAt = f ? { flies: m.flies, url: f[0], need: f[1].p.need } : { flies: lanternFlies, url: 'https://github.com/demo/lantern/pull/1', need: 'waiting' };
-  }
+  // a random firefly each press (never the same twice running when there are others), so the effect plays from every side
+  const all = [...moths.values()].flatMap(m => m.flies ? [...m.flies].filter(([, f]) => !f.leave).map(([url, f]) => ({ flies: m.flies, url, need: f.p.need })) : []);
+  const others = all.filter(c => c.url !== tryAt?.url);
+  const pool = others.length ? others : all;
+  tryAt = pool.length ? pool[Math.floor(Math.random() * pool.length)] : { flies: lanternFlies, url: 'https://github.com/demo/lantern/pull/1', need: 'waiting' };
   flyTry.set(tryAt.url, { flies: tryAt.flies, seen: 0, need: tryAt.need, ...change(Date.now()) });
 }
 devButton('Temporary', 'firefly: merge', 'A firefly plays a merge: flare, shake, loop-de-loop, off the far side', () => tryFly(now => ({ need: 'merged', was: tryAt.need, since: now })));
