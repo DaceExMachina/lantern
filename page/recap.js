@@ -56,7 +56,7 @@ function constellation(stars, early, gutter, axis) {
   const lines = at.slice(1).map(([x, y], i) => `<path d="M${at[i][0]} ${at[i][1]}L${x} ${y}"/>`).join('');
   const dots = at.map(([x, y, r, fill], i) => `<g class="star" data-i="${i}" tabindex="0" aria-label="${esc(stars[i].title || 'a session')}">
     <circle cx="${x}" cy="${y}" r="${Math.max(r * 2.6, 9)}" fill="${fill}" opacity=".12"/><circle cx="${x}" cy="${y}" r="${r}" fill="${fill}"/></g>`).join('');
-  const edge = gutter ? `<path d="M${gutter} 0V${h}" stroke="${RIBBON.mark}" stroke-width=".6" opacity=".35"/>` : '';
+  const edge = gutter ? `<path d="M${gutter} 0V${h}" stroke="var(--ink)" stroke-width=".6" opacity=".35"/>` : '';
   return `<div class="starsBox"><svg class="stars" viewBox="0 0 ${w} ${h}" role="img" aria-label="${stars.length} sessions">${edge}<g stroke="${WARM.thread}" stroke-width=".6" opacity=".35" fill="none">${lines}</g>${dots}</svg><i class="cursor" hidden></i></div>`;
 }
 

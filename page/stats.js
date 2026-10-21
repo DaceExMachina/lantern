@@ -6,7 +6,7 @@ const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'S
 // in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour; snoozed for good,
 // sleeping, counts as snoozed here, since the two can't be told apart on the graph).
 const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
-const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050', mark: '#D8CCE6' };
+const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050' };
 
 // the day a time falls on (yyyy-MM-dd): a day starts at the day rollover (dayStart) and is named for the date it starts on
 const dayKey = t => { const d = new Date(t), [h, m] = dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -67,14 +67,14 @@ function ribbon(r, w, h) {
     if (s.flying != null) svg += `<rect x="${x0}" y="${low + gap}" width="${sw}" height="${band}" fill="${mix(landed(s), MOTHS.working, s.flying)}"/>`;
     if (lamp) svg += `<rect x="${x0}" y="${low + 2 * gap + band}" width="${sw}" height="${band}" fill="${RIBBON[lamp]}"/>`;
   }
-  for (const t of r.starts) svg += `<path d="M${x(t)} ${h - 3}V${h}" stroke="${RIBBON.mark}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`;
+  for (const t of r.starts) svg += `<path d="M${x(t)} ${h - 3}V${h}" stroke="var(--ink)" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`;
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
 }
 
 // A day's ribbon with its axis and a legend of the moth states (snoozed counts sleeping too) with their times, for the stats panel and the recap. `end` labels the right edge.
 const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
-  <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k === 'snoozed' ? 'snoozed / sleeping' : k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
+  <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background: var(--state-${k})"></i>${k === 'snoozed' ? 'snoozed / sleeping' : k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
 
 // The two headline stats, for the stats panel and the recap. They measure different things: the lantern's warm share
 // is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed and sleeping
