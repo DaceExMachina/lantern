@@ -466,6 +466,8 @@ final class LanternServer {
             s["turn"] = "blocked"
             s["note"] = "Wants permission to use \(truthy(e["tool_name"]) ? str(e["tool_name"]) : "a tool")"
         case "Notification":
+            // the idle nudge proves it's back at its prompt, so a /compact that never reported back is over: settle it first
+            if str(s["turn"]) == "compacting" && str(e["notification_type"]) == "idle_prompt" { check(&s); if truthy(s["awaits"]) { break } }
             // the "idle, waiting for input" nudge also fires while a session waits on its agents; that one doesn't count
             if str(e["notification_type"]) == "idle_prompt" && (str(s["state"]) == "paused" || truthy(s["resting"])) { break }
             if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["turn"] = "blocked"; s["note"] = or(e["message"], s["note"]) }
@@ -489,7 +491,7 @@ final class LanternServer {
     /// ran happens at the prompt, so it answers a finished turn (idle, not waiting), while a turn that handed over to
     /// background work still waits on it, and an automatic compaction leaves the turn it ran inside as it was.
     func check(_ s: inout JSON) {
-        if str(s["turn"]) == "compacting" { s["turn"] = truthy(s["awaits"]) ? "ended" : "idle"; if !truthy(s["awaits"]) { s["note"] = "" } }
+        if str(s["turn"]) == "compacting" { if truthy(s["awaits"]) { s["turn"] = "ended" } else { s["turn"] = "idle"; s["note"] = "" } }
         // Every process the session runs in has to say idle (one busy in a terminal while the app's sits idle is busy), and
         // only status files that name this session count: a pid can be reused.
         let statuses = (s["pids"] as? [Int] ?? []).compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
