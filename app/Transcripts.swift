@@ -443,16 +443,16 @@ extension LanternServer {
         if words { seedProse() }
         DispatchQueue.global().async {
             var seeded: [(JSON, Ordered<JSON>)] = [], seen = Set<String>()
-            let take = { (f: String, live: Bool, pid: Int?, busy: Bool?) in
+            let take = { (f: String, live: Bool, pids: [Int], busy: Bool?) in
                 let id = ((f as NSString).lastPathComponent as NSString).deletingPathExtension
                 if seen.contains(id) { return }
-                // with its process known, sweep() keeps it while that runs and drops it once it's gone, as for a hooked one
-                if var s = seedSession(f, live: live, busy: busy, words: words) { s.0["pid"] = pid; seen.insert(id); seeded.append(s) }
+                // with its processes known, sweep() keeps it while one runs and drops it once all are gone, as for a hooked one
+                if var s = seedSession(f, live: live, busy: busy, words: words) { if !pids.isEmpty { s.0["pids"] = pids }; seen.insert(id); seeded.append(s) }
             }
             if !mirroring {
-                for (f, pid, busy) in liveTranscripts() { take(f, true, pid, busy) }
+                for (f, pids, busy) in liveTranscripts() { take(f, true, pids, busy) }
                 if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, nil, nil) } }
+                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, [], nil) } }
                 } else { print("seeding failed: no \(PROJECTS)") }
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
@@ -494,16 +494,25 @@ extension LanternServer {
 
     // Hooks can miss a session (iTerm restarting, a hook failing), so now and then any running `claude` the lantern
     // doesn't know is brought back from its transcript, as at startup. One ps; the session files only for unknown pids.
+    // A process of a session already known (the Claude app's, while a terminal resume of it sends the hooks) joins that
+    // session's pids without its transcript being read, which for a long desktop session is 175 MB a minute.
     // Not while the screen's locked: nobody's looking, and the first sweep after unlocking catches up.
     func adopt() {
         if screenLocked() { return }
-        let known = Set(sessions.items.compactMap { truthy($0.1["pid"]) ? str($0.1["pid"]) : nil }), words = wordsOn
+        let known = Set(sessions.items.flatMap { $0.1["pids"] as? [Int] ?? [] }.map(String.init)), ids = Set(sessions.keys), words = wordsOn
         DispatchQueue.global().async {
-            let found = claudePids().filter { !known.contains($0) }.compactMap { pid in
-                sessionFile(pid).flatMap { seedSession($0.file, live: true, busy: $0.busy, words: words) }.map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pid"] = Int(pid); return s }
+            var joins: [(String, Int)] = [], unknown: [(file: String, pid: Int?, busy: Bool?)] = []
+            for pid in claudePids() where !known.contains(pid) {
+                guard let f = sessionFile(pid), let p = Int(pid) else { continue }
+                let id = ((f.file as NSString).lastPathComponent as NSString).deletingPathExtension
+                if ids.contains(id) { joins.append((id, p)) } else { unknown.append((f.file, p, f.busy)) }
             }
-            if found.isEmpty { return }
+            let found = bySession(unknown).compactMap { f, pids, busy in
+                seedSession(f, live: true, busy: busy, words: words).map { s -> (JSON, Ordered<JSON>) in var s = s; s.0["pids"] = pids; return s }
+            }
+            if found.isEmpty && joins.isEmpty { return }
             DispatchQueue.main.async {
+                for (id, p) in joins where self.sessions[id] != nil { self.sessions[id]!["pids"] = [p] + (self.sessions[id]!["pids"] as? [Int] ?? []) } // first: the hooks' process stays the one to focus
                 let before = self.sessions.count
                 self.add(found)
                 if self.sessions.count == before { return }

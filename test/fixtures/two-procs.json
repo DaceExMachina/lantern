@@ -1,0 +1,48 @@
+[
+ {
+  "pid": 58104,
+  "sessionId": "c0223694-dbd3-47d3-99d4-c889a060f541",
+  "cwd": "/Users/user",
+  "startedAt": 1792530512471,
+  "procStart": "Tue Oct 20 21:08:31 2026",
+  "version": "2.1.304",
+  "peerProtocol": 1,
+  "peerFeatures": [
+   "notify_idle",
+   "reply_across_default_dirs",
+   "artifact_yield"
+  ],
+  "kind": "interactive",
+  "entrypoint": "claude-desktop",
+  "hostSessionId": "local_00000000-0000-4000-8000-000000000000",
+  "pidDomain": "darwin",
+  "name": "lantern",
+  "nameSince": 1792530512471,
+  "updatedAt": 1792546351736,
+  "status": "idle",
+  "statusUpdatedAt": 1792546351736
+ },
+ {
+  "pid": 84025,
+  "sessionId": "c0223694-dbd3-47d3-99d4-c889a060f541",
+  "cwd": "/Users/user",
+  "startedAt": 1792548052990,
+  "procStart": "Wed Oct 21 02:00:52 2026",
+  "version": "2.1.305",
+  "peerProtocol": 1,
+  "peerFeatures": [
+   "notify_idle",
+   "reply_across_default_dirs",
+   "artifact_yield"
+  ],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "darwin",
+  "name": "lantern",
+  "nameSource": "user",
+  "nameSince": 1792548053315,
+  "updatedAt": 1792554726484,
+  "status": "busy",
+  "statusUpdatedAt": 1792554726484
+ }
+]

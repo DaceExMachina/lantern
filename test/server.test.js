@@ -546,7 +546,7 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
     fs.utimesSync(path.join(home, file), dayAgo, dayAgo);
   });
   const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the live session to be seeded');
-  assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
+  assert.deepStrictEqual({ pids: s.pids, state: s.state }, { pids: [proc.pid], state: 'waiting' });
 });
 
 // Claude Code's sessions/<pid>.json says whether a running session is busy or idle, and that wins over the transcript;
@@ -585,7 +585,7 @@ test('a quiet Claude app session is seeded with its process, though ps names it 
     fs.utimesSync(path.join(home, file), dayAgo, dayAgo);
   });
   const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the Claude app session to be seeded');
-  assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
+  assert.deepStrictEqual({ pids: s.pids, state: s.state }, { pids: [proc.pid], state: 'waiting' });
 });
 
 // A `claude` the hooks never told the lantern about (iTerm restarted, a hook failed) shows up after startup: the next
@@ -609,7 +609,64 @@ test('a running session the lantern missed is adopted with its process on the ne
   fs.writeFileSync(path.join(home, `.claude/sessions/${proc.pid}.json`), JSON.stringify({ pid: proc.pid, sessionId: id, cwd: '/work' }));
   fs.writeFileSync(path.join(home, 'pids'), `  ${proc.pid} claude\n`);
   const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the running session to be adopted');
-  assert.deepStrictEqual({ pid: s.pid, state: s.state }, { pid: proc.pid, state: 'waiting' });
+  assert.deepStrictEqual({ pids: s.pids, state: s.state }, { pids: [proc.pid], state: 'waiting' });
+});
+
+// One session, two processes: Dace's c0223694 ran in the Claude app (pid 58104, status idle) and in a terminal `claude
+// --resume` (pid 84025, busy) at once. test/fixtures/two-procs.json holds those two real status files; sleeping children
+// stand in for the processes, and a fake ps lists whichever pids are in $HOME/pids. Lantern kept one pid per session:
+// seeding took the first in ps order (the app's, idle, so it showed waiting while the terminal worked), adoption re-read
+// the 85 MB transcript every minute for the other pid only to throw it away, and quitting the app dropped a session
+// still running in iTerm.
+const TWO_PROCS = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/two-procs.json'), 'utf8'));
+async function twoProcs(t, listed = true, adopt = 0.2) {
+  const [app, term] = TWO_PROCS.map(() => spawn('sleep', ['60']));
+  t.after(() => { app.kill(); term.kill(); });
+  const id = TWO_PROCS[0].sessionId, file = `.claude/projects/-Users-user/${id}.jsonl`;
+  const ps = procs => procs.map(p => `${p.pid} ${p === app ? '/Applications/Claude.app/Contents/MacOS/claude' : 'claude'}\n`).join('');
+  let home;
+  const base = await serve(t, {
+    [file]: jsonl([user('Fix it'), answer('Fixed. **You:** try it')]), // the transcript alone would say waiting
+    ...Object.fromEntries([app, term].map((p, i) => [`.claude/sessions/${p.pid}.json`, JSON.stringify({ ...TWO_PROCS[i], pid: p.pid })])),
+    'no-bin/ps': '#!/bin/sh\n[ -f "$HOME/pids" ] && while read -r line; do echo "$line"; done < "$HOME/pids"\n', // builtins only: PATH is empty
+    pids: listed ? ps([app, term]) : '',
+  }, h => {
+    home = h;
+    fs.chmodSync(path.join(h, 'no-bin/ps'), 0o755);
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000); // too old for the recent-transcript pass: only its processes find it
+    fs.utimesSync(path.join(h, file), dayAgo, dayAgo);
+  }, { LANTERN_SWEEP_SECONDS: '0.1', LANTERN_ADOPT_SECONDS: String(adopt) });
+  const session = async () => (await snapshot(base)).sessions.find(s => s.id === id);
+  const list = procs => fs.writeFileSync(path.join(home, 'pids'), ps(procs));
+  // a process ending: gone from ps, then reaped (so kill(pid, 0) fails)
+  const end = async (proc, left) => { list(left); const gone = new Promise(r => proc.once('exit', r)); proc.kill(); await gone; };
+  return { base, home, id, file, app, term, session, list, end };
+}
+
+test('a session running in the Claude app and a terminal at once seeds busy, with both processes, and stays until both end', async t => {
+  const { app, term, session, end } = await twoProcs(t, true, 600); // no adoption pass to bring a dropped session back
+  const s = await until(session, 'the session to be seeded');
+  assert.deepStrictEqual({ state: s.state, pids: s.pids }, { state: 'working', pids: [app.pid, term.pid] });
+  await end(app, [term]); // quitting the app: the terminal still runs it
+  await until(async () => (await session())?.pids?.join() === String(term.pid), 'the app\'s process to drop out');
+  assert.strictEqual((await session()).state, 'working');
+  await end(term, []);
+  await until(async () => !(await session()), 'the session to end with its last process');
+});
+
+test('adoption adds a known session\'s other process to it instead of re-reading its transcript', async t => {
+  const { base, home, id, file, app, term, session, list, end } = await twoProcs(t, false); // ps lists nothing at first
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(term.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/Users/user', transcript_path: path.join(home, file), prompt: 'go' }) });
+  list([app, term]);
+  await until(async () => (await session()).pids.join() === `${app.pid},${term.pid}`, 'adoption to add the app\'s process');
+  // a compaction's check reads every process: the app's says idle, but the terminal's busy one is still working
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(term.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'SessionStart', source: 'compact', cwd: '/Users/user', transcript_path: path.join(home, file) }) });
+  assert.strictEqual((await session()).state, 'working');
+  await end(term, [app]); // the terminal that sent the hooks closes; the app still runs it
+  await wait(500); // five sweeps
+  assert.deepStrictEqual((await session())?.pids, [app.pid]);
 });
 
 // A stats log (stats.sqlite) at the schema of version 2, holding the given spans ([kind, session, began, ended, data]),
