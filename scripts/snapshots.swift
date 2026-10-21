@@ -7,8 +7,12 @@
 import AppKit
 import WebKit
 
-let SCENES = [("barrel", "style=barrel&hover"), ("chochin", "style=chochin"), ("moroccan", "style=moroccan"), ("ambient", "style=barrel&ambient"), ("candle", "style=candle")]
-let SIZE = NSSize(width: 720, height: 540), TOLERANCE = 2
+// each scene's name, page query and window size. The chrome scenes snap the menu, stats, recap, a card and the dev panel
+// over the barrel: full width, a phone's width, and the iTerm2 panel's.
+let WIDE = NSSize(width: 720, height: 540)
+let SCENES = [("barrel", "style=barrel&hover", WIDE), ("chochin", "style=chochin", WIDE), ("moroccan", "style=moroccan", WIDE), ("ambient", "style=barrel&ambient", WIDE), ("candle", "style=candle", WIDE),
+  ("chrome", "style=barrel&chrome", WIDE), ("chrome375", "style=barrel&chrome", NSSize(width: 375, height: 700)), ("panel", "style=barrel&chrome&panel", NSSize(width: 300, height: 420))]
+let TOLERANCE = 2
 let update = CommandLine.arguments.contains("--update")
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
 let refs = root.appendingPathComponent("test/snapshots"), out = refs.appendingPathComponent("out")
@@ -51,8 +55,8 @@ func check(_ name: String, _ image: CGImage) {
 }
 
 final class Shooter: NSObject, WKNavigationDelegate {
-  let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -30000, y: -30000), size: SIZE), styleMask: .borderless, backing: .buffered, defer: false)
-  var web: WKWebView!, queue = SCENES, scene = ""
+  let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -30000, y: -30000), size: WIDE), styleMask: .borderless, backing: .buffered, defer: false)
+  var web: WKWebView!, queue = SCENES, scene = "", size = WIDE
   override init() {
     super.init()
     window.colorSpace = .sRGB
@@ -64,11 +68,12 @@ final class Shooter: NSObject, WKNavigationDelegate {
       print(update ? "references updated" : failed == 0 ? "all snapshots match" : "\(failed) snapshot(s) differ")
       exit(failed == 0 ? 0 : 1)
     }
-    let (name, query) = queue.removeFirst()
-    scene = name
+    let (name, query, size) = queue.removeFirst()
+    scene = name; self.size = size
+    window.setContentSize(size)
     let config = WKWebViewConfiguration() // a fresh page per scene, so each starts from the same seed and clock
     config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-    web = WKWebView(frame: NSRect(origin: .zero, size: SIZE), configuration: config)
+    web = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: config)
     web.setValue(false, forKey: "windowOcclusionDetectionEnabled") // keep painting although the window is never shown
     web.navigationDelegate = self
     window.contentView = web // never ordered in: it stays off screen and out of the way
@@ -82,7 +87,7 @@ final class Shooter: NSObject, WKNavigationDelegate {
       if step == "done" { return self.next() }
       let config = WKSnapshotConfiguration()
       config.afterScreenUpdates = true
-      config.snapshotWidth = NSNumber(value: Double(SIZE.width / self.window.backingScaleFactor)) // in points: one pixel per CSS pixel
+      config.snapshotWidth = NSNumber(value: Double(self.size.width / self.window.backingScaleFactor)) // in points: one pixel per CSS pixel
       self.web.takeSnapshot(with: config) { image, error in
         guard let image = image?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { fatalError("\(self.scene): \(String(describing: error))") }
         check("\(self.scene)-\(step)", image)

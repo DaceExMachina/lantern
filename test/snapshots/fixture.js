@@ -2,7 +2,8 @@
 // (performance.now, Date) only moves when frames are stepped, timers and animation frames never fire (the driver calls
 // frame() and the session text's tick itself), and a fake EventSource plays a fixture covering every kind of moth,
 // firefly, wisp and ghost. The harness calls __drive() until it returns 'done'; each other answer names a snapshot to take.
-// The page's query picks the scene: style=<lantern>, ambient for the second screen's view, hover to snap a hover card.
+// The page's query picks the scene: style=<lantern>, ambient for the second screen's view, hover to snap a hover card,
+// chrome to snap the menu, stats, recap, a card and the dev panel instead of the later scene (with /stats from statsLog).
 (() => {
   let seed = 0x5eed;
   Math.random = () => { // mulberry32
@@ -26,7 +27,7 @@
   let es;
   window.EventSource = class { constructor() { es = this; this.l = {}; } addEventListener(t, f) { (this.l[t] ||= []).push(f); } };
   const emit = (type, data) => { const e = { data: JSON.stringify(data) }; if (type === 'message') es.onmessage(e); else (es.l[type] || []).forEach(f => f(e)); };
-  window.fetch = () => Promise.resolve(new Response('{}'));
+  window.fetch = url => Promise.resolve(new Response(String(url).endsWith('/stats') ? JSON.stringify(statsLog()) : '{}'));
   addEventListener('DOMContentLoaded', () => {
     const st = document.createElement('style');
     st.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
@@ -86,6 +87,33 @@
     }
     errs.push(`no scorch for sess-alpha within ${slots} slots`);
   };
+  // GET /stats for the chrome scenes: today and the week before, each with four sessions that work, wait, snooze, sleep
+  // and idle, the lantern violet and quiet for a while, a couple of PRs and badges
+  const statsLog = () => {
+    const H = 3600000, now = Date.now(), days = [], spans = [], gauges = [], prs = [];
+    for (let i = 7; i >= 0; i--) {
+      const start = now - 10 * H - i * 864e5, end = now - i * 864e5, at = h => start + h * H, id = n => `day${i}-${n}`;
+      days.push({ start, end, warmMoths: 58 + 4 * i, warmLantern: 66 + 3 * i, medianWait: (3 + i) * MIN, slowWait: (20 + i) * MIN, waits: 9 + i,
+        snoozedMs: 30 * MIN, sleepingMs: H, merged: i % 4, open: 5, stale: 12 + i, staleChange: i % 3 - 1, mothMs: 18 * H });
+      spans.push(['server', start, end], ['violet', at(2), at(3)], ['quiet', at(8), at(9)]);
+      [['alpha', 0, 10], ['bravo', 1, 9], ['charlie', 3.5, 8], ['delta', 6, 7.5]].forEach(([n, b, e]) =>
+        spans.push(['alive', at(b), at(e), false, id(n), `Session ${n}`, `/Users/x/projects/${n}`]));
+      spans.push(['waiting', at(2), at(3), null, id('bravo')], ['waiting', at(4), at(5), null, id('charlie')], ['snoozed', at(4), at(5), null, id('charlie')],
+        ['waiting', at(6), at(7), null, id('bravo')], ['sleeping', at(6), at(7), null, id('bravo')]);
+      prs.push([at(5), id('alpha'), 'https://github.com/acme/app/pull/1', 'merged', 'ready', 'PR 1: ready change'], [at(7), id('charlie'), 'https://github.com/acme/app/pull/3', null, 'changes', 'PR 3: changes change']);
+      for (let t = start; t < end; t += 5 * MIN) gauges.push([t, 4, 2, 1, 0]);
+    }
+    const today = dayKey(now), before = dayKey(now - 864e5);
+    return { days, spans, gauges, prs, tally: { warm_all_day: [3, today], revived: [1, before] }, achievements: [['revived', before], ['warm_all_day', today]], streak: 3, warmGoal: 70 };
+  };
+  // the chrome scenes: each panel opened over the barrel in turn, then closed (a function, as run() adds to LAST)
+  const chrome = () => [
+    () => { $('menu').showPopover(); $('help').open = true; }, snap('menu'), () => { $('menu').hidePopover(); },
+    async () => { $('stats').showPopover(); await loadStats(); }, snap('stats'), () => { $('stats').hidePopover(); },
+    async () => { await openRecap(6); }, snap('recap'), () => { $('recap').hidePopover(); },
+    () => { enterZone(moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { hideCard(); },
+    () => { toggleDevPanel(); }, snap('dev'),
+  ];
   const steps = [
     () => {
       catchScorch();
@@ -96,9 +124,12 @@
       emit('message', sessionsAt(0));
     },
     run(6),
+    ...(Q.has('chrome') ? chrome() : []),
     ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), () => { hideCard(); }] : []),
-    () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
-    run(14), snap('t20'), // T = LAST
+    ...(Q.has('chrome') ? [] : [
+      () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
+      run(14), snap('t20'), // T = LAST
+    ]),
   ];
   window.__drive = async () => {
     while (steps.length && !errs.length) { const r = await steps.shift()(); if (r && !errs.length) return r; }
