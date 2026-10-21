@@ -197,7 +197,6 @@ function renderStats(j) {
     ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
     ['slowest answers', today.slowWait == null ? '–' : ago(today.slowWait), 'one in ten waits lasted at least this long'],
     ['waits', today.waits, 'times a moth landed on the lantern for you'],
-    ['snoozed', today.snoozedMs || today.sleepingMs ? ago(today.snoozedMs + today.sleepingMs) : '–', 'moth time spent waiting while snoozed, by hand or in quiet hours, or snoozed for good (sleeping)'],
     ['merged', today.merged, 'fireflies that flew home (merged PRs)'],
     ['in flight', today.open ?? '–', 'open PRs your sessions own'],
     ['stale PRs', stale, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
