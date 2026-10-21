@@ -323,10 +323,12 @@ func lineWith(_ file: String, _ needle: String) -> Data? {
 }
 
 /// The model an agent runs now, by name ("Opus 5.5"): the newest model named in its transcript's last 128 KB, a `model`
-/// attachment or a reply's `message.model`, since about 1 in 200 agents switch mid-run. Past that, the model attachment
-/// near its start (written about 70 ms in, by every Claude Code version and the desktop app; a fork has none), then its
-/// first reply's. nil until one is written. Only lines naming a model get parsed.
-func agentModel(_ file: String) -> String? {
+/// attachment or a reply's `message.model`, since about 1 in 200 agents switch mid-run. Only lines naming a model get
+/// parsed. With `first` (an agent with no model yet), when the tail names none, the one it started on: the model
+/// attachment near its start (every Claude Code version and the desktop app write it, about 70 ms in; a fork has none),
+/// then its first reply's. Without `first` that would be its old model if it has switched since, so it's nil, and the
+/// caller keeps what it has.
+func agentModel(_ file: String, first: Bool) -> String? {
     let named = { (j: JSON) -> String? in
         if str(j["type"]) == "assistant", let m = (j["message"] as? JSON)?["model"] as? String { return m }
         guard let at = j["attachment"] as? JSON, str(at["type"]) == "model", let id = at["identity"] as? JSON else { return nil }
@@ -336,7 +338,7 @@ func agentModel(_ file: String) -> String? {
     for line in tail(file, 128 * 1024).reversed() where line.contains("\"model") {
         if let j = parse(Data(line.utf8)) as? JSON, let m = usable(named(j)) { return m }
     }
-    for needle in ["\"type\":\"model\",\"identity\"", "\"type\":\"assistant\""] {
+    for needle in first ? ["\"type\":\"model\",\"identity\"", "\"type\":\"assistant\""] : [] {
         if let line = lineWith(file, needle), let j = parse(line) as? JSON, let m = usable(named(j)) { return m }
     }
     return nil
@@ -351,15 +353,15 @@ func modelLabel(_ m: String) -> String {
 
 /// Subagents under a session folder that are still going: transcript not finished, and touched within AGENT_EXPIRE_MS (an
 /// agent waiting on a long tool call writes nothing for minutes). This is the one rule for a live agent: startup seeds
-/// from it, and every sweep rebuilds each session's agents from it plus any heard from within AGENT_CHECK_MS.
-func liveSubagents(_ dir: String) -> Ordered<JSON> {
+/// from it, and every sweep rebuilds each session's agents from it plus any heard from within AGENT_CHECK_MS. The agents in
+/// `modelled` already have a model, so only a newer one is read for them (agentModel).
+func liveSubagents(_ dir: String, modelled: Set<String> = []) -> Ordered<JSON> {
     var agents = Ordered<JSON>()
     for f in transcripts(dir + "/subagents") {
         guard let agent = Re("^agent-([A-Za-z0-9_-]+)\\.jsonl$").match((f as NSString).lastPathComponent)?[1], let mtime = fileTimes(f)?.mtime,
               now() - mtime <= AGENT_EXPIRE_MS, !lastTurn(tail(f, 64 * 1024)).done else { continue }
-        // tries 0: an agent found before its model is written gets it once it fires a hook (loadAgentMeta)
-        var a: JSON = ["type": "", "description": "", "activity": "", "tries": 0, "last": mtime, "started": fileTimes(f)?.birth ?? mtime]
-        if let m = agentModel(f) { a["model"] = m }
+        var a: JSON = ["type": "", "description": "", "activity": "", "tries": 3, "last": mtime, "started": fileTimes(f)?.birth ?? mtime]
+        if let m = agentModel(f, first: !modelled.contains(agent)) { a["model"] = m }
         if let data = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(agent).meta.json"), let j = parse(data) as? JSON {
             a["type"] = or(j["agentType"], ""); a["description"] = or(j["description"], "")
         }
@@ -411,10 +413,11 @@ extension LanternServer {
     /// background agents run on while it waits on me. A lost SubagentStop, a restart and a quiet agent all come out right.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
     func reconcile() {
-        struct Look { let id: String, dir: String, had: Set<String>, title: Any?, titleSeen: Double }
+        struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
-            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", had: Set(agents[id]?.keys ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
+            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", had: Set(agents[id]?.keys ?? []),
+                        modelled: Set(agents[id]?.items.filter { truthy($0.1["model"]) }.map(\.0) ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
         guard !looks.isEmpty else { return }
         DispatchQueue.global().async {
@@ -424,7 +427,7 @@ extension LanternServer {
                 let mine = app.first { $0.cli == l.id }
                 let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0, mine?.mtime ?? 0)
                 let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
-                return (l.id, l.had, liveSubagents(l.dir), written, title)
+                return (l.id, l.had, liveSubagents(l.dir, modelled: l.modelled), written, title)
             }
             DispatchQueue.main.async {
                 var changed = false
@@ -438,7 +441,13 @@ extension LanternServer {
                     var kept = Ordered<JSON>()
                     for (aid, a) in was.items {
                         let last = (a["last"] as? Double) ?? 0
-                        if let seen = live[aid] { var a = a; a["last"] = max(last, (seen["last"] as? Double) ?? 0); kept[aid] = a }
+                        if let seen = live[aid] {
+                            var a = a
+                            a["last"] = max(last, (seen["last"] as? Double) ?? 0)
+                            // the model it's on now: about 1 in 200 agents switch mid-run
+                            if let m = seen["model"], str(a["model"]) != str(m) { a["model"] = m; changed = true }
+                            kept[aid] = a
+                        }
                         else if now() - last < AGENT_CHECK_MS { kept[aid] = a }
                     }
                     // not one that went while the transcripts were read (its SubagentStop landed meanwhile)
@@ -454,7 +463,7 @@ extension LanternServer {
     func loadAgentMeta(_ id: String, _ aid: String, _ dir: String) {
         DispatchQueue.global().async {
             let meta = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(aid).meta.json").flatMap(parse) as? JSON
-            let model = agentModel("\(dir)/subagents/agent-\(aid).jsonl")
+            let model = agentModel("\(dir)/subagents/agent-\(aid).jsonl", first: true) // only called while it has none
             DispatchQueue.main.async {
                 guard let was = self.agents[id]?[aid] else { return }
                 var a = was
