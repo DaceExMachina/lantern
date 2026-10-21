@@ -80,7 +80,7 @@
   #recap:popover-open { gap: var(--space-3); }
   #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
   #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
-  #statsBody { display: flex; flex-direction: column; gap: var(--space-4); }
+  #statsBody { display: flex; flex-direction: column; gap: var(--space-4); container-type: inline-size; }
   #statsWeek { display: flex; flex-direction: column; gap: var(--space-2); } /* a heading, then its content; each heading after the first starts a new section */
   #statsWeek h4:first-child { margin-top: 0; }
   :is(#stats, #recap) .headline { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
@@ -101,7 +101,10 @@
   :is(#stats, #recap) .legend span { display: flex; align-items: center; white-space: nowrap; }
   :is(#stats, #recap) .legend [data-v] { margin-left: auto; min-width: 5.4em; text-align: right; }
   :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
-  :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: var(--space-2) var(--space-3); margin: 0; }
+  :is(#stats, #recap) dl { display: grid; gap: var(--space-2) var(--space-3); margin: 0; }
+  /* the stats panel's six numbers: 3 by 2 when there's room (380px), else 2 by 3 */
+  #stats dl { grid-template-columns: repeat(2, 1fr); }
+  @container (min-width: 380px) { #stats dl { grid-template-columns: repeat(3, 1fr); } }
   :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }
   :is(#stats, #recap) dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
