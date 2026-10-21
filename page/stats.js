@@ -79,12 +79,12 @@ const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribb
 // The two headline stats, for the stats panel and the recap. They measure different things: the lantern's warm share
 // is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed and sleeping
 // ones aside), moths flying is of all session time summed over the sessions (waiting, snoozed and sleeping count as landed).
-// Hovering the ribbon swaps them for that moment's lantern colour and share of moths flying (see followRibbon).
+// Hovering the ribbon swaps them for that moment's lantern state and share of moths flying (see followRibbon).
 const pct = v => v == null ? '–' : `${v}%`;
-const LAMP_NOTE = 'no session waiting', FLYING_NOTE = 'of moth time';
+const LAMP_WORD = { warm: 'warm', violet: 'waiting', quiet: 'quiet' }; // the lantern's headline while hovering (no lamp at all reads "off")
 const headline = d => `<div class="headline">
-  <div title="Of the time the app ran, outside quiet hours, the lantern was warm: no session was waiting on you (snoozed and sleeping ones don't count as waiting)."><b data-v="lamp">${pct(d.warmLantern)}</b><span>lantern warm</span><small data-v="lampNote">${LAMP_NOTE}</small></div>
-  <div title="Of all session time, added up across sessions, moths were flying: not waiting on you, snoozed or sleeping. Two sessions running for an hour is two hours."><b data-v="flying">${pct(d.warmMoths)}</b><span>moths flying</span><small data-v="flyingNote">${FLYING_NOTE}</small></div></div>`;
+  <div><b data-v="lamp">${pct(d.warmLantern)}</b><span>warm lantern</span></div>
+  <div><b data-v="flying">${pct(d.warmMoths)}</b><span>moths flying</span></div></div>`;
 
 // Hovering (or touching) a dayRibbon: a line follows the pointer and the legend's values show that moment; leaving
 // puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change. It returns
@@ -95,9 +95,9 @@ function followRibbon(box, r, day, onMoment = t => {}) {
   const el = box.querySelector('.ribbon'), root = el.closest('[popover]');
   const show = s => {
     const t = s && clock(s.a), b = s && states(s), out = s
-      ? { at: t, lamp: lampOf(s) || 'off', flying: s.flying == null ? '–' : `${Math.round(100 * s.flying)}%`, lampNote: `at ${t}`, flyingNote: `at ${t}`,
+      ? { at: t, lamp: LAMP_WORD[lampOf(s)] || 'off', flying: s.flying == null ? '–' : `${Math.round(100 * s.flying)}%`,
           ...Object.fromEntries(Object.entries(b).map(([k, n]) => [k, String(Math.round(n))])) }
-      : { at: '', lamp: pct(day.warmLantern), flying: pct(day.warmMoths), lampNote: LAMP_NOTE, flyingNote: FLYING_NOTE,
+      : { at: '', lamp: pct(day.warmLantern), flying: pct(day.warmMoths),
           ...Object.fromEntries(Object.keys(states(r.slices[0])).map(k => [k, ago(r.slices.reduce((ms, s) => ms + states(s)[k] * (s.b - s.a), 0))])) };
     for (const [k, v] of Object.entries(out)) for (const slot of root.querySelectorAll(`[data-v="${k}"]`)) slot.textContent = v;
   };
