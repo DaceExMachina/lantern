@@ -233,8 +233,6 @@
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
   .moth { pointer-events: none; }
-  /* each session's hover area: still while its moth wanders, so the card doesn't chase it */
-  #zones circle { fill: transparent; cursor: pointer; }
   :is(#card, .starCard) .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
   :is(#card, .starCard) .agent { color: #E8DCF2; }
   :is(#card, .starCard) .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
@@ -277,13 +275,11 @@
     </linearGradient>
     <filter id="behindPaper" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.8"/></filter>
   </defs>
-  <g id="stale"></g>
   <g id="staleCloud" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="staleCloudCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
   <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
   <g id="lantern"></g>
   <g id="moths"></g>
   <g id="flies"></g>
-  <g id="zones"></g>
 </svg></div>
 <div id="card" role="tooltip"></div>
 <footer>

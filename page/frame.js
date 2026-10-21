@@ -747,7 +747,7 @@ function mothTarget(k, m, dt, s) {
 }
 
 function dropMoth(k, m) {
-  m.g.remove(); m.thread?.remove(); m.zone?.remove(); m.flyZone?.remove(); m.grad?.remove(); m.flyGrad?.remove();
+  m.g.remove(); m.thread?.remove(); zones.delete(m.zone); zones.delete(m.flyZone); m.grad?.remove(); m.flyGrad?.remove();
   m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
   moths.delete(k);
   if (hovered === m) hideCard();
@@ -794,15 +794,13 @@ function mothZones(m, needsMe) {
   // no longer overlap and steal each other's card. It sits on the middle of the wings (m.shade, from the last frame),
   // not on m.x, m.y, the joint resting on the paper, which lies below it and would hang the area over the moth below.
   [m.zx, m.zy] = needsMe ? m.shade || [m.x, m.y] : stretch(m.home);
-  put(m.zone, 'cx', m.zx.toFixed(1)); put(m.zone, 'cy', m.zy.toFixed(1)); put(m.zone, 'r', needsMe ? 32 : 56);
+  Object.assign(m.zone, { x: m.zx, y: m.zy, r: needsMe ? 32 : 56, off: !!m.leaving }); // back on for a moth that came back (state.js sync)
   // once it has landed, its fireflies back home get a hover area of their own with the same card
   if (m.flies) {
     m.flyZone ??= hoverArea(m, 'flies');
     [m.fx, m.fy] = stretch(m.home);
-    put(m.flyZone, 'cx', m.fx.toFixed(1)); put(m.flyZone, 'cy', m.fy.toFixed(1)); put(m.flyZone, 'r', 62);
-    m.flyZone.style.display = needsMe && m.flies.size && !m.leaving ? '' : 'none';
+    Object.assign(m.flyZone, { x: m.fx, y: m.fy, r: 62, off: !(needsMe && m.flies.size && !m.leaving) });
   }
-  m.zone.style.pointerEvents = m.leaving ? 'none' : ''; // back on for a moth that came back (state.js sync)
 }
 
 // Glide toward the target on the ghosts' spring (stale.js's settle), so a new target (taking off, landing, a hop,

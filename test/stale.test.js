@@ -61,3 +61,76 @@ test("with a standing lantern, no loose wisp's spot lands in the band its pedest
   page.planStale(0, [d]);
   assert.strictEqual(d.aim, d.pref);
 });
+
+// The wisps and ghost moths are light and shapes in the background shader (flyLights and ghostWings, drawn by
+// background.js), hovered through plain circles (card.js zones), so nothing in the scene's SVG moves for them.
+const BASE = Date.UTC(2026, 9, 20, 12);
+const NEEDS = ['ready', 'failing', 'draft', 'review', 'changes', 'quiet'];
+const stale = NEEDS.map((need, i) => ({ url: `https://github.com/o/r/pull/${i}`, label: `#${i}`, title: `PR ${i}`, need, updatedAt: new Date(BASE - (8 + i) * 864e5).toISOString(),
+  owner: i < 2 ? { id: 'old-session', title: 'Old session', last: BASE - 9 * 864e5 } : undefined })); // the first two made by one old session
+
+function screen(clock) {
+  const el = { style: {}, getAttribute() {}, setAttribute() {} };
+  const w = vm.createContext({ URLSearchParams, location: { search: '' }, performance, wall: () => clock.t, document: { getElementById: () => el } });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'fireflies', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), w, { filename: f + '.js' });
+  vm.runInContext('Date.now = () => wall()', w);
+  // one frame, then what the shader would be handed: each light's x, y, radius, brightness, r, g, b, and the ghosts' wing corners
+  const frame = (dt, s) => vm.runInContext(`drawStale(${dt}, ${s}); (() => { const out = { lights: [...flyLights.slice(0, 7 * flyLightN)], wings: [...ghostWings.slice(0, 3 * ghostWingN)] };
+    flyLightN = 0; ghostWingN = 0; return out; })()`, w);
+  const run = code => vm.runInContext(code, w);
+  run(`stalePRs = ${JSON.stringify(stale)}`);
+  // the page's own names (top-level let and const aren't properties of the context)
+  return { frame, run, w: run('({ hex, mix, FLY, WISP_TINT, GHOST_TRIS, zones, zoneAt, wisps, ghosts, off: () => { staleOn = false; } })') };
+}
+test('every stale PR leaves a pale light for the shader, its old session a ghost moth, and turning them off leaves neither', () => {
+  const clock = { t: BASE }, { w, frame } = screen(clock);
+  let out;
+  for (let i = 0; i < 3; i++) { clock.t += 16; out = frame(0.016, i * 0.016); }
+  assert.strictEqual(out.lights.length / 7, stale.length, 'one light per stale PR');
+  const pale = stale.map(p => w.hex(w.mix(w.FLY[p.need], w.WISP_TINT, 0.55)).map(v => v / 255));
+  for (let i = 0; i < stale.length; i++) {
+    const l = out.lights.slice(7 * i, 7 * i + 7);
+    assert.strictEqual(l[2], 40, 'a wisp-sized glow');
+    assert.ok(l[3] > 0.05, `lit: ${l[3]}`);
+    l.slice(4).forEach((v, k) => assert.ok(Math.abs(v - pale[i][k]) < 1e-6, `${stale[i].need}: its colour washed out toward the tint`));
+  }
+  assert.strictEqual(out.wings.length / 9, 2 * w.GHOST_TRIS, 'one ghost moth: two wings of triangles');
+  w.off();
+  clock.t += 16; out = frame(0.016, 0.064);
+  assert.deepStrictEqual([out.lights.length, out.wings.length], [0, 0]);
+  assert.ok([...w.zones].every(z => z.off), 'and none can be hovered');
+});
+
+test('hovering a wisp or a ghost moth finds it where it is drawn now, after it has moved', () => {
+  const clock = { t: BASE }, { w, frame } = screen(clock);
+  const at = () => { clock.t += 16; return frame(0.016, (clock.t - BASE) / 1000).lights; };
+  const hits = lights => [...w.wisps.values()].map((d, i) => w.zoneAt(w.zones, lights[7 * i], lights[7 * i + 1])?.target);
+  const before = at();
+  assert.deepStrictEqual(hits(before).map(t => t?.stale.url), stale.map(p => p.url), 'each light hovers its own PR');
+  clock.t += 20e3; // 20s on, everything has drifted
+  const after = at();
+  assert.deepStrictEqual(hits(after).map(t => t?.stale.url), stale.map(p => p.url), 'and still does where it has drifted to');
+  const moved = stale.filter((p, i) => Math.hypot(after[7 * i] - before[7 * i], after[7 * i + 1] - before[7 * i + 1]) > 12);
+  assert.ok(moved.length >= 3, `most moved further than their hover areas are wide: ${moved.length}`);
+  for (const p of moved) {
+    const i = stale.indexOf(p);
+    assert.notStrictEqual(w.zoneAt(w.zones, before[7 * i], before[7 * i + 1])?.target?.stale, p, `${p.label}'s old spot isn't it any more`);
+  }
+  const ghost = [...w.ghosts.values()][0];
+  assert.strictEqual(w.zoneAt(w.zones, ghost.x, ghost.y)?.target.ghost, ghost, 'the ghost moth hovers as itself');
+});
+
+test('every screen draws the wisps and ghosts in the same places, whatever its frame rate and whenever it opened', () => {
+  const clock = { t: BASE }, a = screen(clock), b = screen(clock);
+  let outA, outB;
+  for (let t = 0; t <= 30; t += 1 / 60) { // the app at 60 fps since BASE; the panel at 25, opened 10s later with its own page clock
+    clock.t = BASE + t * 1000;
+    outA = a.frame(1 / 60, t);
+    if (t >= 10 && Math.round(t * 60) % 3 === 0) outB = b.frame(0.05, 100 + t - 10);
+  }
+  clock.t = BASE + 30.5e3; outA = a.frame(0.5, 30.5); outB = b.frame(0.5, 120.5);
+  assert.strictEqual(outB.lights.length, outA.lights.length); // the same to a thousandth of a unit (the shader gets 32-bit floats)
+  outA.lights.forEach((v, i) => assert.ok(Math.abs(v - outB.lights[i]) < 1e-3, `light value ${i}: ${v} against ${outB.lights[i]}`));
+  assert.strictEqual(outB.wings.length, outA.wings.length);
+  outA.wings.forEach((v, i) => assert.ok(Math.abs(v - outB.wings[i]) < 1e-3, `ghost wing value ${i}: ${v} against ${outB.wings[i]}`));
+});

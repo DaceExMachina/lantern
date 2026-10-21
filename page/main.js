@@ -119,21 +119,34 @@ setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
 $('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) clickZone(hovered.zone, e.shiftKey); });
-// every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt)
+// every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt).
+// Only the scene's own pointer events count, never ones on the card, the footer or a menu over it.
 const zoneFor = (/** @type {MouseEvent} */ e) => {
-  const p = new DOMPoint(e.clientX, e.clientY).matrixTransform($('zones').getScreenCTM().inverse());
-  return zoneAt([...$('zones').children].filter(z => z instanceof SVGElement && z.style.display !== 'none' && z.style.pointerEvents !== 'none'), p.x, p.y);
+  if (!(/** @type {Element} */ (e.target)).closest?.('#scene')) return null;
+  const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(document.querySelector('svg').getScreenCTM().inverse());
+  return zoneAt(zones, p.x, p.y);
 };
 // Touch has no hover, so a tap stands in: it shows the card (tapZone), and tapping the card then does what a click does.
 // Taps never run a hover area's click action or hide the card on pointerleave, which a finger lifting would trigger at once.
 // A long press reaches snooze through the contextmenu event below.
 const isTouch = (/** @type {PointerEvent} */ e) => e.pointerType === 'touch';
-for (const type of ['pointerdown', 'pointermove']) $('zones').addEventListener(type, e => isTouch(e) || enterZone(zoneFor(e)));
-$('zones').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 700); });
-$('zones').addEventListener('click', e => { const z = zoneFor(e); if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey); });
-// a tap anywhere else puts the card away
-addEventListener('click', e => { if (isTouch(e) && !(/** @type {Element} */ (e.target)).closest('#card, #zones')) hideCard(); });
-$('zones').addEventListener('contextmenu', e => areas.get(zoneFor(e))?.menu?.());
+// Leaving every area (or the scene) starts the card's grace period, once.
+let inZone = false;
+const leaveZones = () => { if (inZone) { inZone = false; hideTimer = setTimeout(hideCard, 700); } };
+for (const type of ['pointerdown', 'pointermove']) $('scene').addEventListener(type, e => {
+  if (isTouch(e)) return;
+  const z = zoneFor(e);
+  $('scene').style.cursor = z ? 'pointer' : '';
+  if (z) { inZone = true; enterZone(z); } else leaveZones();
+});
+$('scene').addEventListener('pointerleave', e => isTouch(e) || leaveZones());
+// a click on an area runs it; a tap shows its card, and a tap anywhere else puts the card away
+addEventListener('click', e => {
+  const z = zoneFor(e);
+  if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey);
+  else if (isTouch(e) && !(/** @type {Element} */ (e.target)).closest('#card')) hideCard();
+});
+$('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
 $('card').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 400); });

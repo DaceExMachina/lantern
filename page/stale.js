@@ -14,29 +14,42 @@ const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
 
 function makeWisp(p) {
   const rand = seeded(hash(p.url));
-  const zone = $('zones').appendChild(el('circle', { r: 12 }));
+  // hovering shows the PR's card; clicking (or clicking the card) opens it
+  const card = { stale: p, zone: null }, zone = card.zone = Object.assign(hoverZone(card, () => open(p.url, '_blank', 'noopener')), { r: 12 });
   const d = { p, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30,
     born: staleSeeded ? 0 : 1, gone: undefined };
-  // hovering shows the PR's card; clicking (or clicking the card) opens it
-  hoverZone(zone, { stale: d.p, zone }, () => open(d.p.url, '_blank', 'noopener'));
   return d;
 }
 
 // Ghost moths: an old session that made some of the stale PRs drifts faintly in the background, the same moth as the
 // flying ones, flapping the same way, but pale and nearly see-through. Hovering shows the session and its stale PRs;
 // clicking resumes it in a new iTerm tab. At most 8, the most recently active; older ones drift lower and fainter.
+// Like the wisps' light, they're drawn by the background shader (background.js drawGhosts), not the SVG: anything moving
+// in the SVG makes WebKit repaint the scene under it every frame, the Moroccan's masked brass and lace included. Their
+// hover areas are plain circles (card.js), not SVG ones, for the same reason.
 const GHOSTS_MAX = 8;
 const ghosts = new Map(); // session id -> ghost moth
 function makeGhost(o) {
   const rand = seeded(hash(o.id));
-  const g = el('g'), wings = el('g', { transform: 'translate(-2 -6)' }), side = el('path'), up = el('path');
-  wings.append(side, up); g.append(wings);
-  $('stale').prepend(g); // behind the wisps
-  const zone = $('zones').appendChild(el('circle', { r: 20 }));
-  const m = { o, g, side, up, zone, prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0 };
-  hoverZone(zone, { ghost: m, zone }, () => post('/resume', { id: m.o.id }));
+  const m = { o, zone: null, prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0,
+    rate: 0.88 + seeded(hash(o.id + ':wings'))() * 0.24 }; // a living moth's wingbeat, at its own speed
+  const card = { ghost: m, zone: null };
+  m.zone = card.zone = Object.assign(hoverZone(card, () => post('/resume', { id: m.o.id })), { r: 20 });
   return m;
+}
+// Each frame the ghosts leave their wings in ghostWings for the shader, as triangles (x, y, opacity per corner): each
+// wing's outline (pathOf's two curves from the root out and back) sampled into a fan from the root, which the wing
+// shapes are star-shaped about. `at` takes a point on the moth to the scene.
+const WING_STEPS = 6, GHOST_TRIS = 2 * WING_STEPS - 1; // points along each curve, triangles per wing
+const ghostWings = new Float32Array(GHOSTS_MAX * 2 * GHOST_TRIS * 9);
+let ghostWingN = 0; // corners
+function addGhostWing(pts, at, alpha) {
+  const q = (a, c, b, t) => at([0, 1].map(k => (1 - t) * (1 - t) * a[k] + 2 * (1 - t) * t * c[k] + t * t * b[k]));
+  const rim = [];
+  for (const [a, c, b] of [pts.slice(0, 3), pts.slice(2, 5)]) for (let i = 1; i <= WING_STEPS; i++) rim.push(q(a, c, b, i / WING_STEPS));
+  const root = at(pts[0]);
+  for (let i = 0; i < GHOST_TRIS && ghostWingN < ghostWings.length / 3; i++, ghostWingN += 3) ghostWings.set([...root, alpha, ...rim[i], alpha, ...rim[i + 1], alpha], 3 * ghostWingN);
 }
 
 // Where the ghosts go: all around the lantern, in the gaps between the living moths. Each living moth (with its
@@ -92,8 +105,8 @@ function driftTo(o, dt, s, sway) {
 }
 
 function drawStale(dt, s) {
-  const show = staleOn, list = stalePRs;
-  $('stale').style.display = show ? '' : 'none'; // turning it off just hides it
+  const show = staleOn, list = stalePRs; // turning it off just hides them
+  const now = Date.now() / 1000; // they move on the wall clock, so every window (app, panel, screensaver) has them in the same places
   const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 30 drift, the oldest cloud up
   const want = new Map(drifting.map((p, i) => [p.url, [p, i]]));
   for (const [url, [p]] of want) if (!wisps.has(url)) wisps.set(url, makeWisp(p));
@@ -107,49 +120,45 @@ function drawStale(dt, s) {
   planStale(s, [...wisps.values()].filter(d => !ghosts.has(d.p.owner?.id)));
   for (const [id, m] of ghosts) {
     const i = kept.findIndex(o => o.id === id);
-    if (i < 0) { m.g.remove(); m.zone.remove(); ghosts.delete(id); continue; }
+    if (i < 0) { zones.delete(m.zone); ghosts.delete(id); continue; }
     m.o = kept[i]; m.prs = kept[i].prs;
     m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3;
     m.aim ??= m.pref;
-    [m.x, m.y] = driftTo(m, dt, s, 22);
-    m.beat += dt * 22.4 * (m.rate ??= 0.88 + seeded(hash(m.o.id + ':wings'))() * 0.24); // a living moth's wingbeat, at its own speed
-    const liftAt = lag => 80 * Math.PI / 180 * (0.7 * Math.sin(m.beat - lag) + 0.3), sweep = 0.4 * Math.cos(m.beat);
-    const roll = 0.7 * Math.sin(s * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
-    const upPts = flapWing(WING_UP, liftAt(0), sweep, roll), sidePts = flapWing(WING_SIDE, liftAt(0.18), sweep, roll);
-    put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
-    wingsInDepthOrder(m.up, upPts, m.side, sidePts);
-    put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) scale(${(1 - m.back * 0.3).toFixed(2)})`);
-    for (const wing of [m.side, m.up]) { put(wing, 'fill', WISP_TINT); put(wing, 'opacity', (0.14 * (1 - m.back * 0.5)).toFixed(2)); }
-    m.zone.style.display = show ? '' : 'none';
-    put(m.zone, 'cx', m.x.toFixed(1)); put(m.zone, 'cy', m.y.toFixed(1));
+    [m.x, m.y] = driftTo(m, dt, now, 22);
+    const beat = m.beat + now * 22.4 * m.rate;
+    const liftAt = lag => 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3), sweep = 0.4 * Math.cos(beat);
+    const roll = 0.7 * Math.sin(now * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
+    // both wings are the same flat colour, so the order they're drawn in doesn't show
+    const k = 1 - m.back * 0.3, at = ([x, y]) => [m.x + (x - 2) * k, m.y + (y - 6) * k]; // the wings sit 2 left of and 6 above the moth's position
+    const alpha = 0.14 * (1 - m.back * 0.5);
+    if (show) { addGhostWing(flapWing(WING_SIDE, liftAt(0.18), sweep, roll), at, alpha); addGhostWing(flapWing(WING_UP, liftAt(0), sweep, roll), at, alpha); }
+    Object.assign(m.zone, { x: m.x, y: m.y, off: !show });
   }
   for (const [url, d] of wisps) {
     const entry = want.get(url);
     if (entry) { d.p = entry[0]; d.gone = undefined; } else d.gone ??= 0;
     if (d.gone !== undefined) { // back to life: it lifts away and fades
       d.gone += dt / 2;
-      if (d.gone >= 1) { d.zone.remove(); wisps.delete(url); continue; }
+      if (d.gone >= 1) { zones.delete(d.zone); wisps.delete(url); continue; }
     }
     d.born = Math.min(1, d.born + dt / 2);
     const back = drifting.length > 1 && entry ? 1 - entry[1] / (drifting.length - 1) : 0.5; // older: fainter
     d.aim ??= d.pref;
-    let [x, y] = driftTo(d, dt, s, 16);
+    let [x, y] = driftTo(d, dt, now, 16);
     const moth = ghosts.get(d.p.owner?.id);
     if (moth) { // circling the ghost of the session that made it, the way fireflies circle a living moth
-      d.a += d.w * dt;
-      const r = 22 + d.wob * 16;
-      x = moth.x + Math.cos(d.a) * r; y = moth.y + Math.sin(d.a) * r * 0.7;
+      const r = 22 + d.wob * 16, a = d.a + d.w * now;
+      x = moth.x + Math.cos(a) * r; y = moth.y + Math.sin(a) * r * 0.7;
     }
-    x += GUST(s - 0.03 * d.ph) * 7; // drifting in the wind like the fireflies
+    x += GUST(now - 0.03 * d.ph) * 7; // drifting in the wind like the fireflies
     y -= (d.gone || 0) * 70;
     const fade = (1 - back * 0.5) * d.born * (1 - (d.gone || 0));
     const pale = mix(FLY[d.p.need] || FLY.quiet, WISP_TINT, 0.55);
     // a faint steady glow, and now and then a slow brightening
-    const spark = Math.max(0, Math.sin(s * 6.283 / d.period + d.ph)) ** 8;
+    const spark = Math.max(0, Math.sin(now * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
     if (show) addFlyLight(x, y, 40, lit * fade, pale); // drawn as light by the background shader, like the fireflies
-    put(d.zone, 'cx', x.toFixed(1)); put(d.zone, 'cy', y.toFixed(1));
-    d.zone.style.display = show && d.gone === undefined ? '' : 'none';
+    Object.assign(d.zone, { x, y, off: !show || d.gone !== undefined });
   }
   // the overflow: everything past 30 as a faint cloud low on the right, with a count
   $('staleCloud').style.display = show && clouded > 0 ? '' : 'none';
