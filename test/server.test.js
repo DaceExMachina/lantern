@@ -1184,6 +1184,32 @@ test('a preview shows the live app\'s sessions as they change', async t => {
   await until(async () => (await shows()).length === 0, 'the preview to drop the ended session');
 });
 
+// A preview's sessions are the app's, so snoozing, sleeping and waking in a preview happen in the app, and the preview
+// shows them in the app's next list like anything else. (A server not following an app snoozes its own: the snooze replay.)
+test('a preview snoozes, sleeps and wakes sessions in the app, and shows the app\'s word', async t => {
+  const live = await serve(t);
+  // a preview starts with a copy of the app's settings, here from a day s1 was asleep: the app's word wins over it
+  const preview = await serve(t, { 'data/settings.json': JSON.stringify({ snoozedForGood: ['s1'] }) }, () => {}, { LANTERN_MIRROR: live + '/events' });
+  const shows = async base => (await snapshot(base)).sessions.map(s => `${s.id} ${s.state}${s.snoozed ? ' snoozed' : ''}${s.forGood ? ' forGood' : ''}`).join();
+  await post(live, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' });
+  await until(async () => await shows(preview) === 's1 waiting', 'the preview to show the waiting session');
+  for (const [snoozed, after, next] of [[true, 's1 waiting snoozed', 's2'], ['always', 's1 waiting snoozed forGood', 's3'], [false, 's1 waiting', 's4']]) {
+    assert.strictEqual((await post(preview, '/snooze', { id: 's1', snoozed })).status, 204, `snoozed: ${snoozed}`);
+    assert.strictEqual((await shows(live)).split(',')[0], after, `the app after snoozed: ${snoozed}`);
+    await until(async () => (await shows(preview)).split(',')[0] === after, `the preview to show ${after}`);
+    // the app's next list (another session's turn): that session in it proves the preview took it, and it still agrees
+    await post(live, '/event', { session_id: next, hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+    await until(async () => (await shows(preview)).includes(next), 'the preview to take the app\'s next list');
+    assert.strictEqual((await shows(preview)).split(',')[0], after, `the preview after the app's next list, snoozed: ${snoozed}`);
+  }
+});
+
+// With the app not answering, a snooze fails rather than landing on a copy the app's next list would replace.
+test('a snooze in a preview whose app isn\'t answering fails', async t => {
+  const preview = await serve(t, {}, () => {}, { LANTERN_MIRROR: 'http://127.0.0.1:9/events' });
+  assert.strictEqual((await post(preview, '/snooze', { id: 's1', snoozed: true })).status, 502);
+});
+
 // The app's next list would replace anything the preview seeded, but that can be a while, so it seeds none. Here the app
 // never answers, and a server without the mirror seeds the same transcript, to show the seeding had time to happen.
 test('a preview following the app seeds no sessions of its own', async t => {

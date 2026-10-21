@@ -290,7 +290,8 @@ final class LanternServer {
 
     // Sessions snoozed for good stay snoozed through new activity and restarts, until they're woken by hand.
     // ponytail: the list is never pruned; ids are small and a resumed session keeps its id.
-    func forGood(_ id: String) -> Bool { (settings["snoozedForGood"] as? [Any] ?? []).contains { str($0) == id } }
+    // A preview following the app takes the app's word, which comes with each session.
+    func forGood(_ id: String) -> Bool { mirror != nil ? truthy(sessions[id]?["forGood"]) : (settings["snoozedForGood"] as? [Any] ?? []).contains { str($0) == id } }
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
@@ -736,7 +737,7 @@ final class LanternServer {
         }
     }
     func respond(_ c: NWConnection, _ status: Int, _ type: String? = nil, _ body: Data = Data(), headers: String = "") {
-        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error"][status] ?? ""
+        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error", 502: "Bad Gateway"][status] ?? ""
         var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\n" + headers
         if let type { head += "Content-Type: \(type)\r\n" }
         if status != 204 && status != 304 { head += "Content-Length: \(body.count)\r\n" }
@@ -838,6 +839,16 @@ final class LanternServer {
         }
         // Snooze or wake a session: it stops counting as needing me until it does something new, or with "always" for good.
         if json && req.url == "/snooze" {
+            // A preview's sessions are the app's, so it snoozes them there and shows the app's next list; the app answers.
+            if let mirror {
+                var r = URLRequest(url: URL(string: "/snooze", relativeTo: mirror)!)
+                r.httpMethod = "POST"; r.httpBody = req.body; r.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                URLSession.shared.dataTask(with: r) { _, response, _ in
+                    let status = (response as? HTTPURLResponse)?.statusCode ?? 502 // the app isn't answering
+                    DispatchQueue.main.async { self.respond(c, status) }
+                }.resume()
+                return
+            }
             guard let j = body, let id = j["id"] as? String, sessions[id] != nil else { return respond(c, 404) }
             sessions[id]!["snoozed"] = truthy(j["snoozed"])
             let rest = (settings["snoozedForGood"] as? [Any] ?? []).filter { str($0) != id }
