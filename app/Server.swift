@@ -129,21 +129,20 @@ struct Ordered<V> {
 }
 
 
-/// Runs a command (found on PATH unless it's a full path) and returns its output, whatever its exit status.
-func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 10) -> (ok: Bool, out: String, err: String) {
-    let p = Process(), out = Pipe(), err = Pipe()
+/// Runs a command (found on PATH unless it's a full path) and returns its output, whatever its exit status. Its stderr goes
+/// to the app's own, so a chatty command can't fill a pipe nobody reads yet and stall until the timeout.
+func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 10) -> (ok: Bool, out: String) {
+    let p = Process(), out = Pipe()
     p.executableURL = URL(fileURLWithPath: cmd.hasPrefix("/") ? cmd : "/usr/bin/env")
     p.arguments = cmd.hasPrefix("/") ? args : [cmd] + args
     if let cwd { p.currentDirectoryURL = URL(fileURLWithPath: cwd) }
     p.standardInput = FileHandle.nullDevice
     p.standardOutput = out
-    p.standardError = err
-    guard (try? p.run()) != nil else { return (false, "", "") }
+    guard (try? p.run()) != nil else { return (false, "") }
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if p.isRunning { p.terminate() } }
     let data = out.fileHandleForReading.readDataToEndOfFile()
     p.waitUntilExit()
-    return (p.terminationStatus == 0 && p.terminationReason == .exit, String(decoding: data, as: UTF8.self),
-            String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+    return (p.terminationStatus == 0 && p.terminationReason == .exit, String(decoding: data, as: UTF8.self))
 }
 
 
@@ -225,10 +224,14 @@ final class LanternServer {
     // app's instead, each time the app sends them. When the stream ends (the app quitting, say) it keeps the last ones
     // and tries again every two seconds; a new stream starts with the app's current list.
     func follow(_ url: URL) {
+        // the app's stream is quiet while nothing changes, so no timeout between bytes (the default drops it every 60s)
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = .infinity
+        let session = URLSession(configuration: config)
         Task {
             while true {
                 var heard = false
-                if let (lines, _) = try? await URLSession.shared.bytes(from: url) {
+                if let (lines, _) = try? await session.bytes(from: url) {
                     var event: String?
                     do {
                         for try await line in lines.lines {
@@ -333,6 +336,24 @@ final class LanternServer {
 
     // MARK: hook events
 
+    let prep = DispatchQueue(label: "lantern.events")
+    var starts: [String: Double?] = [:] // "<transcript>\n<task id>" -> when the session started it, or nil: it didn't. Only on prep.
+    /// When the session itself started each background task a Stop lists (see taskStart), looked up off the main queue: a
+    /// miss scans the whole transcript (110 ms for a 175 MB one), so hits and misses are both remembered. A task's start
+    /// line is written before any Stop lists it, so the first answer holds.
+    /// ponytail: one entry per task id ever seen, never pruned; a few bytes each.
+    func taskStarts(_ e: JSON) -> [String: Double] {
+        guard str(e["hook_event_name"]) == "Stop", let dir = sessionDir(e["transcript_path"]) else { return [:] }
+        var out: [String: Double] = [:]
+        for t in e["background_tasks"] as? [JSON] ?? [] where str(t["type"]) != "subagent" {
+            let tid = str(t["id"]), key = dir + "\n" + tid
+            guard Re("^[A-Za-z0-9_-]+$").test(tid) else { continue }
+            if starts[key] == nil { starts[key] = .some(taskStart(dir + ".jsonl", tid)) }
+            if let at = starts[key]! { out[tid] = at }
+        }
+        return out
+    }
+
     func handle(_ e: JSON) {
         guard let id = e["session_id"] as? String, !id.isEmpty else { return }
         let ev = e["hook_event_name"] as? String
@@ -422,13 +443,13 @@ final class LanternServer {
             // background task" for 14 hours), so: a subagent counts while the agents map (hooks, and reconcile() reading
             // its transcript) still has it alive, and a shell, monitor or workflow task only when this session's own
             // transcript started it. A task a subagent started is in that subagent's transcript, and its end wakes the subagent.
-            let known = s["taskSince"] as? [String: Double] ?? [:]
+            let starts = e["taskStarts"] as? [String: Double] ?? [:] // looked up off the main queue (see taskStarts)
             var since: [String: Double] = [:], described: [Any] = [], awaited: [String] = []
             for t in e["background_tasks"] as? [JSON] ?? [] where !truthy(t["status"]) || str(t["status"]) == "running" {
                 let tid = str(t["id"])
-                if str(t["type"]) == "subagent" { if agents[id]![tid] != nil { awaited.append(tid) }; continue }
+                if str(t["type"]) == "subagent" { awaited.append(tid); continue } // awaitedAgents() keeps the ones still alive
                 // when it started, from the transcript line that started it, so a restart doesn't make an old server fresh
-                guard Re("^[A-Za-z0-9_-]+$").test(tid), let at = known[tid] ?? dir.flatMap({ taskStart($0 + ".jsonl", tid) }) else { continue }
+                guard let at = starts[tid] else { continue }
                 since[tid] = at
                 if truthy(t["description"]) { described.append(t["description"]!) }
             }
@@ -728,13 +749,16 @@ final class LanternServer {
         let json = post && req.headers["content-type"] == "application/json"
         let body = parse(req.body) as? JSON
         if post && req.url == "/event" {
-            if var e = body {
-                e["iterm"] = req.headers["x-iterm-session"]; e["pid"] = req.headers["x-claude-pid"]
-                e["term"] = req.headers["x-term-program"]; e["app"] = req.headers["x-term-app"]
-                e["pane"] = req.headers["x-term-pane"]; e["kitty"] = req.headers["x-kitty-socket"]
-                handle(e); broadcast()
+            guard var e = body else { return respond(c, 200) }
+            e["iterm"] = req.headers["x-iterm-session"]; e["pid"] = req.headers["x-claude-pid"]
+            e["term"] = req.headers["x-term-program"]; e["app"] = req.headers["x-term-app"]
+            e["pane"] = req.headers["x-term-pane"]; e["kitty"] = req.headers["x-kitty-socket"]
+            // every event passes through one serial queue, so they're handled in the order they came
+            prep.async {
+                e["taskStarts"] = self.taskStarts(e)
+                DispatchQueue.main.async { self.handle(e); self.broadcast(); self.respond(c, 200) }
             }
-            return respond(c, 200)
+            return
         }
         // Resume the old session behind a dead moth: a new iTerm tab in its folder running `claude --resume <id>`.
         // Only sessions that own something on the stale list can be resumed this way.

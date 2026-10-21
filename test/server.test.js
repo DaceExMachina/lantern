@@ -278,6 +278,19 @@ test('a background task open past the threshold with no agent activity rests aft
   assert.strictEqual((await s1(base)).state, 'idle');
 });
 
+// A task the session's transcript didn't start is decided once: its start line is written before any Stop lists it, so a
+// miss stays a miss, and the next Stop doesn't scan the whole transcript again (110 ms for a 175 MB one).
+test('a background task the transcript didn\'t start is looked up once, not at every Stop', async t => {
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([user('go')]) }, h => home = h, bg(0.1, 60));
+  await post(base, '/event', stopWith(home, SERVER));
+  assert.strictEqual((await s1(base)).state, 'waiting');
+  fs.appendFileSync(path.join(home, S1_TRANSCRIPT), jsonl([started('b1')])); // only a second scan could find it now
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'more' });
+  await post(base, '/event', stopWith(home, SERVER));
+  assert.strictEqual((await s1(base)).state, 'waiting');
+});
+
 // A task's age comes from the line in the transcript that started it, not from when this lantern first saw it, so a
 // restart (a fresh server) doesn't make a two-hour-old dev server fresh again.
 test('a background task the transcript says started two hours ago rests at its first Stop on a fresh server', async t => {
@@ -613,7 +626,8 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
 // without a status there (older versions, or one it doesn't know), the transcript's last turn decides.
 test('a live session seeds from Claude Code\'s own status when it gives one, and from its transcript when not', async t => {
   const midTurn = [user('Fix it')], finished = [user('Fix it'), answer('Fixed.'), turnEnd];
-  const cases = [['idle', midTurn, 'waiting'], ['busy', finished, 'working'], [undefined, midTurn, 'working'], ['something-new', midTurn, 'working']];
+  // idle mid-turn: no finished turn to wait on, so it's at the prompt (as check() reads Claude Code's idle)
+  const cases = [['idle', midTurn, 'idle'], ['idle', finished, 'waiting'], ['busy', finished, 'working'], [undefined, midTurn, 'working'], ['something-new', midTurn, 'working']];
   const procs = cases.map(() => spawn('sleep', ['60']));
   t.after(() => procs.forEach(p => p.kill()));
   const file = i => `.claude/projects/-work/${UUID(i)}.jsonl`;
@@ -923,6 +937,35 @@ test('stats: a session the hooks bring back still owns the PRs it created', asyn
   assert.deepStrictEqual(s.github.map(p => p.url), [prUrl(1)]);
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });
+
+// The race that test can't reach: a refresh that lands while the joining session is still reading its PRs back. Until the
+// read is done, refreshes leave the session out; otherwise that refresh gives it no PRs and logs the one it made as a
+// stray. A long transcript full of `gh pr create` mentions (each one parsed) keeps the read going, and a second session in
+// another checkout, owning nothing, shows when a refresh has landed.
+test('stats: a refresh that lands while a joining session reads its PRs back leaves its PRs alone', async t => {
+  const id = UUID(8), file = `.claude/projects/-work-8/${id}.jsonl`, { gh, repo } = ghRepo([prNode(1, iso(Date.now()))]);
+  const other = fs.mkdtempSync(path.join(tmp, 'other-'));
+  for (const args of [['init', '-q', '-b', 'quiet'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], ['remote', 'add', 'origin', 'https://github.com/o/r.git']]) execFileSync('git', ['-C', other, ...args]);
+  const made = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --draft --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(1) + '\n' }] } }];
+  const talk = JSON.stringify(answer('Then gh pr create opens it.')) + '\n';
+  let home = '';
+  const base = await serve(t, { 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 3600000, Date.now() - 60000]], appeared(id, 1)),
+    [file]: talk.repeat(LONG_READ) + jsonl([user('Fix it'), ...made]) }, h => {
+    home = h;
+    const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+    fs.utimesSync(path.join(h, file), dayAgo, dayAgo);
+  }, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's2', hook_event_name: 'UserPromptSubmit', cwd: other, prompt: 'go' });
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const landed = await until(async () => { const s = (await snapshot(base)).sessions; return s.find(x => x.id === 's2')?.github && s; }, 'a refresh to land');
+  assert.deepStrictEqual(landed.find(x => x.id === id).created ?? [], [], 'the refresh landed while the PR read was still going');
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length), 'a refresh to look at the session', 60000);
+  assert.deepStrictEqual(s.github.map(p => p.url), [prUrl(1)]);
+  assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
+});
+const LONG_READ = 200000;
 
 // A session that joins while a refresh is out (adopted, say) isn't in that refresh's answer. Until one looks at it, it
 // keeps the PRs it owned rather than dropping them as strays. Here s2 works outside any git repo, so no refresh ever looks

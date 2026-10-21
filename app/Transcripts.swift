@@ -339,7 +339,9 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
     let lines = tail(file)
     var turn = lastTurn(lines)
-    if let busy { turn.done = !busy; turn.idle = turn.idle && !busy }
+    // Claude Code's own status wins: busy is a turn (or agents) running; idle with no finished turn to wait on is at the
+    // prompt (idle), as check() reads it, and idle after a finished turn is that turn waiting on me
+    if busy == true { turn.done = false; turn.idle = false } else if busy == false && !turn.done { turn.done = true; turn.idle = true }
     var s: JSON = ["id": id, "cwd": or(turn.cwd, "")!, "turn": turn.idle ? "idle" : turn.done ? "ended" : "running",
                    "note": turn.done && !turn.idle ? "Finished its turn, waiting for you" : "",
                    "started": st.birth, "last": live ? now() : st.mtime, "project": ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent,
