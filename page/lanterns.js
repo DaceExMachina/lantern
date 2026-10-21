@@ -151,17 +151,15 @@ function bakeFarWall() {
   };
   brass.src = FAR_WALL_SVG('#f00', 0.92); outline.src = FAR_WALL_SVG('#0f0', 0);
 }
-// ponytail: temporary, for judging on a real display. The front's pierced design (#cutouts in MOROCCAN_DEFS) baked into
-// a picture, the brass opaque and the holes clear, and used as an alpha mask in its place. The lantern sways, so it
-// repaints every frame, and WebKit redraws a vector mask and turns it into luminance each time: about a quarter of a core
-// in the GPU process at 2560x1440. The picture's lace is a little softer, so it's off unless ?bakedlace. It's baked at the
-// screen's pixels per unit, and again when that changes (fitView); until it's ready the vector mask stands in.
-const BAKED_LACE = devToggle('Temporary', 'bakedlace', 'baked lace mask', false, 'The Moroccan\'s lace as a picture: cheaper to draw every frame, a little softer (reloads the page)', () => location.reload());
+// The front's pierced design (#cutouts in MOROCCAN_DEFS) baked into a picture, the brass opaque and the holes clear, and
+// used as an alpha mask in its place. The lantern sways, so it repaints every frame, and WebKit redraws a vector mask and
+// turns it into luminance each time: about a third of the GPU process's CPU on the Moroccan at 2560x1440. It's baked at
+// the screen's pixels per unit, and again when that changes (fitView); until it's ready the vector mask stands in.
 let cutouts = { k: 0, pic: '' }, cutoutsBake = 0;
 function bakeCutouts() {
-  if (!BAKED_LACE) return;
-  const m = $('cutouts'), k = VIEW.px * (devicePixelRatio || 1); // device pixels a unit
-  if (!m || !k) return;
+  const m = $('cutouts');
+  if (!m || !VIEW.px) return; // not the Moroccan, or not laid out yet
+  const k = VIEW.px * (devicePixelRatio || 1); // device pixels a unit
   const swap = () => { m.style.maskType = 'alpha'; m.innerHTML = `<image href="${cutouts.pic}" x="260" y="120" width="160" height="380" preserveAspectRatio="none"/>`; };
   if (cutouts.k === k) return swap();
   const bake = ++cutoutsBake, c = document.createElement('canvas'), img = new Image();

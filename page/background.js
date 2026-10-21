@@ -8,7 +8,7 @@ const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
 // Everything on it is soft (glow, smoke, dust, the shimmer), so it's drawn at this share of the screen's resolution and
 // the browser scales it up: at 0.6 that's about a third of the pixels and of the GPU time, and it looks the same, the
 // far wall's lace included (below 0.5 that starts to soften). fitView sizes it.
-let bgScale = devSlider('Temporary', 'bgscale', 'background resolution', 0.25, 1, 0.05, 0.6, 'How much of the screen\'s resolution the WebGL background is drawn at', v => { bgScale = v; fitView(); });
+const bgScale = 0.6;
 // A GPU reset (sleep, a display change, the GPU process restarting) loses the context and every shader and buffer on it.
 // Asking for it back (preventDefault) and reloading once it's restored rebuilds them all from scratch.
 $('bg').addEventListener('webglcontextlost', e => e.preventDefault());
