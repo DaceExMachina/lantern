@@ -209,6 +209,11 @@
   /* screensaver mode (opened with ?screensaver): just the scene, with the glow running to the screen's edges */
   body.screensaver { background: #2B2440; cursor: none; }
   .screensaver footer, .screensaver #card { display: none; }
+  /* The lantern in a layer of its own, swung by a CSS transform (frame.js swingLantern) about where it hangs from: WebKit
+     turns the picture it has instead of drawing the lantern afresh every frame, redrawing only the parts that change
+     (its flame and light), and the wisps, threads and moths moving round it no longer make it redraw the lantern under
+     them. Only as wide as the lanterns (scene.js fitView). */
+  #lanternLayer { right: auto; will-change: transform; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
   #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
   .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
@@ -264,6 +269,10 @@
 <body>
 <div id="scene"><canvas id="bg"></canvas>
 <svg viewBox="40 20 600 600" role="img" aria-label="Lantern: live status of Claude Code sessions">
+  <g id="staleCloud" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="staleCloudCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
+  <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
+</svg>
+<svg id="lanternLayer" aria-hidden="true">
   <defs>
     <radialGradient id="paperGrad" cx="340" cy="350" r="140" gradientUnits="userSpaceOnUse">
       <stop class="paperStop" offset="0" stop-opacity="0.85"/>
@@ -275,9 +284,9 @@
     </linearGradient>
     <filter id="behindPaper" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.8"/></filter>
   </defs>
-  <g id="staleCloud" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="staleCloudCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
-  <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
   <g id="lantern"></g>
+</svg>
+<svg aria-hidden="true">
   <g id="moths"></g>
   <g id="flies"></g>
 </svg></div>

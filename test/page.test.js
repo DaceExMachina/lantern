@@ -11,6 +11,7 @@ const vm = require('vm');
 const row = () => ({ classList: { toggle() {} } }); // a settings row
 const attrs = {}, els = {
   lantern: { innerHTML: '', getAttribute: k => attrs[k] ?? null, setAttribute: (k, v) => { attrs[k] = v; } },
+  lanternLayer: { style: { transform: '' } },
   style: { value: '' },
   textToggle: { disabled: false, parentElement: row() },
   ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
@@ -66,27 +67,30 @@ test('the candle is the fourth lantern in the menu', () => {
   assert.strictEqual(run('STYLES.candle.name'), 'Pillar candle');
 });
 
-test('a standing lantern holds still with nothing to hang from; every hanging one sways on one', () => {
+// The sway turns #lanternLayer, the lantern's own layer, by a CSS transform, so WebKit turns the picture it has rather
+// than drawing the lantern afresh; nothing writes a turn onto the drawing (#lantern) itself.
+test('a standing lantern holds still with nothing to hang from; every hanging one sways on one, turning its layer', () => {
   assert.deepStrictEqual(styles.filter(k => run(`STYLES.${k}.stands`)), ['candle'], 'the candle, and only the candle, stands');
   // 30 seconds of frames for each style, the clock running on from one style to the next
   let start = 0;
   const check = key => {
     run(`applyStyle('${key}')`);
-    // each frame's sway, and the turn it gives #lantern
+    // each frame's sway, and the turn it gives the lantern's layer
     const frames = [...run(`Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, ${start} + i / 60),
-      [swayAngle, document.getElementById('lantern').getAttribute('transform')]))`)];
-    const sway = frames.map(f => f[0]), top = run('VIEW.top').toFixed(1);
+      [swayAngle, document.getElementById('lanternLayer').style.transform]))`)];
+    const sway = frames.map(f => f[0]);
+    assert.strictEqual(attrs.transform, undefined, `${key}: the drawing itself is never turned, only its layer`);
     start += 30;
     const hang = /id="hang"/.test(els.lantern.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
       assert.ok(sway.every(a => a === 0), `${key} stands still`);
-      assert.strictEqual(attrs.transform, `rotate(0.000 340 ${run('VIEW.top').toFixed(1)})`, `${key} is drawn unturned`);
+      assert.strictEqual(els.lanternLayer.style.transform, 'rotate(0.000deg)', `${key} is drawn unturned`);
       assert.deepStrictEqual([...run('rot(300, 400)')], [300, 400], `${key}: nothing attached to it turns`);
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
       assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: at most ${Math.max(...sway.map(Math.abs))}`);
       assert.ok(Math.min(...sway) < -0.1 && Math.max(...sway) > 0.1, `${key} swings to and fro, past the middle: ${Math.min(...sway)} to ${Math.max(...sway)}`);
-      const off = frames.find(([a, t]) => t !== `rotate(${a.toFixed(3)} 340 ${top})`);
+      const off = frames.find(([a, t]) => t !== `rotate(${a.toFixed(3)}deg)`);
       assert.ok(!off, `${key} is drawn turned by its sway: ${off}`);
       assert.ok(hang, `${key} hangs from a string or chain`);
     }

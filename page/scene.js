@@ -80,6 +80,10 @@ function ringHome(i, n, layer = 0) {
 }
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
 
+// How far either side of its middle a lantern's drawing reaches (the widest, the candle's vine, to about 140, the
+// chōchin to 125), with room for the barrel's ribbon blowing about: its layer is this wide (index.html #lanternLayer).
+const LANTERN_SPAN = 200;
+
 // The scene is designed on a 600x600 square around the lantern. To fill any window shape, the visible area grows
 // wider or taller (the lantern keeps its size), and positions laid out on the square stretch with it.
 const VIEW = { kx: 1, ky: 1, top: 20 }; // top: where the lantern hangs from, the visible area's top edge
@@ -90,9 +94,15 @@ function fitView() {
   if (!width || !height) return;
   VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
-  svg.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  for (const s of document.querySelectorAll('#scene > svg:not(#lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
   VIEW.box = [x, y, w, h];
   VIEW.px = width / w; // CSS pixels per unit
+  // the lantern's layer spans LANTERN_SPAN either side of its middle, the window's full height (a chain or column runs edge
+  // to edge), its left edge on a whole device pixel so the lantern lands on the same pixels it would in the scene, and it
+  // turns about where the lantern hangs from (frame.js swingLantern)
+  const layer = $('lanternLayer'), dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
+  Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
+  layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
   const canvas = $('bg'), k = (devicePixelRatio || 1) * bgScale; // background.js
   canvas.width = Math.round(width * k); canvas.height = Math.round(height * k);
   VIEW.top = y;

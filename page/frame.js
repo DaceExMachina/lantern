@@ -210,7 +210,7 @@ function swingLantern(elapsed, s) {
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
-  put($('lantern'), 'transform', `rotate(${swayAngle.toFixed(3)} 340 ${top.toFixed(1)})`);
+  $('lanternLayer').style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
   twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * TWIST_GAIN / TWIST_MAX) - twist) * dt * TWIST_RATE;
   farSlide = style.farWall ? -twist * 0.2 : 0;
   put($('inside'), 'transform', `translate(${(farSlide / 2).toFixed(2)} 0)`);
@@ -955,7 +955,7 @@ function mothThread(m, dt, s) {
   if (!m.flyGrad) {
     m.flyGrad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
     for (const [o, a] of [[0, 0], [0.25, 1], [0.75, 1], [1, 0]]) m.flyGrad.append(el('stop', { offset: o, 'stop-opacity': a }));
-    document.querySelector('svg defs').append(m.flyGrad);
+    $('flies').append(m.flyGrad);
     put(m.flyLine, 'stroke', `url(#${m.flyGrad.id})`);
   }
   for (const st of m.flyGrad.children) put(st, 'stop-color', base);
@@ -973,7 +973,7 @@ function mothThread(m, dt, s) {
   if (!m.grad) {
     m.grad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
     for (let i = 0; i <= 16; i++) m.grad.append(el('stop', { offset: i / 16 }));
-    document.querySelector('svg defs').append(m.grad);
+    $('threads').append(m.grad);
     put(m.thread, 'stroke', `url(#${m.grad.id})`);
   }
   put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', bx.toFixed(1)); put(m.grad, 'y2', by.toFixed(1));

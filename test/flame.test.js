@@ -21,7 +21,7 @@ function context() {
     getUniformLocation: (_, name) => name,
   }, { get: (t, k) => k in t ? t[k] : typeof k === 'string' && k.startsWith('uniform') ? (loc, ...v) => { uniforms[loc] = v.length === 1 && v[0]?.length ? [...v[0]] : v; } : () => ({}) });
   const node = () => ({ attrs: {}, getAttribute(k) { return this.attrs[k] ?? null; }, setAttribute(k, v) { this.attrs[k] = String(v); } });
-  const els = { bg: { getContext: () => gl, addEventListener() {}, width: 1200, height: 800 }, lantern: { ...node(), innerHTML: '' }, style: { value: '' } };
+  const els = { bg: { getContext: () => gl, addEventListener() {}, width: 1200, height: 800 }, lantern: { ...node(), innerHTML: '' }, lanternLayer: { style: {} }, style: { value: '' } }; // lanternLayer: the layer the sway turns (frame.js swingLantern)
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, devicePixelRatio: 2, window: {},
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] } });
   for (const f of ['scene', 'dev', 'lanterns', 'state', 'background', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
