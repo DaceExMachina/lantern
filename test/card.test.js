@@ -231,7 +231,7 @@ test('no PR link shows a native "#n" title; a list row shows its title in the ti
   assert.strictEqual(tip.className, 'badgeTip');
 });
 
-test('an agent with no tag or model is two lines (job beside the dot), and a shell command is one, "shell" in the model\'s place', () => {
+test('an agent with no tag or model is two lines (job beside the dot), and a shell command has "shell" in the model\'s place', () => {
   const { show } = load();
   const card = show(session({ state: 'working', tasks: ['npm run preview'], subagents: [
     { id: 'a', description: 'Tagged', model: 'Opus 5.5', activity: '[t] Step', started: now - 1e3, last: now },
@@ -242,8 +242,8 @@ test('an agent with no tag or model is two lines (job beside the dot), and a she
     [['arow', 'live', 'tag', 'model', 't'], ['job'], ['astep']],
     [['arow', 'live', 'model', 't'], ['job'], ['astep']],
     [['arow', 'live', 'job', 't'], ['astep']],
-    [['arow', 'live quiet', 'job', 'model']]]);
-  assert.strictEqual(text(find(card, 'agent')[3]), 'npm run previewshell');
+    [['arow', 'live quiet', 'model'], ['job']]], 'a shell command: "shell" where the model goes, then the command');
+  assert.strictEqual(text(find(card, 'agent')[3]), 'shellnpm run preview');
   const [head] = find(find(card, 'agentZone')[0], 'head');
   assert.strictEqual(text(head), 'Running3 agents · 1 shell');
 });

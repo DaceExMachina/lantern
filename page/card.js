@@ -119,7 +119,7 @@ function sessionRows(s) {
     // finished one just drops out, whatever order the server's list comes in
     const agents = [...s.subagents].sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || String(a.id).localeCompare(String(b.id)));
     for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
-    for (const t of loose) zone.append(agentRow({ job: t, last: 0, kind: 'shell', started: s.taskStarted?.[t] }, now)); // its start: #171
+    for (const t of loose) zone.append(agentRow({ job: t, last: 0, model: 'shell', started: s.taskStarted?.[t] }, now)); // its kind where an agent's model goes
   }
   if (side.length) {
     tray.push(make('div', 'head', 'Side sessions', make('span', 'r', String(side.length))));
@@ -134,18 +134,17 @@ function sessionRows(s) {
 // An agent in the tray. With a task tag (when its step starts "[tag]", a tag some setups put on every step) or a model to
 // show, three lines: the live dot (dim once it's been quiet 10 s), the tag as a chip, the model and how long it's run;
 // then its job; then its current step. With neither, two: the dot, the job and the time; then the step. A shell command
-// has no step, so it's one line: the dot, the command, "shell" and the time. The job and step are cut to a line each; a
+// left running has "shell" where an agent's model goes, then the command below. The job and step are cut to a line each; a
 // click opens the agent to show them in full, and it stays open, by id, through the redraws until the card closes. A
 // button, so the keyboard gets it too.
 const TAG = /^\[([^\]]+)\]\s*/;
 const openAgents = new Set();
-/** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string, kind?: string }} a */
-function agentRow({ id, job, activity = '', started, last = 0, model, kind }, now) {
+/** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string }} a */
+function agentRow({ id, job, activity = '', started, last = 0, model }, now) {
   const tag = activity.match(TAG)?.[1], step = activity.replace(TAG, ''), key = id || job;
   const dot = make('span', 'live' + (now - last > 10e3 ? ' quiet' : '')), time = started ? [make('span', 't', short(now - started))] : [];
   const about = [...(tag ? [make('span', 'tag', tag)] : []), ...(model ? [make('span', 'model', model)] : [])], name = make('span', 'job', job);
-  const lines = kind ? [make('span', 'arow', dot, name, make('span', 'model', kind), ...time)] // a shell command: its kind in the model's style
-    : about.length ? [make('span', 'arow', dot, ...about, ...time), name]
+  const lines = about.length ? [make('span', 'arow', dot, ...about, ...time), name]
     : [make('span', 'arow', dot, name, ...time)]; // nothing to say on a line of its own
   const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), make('span', 'face', ...lines, ...(step ? [make('span', 'astep', step)] : [])));
   row.setAttribute('aria-expanded', String(openAgents.has(key)));
