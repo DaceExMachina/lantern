@@ -180,11 +180,7 @@ let NOT_A_PROMPT = Re("^\\s*<(command-name|local-command-|bash-|task-notificatio
 // later) is skipped, so a session renamed after its turn still reads as waiting.
 func lastTurn(_ lines: [String]) -> Turn {
     var ended = false // a turn_duration marker comes after the final message, so keep looking back for its text
-    // The transcript ends on tool results: done only if the message that made those calls handed back. A background agent
-    // ends by calling SubagentHandback with its report, not with a closing turn (and no SubagentStop follows), and that
-    // call can share its message (written one line per block) with other calls, whose results can come either side of it.
-    var results = false, calls: String? // calls: the id of the message those results answer
-    let handsBack = { (msg: JSON?) in ((msg?["content"] as? [JSON]) ?? []).contains { str($0["type"]) == "tool_use" && str($0["name"]) == "SubagentHandback" } }
+    var answered = false // the last line is a tool's result: done only if that tool was a subagent's hand-back
     for line in lines.reversed() {
         guard let j = parse(Data(line.utf8)) as? JSON else { continue }
         let type = str(j["type"]), subtype = str(j["subtype"]), content = (j["message"] as? JSON)?["content"]
@@ -200,16 +196,19 @@ func lastTurn(_ lines: [String]) -> Turn {
             let msg = j["message"] as? JSON
             let text = ((msg?["content"] as? [JSON]) ?? []).filter { str($0["type"]) == "text" }.map { str($0["text"]) }.joined(separator: "\n")
             if ended && text.isEmpty { continue }
-            if results {
-                if handsBack(msg) { return Turn(done: true, text: text, cwd: j["cwd"]) }
-                if calls == nil || calls == str(msg?["id"]) { calls = str(msg?["id"]); continue } // another line of the same message
-                return Turn(done: false, cwd: j["cwd"])
-            }
+            // a background agent ends by calling SubagentHandback with its report, not with a closing turn (and no
+            // SubagentStop follows), so its transcript ends on that call's result
+            if answered { return Turn(done: ((msg?["content"] as? [JSON]) ?? []).contains { str($0["type"]) == "tool_use" && str($0["name"]) == "SubagentHandback" }, text: text, cwd: j["cwd"]) }
             return Turn(done: ended || str(msg?["stop_reason"]) == "end_turn", text: text, cwd: j["cwd"])
         }
         if ended { return Turn(done: true, cwd: j["cwd"]) }
         if compact { return Turn(done: true, idle: true, cwd: j["cwd"]) } // stopped right after a compact
-        if calls == nil, (content as? [JSON] ?? []).contains(where: { str($0["type"]) == "tool_result" }) { results = true; continue }
+        if (content as? [JSON] ?? []).contains(where: { str($0["type"]) == "tool_result" }) {
+            // Claude Code marks the result of a hand-back that ends the run (2.1.285 on), whichever of the message's results
+            // comes last; an older one is the hand-back's own result, checked against its call below
+            if truthy(j["toolEndsTurn"]) { return Turn(done: true, cwd: j["cwd"]) }
+            if !answered { answered = true; continue }
+        }
         return Turn(done: false, cwd: j["cwd"]) // a prompt, or a second tool result: mid-turn
     }
     return Turn()
@@ -320,9 +319,9 @@ func taskStart(_ file: String, _ id: String) -> Double? {
     return (at.timeIntervalSince1970 * 1000).rounded(.down)
 }
 
-/// Subagents under a session folder that are still going: transcript not finished, and touched within AGENT_EXPIRE_MS (how
-/// long a hooked agent is kept without a word, so both sources agree; an agent waiting on a long tool call writes nothing
-/// for minutes). Startup and every sweep rebuild the agents from this, so a restart doesn't lose the quiet ones.
+/// Subagents under a session folder that are still going: transcript not finished, and touched within AGENT_EXPIRE_MS (an
+/// agent waiting on a long tool call writes nothing for minutes). This is the one rule for a live agent: startup seeds
+/// from it, and every sweep rebuilds each session's agents from it plus any heard from within AGENT_CHECK_MS.
 func liveSubagents(_ dir: String) -> Ordered<JSON> {
     var agents = Ordered<JSON>()
     for f in transcripts(dir + "/subagents") {
@@ -380,24 +379,24 @@ extension LanternServer {
     /// background agents run on while it waits on me. A lost SubagentStop, a restart and a quiet agent all come out right.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
     func reconcile() {
-        struct Look { let id: String, dir: String, title: Any?, titleSeen: Double }
+        struct Look { let id: String, dir: String, had: Set<String>, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
-            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
+            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", had: Set(agents[id]?.keys ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
         guard !looks.isEmpty else { return }
         DispatchQueue.global().async {
             let app = appSessions() // the Claude app keeps the title it shows in its own file for the session
-            let results = looks.map { l -> (String, Ordered<JSON>, Double, Any?) in
+            let results = looks.map { l -> (String, Set<String>, Ordered<JSON>, Double, Any?) in
                 // a rename fires no hook, so re-read the title when a file it lives in has been written since we last looked
                 let mine = app.first { $0.cli == l.id }
                 let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0, mine?.mtime ?? 0)
                 let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
-                return (l.id, liveSubagents(l.dir), written, title)
+                return (l.id, l.had, liveSubagents(l.dir), written, title)
             }
             DispatchQueue.main.async {
                 var changed = false
-                for (id, live, written, title) in results where self.sessions[id] != nil {
+                for (id, had, live, written, title) in results where self.sessions[id] != nil {
                     self.sessions[id]!["titleSeen"] = written
                     if str(self.sessions[id]!["title"]) != str(title) { self.sessions[id]!["title"] = title; changed = true }
                     // One rule for an agent being alive: its transcript says so (liveSubagents), or a hook was heard from it
@@ -410,7 +409,8 @@ extension LanternServer {
                         if let seen = live[aid] { var a = a; a["last"] = max(last, (seen["last"] as? Double) ?? 0); kept[aid] = a }
                         else if now() - last < AGENT_CHECK_MS { kept[aid] = a }
                     }
-                    for (aid, a) in live.items where kept[aid] == nil { kept[aid] = a }
+                    // not one that went while the transcripts were read (its SubagentStop landed meanwhile)
+                    for (aid, a) in live.items where kept[aid] == nil && !had.contains(aid) { kept[aid] = a }
                     if kept.keys != was.keys { changed = true }
                     self.agents[id] = kept
                 }

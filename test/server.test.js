@@ -184,8 +184,8 @@ test('a subagent whose transcript ends in a hand-back is dropped once quiet, lon
 
 // A hand-back can share its message with other calls: Claude Code writes the message one line per block, so the transcript
 // ends on the Bash call's line, the SubagentHandback line, then both results (agent aac33e1a05c9e0ff4's real tail,
-// test/fixtures/handback). Reading back over every result to the message that made the calls finds the hand-back, in
-// either order of its lines (the second agent has them swapped).
+// test/fixtures/handback). Claude Code marks the hand-back's result `toolEndsTurn`, which says the run is over whichever
+// order the message's lines and results come in (the second agent has its lines swapped).
 test('an agent whose hand-back shares its message with other calls is finished', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, agentEnv(600));
@@ -202,6 +202,19 @@ test('an agent whose hand-back shares its message with other calls is finished',
   fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), real.join('\n') + '\n');
   fs.writeFileSync(path.join(dir, 'agent-a2.jsonl'), swapped.join('\n') + '\n');
   await until(async () => (await agentIds(base)).length === 0, 'both handed-back agents to be dropped');
+});
+
+// After an interrupt (or a compaction), the agent carried on: a coordinator's message, then a Bash call and its result
+// (agent a800a90975f56f70f's real lines, test/fixtures/after-interrupt). It's mid-turn; reading on back past the call to
+// the interrupt or the compact summary would call it finished. The second case swaps the interrupt for the jwt fixture's
+// real compact summary.
+test('a turn that carries on after an interrupt or a compaction reads as still going', async t => {
+  const real = fs.readFileSync(path.join(__dirname, 'fixtures/after-interrupt/agent-a800a90975f56f70f.jsonl'), 'utf8').trim().split('\n');
+  const summary = fs.readFileSync(path.join(__dirname, 'fixtures/jwt/61917df1-4b2c-4e20-b413-cc6c479afa20.jsonl'), 'utf8').trim().split('\n').find(l => JSON.parse(l).isCompactSummary);
+  const cases = { interrupted: real, compacted: [real[0], summary, ...real.slice(2)] }, file = i => `.claude/projects/-work/${UUID(i)}.jsonl`;
+  const base = await serve(t, Object.fromEntries(Object.values(cases).map((lines, i) => [file(i), lines.join('\n') + '\n'])));
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === 2 && s; }, 'both transcripts to be seeded');
+  assert.deepStrictEqual(Object.keys(cases).map((k, i) => [k, sessions.find(s => s.id === UUID(i)).state]), [['interrupted', 'working'], ['compacted', 'working']]);
 });
 
 // One rule for an agent being alive, on every sweep: its transcript is unfinished and recent, or a hook was heard from it
