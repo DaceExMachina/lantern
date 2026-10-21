@@ -126,8 +126,10 @@ setInterval(() => {
   const s = hovered.session, as = s ? `${s.id} ${s.state} ${!!s.snoozed} ${!!s.forGood}` : '';
   if (as !== drawnAs || !touching && !$('card').matches(':hover, :has(:focus-visible)')) { drawnAs = as; renderCard(); }
 }, 500);
-// and the sidebar the same way, except under the pointer or keyboard focus; it shows or goes as the window crosses PIN_MIN
-setInterval(() => { if (!$('dock').matches(':hover, :focus-within')) renderSidebar(); }, 500);
+// and the sidebar, under the pointer too, so pins, toggles and state changes show at once (its scroller keeps its scroll
+// through a redraw). Except mid-press, since a redraw between press and release swallows the click (WebKit), and while
+// a control in it has keyboard focus. It shows or goes as the window crosses PIN_MIN.
+setInterval(() => { if (!$('dock').matches(':active, :has(:focus-visible)')) renderSidebar(); }, 500);
 addEventListener('resize', renderSidebar);
 $('card').addEventListener('touchstart', () => { touching = true; }, { passive: true });
 for (const type of ['touchend', 'touchcancel']) $('card').addEventListener(type, () => { touching = false; });

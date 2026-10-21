@@ -155,15 +155,17 @@ test('a card under the pointer or keyboard focus isn\'t redrawn, unless its sess
   assert.strictEqual(draws, 3, 'away from the card it redraws as before');
 });
 
-test('the sidebar isn\'t redrawn under the pointer or while a control in it has keyboard focus', () => {
-  let over = '';
-  const dock = { matches: sel => sel.split(', ').includes(over) };
+// The dock's matches() answers like WebKit's does for the state named: hovered (also :hover), pressed (also :hover and
+// :active), keyboard focus inside (:focus-within, :has(:focus-visible)), or a mouse-focused control (:focus-within only).
+test('the sidebar redraws under the pointer, but not mid-press or while a control in it has keyboard focus', () => {
+  const MATCH = { '': [], hovered: [':hover'], pressed: [':hover', ':active'], keyboard: [':focus-within', ':has(:focus-visible)'], mouseFocus: [':focus-within'] };
+  let now = '';
+  const dock = { matches: sel => sel.split(', ').some(s => MATCH[now].includes(s)) };
   const { page, every } = open('', { dock });
   let draws = 0;
   page.renderSidebar = () => draws++;
   const tick = () => every(500).forEach(f => f());
-  tick();
-  assert.strictEqual(draws, 1, 'redrawn on the timer');
-  for (over of [':hover', ':focus-within']) tick();
-  assert.strictEqual(draws, 1, 'not under the pointer, nor with focus inside it');
+  const drawn = state => { now = state; const was = draws; tick(); return draws > was; };
+  assert.deepStrictEqual(Object.keys(MATCH).map(drawn), [true, true, false, false, true],
+    'redrawn on the timer, under the pointer and after a mouse click focuses a control; not mid-press (it would swallow the click) or with keyboard focus inside');
 });
