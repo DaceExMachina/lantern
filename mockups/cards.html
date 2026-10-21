@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moth card mockups</title>
+<style>
+  /* the page: Lantern's scene colours and face */
+  html { color-scheme: dark; }
+  html, body { margin: 0; background: #1E1930; color: #C9B8DA; font: 14px/1.4 Georgia, 'Times New Roman', serif; }
+  main { padding: 24px 16px 60px; max-width: 1700px; margin: 0 auto; }
+  h1 { font-size: 20px; font-weight: 500; color: #F5E9FF; margin: 0 0 6px; }
+  h2 { font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; margin: 34px 0 10px; }
+  p.lede { max-width: 860px; color: #B8AACB; margin: 0 0 6px; }
+  .pitches { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 18px 0 0; }
+  .pitch { border: 1px solid #3A3050; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; color: #B8AACB; background: rgba(43, 36, 64, .5); }
+  .pitch b { color: #F5E9FF; font-weight: 600; }
+  .pitch ul { margin: 6px 0 0; padding-left: 16px; }
+  .row { display: flex; gap: 18px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+  .col { flex: none; width: 300px; }
+  .col > .label { font-size: 11px; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .col > .label .h { text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .col > .label .h.more { color: #FFAA6E; } .col > .label .h.less { color: #C8F48A; }
+
+  /* ---- the real card, copied from index.html (#card → .card), shown in place instead of floating ---- */
+  .card { position: relative; max-width: 300px; width: max-content; box-sizing: border-box;
+    background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
+    font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); cursor: pointer; }
+  .card .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+  .card .agent { color: #E8DCF2; }
+  .card .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
+  .card .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
+  .card .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #B8AACB; }
+  .card ul { margin: 6px 0 2px; padding-left: 16px; }
+  .card li { margin: 2px 0; }
+  .card a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
+  .card a:hover { color: #F0E8FF; border-color: #B9A8FF; }
+  .card .note a { color: #F0E8FF; border-color: #8C78C8; }
+  .card h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: flex-start; font-weight: bold; }
+  .card .chip { white-space: nowrap; flex-shrink: 0; margin-top: 2px; font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 99px; background: #4A3B58; color: #F2DCC0; }
+  .card .chip.waiting { background: #5B44C9; color: #F0ECFF; }
+  .card .chip.idle { background: #3A3050; color: #B9A8C8; }
+  .card .chip.error { background: #4A3A40; color: #E8C8C8; }
+  .card .chip.paused { background: #33405E; color: #C4D2F0; }
+  .card .note { color: #C3B2FF; font-weight: 500; }
+  .card .prompt { font-style: italic; color: #E8DCF2; overflow-wrap: anywhere; }
+  .card .dim { color: #8F7FA6; overflow-wrap: anywhere; }
+  .card div + div { margin-top: 3px; }
+
+  /* ---- shared bits for the new directions ---- */
+  .card h3 .name { flex: 1; min-width: 0; }
+  .card .count { color: #8F7FA6; font-weight: normal; font-size: 11px; }
+  .card .head { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+  .card .head .r { text-transform: none; letter-spacing: 0; }
+  /* the session's own state line, set apart from the message: small, dim, with a glyph */
+  .card .state { color: #8F7FA6; font-size: 11.5px; display: flex; gap: 5px; align-items: baseline; }
+  .card .state::before { content: attr(data-g); color: #B9A8FF; }
+  /* what it said to me: a quoted block in the page's ink, not the status violet */
+  .card .msg { margin-top: 6px; padding: 4px 0 4px 9px; border-left: 2px solid #8C78C8; color: #EDE4F7; font-weight: normal; }
+  .card .msg a { color: #F0E8FF; border-color: #8C78C8; }
+  .card .ask { margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(91, 68, 201, .22); color: #F0ECFF; }
+  .card .ask::before { content: '? '; color: #B9A8FF; font-weight: bold; }
+  .card .foot { margin-top: 8px; color: #6F6188; font-size: 11px; }
+  .card .tag { font: 10px/1.5 ui-monospace, monospace; color: #B9A8FF; background: #2B2440; border: 1px solid #3A3050; border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+  .card .model { font-size: 10px; color: #8F7FA6; }
+  .card .ell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .card .live { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #F2DCC0; box-shadow: 0 0 6px #FFC266; flex: none; align-self: center; animation: pulse 1.6s ease-in-out infinite; }
+  .card .live.quiet { background: #5B4A8A; box-shadow: none; animation: none; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  .card .t { color: #8F7FA6; font-size: 11px; font-variant-numeric: tabular-nums; flex: none; }
+  .card .st { font-style: normal; flex: none; font-size: 10.5px; padding: 0 6px; border-radius: 99px; color: #1E1930; font-weight: 600; }
+
+  /* the agents' own tray: tinted, a shade off the card, so it reads as a separate thing */
+  .card .tray { margin: 8px -12px 0; padding: 6px 12px 7px; background: rgba(51, 64, 94, .28); border-top: 1px solid #33405E; border-bottom: 1px solid #33405E; }
+  .card .tray .head { margin-top: 0; color: #9DB0D6; }
+  .card .arow { display: flex; gap: 6px; align-items: baseline; }
+  .card .arow + .arow, .card .arow + .step + .arow { margin-top: 4px; }
+  .card .step { color: #B8C6E6; font-size: 11.5px; padding-left: 12px; margin-top: 0 !important; }
+
+  /* A: tidy. Single-line PR rows with a status chip on the right. */
+  .A .pr { gap: 0 6px; }
+  .A .pr b { font-weight: normal; color: #C3B2FF; flex: none; }
+  .A .pr span { flex: 1; }
+  .A a.pr { border: none; color: inherit; border-radius: 4px; margin: 0 -4px; padding: 0 4px; }
+  .A a.pr:hover { background: rgba(195, 178, 255, .1); }
+
+  /* B: two-line PR rows, the whole row a link */
+  .B a.pr2 { display: block; border: none; color: inherit; margin: 2px -6px 0; padding: 3px 6px; border-radius: 6px; }
+  .B a.pr2:hover { background: rgba(195, 178, 255, .1); }
+  .B a.pr2 .ti { color: #E8DCF2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .B a.pr2 .me { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #8F7FA6; }
+  .B a.pr2 .me i { width: 6px; height: 6px; border-radius: 50%; }
+  .B a.pr2 .me b { color: #C3B2FF; font-weight: normal; }
+  .B .moreprs { font-size: 11px; color: #8F7FA6; padding: 2px 0 0; }
+
+  /* C: PRs summed up by state; the list opens when you hover the strip */
+  .C .sum { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: 12px; }
+  .C .sum span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .C .sum i { width: 7px; height: 7px; border-radius: 50%; }
+  .C .prs { border-radius: 6px; margin: 0 -6px; padding: 0 6px 2px; }
+  .C .prs .list { display: none; margin-top: 4px; }
+  .C .prs:hover { background: rgba(195, 178, 255, .06); }
+  .C .prs:hover .list, .C .prs.few .list { display: block; }
+  .C .prs.few .sum { display: none; }
+  .C .prs .hint { font-size: 10.5px; color: #6F6188; text-transform: none; letter-spacing: 0; }
+  .C .prs:hover .hint, .C .prs.few .hint { visibility: hidden; }
+  .C .pr { gap: 0 6px; }
+  .C .pr b { font-weight: normal; color: #C3B2FF; flex: none; }
+  .C .pr span { flex: 1; }
+  .C a.pr { border: none; color: inherit; }
+
+  /* D: two zones. The top is what it wants from me; the tray below is the work (agents, then PRs as chips). */
+  .D .tray { background: rgba(20, 16, 32, .55); border-color: #3A3050; padding-bottom: 8px; border-radius: 0 0 10px 10px; border-bottom: none; margin-bottom: -10px; }
+  .D .tray .head { color: #8F7FA6; }
+  .D .tray .head + .head, .D .tray .arow + .head { margin-top: 8px; }
+  .D .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .D .chips a { display: inline-flex; align-items: center; gap: 4px; border: 1px solid #3A3050; background: #2B2440; border-radius: 99px; padding: 0 7px 0 5px; font-size: 11px; color: #D8CCE6; }
+  .D .chips a:hover { border-color: #8C78C8; color: #F5E9FF; }
+  .D .chips i { width: 6px; height: 6px; border-radius: 50%; }
+  .D .foot { margin-top: 6px; }
+  .D .arow .ell { flex: 1; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Moth hover card: four directions</h1>
+  <p class="lede">Each row is one real session (from <code>/events</code>, lightly adjusted to hit each case), drawn by today's card and by four new directions. The number beside each label is the card's height in px; green is shorter than today, orange taller. Every card is live: hover the PR rows and strips.</p>
+  <div class="pitches">
+    <div class="pitch"><b>A. Tidy.</b> Today's layout with the clutter taken out. The redundant status line goes, the message becomes a quoted block, agents get their own tinted tray with a live step line, and each PR is one row with a coloured status chip on the right; the whole row is the link.
+      <ul><li>Smallest change from today; shorter in every case.</li><li>Ten PRs is still ten lines.</li></ul></div>
+    <div class="pitch"><b>B. Two-line PRs.</b> Dace's idea: the title on top, then dot, number and state below, and the whole row clickable. Past four PRs it shows the first four (worst first) and "6 more".
+      <ul><li>Titles read in full, nothing squashed.</li><li>About 2× the height per PR; needs the cap to stay on screen.</li></ul></div>
+    <div class="pitch"><b>C. Summed-up PRs.</b> A strip like "1 ready · 8 drafts · 1 in review" in the PRs header, opening into the one-line list on hover. With three PRs or fewer it just shows the list.
+      <ul><li>The 10-PR card shrinks the most.</li><li>A hover-to-reveal step for the titles.</li></ul></div>
+    <div class="pitch"><b>D. Two zones.</b> The top is what it wants from you (state, question, message). A dark tray below holds the work: agents one line each (tag, live step, time), then PRs as small chips coloured by state, titles on hover.
+      <ul><li>Most glanceable, and the agents are clearly their own thing.</li><li>PR titles only appear on hover.</li></ul></div>
+  </div>
+  <div id="cases"></div>
+  <h2>Notes</h2>
+  <div class="pitches">
+    <div class="pitch"><b>What agents can tell us.</b> Each agent sends its <i>description</i> (the dispatch line), its <i>type</i> (<code>opus-implement</code>, so the model comes for free), its latest <i>activity</i> (the last tool call's description, which already carries the task tag, like "[shader-flame] Fix halo line"), and <i>last</i> (when we last heard from it). The new directions pull the tag out as a chip and show the step without it. <b>Elapsed time isn't stored yet</b>: the server would need to record <code>started</code> on an agent's first event (one line in Server.swift). The times here show what that would look like.</div>
+    <div class="pitch"><b>Duplicates in today's card.</b> Background agents show twice: once under "Running:" (from <code>tasks</code>) and again under "Agents". The new directions list only the tasks that aren't an agent (like "[brass-depth] Restart the preview server"). The status line repeats the pill for "Finished its turn…" and "Waiting on N background tasks", and "Sleeping until you wake it" and "Snoozed until…" repeat a sleeping or snoozed pill, so those drop. Lines that add something ("Asks: …", "Wants permission to use Bash", an API error) stay.</div>
+    <div class="pitch"><b>Status vs. message.</b> Today both render as violet, weight 500, the same size. In the new directions the state line is small and dim with a glyph, the question sits in a violet-tinted box, and the "You:" message is a quote in the card's bright ink with a violet rule on its left.</div>
+  </div>
+</main>
+<script>
+// Firefly colours and PR states, as in page/fireflies.js and page/card.js
+const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '#FFD27A', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF' };
+const NEED = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
+const SHORT = { ready: 'ready', failing: 'failing', changes: 'changes', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
+const ORDER = ['failing', 'changes', 'ready', 'waiting', 'draft', 'merged', 'closed']; // worst (most needing me) first
+const col = n => FLY[n] || FLY.quiet;
+const now = Date.now(), min = 60e3;
+const ago = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
+const short = ms => ms < 60e3 ? `${Math.round(ms / 1e3)}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : `${Math.floor(ms / 3600e3)}h`;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const project = s => s.cwd.split('/').filter(Boolean).pop();
+const gh = (repo, n) => `https://github.com/${repo}/pull/${n}`;
+
+// ---- the cases, from the live sessions on 2026-10-20 ----
+const CASES = [
+  { label: '1. Working, 3 agents, 2 PRs', s: {
+    title: 'lantern', cwd: '/Users/dace/projects/lantern', state: 'working', started: now - 192 * min, last: now - 4e3,
+    activity: 'Starting agent: Lantern: moth hover card redesign mockups',
+    prompt: 'Also It would be neat if we could redesign our hover cards for the moths. make them more digestable at a glance. Could we make the agents section a bit more separate and distinct?',
+    tasks: ['Lantern: shader flame with physics', 'Lantern state plan: PRs 1,2,3,5,7', 'Lantern: moth hover card redesign mockups', '[brass-depth] Restart the preview server'],
+    github: [
+      { url: gh('DaceExMachina/lantern', 131), label: '#131', need: 'waiting', title: "Sit the Moroccan's flame and burner cup at the lantern's middle depth" },
+      { url: gh('DaceExMachina/lantern', 132), label: '#132', need: 'failing', title: "Cap the Moroccan's twist (TWIST_MAX), with temporary dev sliders" },
+    ],
+    subagents: [
+      { type: 'opus-implement', description: 'Lantern: shader flame with physics', activity: '[shader-flame] Fix halo line and rename flame program', started: now - 41 * min, last: now - 2e3 },
+      { type: 'opus-implement', description: 'Lantern state plan: PRs 1,2,3,5,7', activity: '[state-plan] Review diff, run check and full tests', started: now - 18 * min, last: now - 16e3 },
+      { type: 'opus-implement', description: 'Lantern: moth hover card redesign mockups', activity: '[card-mockups] Snapshot live sessions from events stream', started: now - 3 * min, last: now - 1e3 },
+    ] } },
+  { label: '2. Needs you, a question, 10 PRs', s: {
+    title: 'update backgrounds', cwd: '/Users/dace/momentum/api', state: 'waiting', started: now - 26 * 3600e3, last: now - 7 * min,
+    note: 'Asks: Should the restore list show every previous image, or only the last five?',
+    forYou: { you: ["I didn't change their statuses, and I didn't take any of them off Kanban. Review ", { label: 'api#4324', url: gh('momentumdash/api', 4324) }, ' first; the rest stack on it.'],
+      questions: ['Should the restore list show every previous image, or only the last five?'] },
+    github: [
+      ['api', 4324, 'ready', 'PRO-15057: feat: Add background image storage and guarded set-image SQL'],
+      ['api', 4325, 'draft', 'PRO-15058: feat: Add admin background reserve and replace endpoints'],
+      ['admin-site', 401, 'draft', "PRO-15060: feat: Replace a background's image from Preview"],
+      ['extension', 6870, 'draft', 'PRO-15112 Refresh a cached background when its image URL changes'],
+      ['api', 4338, 'waiting', 'PRO-15117 Raise Unsplash background downloads to 2560px wide'],
+      ['api', 4332, 'draft', 'PRO-15104: refactor: Remove the unused POST /files endpoint'],
+      ['admin-site', 403, 'draft', 'PRO-15061: feat: Add a background by uploading a photo'],
+      ['admin-site', 404, 'draft', 'PRO-15107: feat: Show and restore previous background images'],
+      ['api', 4335, 'draft', 'PRO-15107: feat: Restore previous background images'],
+      ['api', 4334, 'draft', 'PRO-15061: feat: Create a background from an admin upload'],
+    ].map(([r, n, need, title]) => ({ url: gh('momentumdash/' + r, n), label: '#' + n, need, title })),
+    subagents: [] } },
+  { label: '3. Sleeping', s: {
+    title: 'jwt', cwd: '/Users/dace/momentum/extension', state: 'waiting', snoozed: true, forGood: true, started: now - 5.4 * 86400e3, last: now - 52 * min,
+    note: 'Finished its turn, waiting for you',
+    forYou: { you: ["Go through the table. When you're done, tell me and I'll remove the QA switch, switch the main tree back to feature/PRO-14708-jwt-auth, and reattach the PR's worktree."], questions: [] },
+    github: [{ url: gh('momentumdash/extension', 6873), label: '#6873', need: 'draft', title: "PRO-15119: fix: keep retrying the tab's background handshake instead of giving up" }],
+    subagents: [] } },
+  { label: '4. Quiet, idle', s: {
+    title: 'ci checks', cwd: '/Users/dace/momentum/extension/.claude/worktrees/PRO-15158-vue-shim', state: 'idle', started: now - 3.1 * 86400e3, last: now - 3 * 3600e3,
+    note: '', prompt: 'why does e2e-test-summary stay pending on 6901?', github: [], subagents: [] } },
+];
+
+// ---- today's card: page/card.js renderCard, as strings ----
+function link({ label, url }, text = label) { return `<a href="${url}" target="_blank" rel="noopener" title="${esc(label)}">${esc(text)}</a>`; }
+const chipOf = s => [s.reported ? 'reported back' : s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? (s.forGood ? 'sleeping' : 'snoozed') : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state,
+  'chip ' + (s.error && s.state === 'waiting' ? 'error' : s.snoozed && s.state === 'waiting' ? 'idle' : s.state)];
+const you = f => f.you.map(p => typeof p === 'string' ? esc(p) : link(p)).join('');
+function current(s) {
+  const [chip, cls] = chipOf(s), r = [`<h3>${esc(s.title)}<span class="${cls}">${chip}</span></h3>`];
+  if (s.state !== 'working' && s.note) r.push(`<div class="${s.state === 'waiting' ? 'note' : ''}">${esc(s.note)}</div>`);
+  if (s.state === 'waiting' && s.forYou) {
+    if (s.forYou.you.length) r.push(`<div class="note">${you(s.forYou)}</div>`);
+    if (s.forYou.questions.length) r.push(`<ul><li>${s.forYou.questions.length} question${s.forYou.questions.length > 1 ? 's' : ''}</li></ul>`);
+  }
+  if (s.github.length) r.push(`<div class="agents">PRs (${s.github.length})</div>`, ...s.github.map(p => `<div class="pr"><i style="background:${col(p.need)}"></i>${link(p)} ${NEED[p.need]} · <span title="${esc(p.title)}">${esc(p.title)}</span></div>`));
+  if (s.tasks?.length) r.push(`<div class="dim">Running: ${esc(s.tasks.join(', '))}</div>`);
+  else if (s.activity) r.push(`<div>Now: ${esc(s.activity)}</div>`);
+  if (s.prompt) r.push(`<div class="prompt">“${esc(s.prompt.length > 140 ? s.prompt.slice(0, 140) + '…' : s.prompt)}”</div>`);
+  if (s.subagents.length) {
+    r.push(`<div class="agents">Agents (${s.subagents.length})</div>`);
+    for (const a of s.subagents) r.push(`<div class="agent">${esc(a.description || a.type)}</div>`, a.activity ? `<div class="dim">Now: ${esc(a.activity)}</div>` : '');
+  }
+  if (s.forGood) r.push('<div class="dim">Sleeping until you wake it</div>');
+  else if (s.snoozed && s.state === 'waiting') r.push('<div class="dim">Snoozed until it does something new</div>');
+  r.push(`<div class="dim">${esc(project(s))} · running ${ago(now - s.started)} · active ${ago(now - s.last)} ago</div>`);
+  return r.join('');
+}
+
+// ---- pieces the new directions share ----
+// the state line only when it says more than the pill: a question, a permission, an error. "Finished its turn" and
+// "Waiting on N tasks" are the pill again.
+function stateLine(s) {
+  const n = s.note || '';
+  if (!n || /^(Finished its turn|Waiting on)/.test(n) || n.startsWith('Asks:')) return '';
+  return `<div class="state" data-g="${s.error ? '!' : '◆'}">${esc(n)}</div>`;
+}
+const ask = s => s.state === 'waiting' && s.forYou?.questions.length ? s.forYou.questions.map(q => `<div class="ask">${esc(q)}</div>`).join('') : '';
+const msg = s => s.state === 'waiting' && s.forYou?.you.length ? `<div class="msg">${you(s.forYou)}</div>` : '';
+// an agent: the tag pulled out of its step (or description), the description without the tag or a "Project:" prefix
+function agent(a) {
+  const tag = (a.activity.match(/^\[([^\]]+)\]/) || a.description.match(/^\[([^\]]+)\]/) || [])[1];
+  const name = a.description.replace(/^\[[^\]]+\]\s*/, '').replace(/^[A-Z][\w-]*:\s+/, '');
+  const step = a.activity.replace(/^\[[^\]]+\]\s*/, '');
+  const model = (a.type.match(/^(opus|sonnet|haiku|fable)/) || [])[1];
+  return { tag, name, step, model, quiet: now - a.last > 10e3, time: short(now - a.started) };
+}
+// background tasks that aren't one of the agents (today both get listed)
+const looseRow = t => { const m = t.match(/^\[([^\]]+)\]\s*(.*)/); return m ? `<span class="tag">${esc(m[1])}</span><span class="ell dim">${esc(m[2])}</span>` : `<span class="ell dim">${esc(t)}</span>`; };
+const loose = s => (s.tasks || []).filter(t => !s.subagents.some(a => a.description === t));
+const sorted = prs => [...prs].sort((a, b) => ORDER.indexOf(a.need) - ORDER.indexOf(b.need));
+const foot = s => `<div class="foot">${esc(project(s))} · ${short(now - s.started)} old · active ${short(now - s.last)} ago</div>`;
+const head = s => { const [chip, cls] = chipOf(s); return `<h3><span class="name">${esc(s.title)}</span><span class="${cls}">${chip}</span></h3>`; };
+const nowLine = s => s.state === 'working' && s.activity ? `<div class="state" data-g="›">${esc(s.activity)}</div>` : '';
+const prompt = s => s.prompt && s.state !== 'waiting' ? `<div class="prompt">“${esc(s.prompt.length > 110 ? s.prompt.slice(0, 110) + '…' : s.prompt)}”</div>` : '';
+const chipPr = p => `<em class="st" style="background:${col(p.need)}">${SHORT[p.need]}</em>`;
+function agentTray(s, rowFn) {
+  if (!s.subagents.length && !loose(s).length) return '';
+  return `<div class="tray"><div class="head"><span>Agents</span><span class="r">${s.subagents.length} running</span></div>${s.subagents.map(a => rowFn(agent(a))).join('')}${loose(s).map(t => `<div class="arow"><span class="live quiet"></span>${looseRow(t)}</div>`).join('')}</div>`;
+}
+const twoLineAgent = a => `<div class="arow"><span class="live${a.quiet ? ' quiet' : ''}"></span><span class="ell agent" style="flex:1">${esc(a.name)}</span>${a.model ? `<span class="model">${a.model}</span>` : ''}<span class="t">${a.time}</span></div><div class="step ell">${esc(a.step)}</div>`;
+const oneLineAgent = a => `<div class="arow" title="${esc(a.name)}"><span class="live${a.quiet ? ' quiet' : ''}"></span>${a.tag ? `<span class="tag">${esc(a.tag)}</span>` : ''}<span class="ell" style="color:#B8C6E6">${esc(a.step)}</span><span class="t">${a.time}</span></div>`;
+const prHead = (s, extra = '') => `<div class="head"><span>PRs <span class="r">${s.github.length}</span></span>${extra}</div>`;
+const oneLinePr = p => `<a class="pr" href="${p.url}" target="_blank" rel="noopener" title="${esc(p.title)}"><b>${esc(p.label)}</b><span>${esc(p.title)}</span>${chipPr(p)}</a>`;
+
+// ---- A: tidy ----
+function A(s) {
+  return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), agentTray(s, twoLineAgent),
+    s.github.length ? prHead(s) + sorted(s.github).map(oneLinePr).join('') : '', foot(s)].join('');
+}
+// ---- B: two-line PRs, capped at four ----
+function B(s) {
+  const prs = sorted(s.github), shown = prs.slice(0, 4);
+  return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), agentTray(s, twoLineAgent),
+    prs.length ? prHead(s) + shown.map(p => `<a class="pr2" href="${p.url}" target="_blank" rel="noopener"><div class="ti">${esc(p.title)}</div><div class="me"><i style="background:${col(p.need)}"></i><b>${esc(p.label)}</b>${NEED[p.need]}</div></a>`).join('') + (prs.length > 4 ? `<div class="moreprs">${prs.length - 4} more: ${prs.slice(4).map(p => link(p)).join(', ')}</div>` : '') : '',
+    foot(s)].join('');
+}
+// ---- C: PRs summed up by state ----
+function summary(prs) {
+  const n = {}; for (const p of prs) n[p.need] = (n[p.need] || 0) + 1;
+  return ORDER.filter(k => n[k]).map(k => `<span><i style="background:${col(k)}"></i>${n[k]} ${SHORT[k]}${k === 'draft' && n[k] > 1 ? 's' : ''}</span>`).join('');
+}
+function C(s) {
+  const prs = sorted(s.github);
+  return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), agentTray(s, oneLineAgent),
+    prs.length ? `<div class="prs${prs.length <= 3 ? ' few' : ''}">${prHead(s, '<span class="hint">hover for titles</span>')}<div class="sum">${summary(prs)}</div><div class="list">${prs.map(oneLinePr).join('')}</div></div>` : '',
+    foot(s)].join('');
+}
+// ---- D: two zones ----
+function D(s) {
+  const prs = sorted(s.github), work = s.subagents.length || loose(s).length || prs.length;
+  const tray = work ? `<div class="tray">${s.subagents.length || loose(s).length ? `<div class="head"><span>Agents</span><span class="r">${s.subagents.length}</span></div>${s.subagents.map(a => oneLineAgent(agent(a))).join('')}${loose(s).map(t => `<div class="arow"><span class="live quiet"></span>${looseRow(t)}</div>`).join('')}` : ''}${prs.length ? `<div class="head"><span>PRs</span><span class="r">${summary(prs).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().replace(/ (\d)/g, ' · $1')}</span></div><div class="chips">${prs.map(p => `<a href="${p.url}" target="_blank" rel="noopener" title="${esc(p.title)} (${NEED[p.need]})"><i style="background:${col(p.need)}"></i>${esc(p.label)}</a>`).join('')}</div>` : ''}${foot(s)}</div>` : foot(s);
+  return [head(s), stateLine(s), nowLine(s), ask(s), msg(s), prompt(s), tray].join('');
+}
+
+const DIRS = [['Today', current], ['A. Tidy', A], ['B. Two-line PRs', B], ['C. Summed-up PRs', C], ['D. Two zones', D]];
+const root = document.getElementById('cases');
+for (const c of CASES) {
+  const h = document.createElement('h2'); h.textContent = c.label; root.append(h);
+  const row = document.createElement('div'); row.className = 'row'; root.append(row);
+  let base;
+  for (const [name, fn] of DIRS) {
+    const col = document.createElement('div'); col.className = 'col';
+    col.innerHTML = `<div class="label"><span>${name}</span><span class="h"></span></div><div class="card ${name[0]}">${fn(c.s)}</div>`;
+    row.append(col);
+    const card = col.querySelector('.card'), hgt = Math.round(card.offsetHeight), tag = col.querySelector('.h');
+    base ??= hgt;
+    tag.textContent = name === 'Today' ? `${hgt}px` : `${hgt}px (${hgt - base >= 0 ? '+' : ''}${hgt - base})`;
+    if (name !== 'Today') tag.classList.add(hgt > base ? 'more' : 'less');
+  }
+}
+</script>
+</body>
+</html>
