@@ -30,13 +30,13 @@ function toggleDevPanel() {
   if (devPanel) { devPanel.hidden = !devPanel.hidden; return; }
   devPanel = document.createElement('div');
   devPanel.style.cssText = 'position: fixed; top: 12px; left: 12px; z-index: 10; width: 260px; max-height: calc(100vh - 24px); overflow-y: auto;'
-    + 'box-sizing: border-box; padding: 4px 14px 8px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;'
-    + 'color: #D8CCE6; font: 12.5px/1.5 Georgia, serif; box-shadow: 0 8px 28px rgba(0, 0, 0, .45)';
+    + 'box-sizing: border-box; padding: 4px 14px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;'
+    + 'color: var(--ink); font: 12.5px/1.5 Georgia, serif; box-shadow: var(--shadow-lg)';
   const sections = new Map();
   for (const r of devRows) {
     if (!sections.has(r.section)) {
       const d = document.createElement('details'), s = document.createElement('summary');
-      d.open = true; s.textContent = r.section; s.style.cssText = 'padding: 6px 0 2px; cursor: pointer; color: #C3B2FF';
+      d.open = true; s.textContent = r.section; s.style.cssText = 'padding: 6px 0 2px; cursor: pointer; color: var(--accent-violet)';
       d.append(s); devPanel.append(d); sections.set(r.section, d);
     }
     // each row is one label: its click area the row's full width and height, meeting the next row's
@@ -46,7 +46,7 @@ function toggleDevPanel() {
     sections.get(r.section).append(row);
     if (r.kind === 'button') {
       const b = document.createElement('button');
-      b.textContent = r.label; b.style.cssText = 'all: unset; flex: 1; color: #C3B2FF'; b.onclick = r.onChange;
+      b.textContent = r.label; b.style.cssText = 'all: unset; flex: 1; color: var(--accent-violet)'; b.onclick = r.onChange;
       row.append(b); continue;
     }
     const input = /** @type {HTMLInputElement} */ (document.createElement(r.kind === 'select' ? 'select' : 'input')); // a select's value works the same
