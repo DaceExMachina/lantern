@@ -1,6 +1,5 @@
 // Wiring, run last once everything is defined: the live connection to the server, controls, and the animation clock.
 
-addEventListener('resize', fitView);
 const es = new EventSource('/events');
 es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
@@ -35,7 +34,8 @@ es.addEventListener('settings', e => {
   usingGh = !!st.github; renderGitHub();
   staleOn = st.stale !== false; $('staleToggle').checked = staleOn;
   prList = st.prList || {}; // each session's card: its PRs listed or as chips
-  sync();
+  pinned = Array.isArray(st.pinned) ? st.pinned : []; // the sessions in the sidebar, in the order they were pinned, with their PR view
+  sync(); renderSidebar();
 });
 // The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
 // 9px, and only wraps past that. Text scales with its font size, so one measurement gives the size that fits.
@@ -126,6 +126,9 @@ setInterval(() => {
   const s = hovered.session, as = s ? `${s.id} ${s.state} ${!!s.snoozed} ${!!s.forGood}` : '';
   if (as !== drawnAs || !touching && !$('card').matches(':hover, :has(:focus-visible)')) { drawnAs = as; renderCard(); }
 }, 500);
+// and the sidebar the same way, except under the pointer or keyboard focus; it shows or goes as the window crosses PIN_MIN
+setInterval(() => { if (!$('dock').matches(':hover, :focus-within')) renderSidebar(); }, 500);
+addEventListener('resize', renderSidebar);
 $('card').addEventListener('touchstart', () => { touching = true; }, { passive: true });
 for (const type of ['touchend', 'touchcancel']) $('card').addEventListener(type, () => { touching = false; });
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));

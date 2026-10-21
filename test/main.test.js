@@ -154,3 +154,16 @@ test('a card under the pointer or keyboard focus isn\'t redrawn, unless its sess
   tick();
   assert.strictEqual(draws, 3, 'away from the card it redraws as before');
 });
+
+test('the sidebar isn\'t redrawn under the pointer or while a control in it has keyboard focus', () => {
+  let over = '';
+  const dock = { matches: sel => sel.split(', ').includes(over) };
+  const { page, every } = open('', { dock });
+  let draws = 0;
+  page.renderSidebar = () => draws++;
+  const tick = () => every(500).forEach(f => f());
+  tick();
+  assert.strictEqual(draws, 1, 'redrawn on the timer');
+  for (over of [':hover', ':focus-within']) tick();
+  assert.strictEqual(draws, 1, 'not under the pointer, nor with focus inside it');
+});

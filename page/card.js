@@ -83,8 +83,9 @@ function renderCard() {
   $('card').classList.add('show');
 }
 
-// A session in rows. Its header opens the session (a click on its moth does the same; shift-click snoozes).
-function sessionRows(s) {
+// A session in rows. Its header opens the session (a click on its moth does the same; shift-click snoozes). `full` is the
+// pinned sidebar's version: nothing cut short, and every PR there to list.
+function sessionRows(s, full = false) {
   const now = Date.now(), waiting = s.state === 'waiting', questions = waiting && s.forYou?.questions || [], you = waiting && s.forYou?.you || [];
   // Every control on the card is an outer button or link that fills its zone (the padding around it, up to its neighbours
   // and the card's edges) and an inner .face that's the visible pill or hover, the size it always was (index.html).
@@ -102,12 +103,12 @@ function sessionRows(s) {
   const next = s.forGood ? 'Wake' : waiting && !s.snoozed ? 'Snooze' : 'Sleep until you wake it';
   chip.title = next; chip.setAttribute('aria-label', `${chip.textContent}: ${next.toLowerCase()}`);
   chip.onclick = () => moths.get(s.id)?.zone?.menu?.();
-  const rows = [make('h3', '', open, chip)];
+  const rows = [make('h3', '', open, chip, ...(pinnable() ? [pinButton(s)] : []))];
   if (s.state === 'working' && s.activity) rows.push(make('div', 'state', s.activity));
   else if (s.state !== 'working' && s.note && !/^(Finished its turn|Waiting on|Asks:)/.test(s.note)) rows.push(make('div', 'state' + (s.error ? ' error' : ''), s.note));
   for (const q of questions) rows.push(make('div', 'ask', q));
   if (you.length) rows.push(make('div', 'msg', ...you.map(piece => typeof piece === 'string' ? piece : link(piece))));
-  if (s.prompt && !waiting) rows.push(make('div', 'prompt', `“${s.prompt.length > 110 ? s.prompt.slice(0, 110) + '…' : s.prompt}”`));
+  if (s.prompt && !waiting) rows.push(make('div', 'prompt', `“${s.prompt.length > 110 && !full ? s.prompt.slice(0, 110) + '…' : s.prompt}”`));
   // The work below, in its tray: agents (each once; background tasks only when they aren't one), side sessions, PRs.
   const tray = [], side = sessions.filter(o => o.parent === s.id), loose = (s.tasks || []).filter(t => !s.subagents.some(a => a.description === t));
   if (s.subagents.length || loose.length) { // in a tinted band of their own, set apart from the rest of the work
@@ -118,16 +119,16 @@ function sessionRows(s) {
     // oldest first, by start then id, so the order never shifts while they run: a new agent joins at the bottom and a
     // finished one just drops out, whatever order the server's list comes in
     const agents = [...s.subagents].sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || String(a.id).localeCompare(String(b.id)));
-    for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
+    for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now, full));
     // its kind where an agent's model goes; keyed by place, as two can share a description (and so a start: taskStarted is
     // by description)
-    loose.forEach((t, i) => zone.append(agentRow({ id: `shell ${i}`, job: t, last: 0, model: 'shell', started: s.taskStarted?.[t] }, now)));
+    loose.forEach((t, i) => zone.append(agentRow({ id: `shell ${i}`, job: t, last: 0, model: 'shell', started: s.taskStarted?.[t] }, now, full)));
   }
   if (side.length) {
     tray.push(make('div', 'head', 'Side sessions', make('span', 'r', String(side.length))));
-    for (const o of side) tray.push(agentRow({ id: o.id, job: o.title || project(o), activity: o.state === 'working' ? o.activity : o.reported ? 'Reported back' : '', started: o.started, last: o.state === 'working' ? o.last : 0 }, now));
+    for (const o of side) tray.push(agentRow({ id: o.id, job: o.title || project(o), activity: o.state === 'working' ? o.activity : o.reported ? 'Reported back' : '', started: o.started, last: o.state === 'working' ? o.last : 0 }, now, full));
   }
-  if (s.github?.length) tray.push(...prBlock(s));
+  if (s.github?.length) tray.push(...prBlock(s, full));
   const foot = make('div', 'foot', `${project(s)} · ${short(now - s.started)} old · active ${short(now - s.last)} ago`);
   rows.push(tray.length ? make('div', 'tray', ...tray, foot) : foot);
   return rows;
@@ -142,13 +143,15 @@ function sessionRows(s) {
 const TAG = /^\[([^\]]+)\]\s*/;
 const openAgents = new Set();
 /** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string }} a */
-function agentRow({ id, job, activity = '', started, last = 0, model }, now) {
+function agentRow({ id, job, activity = '', started, last = 0, model }, now, full = false) {
   const tag = activity.match(TAG)?.[1], step = activity.replace(TAG, ''), key = id || job;
   const dot = make('span', 'live' + (now - last > 10e3 ? ' quiet' : '')), time = started ? [make('span', 't', short(now - started))] : [];
   const about = [...(tag ? [make('span', 'tag', tag)] : []), ...(model ? [make('span', 'model', model)] : [])], name = make('span', 'job', job);
   const lines = about.length ? [make('span', 'arow', dot, ...about, ...time), name]
     : [make('span', 'arow', dot, name, ...time)]; // nothing to say on a line of its own
-  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), make('span', 'face', ...lines, ...(step ? [make('span', 'astep', step)] : [])));
+  const face = make('span', 'face', ...lines, ...(step ? [make('span', 'astep', step)] : []));
+  if (full) return make('div', 'agent open', face); // the sidebar shows it in full already, so there's nothing to open
+  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), face);
   row.setAttribute('aria-expanded', String(openAgents.has(key)));
   const toggle = () => {
     const open = !openAgents.has(key);
@@ -174,14 +177,17 @@ function prSummary(prs) {
   for (const p of prs) n[p.need] = (n[p.need] || 0) + 1;
   return Object.keys(n).sort((a, b) => rank(a) - rank(b)).map(k => `${n[k]} ${k === 'changes' && n[k] === 1 ? 'change requested' : SHORT[k] || k}${k === 'draft' && n[k] > 1 ? 's' : ''}`).join(' · ');
 }
-function prBlock(s) {
-  const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = prList[s.id] ?? prs.length <= 3;
+function prBlock(s, full = false) {
+  // in the sidebar they're listed in full until that pin's own toggle (kept with the pin) turns them into chips
+  const pin = full && pinned.find(p => p.id === s.id), cap = full ? Infinity : PR_CAP;
+  const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = full ? !pin?.chips : prList[s.id] ?? prs.length <= 3;
   const ph = make('span', 'ph'), summary = () => { ph.className = 'ph'; ph.replaceChildren(make('span', 'sum', make('b', '', 'PRs'), ` · ${prSummary(prs)}`)); };
   summary();
   const tog = make('button', 'tog'), label = open ? 'Show PRs as chips' : 'List PRs with their titles';
   tog.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
   tog.setAttribute('aria-expanded', String(open)); tog.setAttribute('aria-label', label); tog.title = label;
   tog.onclick = () => {
+    if (full) return setPins(pinned.map(p => p.id === s.id ? { ...p, chips: open } : p));
     prList[s.id] = !open;
     post('/settings', { prList: { [s.id]: !open } });
     renderCard();
@@ -212,17 +218,56 @@ function prBlock(s) {
     a.onpointerleave = summary;
     return a;
   }))];
-  return [head, ...prs.slice(0, PR_CAP).map(p => {
+  return [head, ...prs.slice(0, cap).map(p => {
     const a = link(p, ''), ti = make('span', 'ti', p.title);
     a.className = 'pr2';
     a.append(make('span', 'face', ti, make('span', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
       ...(p.createdAt ? [make('span', 't', short(Date.now() - Date.parse(p.createdAt)))] : [])))); // how long it's been open
     return titled(a, p, () => ti.scrollWidth > ti.clientWidth);
-  }), ...(prs.length > PR_CAP ? [make('div', 'more', `${prs.length - PR_CAP} more: `, ...prs.slice(PR_CAP).map(p => { // the comma after each is its own, so the links touch
+  }), ...(prs.length > cap ? [make('div', 'more', `${prs.length - cap} more: `, ...prs.slice(cap).map(p => { // the comma after each is its own, so the links touch
       const a = link(p, '');
       a.className = 'ov'; a.append(make('span', 'face', p.label));
       return titled(a, p);
     }))] : []), tip];
+}
+// ---- the pinned sidebar ------------------------------------------------------------
+// Sessions pinned from their cards show in full, stacked in the order they were pinned (the newest at the bottom, so
+// nothing jumps), in one column docked right of the scene, which narrows to make room (fitView follows the scene's size).
+// The pins are a setting, so every window agrees and they survive a restart. A pinned session that ends stays in its
+// place, dimmed, as this window last saw it, until it's unpinned; a window that never saw it leaves it out. No pinning
+// where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
+const PIN_MIN = 800;
+/** @type {{ id: string, chips?: boolean }[]} the pinned sessions, oldest first, each with whether its PRs show as chips */
+let pinned = [];
+const isPinned = (/** @type {string} */ id) => pinned.some(p => p.id === id);
+const pinnedLast = new Map(); // id → the session as this window last saw it
+const pinnable = () => innerWidth >= PIN_MIN && !document.body.matches('.panel, .screensaver, .ambient');
+function pinButton(s) {
+  const on = isPinned(s.id), face = make('span', 'face'), b = make('button', 'pin' + (on ? ' on' : ''), face), name = s.title || project(s);
+  face.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg>';
+  b.setAttribute('aria-label', on ? `Unpin ${name}` : `Pin ${name} to the sidebar`);
+  b.title = on ? 'Unpin' : 'Pin to the sidebar';
+  b.onclick = () => setPins(on ? pinned.filter(p => p.id !== s.id) : [...pinned, { id: s.id }]);
+  return b;
+}
+// Only the pins this window can show go to the server (the one just pinned is live), so one nobody can see any more
+// doesn't linger.
+function setPins(/** @type {typeof pinned} */ pins) {
+  pinned = pins.filter(p => pinnedLast.has(p.id) || sessions.some(o => o.id === p.id));
+  post('/settings', { pinned });
+  renderSidebar();
+  if (hovered) renderCard(); // its pin shows the change
+}
+function renderSidebar() {
+  for (const id of pinnedLast.keys()) if (!isPinned(id)) pinnedLast.delete(id);
+  for (const o of sessions) if (isPinned(o.id)) pinnedLast.set(o.id, o);
+  const ids = pinnable() ? pinned.map(p => p.id).filter(id => pinnedLast.has(id)) : [];
+  document.body.classList.toggle('pinned', ids.length > 0);
+  $('dock').inert = !ids.length; // out of the tab order and the accessibility tree while closed
+  if (!ids.length) return; // ponytail: what it showed stays, so it slides out whole
+  const live = new Set(sessions.map(o => o.id));
+  // one section per session in the column's scroller (index.html), which keeps its scroll through a redraw
+  $('dock').children[0].replaceChildren(...ids.map(id => make('section', live.has(id) ? '' : 'ended', ...sessionRows(pinnedLast.get(id), true))));
 }
 // The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
 // anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.

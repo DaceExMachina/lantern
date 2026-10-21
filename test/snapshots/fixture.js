@@ -3,7 +3,8 @@
 // frame() and the session text's tick itself), and a fake EventSource plays a fixture covering every kind of moth,
 // firefly, wisp and ghost. The harness calls __drive() until it returns 'done'; each other answer names a snapshot to take.
 // The page's query picks the scene: style=<lantern>, ambient for the second screen's view, hover to snap a hover card,
-// chrome to snap the menu, stats, recap, a card and the dev panel instead of the later scene (with /stats from statsLog).
+// chrome to snap the menu, stats, recap, a card and the dev panel instead of the later scene (with /stats from statsLog),
+// pinned to dock sess-alpha and sess-bravo in the sidebar and check the scene refitted beside it.
 (() => {
   let seed = 0x5eed;
   Math.random = () => { // mulberry32
@@ -132,10 +133,28 @@
     const [one, two] = [...card.querySelectorAll('a.pr2 .face')].map(f => f.getBoundingClientRect()), between = document.elementFromPoint(one.left + 10, (one.bottom + two.top) / 2);
     if (!between?.closest('a.pr2')) errs.push('the gap between two PR rows belongs to neither');
   };
+  // With the sidebar docked, the scene has the rest of the window, and fitView has followed it (each frame,
+  // since the window itself didn't resize): the viewBox has the scene's shape, the background canvas its size, and a
+  // moth's hover area is where its moth is drawn.
+  const refitted = () => {
+    const svg = document.querySelector('svg'), r = svg.getBoundingClientRect(), dock = $('dock').getBoundingClientRect();
+    const [, , w, h] = svg.getAttribute('viewBox').split(' ').map(Number), zone = moths.get('sess-bravo').zone;
+    const at = new DOMPoint(zone.x, zone.y).matrixTransform(svg.getScreenCTM());
+    if (Math.round(dock.width) !== 380 || Math.round(r.right) !== innerWidth - 380) errs.push(`the dock is ${dock.width} wide and the scene ends at ${r.right}`);
+    if (Math.abs(w / h - r.width / r.height) > 1e-3) errs.push(`the viewBox is ${w}x${h} in a ${r.width}x${r.height} scene: not refitted`);
+    if (Math.abs($('bg').width - r.width * devicePixelRatio * bgScale) > 1) errs.push(`the background is ${$('bg').width} px wide for a ${r.width} scene`);
+    if (at.x > r.right || zoneAtPoint({ clientX: at.x, clientY: at.y }) !== zone) errs.push(`sess-bravo's hover area at ${at.x}, ${at.y} isn't its own`);
+    // each section's pin owns the rest of its header: its top-right corner and just right of the pill
+    for (const h3 of document.querySelectorAll('#dock h3')) {
+      const head = h3.getBoundingClientRect(), chip = h3.querySelector('.chip').getBoundingClientRect(), pin = h3.querySelector('.pin');
+      for (const [where, x, y] of [['top-right corner', head.right - 1, head.top + 1], ['bottom, just right of the pill', chip.right + 1, head.bottom - 1]])
+        if (document.elementFromPoint(x, y)?.closest('.pin') !== pin) errs.push(`the pin's hit area misses its header's ${where}`);
+    }
+  };
   const steps = [
     () => {
       catchScorch();
-      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
+      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31', pinned: Q.has('pinned') ? [{ id: 'sess-alpha' }, { id: 'sess-bravo', chips: true }] : undefined });
       emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too' }]);
       emit('stale', stale(false));
       emit('prose', words(3));
@@ -143,10 +162,11 @@
     },
     run(6),
     ...(Q.has('chrome') ? chrome() : []),
+    ...(Q.has('pinned') ? [() => { renderSidebar(); }, run(0.1), refitted, snap('open')] : []),
     ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), hits, () => { hideCard(); },
       // a stale PR's card and a ghost's, with their pills
       () => { enterZone([...wisps.values()][0].zone); }, snap('stale'), () => { hideCard(); enterZone([...ghosts.values()][0].zone); }, snap('ghost'), () => { hideCard(); }] : []),
-    ...(Q.has('chrome') ? [] : [
+    ...(Q.has('chrome') || Q.has('pinned') ? [] : [
       () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
       run(14), snap('t20'), // T = LAST
     ]),

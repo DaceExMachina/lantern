@@ -89,9 +89,13 @@ const LANTERN_SPAN = 200;
 const VIEW = { kx: 1, ky: 1, top: 20 }; // top: where the lantern hangs from, the visible area's top edge
 /** @type {(p: number[]) => [number, number]} */
 const stretch = ([x, y]) => [340 + (x - 340) * VIEW.kx, 320 + (y - 320) * VIEW.ky];
+// frame() calls it each frame, so it follows the window and the pinned sidebar sliding in or out, and only does the work
+// when the size has changed. Each frame, before anything is drawn, so the sidebar's slide never shows a cleared canvas.
+let fitted = '';
 function fitView() {
-  const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect();
-  if (!width || !height) return;
+  const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect(), size = `${width} ${height} ${devicePixelRatio}`;
+  if (!width || !height || size === fitted) return;
+  fitted = size;
   VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
   for (const s of document.querySelectorAll('#scene > svg:not(#lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);

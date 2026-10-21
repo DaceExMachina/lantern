@@ -25,12 +25,14 @@ const all = n => typeof n === 'string' ? [] : [n, ...n.children.flatMap(all)];
 const find = (n, cls) => all(n).filter(c => c.className.split(' ').includes(cls));
 
 function load() {
-  const card = node('div'), posts = [];
-  const page = vm.createContext({ document: { createElement: node }, innerWidth: 1440, $: () => card, clearTimeout() {}, hideTimer: 0, moths: new Map(), sessions: [], FLY: { ready: 'g', failing: 'r', changes: 'o', draft: 'y', quiet: 'b' },
+  const card = node('div'), dock = node('aside'), body = node('body'), posts = [];
+  dock.append(node('div')); // its scroller, from index.html
+  body.matches = sel => sel.split(', ').some(c => body.className.split(' ').includes(c.slice(1))); // the .panel, .screensaver and .ambient modes
+  const page = vm.createContext({ document: { createElement: node, body }, innerWidth: 1440, $: id => id === 'dock' ? dock : card, clearTimeout() {}, hideTimer: 0, hovered: null, moths: new Map(), sessions: [], FLY: { ready: 'g', failing: 'r', changes: 'o', draft: 'y', quiet: 'b' },
     post: (url, body) => posts.push([url, body]) });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
   const show = s => { page.hovered = { session: s }; vm.runInContext('renderCard()', page); return card; };
-  return { page, card, posts, show, run: code => vm.runInContext(code, page) };
+  return { page, card, dock, body, posts, show, run: code => vm.runInContext(code, page) };
 }
 const now = Date.now();
 const pr = (n, need) => ({ url: `https://github.com/o/r/pull/${n}`, label: `#${n}`, need, title: `PR ${n} title` });
@@ -205,7 +207,7 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
   const pill = o => find(show(session(o)), 'chip')[0];
   const p = pill({});
   assert.strictEqual(p.tag, 'button');
-  assert.deepStrictEqual(show(session({})).children[0].children.map(c => c.className), ['open', 'chip waiting'], 'beside the open button, not inside it, so its click can\'t reach it');
+  assert.deepStrictEqual(show(session({})).children[0].children.map(c => c.className), ['open', 'chip waiting', 'pin'], 'beside the open button, not inside it, so its click can\'t reach it (then the pin)');
   p.onclick();
   assert.deepStrictEqual([calls, posts], [[], ['/snooze']], 'the snooze, and not the open');
   assert.deepStrictEqual([pill({}).title, pill({ snoozed: true }).title, pill({ snoozed: true, forGood: true }).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
@@ -273,4 +275,136 @@ test('one PR with changes requested reads singular, and two shell commands with 
   const s = session({ state: 'paused', tasks: ['npm test', 'npm test'] }), rows = () => find(show(s), 'agent');
   rows()[1].onclick();
   assert.deepStrictEqual(rows().map(r => r.className), ['agent', 'agent open'], 'only the one clicked');
+});
+
+// The pinned sidebar: the pin in a card's header pins or unpins its session, the server's list decides what every
+// window docks, and the dock stacks them in full, in the order they were pinned.
+const pinOf = el => find(el, 'pin')[0];
+const docked = ({ dock, body }) => body.className.split(' ').includes('pinned') ? find(dock, 'name').map(text) : [];
+const sections = dock => all(dock).filter(n => n.tag === 'section');
+const list = posts => JSON.stringify(posts.map(([, b]) => b.pinned.map(p => p.id)));
+
+test('the card\'s pin toggles its session in the list, newest at the bottom, and each section\'s own pin unpins it', () => {
+  const l = load(), { show, posts, page } = l, a = session({ title: 'alpha' }), b = session({ id: 's2', title: 'bravo' }), c = session({ id: 's3', title: 'charlie' });
+  page.sessions = [a, b, c];
+  const pin = pinOf(show(a));
+  assert.deepStrictEqual([pin.tag, pin.attrs['aria-label'], text(pin)], ['button', 'Pin alpha to the sidebar', ''], 'an icon button with a label');
+  pin.onclick();
+  assert.deepStrictEqual(docked(l), ['alpha']);
+  assert.deepStrictEqual([pinOf(l.card).attrs['aria-label'], pinOf(l.card).className], ['Unpin alpha', 'pin on'], 'the open card\'s pin shows it');
+  pinOf(show(c)).onclick();
+  pinOf(show(b)).onclick();
+  assert.deepStrictEqual(docked(l), ['alpha', 'charlie', 'bravo'], 'stacked in the order they were pinned');
+  pinOf(show(c)).onclick();
+  assert.deepStrictEqual(docked(l), ['alpha', 'bravo'], 'a pinned session\'s card pin unpins it, and the rest keep their places');
+  pinOf(sections(l.dock)[0]).onclick();
+  assert.deepStrictEqual(docked(l), ['bravo'], 'a section\'s own pin');
+  pinOf(sections(l.dock)[0]).onclick();
+  assert.deepStrictEqual(docked(l), []);
+  assert.strictEqual(list(posts), JSON.stringify([['s1'], ['s1', 's3'], ['s1', 's3', 's2'], ['s1', 's2'], ['s2'], []]), 'the whole list to the server each time');
+  // another window docks what the server says (main.js: pinned = st.pinned, then renderSidebar)
+  const other = load();
+  other.page.sessions = [a, b];
+  other.run('pinned = [{ id: "s2" }, { id: "s1" }]; renderSidebar()');
+  assert.deepStrictEqual(docked(other), ['bravo', 'alpha']);
+});
+
+test('the sidebar shows each session in full: the whole prompt, every PR listed, no toggle', () => {
+  const l = load(), long = 'x'.repeat(200);
+  l.page.sessions = [session({ state: 'idle', prompt: long, github: TEN })];
+  l.run('pinned = [{ id: "s1" }]; renderSidebar()');
+  assert.strictEqual(find(l.dock, 'prompt').map(text)[0], `“${long}”`, 'not cut at 110');
+  assert.strictEqual(find(l.dock, 'pr2').length, 11, 'every PR, however many');
+  assert.deepStrictEqual([find(l.dock, 'more').length, find(l.dock, 'chips').length], [0, 0], 'no cap, and listed though the card would show chips');
+  assert.strictEqual(find(l.show(session({ state: 'idle', prompt: long, github: TEN })), 'prompt').map(text)[0].length, 113, 'the card still cuts it');
+});
+
+test('a pinned session that ends stays in its place, dimmed, as it last was, until unpinned', () => {
+  const l = load(), a = session({ title: 'alpha', state: 'working', activity: 'Last step' }), b = session({ id: 's2', title: 'bravo' });
+  l.page.sessions = [a, b];
+  l.run('pinned = [{ id: "s1" }, { id: "s2" }]; renderSidebar()');
+  assert.deepStrictEqual(sections(l.dock).map(n => n.className), ['', '']);
+  l.page.sessions = [b];
+  l.run('renderSidebar()');
+  assert.deepStrictEqual(docked(l), ['alpha', 'bravo'], 'still docked, in its place');
+  assert.deepStrictEqual(sections(l.dock).map(n => n.className), ['ended', ''], 'dimmed');
+  assert.deepStrictEqual(find(sections(l.dock)[0], 'state').map(text), ['Last step'], 'as it last was');
+  pinOf(sections(l.dock)[0]).onclick();
+  assert.deepStrictEqual(docked(l), ['bravo']);
+  // a window that never saw it leaves it out
+  const fresh = load();
+  fresh.page.sessions = [b];
+  fresh.run('pinned = [{ id: "gone" }, { id: "s2" }]; renderSidebar()');
+  assert.deepStrictEqual(docked(fresh), ['bravo']);
+});
+
+test('no pin and no sidebar under 800px wide, in the iTerm panel or the screensavers; they come back when there\'s room', () => {
+  const l = load(), s = session({});
+  l.page.sessions = [s];
+  l.run('pinned = [{ id: "s1" }]');
+  for (const [width, mode] of [[799, ''], [375, ''], [1440, 'panel'], [1440, 'screensaver'], [1440, 'ambient']]) {
+    l.page.innerWidth = width; l.body.className = mode;
+    assert.strictEqual(pinOf(l.show(s).children[0]), undefined, `${width} ${mode}: no pin`);
+    l.run('renderSidebar()');
+    assert.deepStrictEqual(docked(l), [], `${width} ${mode}: no sidebar`);
+  }
+  l.page.innerWidth = 800; l.body.className = '';
+  assert.ok(pinOf(l.show(s).children[0]), '800 wide has the pin');
+  l.run('renderSidebar()');
+  assert.deepStrictEqual(docked(l), ['proj'], 'and the remembered pin docks again');
+});
+
+test('each pinned section\'s PRs toggle to chips on their own, kept with the pin, apart from the card\'s', () => {
+  const l = load(), { posts, page, run } = l, a = session({ github: TEN }), b = session({ id: 's2', title: 'bravo', github: TEN });
+  page.sessions = [a, b];
+  run('pinned = [{ id: "s1" }, { id: "s2" }]; renderSidebar()');
+  const listed = () => sections(l.dock).map(sec => [find(sec, 'pr2').length, find(sec, 'chips').length]);
+  assert.deepStrictEqual(listed(), [[11, 0], [11, 0]], 'listed by default');
+  const tog = find(sections(l.dock)[0], 'tog')[0];
+  assert.strictEqual(tog.attrs['aria-label'], 'Show PRs as chips', 'the card\'s toggle');
+  tog.onclick();
+  assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'only that section turns to chips');
+  assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's1', chips: true }, { id: 's2' }] }]), 'kept with its pin');
+  assert.deepStrictEqual([find(l.show(a), 'chips').length, find(l.show(a), 'pr2').length], [1, 0], 'the card keeps its own rule (chips past three PRs)');
+  assert.strictEqual(JSON.stringify(run('prList')), '{}', 'and the card\'s setting is untouched');
+  run('prList = { s2: false }; renderSidebar()');
+  assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'nor does the card\'s setting reach the sidebar');
+  find(sections(l.dock)[0], 'tog')[0].onclick();
+  assert.deepStrictEqual(listed(), [[11, 0], [11, 0]], 'and back');
+  // another window, from the server's settings
+  const other = load();
+  other.page.sessions = [a, b];
+  other.run('pinned = [{ id: "s1" }, { id: "s2", chips: true }]; renderSidebar()');
+  assert.deepStrictEqual(sections(other.dock).map(sec => [find(sec, 'pr2').length, find(sec, 'chips').length]), [[11, 0], [0, 1]]);
+});
+
+test('the closed sidebar is inert: out of the tab order and the accessibility tree, with nothing pinned or under 800px', () => {
+  const l = load();
+  l.page.sessions = [session({})];
+  l.run('renderSidebar()');
+  assert.strictEqual(l.dock.inert, true, 'nothing pinned');
+  l.run('pinned = [{ id: "s1" }]; renderSidebar()');
+  assert.strictEqual(l.dock.inert, false, 'open');
+  l.page.innerWidth = 799;
+  l.run('renderSidebar()');
+  assert.strictEqual(l.dock.inert, true, 'too narrow');
+});
+
+test('pinning sends only the pins this window can show, so one whose session it never saw goes', () => {
+  const l = load(), a = session({ title: 'alpha' }), b = session({ id: 's2', title: 'bravo' });
+  l.page.sessions = [a, b];
+  l.run('pinned = [{ id: "gone" }, { id: "s2", chips: true }]; renderSidebar()');
+  pinOf(l.show(a)).onclick();
+  assert.strictEqual(JSON.stringify(l.posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's2', chips: true }, { id: 's1' }] }]));
+  assert.deepStrictEqual(docked(l), ['bravo', 'alpha']);
+});
+
+test('in the sidebar an agent is a plain row, shown in full, that leaves the card\'s open agents alone', () => {
+  const l = load(), s = session({ state: 'working', tasks: ['npm test'], subagents: [{ id: 'a', description: 'Build', started: now, last: now }] });
+  l.page.sessions = [s];
+  l.run('pinned = [{ id: "s1" }]; renderSidebar()');
+  const rows = find(l.dock, 'agent');
+  assert.deepStrictEqual(rows.map(r => [r.tag, r.className, r.onclick, r.attrs['aria-expanded']]), [['div', 'agent open', undefined, undefined], ['div', 'agent open', undefined, undefined]]);
+  assert.strictEqual(l.run('openAgents.size'), 0);
+  assert.deepStrictEqual(find(l.show(s), 'agent').map(r => [r.tag, r.className]), [['button', 'agent'], ['button', 'agent']], 'the card\'s are still buttons, closed');
 });
