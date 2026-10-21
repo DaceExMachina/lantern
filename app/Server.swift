@@ -289,7 +289,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -339,9 +339,9 @@ final class LanternServer {
         if ev == "SessionEnd" { sessions[id] = nil; agents[id] = nil; return }
 
         let joining = sessions[id] == nil
-        var s = sessions[id] ?? ["id": id, "cwd": or(e["cwd"], "")!, "state": "working", "started": now(), "last": 0]
+        var s = sessions[id] ?? ["id": id, "cwd": or(e["cwd"], "")!, "turn": "running", "started": now(), "last": 0]
         if agents[id] == nil { agents[id] = Ordered() }
-        defer { settle(&s, id); sessions[id] = s } // (until the end of this function, s is a copy)
+        defer { derive(&s, id); sessions[id] = s } // (until the end of this function, s is a copy)
         s["last"] = now()
         if ev == "PreToolUse" { s["ticks"] = ((s["ticks"] as? Int) ?? 0) + 1 } // each tool call, its agents' included, sends a pulse down its thread
         // A session (or one of its agents) that runs `gh pr create` claims the PR: its URL is in the command's output.
@@ -406,10 +406,10 @@ final class LanternServer {
             if ev != "PermissionRequest" && ev != "Notification" { return }
         }
 
+        // Events record what happened (the turn's `turn` and what it handed over to, `awaits`); derive() turns that into the state.
         switch ev {
         case "SessionStart":
-            s["state"] = "idle"
-            s["resting"] = nil
+            s["turn"] = "idle"
         case "Stop":
             // Three ways a turn ends: agents still running and nothing to ask (not waiting on me), agents running but
             // it asked me something, or fully stopped. Only the first one leaves me alone.
@@ -429,10 +429,12 @@ final class LanternServer {
                 if !fresh.isEmpty { s["prose"] = Array((said + fresh).suffix(10)) } // the newest few runs
             }
             s["error"] = false
-            if !running.isEmpty && q.isEmpty { s["state"] = "paused"; s["note"] = "Waiting on \(tasks)" }
-            else { s["state"] = "waiting"; s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
+            s["turn"] = "ended"
+            s["awaits"] = !running.isEmpty && q.isEmpty
+            if !truthy(s["awaits"]) { s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (tasks.isEmpty ? "" : " (\(tasks) still running)") }
         case "StopFailure":
-            s["state"] = "waiting"
+            s["turn"] = "ended"
+            s["awaits"] = false
             s["note"] = "Turn ended with an API error"
             s["error"] = true // the moth lands singed
             stats.event("api_error", id)
@@ -441,19 +443,19 @@ final class LanternServer {
         case "PreCompact":
             s["activity"] = "Compacting the conversation"
             stats.event("compact", id, ["trigger": e["trigger"] ?? NSNull()])
-            if str(e["trigger"]) == "manual" { s["state"] = "working" }
+            if str(e["trigger"]) == "manual" { s["turn"] = "running" }
         case "PostCompact":
             s["activity"] = ""
-            if str(e["trigger"]) == "manual" { s["state"] = "idle"; s["note"] = "" }
+            if str(e["trigger"]) == "manual" { s["turn"] = "idle"; s["note"] = "" }
         case "PermissionRequest":
-            s["state"] = "waiting"
+            s["turn"] = "blocked"
             s["note"] = "Wants permission to use \(truthy(e["tool_name"]) ? str(e["tool_name"]) : "a tool")"
         case "Notification":
             // the "idle, waiting for input" nudge also fires while a session waits on its agents; that one doesn't count
             if str(e["notification_type"]) == "idle_prompt" && (str(s["state"]) == "paused" || truthy(s["resting"])) { break }
-            if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["state"] = "waiting"; s["note"] = or(e["message"], s["note"]) }
+            if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["turn"] = "blocked"; s["note"] = or(e["message"], s["note"]) }
         default: // UserPromptSubmit, PreToolUse, PostToolUse: the session is moving, so it no longer needs me
-            s["state"] = "working"
+            s["turn"] = "running"
             s["note"] = ""
             s["tasks"] = [Any]()
             s["error"] = false
@@ -462,23 +464,30 @@ final class LanternServer {
             if ev == "PreToolUse" { s["activity"] = describe(e["tool_name"] as? String, e["tool_input"] as? JSON ?? [:]) }
             if ev == "UserPromptSubmit" { s["activity"] = "Thinking about your message" }
         }
-        // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
-        if str(s["state"]) == "waiting" { if !truthy(s["waitingSince"]) { s["waitingSince"] = now() } } else { s["waitingSince"] = 0 }
-        if str(s["state"]) != "idle" { s["resting"] = nil }
     }
 
-    /// A session waiting on background tasks is paused (working) while one of them is fresh or an agent was heard from
-    /// lately, and otherwise rests as idle, open but quiet. Runs after every event and on the sweep; says if it changed.
-    @discardableResult func settle(_ s: inout JSON, _ id: String) -> Bool {
-        guard str(s["state"]) == "paused" || truthy(s["resting"]) else { return false }
-        let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
-        let heard = (agents[id]?.items.compactMap { $0.1["last"] as? Double } ?? []).max() ?? 0
-        let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS
-        let tasks = "\(since.count) background task\(since.count == 1 ? "" : "s")"
+    /// A session's state, worked out in one place from what the events recorded: `turn` (running; ended, with `awaits`
+    /// when it handed over to background work; blocked on me; or idle at the prompt). A turn that handed over is paused
+    /// (working) while a task is fresh or an agent was heard from lately, and otherwise rests as idle, open but quiet.
+    /// Runs after every event and on the sweep; says if what the page shows changed.
+    @discardableResult func derive(_ s: inout JSON, _ id: String) -> Bool {
         let before = (str(s["state"]), str(s["note"]))
-        s["state"] = busy ? "paused" : "idle"
-        s["resting"] = busy ? nil : true
-        s["note"] = busy ? "Waiting on \(tasks)" : "\(tasks) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest opened, or an agent last spoke
+        s["resting"] = nil
+        switch str(s["turn"]) {
+        case "running": s["state"] = "working"
+        case "idle": s["state"] = "idle"
+        case "ended" where truthy(s["awaits"]):
+            let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
+            let heard = (agents[id]?.items.compactMap { $0.1["last"] as? Double } ?? []).max() ?? 0
+            let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS
+            let tasks = "\(since.count) background task\(since.count == 1 ? "" : "s")"
+            s["state"] = busy ? "paused" : "idle"
+            if !busy { s["resting"] = true }
+            s["note"] = busy ? "Waiting on \(tasks)" : "\(tasks) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest opened, or an agent last spoke
+        default: s["state"] = "waiting" // a turn that ended without handing over, or one blocked on me (a permission, a question)
+        }
+        // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
+        if str(s["state"]) == "waiting" { if !truthy(s["waitingSince"]) { s["waitingSince"] = now() } } else { s["waitingSince"] = 0 }
         return before != (str(s["state"]), str(s["note"]))
     }
 
@@ -489,7 +498,7 @@ final class LanternServer {
         var changed = false
         reconcile()
         for (id, var s) in sessions.items {
-            if settle(&s, id) { sessions[id] = s; changed = true }
+            if derive(&s, id) { sessions[id] = s; changed = true }
             // with its process known, only that decides: a closed session goes, an open one stays however quiet it's been
             if truthy(s["pid"]) {
                 let pid = pid_t(str(s["pid"])) ?? 0
