@@ -1496,3 +1496,43 @@ test('the PR list toggle is kept per session in the settings, reaches every open
   assert.strictEqual((await post(base, '/settings', { prList: { s2: true } })).status, 204);
   await until(async () => JSON.stringify((await snapshot(base)).settings.prList) === '{"s2":true}', 'the ended session\'s toggle to go');
 });
+
+// The sessions pinned to the sidebar are a shared setting too: a list in the order they were pinned, each `{ id, chips }`
+// with a live session's id or one already pinned (kept after it ends, so the sidebar can dim it), saved, and read back
+// after a restart, where a pin whose session didn't come back goes (no window can show it or unpin it).
+test('the pinned sessions are a list in the settings: toggled, kept in order with their PR view, refused when bad, and outlast a restart', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  for (const id of ['s1', 's2', 's3']) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  const pinned = async () => (await snapshot(base)).settings.pinned;
+  const pin = async pins => (await post(base, '/settings', { pinned: pins })).status;
+  const ids = (...xs) => xs.map(id => ({ id }));
+  assert.strictEqual(await pin(ids('s2')), 204);
+  assert.strictEqual(await pin([{ id: 's2', chips: true }, { id: 's1' }]), 204);
+  assert.deepStrictEqual(await pinned(), [{ id: 's2', chips: true }, { id: 's1' }], 'in the order they were pinned, each with its PR view');
+  assert.strictEqual(await pin([{ id: 's2', chips: true }, { id: 's1' }, { id: 's1', chips: true }]), 204);
+  assert.deepStrictEqual(await pinned(), [{ id: 's2', chips: true }, { id: 's1' }], 'pinning one already pinned changes nothing');
+  assert.strictEqual(await pin(ids('s2', 'nobody')), 400, 'an unknown session is refused');
+  assert.strictEqual(await pin([{ id: 's2' }, { id: 3 }]), 400, 'so is an id that isn\'t a string');
+  assert.strictEqual(await pin([{ id: 's2', chips: 1 }]), 400, 'and chips that aren\'t true or false');
+  assert.strictEqual(await pin(['s2']), 400, 'and a pin that isn\'t an entry');
+  assert.strictEqual(await pin({ id: 's2' }), 400, 'or pins that aren\'t a list');
+  assert.deepStrictEqual(await pinned(), [{ id: 's2', chips: true }, { id: 's1' }], 'and leaves the pins alone');
+  await post(base, '/event', { session_id: 's2', hook_event_name: 'SessionEnd', cwd: '/w' });
+  await until(async () => !(await snapshot(base)).sessions.some(s => s.id === 's2'), 's2 to end');
+  assert.strictEqual(await pin(ids('s2', 's1', 's3')), 204, 'an ended session already pinned stays as more are pinned');
+  assert.deepStrictEqual(await pinned(), ids('s2', 's1', 's3'));
+  assert.strictEqual(await pin(ids('s1', 's3')), 204);
+  assert.strictEqual(await pin(ids('s1', 's3', 's2')), 400, 'but once unpinned, an ended session can\'t come back');
+  assert.strictEqual(await pin([]), 204);
+  assert.deepStrictEqual(await pinned(), [], 'an empty list unpins them all');
+  await pin([{ id: 's3' }, { id: 's1', chips: true }]);
+  const file = path.join(home, 'data/settings.json'), want = [{ id: 's3' }, { id: 's1', chips: true }];
+  await until(() => { try { assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).pinned, want); return true; } catch { return false; } }, 'the pins to be saved');
+  // a restart: one pinned session comes back from its transcript, the other ended while Lantern was closed
+  const back = '00000001-0000-4000-8000-000000000000', transcript = { [`.claude/projects/-work/${back}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]) };
+  const settings = { 'data/settings.json': JSON.stringify({ style: 'barrel', pinned: [{ id: 'gone' }, { id: back, chips: true }] }) };
+  const again = await serve(t, { ...transcript, ...settings });
+  await until(async () => (await snapshot(again)).sessions.some(s => s.id === back), 'the session to be seeded');
+  await until(async () => { try { assert.deepStrictEqual((await snapshot(again)).settings.pinned, [{ id: back, chips: true }]); return true; } catch { return false; } }, 'the ended pin to go and the other to stay'); // in any key order
+});

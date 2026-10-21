@@ -41,10 +41,13 @@
     --weight-regular: 400; --weight-bold: 700; --leading: 1.45; --tracking-label: .04em;
     /* elevation, glass, layers, motion */
     --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
-    --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s;
+    --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s; --slide: .45s cubic-bezier(.4, 0, .2, 1); --faded: .4;
+    /* layout */
+    --dock-width: 380px;
   }
   html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: var(--text-md)/1.4 var(--font-serif); }
-  body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+  body { display: grid; grid-template-rows: minmax(0, 1fr) auto; grid-template-columns: minmax(0, 1fr) auto; } /* the scene, the pinned sidebar beside it, the footer under both */
+  footer { grid-column: 1 / -1; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
@@ -85,7 +88,7 @@
   #menu .switch { display: flex; }
   #menu .switch > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
   #menu .switch > label { display: flex; padding-left: var(--space-2); } /* the time's click area runs the row's full height too */
-  #menu .switch input:disabled { opacity: .4; }
+  #menu .switch input:disabled { opacity: var(--faded); }
   #menu input[type=time], .pill button span { box-sizing: border-box; height: 26px; } /* the switch matches the input */
   #menu input[type=time] { width: 8.6em; } /* one width for every time, the widest value's, so their edges line up */
   .pill { display: flex; }
@@ -100,7 +103,7 @@
   #menu > :has(+ .tip + #gh) { padding-bottom: 10px; } /* the last row reaches down to the GitHub section's line */
   #menu #help { margin-top: 5px; }
   #menu .ribbon { display: flex; align-items: center; gap: var(--space-1-5); }
-  #menu .unavailable { opacity: .4; }
+  #menu .unavailable { opacity: var(--faded); }
   #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
   #ribbons button { all: unset; flex: 1; display: flex; justify-content: center; padding: 5px 0; cursor: pointer; }
   #ribbons button::before { content: ''; width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: var(--rim); } /* a pale rim so the dark ones read */
@@ -244,118 +247,139 @@
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
   .moth { pointer-events: none; }
-  :is(#card, .starCard) .agents { margin-top: var(--space-1-5); color: var(--ink-dim); font-size: var(--text-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
-  :is(#card, .starCard) .pr { display: flex; align-items: baseline; gap: 0 var(--space-1); white-space: nowrap; }
-  :is(#card, .starCard) .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
-  :is(#card, .starCard) .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
-  :is(#card, .starCard) a { color: var(--accent-violet); text-decoration: none; border-bottom: 1px solid var(--accent-violet-line); }
-  :is(#card, .starCard) a:hover { color: var(--ink-hover); border-color: var(--focus); }
+  :is(#card, .starCard, #dock) .agents { margin-top: var(--space-1-5); color: var(--ink-dim); font-size: var(--text-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  :is(#card, .starCard, #dock) .pr { display: flex; align-items: baseline; gap: 0 var(--space-1); white-space: nowrap; }
+  :is(#card, .starCard, #dock) .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
+  :is(#card, .starCard, #dock) .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
+  :is(#card, .starCard, #dock) a { color: var(--accent-violet); text-decoration: none; border-bottom: 1px solid var(--accent-violet-line); }
+  :is(#card, .starCard, #dock) a:hover { color: var(--ink-hover); border-color: var(--focus); }
   select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-0-5) var(--space-1-5); }
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity var(--fade); max-width: 300px;
     background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3); color: var(--ink);
     font-size: var(--text-sm); line-height: var(--leading); box-shadow: var(--shadow-lg); backdrop-filter: var(--blur-glass); }
   #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking a stale PR's or a ghost's card opens it, like clicking its moth */
   #card.show:has(h3 .open) { cursor: default; } /* a session's opens from its header */
-  :is(#card, .starCard) h3 { margin: 0 0 var(--space-1); font-size: var(--text-md); color: var(--ink-strong); display: flex; gap: var(--space-2); align-items: flex-start; }
+  :is(#card, .starCard, #dock) h3 { margin: 0 0 var(--space-1); font-size: var(--text-md); color: var(--ink-strong); display: flex; gap: var(--space-2); align-items: flex-start; }
   /* Every control on the card is an outer button or link that fills its zone: the padding around it, out to the card's
      edges and up to its neighbours, so the hit areas touch with no dead space. Its .face inside is the visible part
      (the pill, the hover tint), the size it always was, lit while the pointer is anywhere in the zone. */
-  :where(#card :is(button, a):is(.open, .chip, .agent, .tog, .pr2, .ov), #card .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
-  #card :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
-  #card .face { display: block; border-radius: var(--radius-md); }
+  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .tog, .pr2, .ov, .pin), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
+  :is(#card, #dock) :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
+  :is(#card, #dock) .face { display: block; border-radius: var(--radius-md); }
   /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill */
-  #card h3:has(.open) { margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0; gap: 0; align-items: stretch; }
-  #card h3 .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; padding: calc(var(--space-3) - var(--space-0-5)) 0 var(--space-0-5) var(--space-2); }
-  #card h3 .open .face { flex: 1; min-width: 0; padding: var(--space-0-5) var(--space-1); }
-  #card h3 .open:hover .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
-  #card h3 .chip { flex: none; display: flex; align-items: flex-start; padding: var(--space-3) var(--space-3) 0 var(--space-1); }
-  #card .chip .face { white-space: nowrap; margin-top: var(--space-0-5); font-size: var(--text-xs); font-weight: var(--weight-regular); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-selected); color: var(--accent-warm-ink); }
-  #card .chip:hover .face { filter: brightness(1.25); }
-  #card .chip.waiting .face { background: var(--state-waiting-chip); color: var(--ink-hover); }
-  #card .chip.idle .face { background: var(--line-soft); color: var(--ink-soft); }
-  #card .chip.error .face { background: var(--error-surface); color: var(--error-ink); }
-  #card .chip.paused .face { background: var(--agents-line); color: var(--agents-ink); }
-  :is(#card, .starCard) .prompt { font-style: italic; color: var(--ink-strong); overflow-wrap: anywhere; }
-  :is(#card, .starCard) .dim { color: var(--ink-dim); overflow-wrap: anywhere; }
-  :is(#card, .starCard) div + div { margin-top: var(--space-1); }
+  :is(#card, #dock) h3:has(.open) { margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0; gap: 0; align-items: stretch; }
+  :is(#card, #dock) h3 .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; padding: calc(var(--space-3) - var(--space-0-5)) 0 var(--space-0-5) var(--space-2); }
+  :is(#card, #dock) h3 .open .face { flex: 1; min-width: 0; padding: var(--space-0-5) var(--space-1); }
+  :is(#card, #dock) h3 .open:hover .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
+  :is(#card, #dock) h3 .chip { flex: none; display: flex; align-items: flex-start; padding: var(--space-3) var(--space-3) 0 var(--space-1); }
+  :is(#card, #dock) .chip .face { white-space: nowrap; margin-top: var(--space-0-5); font-size: var(--text-xs); font-weight: var(--weight-regular); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-selected); color: var(--accent-warm-ink); }
+  :is(#card, #dock) .chip:hover .face { filter: brightness(1.25); }
+  :is(#card, #dock) .chip.waiting .face { background: var(--state-waiting-chip); color: var(--ink-hover); }
+  :is(#card, #dock) .chip.idle .face { background: var(--line-soft); color: var(--ink-soft); }
+  :is(#card, #dock) .chip.error .face { background: var(--error-surface); color: var(--error-ink); }
+  :is(#card, #dock) .chip.paused .face { background: var(--agents-line); color: var(--agents-ink); }
+  :is(#card, .starCard, #dock) .prompt { font-style: italic; color: var(--ink-strong); overflow-wrap: anywhere; }
+  :is(#card, .starCard, #dock) .dim { color: var(--ink-dim); overflow-wrap: anywhere; }
+  :is(#card, .starCard, #dock) div + div { margin-top: var(--space-1); }
   /* a session's card: the top is what it wants from you, the tray below is its work */
   /* never taller than the window: the header stays and the body scrolls, without scrolling the scene behind. The body
      takes the card's side and bottom padding so the tray's bleed to the edges isn't clipped. */
   #card:has(> .cardBody) { display: flex; flex-direction: column; max-height: calc(100vh - 16px); box-sizing: border-box; }
   #card .cardBody { min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 0 calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); padding: 0 var(--space-3) var(--space-3); }
-  #card h3 .go { display: inline-flex; vertical-align: -1px; margin-left: var(--space-1-5); color: var(--ink-dim); }
-  #card h3 .open:hover .go { color: var(--ink-hover); }
-  #card .state { color: var(--ink-dim); font-size: var(--text-xs); display: flex; gap: var(--space-1-5); align-items: baseline; overflow-wrap: anywhere; }
-  #card .state::before { content: '›'; color: var(--focus); }
-  #card .state.error::before { content: '!'; }
-  #card .ask { margin-top: var(--space-1); padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink-hover); }
-  #card .ask::before { content: '? '; color: var(--focus); font-weight: var(--weight-bold); }
-  #card .msg { margin-top: var(--space-1); padding: var(--space-1) 0 var(--space-1) var(--space-2); border-left: 2px solid var(--accent-violet-line); color: var(--ink-strong); }
-  #card .msg a { color: var(--ink-hover); border-color: var(--accent-violet-line); }
-  #card .foot { margin-top: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); }
-  #card .tray { margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--surface-tray); border-top: 1px solid var(--line-soft); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
-  #card .tray .foot { margin-top: var(--space-1-5); }
-  #card .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
-  #card .head .r { text-transform: none; letter-spacing: 0; }
-  #card .tray > :not(:first-child):is(.head, .phead) { margin-top: var(--space-3); }
+  :is(#card, #dock) h3 .go { display: inline-flex; vertical-align: -1px; margin-left: var(--space-1-5); color: var(--ink-dim); }
+  :is(#card, #dock) h3 .open:hover .go { color: var(--ink-hover); }
+  :is(#card, #dock) .state { color: var(--ink-dim); font-size: var(--text-xs); display: flex; gap: var(--space-1-5); align-items: baseline; overflow-wrap: anywhere; }
+  :is(#card, #dock) .state::before { content: '›'; color: var(--focus); }
+  :is(#card, #dock) .state.error::before { content: '!'; }
+  :is(#card, #dock) .ask { margin-top: var(--space-1); padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink-hover); }
+  :is(#card, #dock) .ask::before { content: '? '; color: var(--focus); font-weight: var(--weight-bold); }
+  :is(#card, #dock) .msg { margin-top: var(--space-1); padding: var(--space-1) 0 var(--space-1) var(--space-2); border-left: 2px solid var(--accent-violet-line); color: var(--ink-strong); }
+  :is(#card, #dock) .msg a { color: var(--ink-hover); border-color: var(--accent-violet-line); }
+  :is(#card, #dock) .foot { margin-top: var(--space-2); color: var(--ink-faint); font-size: var(--text-xs); }
+  :is(#card, #dock) .tray { margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--surface-tray); border-top: 1px solid var(--line-soft); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+  :is(#card, #dock) .tray .foot { margin-top: var(--space-1-5); }
+  :is(#card, #dock) .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  :is(#card, #dock) .head .r { text-transform: none; letter-spacing: 0; }
+  :is(#card, #dock) .tray > :not(:first-child):is(.head, .phead) { margin-top: var(--space-3); }
   /* the agents' own band, tinted cool and edge to edge across the tray, as in the mockups' agent tray */
-  #card .agentZone { margin: 0 calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--agents-surface); border-bottom: 1px solid var(--agents-line); }
-  #card .tray > .agentZone:first-child { margin-top: calc(-1 * var(--space-1-5)); }
-  #card .agentZone .head { color: var(--agents-ink-dim); }
+  :is(#card, #dock) .agentZone { margin: 0 calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--agents-surface); border-bottom: 1px solid var(--agents-line); }
+  :is(#card, #dock) .tray > .agentZone:first-child { margin-top: calc(-1 * var(--space-1-5)); }
+  :is(#card, #dock) .agentZone .head { color: var(--agents-ink-dim); }
   /* agents, three lines each in monospace: the live dot, task tag, model and time; the job; the step. A click opens one in full. */
   /* an agent's zone is its whole row, out over the band's side padding; half the gap between rows is each row's */
-  #card .agent { display: block; width: calc(100% + 2 * var(--space-3)); font-family: var(--font-mono); font-size: var(--text-xs); line-height: var(--leading); margin: 0 calc(-1 * var(--space-3)); padding: var(--space-0-5) var(--space-1-5); }
-  #card .agent .face { padding: var(--space-1) var(--space-1-5); }
-  #card .agent:hover .face { background: color-mix(in srgb, var(--accent-violet) 8%, transparent); }
-  #card .arow { display: flex; gap: var(--space-1-5); align-items: center; }
-  #card .agent .arow .job { flex: 1; min-width: 0; margin-top: 0; } /* the job on the first line, when there's no tag or model */
-  #card .arow .t { flex: none; margin-left: auto; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-  #card .arow .model { color: var(--ink-dim); }
-  #card .arow :is(.tag, .model) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long tag or model gives way to the time */
-  #card .live { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-warm-ink); box-shadow: 0 0 var(--space-1-5) var(--accent-warm); animation: live 1.6s ease-in-out infinite; } /* the glow and pulse have no blur or motion token yet, so they borrow the space scale and keep 1.6s */
-  #card .live.quiet { background: var(--accent-violet-line); box-shadow: none; animation: none; }
+  :is(#card, #dock) .agent { display: block; width: calc(100% + 2 * var(--space-3)); font-family: var(--font-mono); font-size: var(--text-xs); line-height: var(--leading); margin: 0 calc(-1 * var(--space-3)); padding: var(--space-0-5) var(--space-1-5); }
+  :is(#card, #dock) .agent .face { padding: var(--space-1) var(--space-1-5); }
+  :is(#card, #dock) button.agent:hover .face { background: color-mix(in srgb, var(--accent-violet) 8%, transparent); }
+  :is(#card, #dock) .arow { display: flex; gap: var(--space-1-5); align-items: center; }
+  :is(#card, #dock) .agent .arow .job { flex: 1; min-width: 0; margin-top: 0; } /* the job on the first line, when there's no tag or model */
+  :is(#card, #dock) .arow .t { flex: none; margin-left: auto; color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+  :is(#card, #dock) .arow .model { color: var(--ink-dim); }
+  :is(#card, #dock) .arow :is(.tag, .model) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long tag or model gives way to the time */
+  :is(#card, #dock) .live { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-warm-ink); box-shadow: 0 0 var(--space-1-5) var(--accent-warm); animation: live 1.6s ease-in-out infinite; } /* the glow and pulse have no blur or motion token yet, so they borrow the space scale and keep 1.6s */
+  :is(#card, #dock) .live.quiet { background: var(--accent-violet-line); box-shadow: none; animation: none; }
   @keyframes live { 50% { opacity: .35; } }
-  #card .tag { color: var(--focus); background: var(--surface-raised); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 0 var(--space-1); }
-  #card .agent :is(.job, .astep) { display: block; margin-top: var(--space-0-5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #card .agent.open :is(.job, .astep) { white-space: normal; overflow-wrap: anywhere; }
-  #card .agent .job { color: var(--ink-strong); }
-  #card .agent .astep { color: var(--ink-soft); }
+  :is(#card, #dock) .tag { color: var(--focus); background: var(--surface-raised); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 0 var(--space-1); }
+  :is(#card, #dock) .agent :is(.job, .astep) { display: block; margin-top: var(--space-0-5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :is(#card, #dock) .agent.open :is(.job, .astep) { white-space: normal; overflow-wrap: anywhere; }
+  :is(#card, #dock) .agent .job { color: var(--ink-strong); }
+  :is(#card, #dock) .agent .astep { color: var(--ink-soft); }
   /* PRs: a header summing them up (or the hovered chip's title), the toggle, then chips or two-line rows */
   /* the header line is the card's own font, so a hovered chip's title (bare text in .ph) takes no more height than the
      smaller summary (.sum) it replaces */
-  #card .phead { display: flex; gap: var(--space-1-5); align-items: center; color: var(--ink-dim); }
-  #card .ph { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #card .ph .sum { font-size: var(--text-xs); }
-  #card .ph b { font-weight: var(--weight-regular); letter-spacing: var(--tracking-label); text-transform: uppercase; }
-  #card .ph.title { color: var(--ink-strong); }
+  :is(#card, #dock) .phead { display: flex; gap: var(--space-1-5); align-items: center; color: var(--ink-dim); }
+  :is(#card, #dock) .ph { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :is(#card, #dock) .ph .sum { font-size: var(--text-xs); }
+  :is(#card, #dock) .ph b { font-weight: var(--weight-regular); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  :is(#card, #dock) .ph.title { color: var(--ink-strong); }
   /* the toggle's zone is the rest of the PR header row after the summary, its full height and out to the tray's edge,
      with the icon at its right end */
-  #card .tog { flex: 1 0 auto; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; color: var(--accent-violet); margin-right: calc(-1 * var(--space-3)); padding: 0 var(--space-3) 0 var(--space-1-5); }
-  #card .tog[aria-expanded=true] svg { transform: rotate(180deg); }
-  #card .tog:hover { color: var(--ink-hover); }
-  #card .tog:focus-visible { outline: 1px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
+  :is(#card, #dock) .tog { flex: 1 0 auto; align-self: stretch; display: flex; align-items: center; justify-content: flex-end; color: var(--accent-violet); margin-right: calc(-1 * var(--space-3)); padding: 0 var(--space-3) 0 var(--space-1-5); }
+  :is(#card, #dock) .tog[aria-expanded=true] svg { transform: rotate(180deg); }
+  :is(#card, #dock) .tog:hover { color: var(--ink-hover); }
+  :is(#card, #dock) .tog:focus-visible { outline: 1px solid var(--focus); outline-offset: -2px; border-radius: var(--radius-sm); }
   /* the gaps between chips are the chips': half each, so they touch */
-  #card .chips { display: flex; flex-wrap: wrap; margin: var(--space-0-5) calc(-1 * var(--space-0-5)) 0; }
-  #card .chips a { padding: var(--space-0-5); }
-  #card .chips .face { display: inline-flex; align-items: center; gap: var(--space-1); border: 1px solid var(--line-soft); background: var(--surface-raised); border-radius: var(--radius-pill); padding: 0 var(--space-2) 0 var(--space-1-5); font-size: var(--text-xs); color: var(--ink); }
-  #card .chips a:hover .face { border-color: var(--accent-violet-line); color: var(--ink-strong); }
-  #card :is(.chips, .me) i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
+  :is(#card, #dock) .chips { display: flex; flex-wrap: wrap; margin: var(--space-0-5) calc(-1 * var(--space-0-5)) 0; }
+  :is(#card, #dock) .chips a { padding: var(--space-0-5); }
+  :is(#card, #dock) .chips .face { display: inline-flex; align-items: center; gap: var(--space-1); border: 1px solid var(--line-soft); background: var(--surface-raised); border-radius: var(--radius-pill); padding: 0 var(--space-2) 0 var(--space-1-5); font-size: var(--text-xs); color: var(--ink); }
+  :is(#card, #dock) .chips a:hover .face { border-color: var(--accent-violet-line); color: var(--ink-strong); }
+  :is(#card, #dock) :is(.chips, .me) i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
   /* a listed PR's zone is its whole row, out to the tray's edges; half the gap between rows is each row's */
-  #card a.pr2 { display: block; width: calc(100% + 2 * var(--space-3)); margin: 0 calc(-1 * var(--space-3)); padding: calc(var(--space-0-5) / 2) var(--space-1-5); }
-  #card .phead + a.pr2 { margin-top: var(--space-0-5); }
-  #card a.pr2 .face { padding: var(--space-1) var(--space-1-5); }
-  #card :is(a.pr2, a.ov, .chips a) { border: none; } /* the card's link underline is on a face, where there is one */
-  #card a.pr2:hover .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
-  #card .pr2 .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #card .pr2 .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
-  #card .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; } /* like an agent's time */
-  #card .pr2 .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
-  #card .more { font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
+  :is(#card, #dock) a.pr2 { display: block; width: calc(100% + 2 * var(--space-3)); margin: 0 calc(-1 * var(--space-3)); padding: calc(var(--space-0-5) / 2) var(--space-1-5); }
+  :is(#card, #dock) .phead + a.pr2 { margin-top: var(--space-0-5); }
+  :is(#card, #dock) a.pr2 .face { padding: var(--space-1) var(--space-1-5); }
+  :is(#card, #dock) :is(a.pr2, a.ov, .chips a) { border: none; } /* the card's link underline is on a face, where there is one */
+  :is(#card, #dock) a.pr2:hover .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
+  :is(#card, #dock) .pr2 .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :is(#card, #dock) .pr2 .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
+  :is(#card, #dock) .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; } /* like an agent's time */
+  :is(#card, #dock) .pr2 .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
+  :is(#card, #dock) .more { font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
   /* an overflow link's zone takes the comma after it, so the links touch */
-  #card a.ov { display: inline-block; color: var(--accent-violet); }
-  #card a.ov:not(:last-of-type)::after { content: ', '; color: var(--ink-dim); }
-  #card a.ov .face { display: inline; border-radius: 0; border-bottom: 1px solid var(--accent-violet-line); }
-  #card a.ov:hover .face { color: var(--ink-hover); border-color: var(--focus); }
+  :is(#card, #dock) a.ov { display: inline-block; color: var(--accent-violet); }
+  :is(#card, #dock) a.ov:not(:last-of-type)::after { content: ', '; color: var(--ink-dim); }
+  :is(#card, #dock) a.ov .face { display: inline; border-radius: 0; border-bottom: 1px solid var(--accent-violet-line); }
+  :is(#card, #dock) a.ov:hover .face { color: var(--ink-hover); border-color: var(--focus); }
+  /* The pin: a third header button after the pill. Its zone runs from the pill to the header's right edge, the header's
+     full height; its .face is the bare icon, faint at rest and the accent while pinned. */
+  :is(#card, #dock) h3 .chip:has(+ .pin) { padding-right: 0; }
+  :is(#card, #dock) h3 .pin { flex: none; display: flex; align-items: flex-start; padding: var(--space-3) var(--space-3) 0 var(--space-2); }
+  :is(#card, #dock) .pin .face { display: flex; margin-top: var(--space-0-5); color: var(--ink-faint); }
+  :is(#card, #dock) .pin.on .face { color: var(--accent); }
+  :is(#card, #dock) .pin:hover .face { color: var(--ink-hover); }
+  /* The pinned sidebar (card.js renderSidebar): a column right of the scene, opening as the scene narrows, with one
+     section per pinned session, scrolling as a whole. A section is a card's body without the card: the same padding, so
+     the shared header and tray rules fit it. Its content keeps its full width while the column slides, so nothing
+     reflows. Nothing is cut short in it. */
+  #dock { grid-row: 1; grid-column: 2; width: 0; overflow: hidden; background: var(--night); /* the footer's (body's), so the two read as one chrome */
+    color: var(--ink); font-size: var(--text-sm); line-height: var(--leading); transition: width var(--slide); }
+  .pinned #dock { width: var(--dock-width); }
+  #dock .stack { width: var(--dock-width); height: 100%; overflow-y: auto; box-sizing: border-box; } /* the scroller, so its scrollbar is inside the column */
+  #dock section { padding: var(--space-3); }
+  #dock section + section { border-top: 1px solid var(--line); }
+  #dock .tray { border-radius: 0; }
+  #dock .pr2 .ti { white-space: normal; overflow-wrap: anywhere; } /* an agent's row is already open there */
+  #dock .agent { box-sizing: border-box; } /* a plain row there, not a button, so it doesn't get the buttons' reset */
+  #dock .ended > :not(h3), #dock .ended h3 :is(.open, .chip) { opacity: var(--faded); } /* its session has ended: as it last was, until unpinned */
   .moth .wing { fill: var(--wing); }
 </style>
 </head>
@@ -383,6 +407,7 @@
   <g id="moths"></g>
   <g id="flies"></g>
 </svg></div>
+<aside id="dock" aria-label="Pinned sessions" inert><div class="stack"></div></aside>
 <div id="card" role="tooltip"></div>
 <footer>
   <span id="status" class="offline">connecting…</span>
@@ -415,6 +440,7 @@
       <p><b>Big moths</b> are your sessions and <b>small ones</b> are their agents. The more of them working, the brighter the flame.</p>
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
       <p><b>Hover</b> a moth for its card. <b>Click</b> the moth or the card's header to jump to its session, or <b>right-click</b> the moth (or click the card's status) to snooze it. Do it again and it sleeps, snoozed until you wake it.</p>
+      <p><b>Pin</b> a card to keep it open on the side.</p>
       <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:var(--pr-ready)"></span>ready</span><span class="key"><span class="swatch" style="background:var(--pr-failing)"></span>failing</span><span class="key"><span class="swatch" style="background:var(--pr-changes)"></span>changes</span><span class="key"><span class="swatch" style="background:var(--pr-draft)"></span>draft</span><span class="key"><span class="swatch" style="background:var(--pr-in-review)"></span>in review</span>. The faint moths and fireflies in the background are stale PRs and the sessions that made them.</p>
       <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span id="quietUntil">until 8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
       <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>

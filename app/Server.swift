@@ -325,6 +325,13 @@ final class LanternServer {
     }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
     func broadcastGitHub() { send("event: github\ndata: \(jsonText(githubState()))\n\n") }
+    /// A pin whose session ended while Lantern was closed can never show (no window saw it last) or be unpinned, so it
+    /// goes once the sessions are back from disk.
+    func dropEndedPins() {
+        guard let pins = settings["pinned"] as? [JSON] else { return }
+        let kept = pins.filter { sessions[str($0["id"])] != nil }
+        if kept.count != pins.count { settings["pinned"] = kept; settingsChanged() }
+    }
     /// Saves the settings and tells every open window.
     func settingsChanged() {
         saveSettings()
@@ -932,6 +939,21 @@ final class LanternServer {
                         if let on = v as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() { kept[id] = on.boolValue; ok = true }
                     }
                     settings["prList"] = kept
+                }
+                // the sessions pinned to the sidebar, in the order they were pinned, so every window shows the same: the whole
+                // list each time, each `{ id, chips }` (chips: its PRs as chips rather than listed). Each one is a live session
+                // or one already pinned, which stays after it ends (the sidebar dims it) until it's unpinned.
+                if let given = j["pinned"] as? [Any] {
+                    let was = (settings["pinned"] as? [JSON] ?? []).map { str($0["id"]) }
+                    let pins: [JSON] = given.compactMap {
+                        guard let p = $0 as? JSON, let id = p["id"] as? String, sessions[id] != nil || was.contains(id) else { return nil }
+                        guard let chips = p["chips"] else { return ["id": id] }
+                        guard let on = chips as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() else { return nil }
+                        return ["id": id, "chips": on.boolValue]
+                    }
+                    if pins.count == given.count {
+                        settings["pinned"] = pins.reduce(into: [JSON]()) { kept, p in if !kept.contains(where: { str($0["id"]) == str(p["id"]) }) { kept.append(p) } }; ok = true
+                    }
                 }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }

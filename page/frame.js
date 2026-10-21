@@ -125,6 +125,7 @@ function drawRibbon(dt, s) {
 // One frame: the lantern burns brighter the more sessions work and turns violet while one needs me, then each part
 // draws itself in turn: the lantern and its flame, the moths one by one, the stale wisps, and the light behind it all.
 function frame(t) {
+  fitView(); // the scene's size, should it have changed (scene.js)
   const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
