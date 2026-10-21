@@ -45,9 +45,13 @@ const lanternFlies = new Map(); // reviews requested from me hang around the lan
 // One flying off is removed only once it and its bloom are wholly outside the window.
 const ARRIVE = 2; // seconds to fly in
 const LEAVING = new Set(['merged', 'closed']);
-// A moth's PRs in the order its fireflies are kept (it shows at most 10): ones flying off first so a merge isn't cut,
-// then the ones that need me, then the rest.
-const byUrgency = prs => { const rank = p => LEAVING.has(p.need) ? 0 : ['ready', 'failing', 'changes'].includes(p.need) ? 1 : 2; return [...prs].sort((a, b) => rank(a) - rank(b)); };
+// A moth's PRs in the order its fireflies are kept (it shows at most 10): ones flying off first so a merge isn't cut, then
+// the ones that need me, then the rest. A merged or closed PR with no firefly of its own yet (`flies` has none) is dropped:
+// swarm never makes one for it, so it would only take a place from a firefly that's showing.
+const byUrgency = (prs, flies) => {
+  const rank = p => LEAVING.has(p.need) ? 0 : ['ready', 'failing', 'changes'].includes(p.need) ? 1 : 2;
+  return prs.filter(p => !LEAVING.has(p.need) || flies?.has(p.url)).sort((a, b) => rank(a) - rank(b));
+};
 // A merge's three motions overlap, each fading out as the next fades in, both already moving: the shake, the loop (30%
 // faster than it first was) and the exit. Seconds: the loop starts at `start` (picked per heading, below), the shake gone
 // BLEND later; the exit starts BLEND/2 before the loop's end, and the loop is gone BLEND after it starts.

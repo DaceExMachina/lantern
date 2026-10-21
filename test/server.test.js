@@ -1179,15 +1179,16 @@ test('a failing GitHub query keeps its own PRs while another folder\'s change st
     { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
     { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(pr[name]) + '\n' }] } }])]));
   let home = '';
-  const base = await serve(t, files, h => { home = h; for (const name of Object.keys(ids)) {
-    const repo = path.join(h, name, 'repo');
-    fs.mkdirSync(repo, { recursive: true });
-    execFileSync('git', ['-C', repo, 'init', '-q', '-b', 'feat']);
+  const base = await serve(t, files, h => { home = h; for (const dir of ['work/aaa', 'work/repo', 'projects/repo']) { // aaa: another session in the work folder, that sorts first and goes
+    fs.mkdirSync(path.join(h, dir), { recursive: true });
+    execFileSync('git', ['-C', path.join(h, dir), 'init', '-q', '-b', 'feat']);
   } }, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: UUID(6), hook_event_name: 'UserPromptSubmit', cwd: path.join(home, 'work/aaa'), prompt: 'go' });
   for (const [name, id] of Object.entries(ids)) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: path.join(home, name, 'repo'), transcript_path: path.join(home, `.claude/projects/-${name}/${id}.jsonl`), prompt: 'go' });
   await post(base, '/settings', { github: true });
   const prs = async name => (await snapshot(base)).sessions.find(x => x.id === ids[name])?.github;
   const first = await until(async () => { const w = await prs('work'), p = await prs('projects'); return w?.length === 1 && p?.length === 1 && { work: w, projects: p }; }, 'both folders to be asked');
+  await post(base, '/event', { session_id: UUID(6), hook_event_name: 'SessionEnd' }); // the work query was asked from aaa so far, and now from repo: the same query
   fs.writeFileSync(path.join(dir, 'work.fail'), ''); // the work query fails from now on, and the projects one reports its PR as ready for review
   answer('projects.json', 21, false);
   await post(base, '/settings', { github: true });

@@ -759,7 +759,7 @@ function mothFireflies(m, dt, s) {
   const want = new Map(), gh = m.session.github;
   if (m.leaving) {} // nothing: they all drift off
   else if (gh) {
-    for (const p of byUrgency(gh)) want.set(p.url, p);
+    for (const p of byUrgency(gh, m.flies)) want.set(p.url, p);
   }
   else {
     const youLinks = new Set((m.session.forYou?.you || []).map(p => p.url).filter(Boolean));

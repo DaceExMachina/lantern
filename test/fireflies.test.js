@@ -157,8 +157,16 @@ test('the dev panel\'s play merge button plays a merge on a firefly of a moth', 
   assert.ok(Math.max(...lights.map(l => l[3])) > 1.1, 'a merge flares');
 });
 
-test('a session with more than 10 PRs keeps the ones flying off, then the ones that need me, inside the cut', () => {
-  const win = window(), prs = [...Array(12)].map((_, i) => ({ url: `${URL}/${i}`, need: i === 11 ? 'merged' : i === 10 ? 'ready' : 'waiting' }));
-  const kept = win.run(`byUrgency(${JSON.stringify(prs)})`).slice(0, 10).map(p => p.need);
-  assert.deepStrictEqual([...kept.slice(0, 2)], ['merged', 'ready'], `the merging one is first, then the one that needs me: ${kept}`);
+test('a session with more than 10 PRs: a merge nobody saw does not push a showing firefly out, but a showing one is kept', () => {
+  const win = window(), pr = (i, need) => ({ url: `${URL}/${i}`, need });
+  const ten = [...Array(10)].map((_, i) => pr(i, 'waiting'));
+  win.run(`var mm = { session: { github: ${JSON.stringify(ten)} }, home: [150, 320], flyLine: { getAttribute() {}, setAttribute() {} } }`);
+  win.run('mothFireflies(mm, 1 / 60, 0)');
+  assert.strictEqual(win.run('mm.flies.size'), 10, 'ten fireflies');
+  // two new open PRs arrive, one PR nobody saw merges, and one of the ten merges (the server keeps merged ones at the end)
+  win.run(`mm.session.github = ${JSON.stringify([...ten.slice(0, 9), pr(10, 'waiting'), pr(11, 'waiting'), pr(12, 'merged'), pr(9, 'merged')])}`);
+  win.run('mothFireflies(mm, 1 / 60, 0)');
+  assert.strictEqual(win.run('[...mm.flies.values()].filter(f => f.leave?.kind === "gone").length'), 0, 'none is pushed out');
+  assert.strictEqual(win.run('mm.flies.get("' + `${URL}/9` + '").leave.kind'), 'merged', 'the one that was showing merges');
+  assert.strictEqual(win.run('mm.flies.has("' + `${URL}/12` + '")'), false, 'and the one nobody saw gets none');
 });
