@@ -34,6 +34,7 @@ es.addEventListener('settings', e => {
   recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
   usingGh = !!st.github; renderGitHub();
   staleOn = st.stale !== false; $('staleToggle').checked = staleOn;
+  prList = st.prList || {}; // each session's card: its PRs listed or as chips
   sync();
 });
 // The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
@@ -116,17 +117,25 @@ window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 10
 const SAVER = Q.has('screensaver');
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
-setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
+// redraw the open card, but not under the pointer (links, a scroll) or a finger (a swipe through its body)
+let touching = false;
+setInterval(() => hovered && !touching && !$('card').matches(':hover') && renderCard(), 500);
+$('card').addEventListener('touchstart', () => { touching = true; }, { passive: true });
+for (const type of ['touchend', 'touchcancel']) $('card').addEventListener(type, () => { touching = false; });
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
-$('card').addEventListener('click', e => { if (hovered && !e.target.closest('a')) clickZone(hovered.zone, e.shiftKey); });
+// A session's card opens it from its header (card.js), or from a click on its body where the card covers its own moth (a
+// tall card in the iTerm panel). The other cards (a stale PR, a ghost) open from anywhere on them.
+$('card').addEventListener('click', e => {
+  if (hovered && !e.target.closest('a, button') && (!hovered.session || zoneAtPoint(e) === hovered.zone)) clickZone(hovered.zone, e.shiftKey);
+});
 // every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt).
 // Only the scene's own pointer events count, never ones on the card, the footer or a menu over it.
-const zoneFor = (/** @type {MouseEvent} */ e) => {
-  if (!(/** @type {Element} */ (e.target)).closest?.('#scene')) return null;
+const zoneAtPoint = (/** @type {MouseEvent} */ e) => {
   const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(document.querySelector('svg').getScreenCTM().inverse());
   return zoneAt(zones, p.x, p.y);
 };
-// Touch has no hover, so a tap stands in: it shows the card (tapZone), and tapping the card then does what a click does.
+const zoneFor = (/** @type {MouseEvent} */ e) => (/** @type {Element} */ (e.target)).closest?.('#scene') ? zoneAtPoint(e) : null;
+// Touch has no hover, so a tap stands in: it shows the card (tapZone), and tapping the card's header then opens it.
 // Taps never run a hover area's click action or hide the card on pointerleave, which a finger lifting would trigger at once.
 // A long press reaches snooze through the contextmenu event below.
 const isTouch = (/** @type {PointerEvent} */ e) => e.pointerType === 'touch';

@@ -87,3 +87,47 @@ test('pointing at a moth shows its card, and clicking it brings its session to t
   fire('click', 110, 205);
   assert.deepStrictEqual(posts, [['/focus', { id: 'api' }]]);
 });
+
+// A card that records its listeners, and a moth's hover area at (100, 100) with radius 40, in screen and scene coordinates alike.
+function withCard() {
+  const handlers = {}, card = { addEventListener: (type, f) => (handlers[type] ??= []).push(f), matches: () => false };
+  const o = open('', { card, svg: { getScreenCTM: () => ({ inverse: () => null }), getBoundingClientRect: () => ({}) } });
+  o.page.DOMPoint = class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return this; } };
+  const zone = vm.runInContext('Object.assign(hoverZone({}, () => {}, 40), { x: 100, y: 100 })', o.page);
+  const fire = (type, e = {}) => handlers[type].forEach(f => f(e));
+  return { ...o, zone, fire };
+}
+
+test('a click on a session\'s card body opens it only where the card covers its own moth; a stale PR\'s card opens from anywhere', () => {
+  const { page, zone, fire } = withCard();
+  const opened = [];
+  page.clickZone = z => opened.push(z);
+  const click = (x, y, tag = '') => fire('click', { target: { closest: sel => sel.split(', ').includes(tag) ? {} : null }, clientX: x, clientY: y, shiftKey: false });
+  page.zoneOf = zone;
+  vm.runInContext('hovered = { session: { id: "s1" }, zone: zoneOf }', page);
+  click(300, 300);
+  assert.deepStrictEqual(opened, [], 'away from its moth');
+  click(110, 95);
+  assert.deepStrictEqual(opened, [zone], 'over its moth (a tall card in the iTerm panel)');
+  click(110, 95, 'a'); click(110, 95, 'button');
+  assert.strictEqual(opened.length, 1, 'but not on a link or button there (a row, the PR toggle)');
+  vm.runInContext('hovered = { stale: {}, zone: "wisp" }', page);
+  click(300, 300);
+  assert.deepStrictEqual(opened, [zone, 'wisp'], 'a stale PR\'s card');
+});
+
+test('the open card isn\'t redrawn while a finger is on it', () => {
+  const { page, every, fire } = withCard();
+  let draws = 0;
+  page.renderCard = () => draws++;
+  vm.runInContext('hovered = {}', page);
+  const tick = () => every(500).forEach(f => f());
+  tick();
+  assert.strictEqual(draws, 1);
+  fire('touchstart');
+  tick();
+  assert.strictEqual(draws, 1, 'mid-swipe');
+  fire('touchend');
+  tick();
+  assert.strictEqual(draws, 2);
+});

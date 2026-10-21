@@ -162,10 +162,8 @@ function showBadge(el) {
   if (!tip) { tip = document.createElement('div'); tip.className = 'badgeTip'; tip.setAttribute('role', 'tooltip'); root.append(tip); }
   tip.innerHTML = `<b>${name}</b><div>${how}.</div>
     <div class="dim">${times ? `Earned ${times === 1 ? 'once' : `${times} times`}, last on ${longDay(last)}.` : 'Not earned yet.'}</div>`;
-  const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
-  const top = r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8; // above the badge, or below when there's no room
-  tip.style.left = `${Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
-  tip.style.top = `${top}px`;
+  const at = tipSpot(tip, el); // above the badge, or below when there's no room
+  tip.style.left = `${at.left}px`; tip.style.top = `${at.top}px`;
   tip.classList.add('show');
 }
 // back to the pinned badge's tip, or none

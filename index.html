@@ -145,7 +145,9 @@
   :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
   #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px var(--space-2); border-radius: var(--radius-pill); background: var(--accent-warm-surface); color: var(--accent-warm-ink); white-space: nowrap; }
   #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
-  .badgeTip { position: fixed; z-index: var(--z-overlay); pointer-events: none; max-width: 240px; padding: var(--space-2) 10px; border: 1px solid var(--line);
+  /* a badge's tip, and an overflow PR's on a moth's card: at most the window less 16px, padding and border included. Its
+     width is its own (max-content), not what's left beside it, so the width tipSpot measures is the one it keeps. */
+  .badgeTip { position: fixed; z-index: var(--z-overlay); pointer-events: none; width: max-content; max-width: min(240px, calc(100vw - 38px)); padding: var(--space-2) 10px; border: 1px solid var(--line);
     border-radius: var(--radius-lg); background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: var(--leading);
     opacity: 0; transition: opacity .12s; }
   .badgeTip.show { opacity: 1; }
@@ -239,30 +241,89 @@
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
   .moth { pointer-events: none; }
   :is(#card, .starCard) .agents { margin-top: 6px; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
-  :is(#card, .starCard) .agent { color: #E8DCF2; }
   :is(#card, .starCard) .pr { display: flex; align-items: baseline; gap: 0 4px; white-space: nowrap; }
   :is(#card, .starCard) .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
   :is(#card, .starCard) .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: #B8AACB; }
-  :is(#card, .starCard) ul { margin: 6px 0 2px; padding-left: 16px; }
-  :is(#card, .starCard) li { margin: 2px 0; }
   :is(#card, .starCard) a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
   :is(#card, .starCard) a:hover { color: #F0E8FF; border-color: #B9A8FF; }
-  :is(#card, .starCard) .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
   select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-0-5) var(--space-1-5); }
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
-  #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking the card opens the session, like clicking its moth */
+  #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking a stale PR's or a ghost's card opens it, like clicking its moth */
+  #card.show:has(h3 .open) { cursor: default; } /* a session's opens from its header */
   :is(#card, .starCard) h3 { margin: 0 0 4px; font-size: 14px; color: #F5E9FF; display: flex; gap: 8px; align-items: flex-start; }
   #card .chip { white-space: nowrap; flex-shrink: 0; margin-top: 2px; font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 99px; background: #4A3B58; color: #F2DCC0; }
   #card .chip.waiting { background: #5B44C9; color: #F0ECFF; }
   #card .chip.idle { background: #3A3050; color: #B9A8C8; }
   #card .chip.error { background: #4A3A40; color: #E8C8C8; }
   #card .chip.paused { background: #33405E; color: #C4D2F0; }
-  :is(#card, .starCard) .note { color: #C3B2FF; font-weight: 500; }
   :is(#card, .starCard) .prompt { font-style: italic; color: #E8DCF2; overflow-wrap: anywhere; }
   :is(#card, .starCard) .dim { color: #8F7FA6; overflow-wrap: anywhere; }
   :is(#card, .starCard) div + div { margin-top: 3px; }
+  /* a session's card: the top is what it wants from you, the tray below is its work */
+  #card h3 .open { all: unset; flex: 1; min-width: 0; display: flex; gap: 8px; align-items: flex-start; cursor: pointer; border-radius: 6px; margin: -2px -4px 0; padding: 2px 4px; }
+  #card h3 .name { flex: 1; min-width: 0; }
+  /* never taller than the window: the header stays and the body scrolls, without scrolling the scene behind. The body
+     takes the card's side and bottom padding so the tray's bleed to the edges isn't clipped. */
+  #card:has(> .cardBody) { display: flex; flex-direction: column; max-height: calc(100vh - 16px); box-sizing: border-box; }
+  #card .cardBody { min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 0 -12px -10px; padding: 0 12px 10px; }
+  #card h3 .open:hover { background: rgba(195, 178, 255, .1); }
+  #card h3 .open:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 0; }
+  #card h3 .go { display: inline-flex; vertical-align: -1px; margin-left: 5px; color: #8F7FA6; }
+  #card h3 .open:hover .go { color: #F0E8FF; }
+  #card .state { color: #8F7FA6; font-size: 11.5px; display: flex; gap: 5px; align-items: baseline; overflow-wrap: anywhere; }
+  #card .state::before { content: '›'; color: #B9A8FF; }
+  #card .state.error::before { content: '!'; }
+  #card .ask { margin-top: var(--space-1); padding: 5px var(--space-2); border-radius: 6px; background: rgba(91, 68, 201, .22); color: #F0ECFF; }
+  #card .ask::before { content: '? '; color: #B9A8FF; font-weight: bold; }
+  #card .msg { margin-top: var(--space-1); padding: var(--space-1) 0 var(--space-1) 9px; border-left: 2px solid #8C78C8; color: #EDE4F7; }
+  #card .msg a { color: #F0E8FF; border-color: #8C78C8; }
+  #card .foot { margin-top: var(--space-2); color: #6F6188; font-size: 11px; }
+  #card .tray { margin: var(--space-2) calc(-1 * var(--space-3)) -10px; padding: 6px var(--space-3) var(--space-2); background: rgba(20, 16, 32, .55); border-top: 1px solid #3A3050; border-radius: 0 0 10px 10px; }
+  #card .tray .foot { margin-top: 6px; }
+  #card .head { display: flex; justify-content: space-between; align-items: baseline; color: #8F7FA6; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+  #card .head .r { text-transform: none; letter-spacing: 0; }
+  #card .tray > :not(:first-child):is(.head, .phead) { margin-top: 10px; }
+  /* agents, three lines each in monospace: the live dot, task tag, model and time; the job; the step. A click opens one in full. */
+  #card .agent { all: unset; display: block; box-sizing: border-box; width: calc(100% + 12px); font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.45; margin: var(--space-1) -6px 0; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+  #card .agent:hover { background: rgba(195, 178, 255, .08); }
+  #card .agent:focus-visible { outline: 1px solid #B9A8FF; outline-offset: -1px; }
+  #card .arow { display: flex; gap: 6px; align-items: center; }
+  #card .arow .t { flex: none; margin-left: auto; color: #8F7FA6; font-variant-numeric: tabular-nums; }
+  #card .arow .model { color: #9D8FB5; font-size: 10.5px; }
+  #card .arow :is(.tag, .model) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* a long tag or model gives way to the time */
+  #card .live { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #F2DCC0; box-shadow: 0 0 6px #FFC266; animation: live 1.6s ease-in-out infinite; }
+  #card .live.quiet { background: #5B4A8A; box-shadow: none; animation: none; }
+  @keyframes live { 50% { opacity: .35; } }
+  #card .tag { font-size: 10px; color: #B9A8FF; background: #2B2440; border: 1px solid #3A3050; border-radius: var(--space-1); padding: 0 var(--space-1); }
+  #card .agent :is(.job, .astep) { display: block; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #card .agent.open :is(.job, .astep) { white-space: normal; overflow-wrap: anywhere; }
+  #card .agent .job { color: #E8DCF2; }
+  #card .agent .astep { font-size: 10.5px; color: #B8C6E6; }
+  /* PRs: a header summing them up (or the hovered chip's title), the toggle, then chips or two-line rows */
+  /* the header line is the card's own font, so a hovered chip's title (bare text in .ph) takes no more height than the
+     smaller summary (.sum) it replaces */
+  #card .phead { display: flex; gap: 6px; align-items: center; color: #8F7FA6; }
+  #card .ph { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #card .ph .sum { font-size: 11px; }
+  #card .ph b { font-weight: normal; letter-spacing: .04em; text-transform: uppercase; }
+  #card .ph.title { color: #F5E9FF; }
+  #card .tog { all: unset; cursor: pointer; flex: none; display: flex; color: #C3B2FF; }
+  #card .tog[aria-expanded=true] svg { transform: rotate(180deg); }
+  #card .tog:hover { color: #F0E8FF; }
+  #card .tog:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; border-radius: 3px; }
+  #card .chips { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+  #card .chips a { display: inline-flex; align-items: center; gap: var(--space-1); border: 1px solid #3A3050; background: #2B2440; border-radius: 99px; padding: 0 7px 0 5px; font-size: 11px; color: #D8CCE6; }
+  #card .chips a:hover { border-color: #8C78C8; color: #F5E9FF; }
+  #card :is(.chips, .me) i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
+  #card a.pr2 { display: block; border: none; color: inherit; margin: 2px -6px 0; padding: 3px 6px; border-radius: 6px; }
+  #card .phead + a.pr2 { margin-top: var(--space-1); }
+  #card a.pr2:hover { background: rgba(195, 178, 255, .1); }
+  #card .pr2 .ti { color: #E8DCF2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #card .pr2 .me { display: flex; gap: 6px; align-items: center; font-size: 11px; color: #8F7FA6; }
+  #card .pr2 .me b { color: #C3B2FF; font-weight: normal; }
+  #card .more { font-size: 11px; color: #8F7FA6; padding-top: 2px; }
   .moth .wing { fill: var(--wing); }
 </style>
 </head>
