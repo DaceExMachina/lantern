@@ -73,10 +73,18 @@ const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
 // stand is, and the one at the top within 60, where the string or chain hangs. The i-th, clockwise from the bottom left;
 // a moth doubling up on a taken spot (`layer` 1, 2...) sits a little further in, and half a spot round. Each session wanders around its home.
 function ringHome(i, n, layer = 0) {
-  const k = 1 - 0.18 * layer, low = Math.asin(Math.min(1, 150 / 225 / k)), high = Math.asin(60 / 225 / k), side = Math.PI - low - high; // the arc each side
+  const k = 1 - 0.18 * layer, [low, high] = ringGaps(k), side = Math.PI - low - high; // the arc each side
   let a = (i + 0.5 + layer / 2) * 2 * side / n; // a second layer sits between two spots, so no two share a direction
   if (a > side) a += 2 * high; // over the top
   return [340 + 225 * k * Math.cos(Math.PI / 2 + low + a), 320 + 235 * k * Math.sin(Math.PI / 2 + low + a)];
+}
+// The gaps at the bottom and top of a ring k of the way out, as angles from straight down and straight up.
+const ringGaps = k => [Math.asin(Math.min(1, 150 / 225 / k)), Math.asin(60 / 225 / k)];
+// How far round its side of the ring a point is (on the 600x600 square), 0 at the bottom gap to 1 at the top one. Spots
+// on a ring further in (layer 1) fall between their neighbours.
+function ringRound([x, y]) {
+  const [low, high] = ringGaps(1), a = Math.atan2(Math.abs(x - 340) / 225, (y - 320) / 235); // from straight down
+  return Math.max(0, Math.min(1, (a - low) / (Math.PI - low - high)));
 }
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
 

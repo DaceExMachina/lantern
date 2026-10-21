@@ -196,3 +196,68 @@ test('two windows opened at different times show the same sessions and agents', 
   // and the ones that came back can be hovered and clicked again (card.js zoneAt skips areas that are off)
   assert.deepStrictEqual(early.run(`return [...moths].filter(([, m]) => m.zone?.off).map(([k]) => k)`), []);
 });
+
+// A frame of every session moth, the lantern swaying with the clock as in the test above
+const step = (w, s) => w.run(`swayAngle = ${2.5 * Math.sin(s * 1.7)};
+  for (const [k, m] of moths) if (!m.parentId && !m.satellite) { const aim = mothTarget(k, m, 1 / 60, ${s}); if (aim) mothMove(m, aim, 1 / 60, ${s}); }`);
+// each landed moth's spot in the lantern's own frame, how far round its side of the lantern's middle that is (0 straight
+// down, PI straight up), how far round the ring its home is, and its side
+const spots = w => w.run(`const b = style.body, mid = (b.top + b.bottom) / 2;
+  return Object.fromEntries([...moths].filter(([, m]) => m.wasLanded).map(([k, m]) => [k, [m.perch[0], m.perch[1], Math.atan2(Math.abs(m.perch[0] - 340), m.perch[1] - mid), ringRound(m.home), Math.sign(m.perch[0] - 340)]]))`);
+
+// perchAt starts each line as high on the paper as its home is round the ring, so landed moths use the paper's whole
+// height in their homes' order. Before, every line fanned out from one point at the paper's middle height, and most
+// moths landed within a few units of a neighbour (2.5 to 7 apart at worst, on a third of the height).
+test('landed moths spread up and down the paper, in their homes\' order, never on top of each other', () => {
+  const own = KEYS.filter(k => k !== 'side');
+  for (const key of ['chochin', 'moroccan', 'barrel', 'candle']) for (const kx of [1, 1.6]) for (const n of [3, 5, 8]) for (const total of [n, 12, 16]) for (const skip of [1, 3, 7]) {
+    const w = open(kx), ids = own.slice(0, total), idle = ids.filter((_, i) => (i * skip) % total < n);
+    w.run(`style = STYLES.${key}`);
+    w.show(ids, idle);
+    w.run('for (const m of moths.values()) m.home = m.spot'); // settled at home
+    for (let f = 0; f < 300; f++) step(w, f / 60);
+    const at = spots(w), all = Object.values(at), where = `${key} ${kx}x, ${idle.length} of ${total} landed`;
+    assert.strictEqual(all.length, idle.length, `${where}: every resting moth landed`);
+    for (const [a, pa] of Object.entries(at)) for (const [b, pb] of Object.entries(at)) if (a < b) {
+      const gap = Math.hypot(pa[0] - pb[0], pa[1] - pb[1]);
+      assert.ok(gap > 12, `${where}: ${a} and ${b} sit ${gap.toFixed(1)} apart`);
+      // on one side, the one whose home is further round the ring sits further round the lantern
+      if (pa[4] === pb[4]) assert.ok((pa[3] - pb[3]) * (pa[2] - pb[2]) > 0, `${where}: ${a} and ${b} sit in their homes' order`);
+    }
+    if (idle.length >= 5) { // with a few on the paper, they reach most of the way up and down it
+      const height = w.run('const b = style.body; return (b.bottom - b.top) * 2 * PERCH_SPREAD'), ys = all.map(p => p[1]);
+      assert.ok(Math.max(...ys) - Math.min(...ys) > 0.6 * height, `${where}: they span ${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} of ${height.toFixed(0)}`);
+    }
+  }
+});
+
+// A landed moth rides its spot exactly (mothMove), so its spot has to glide, never jump. Landing depends on nothing but
+// the moth's own home, and a home glides round the ring (glideHome), so its spot glides with it. Before, a home gliding
+// across the top took its spot over to the other side in a single frame, 87 units.
+test('a moth landing, or a session joining, never makes a landed moth jump', () => {
+  const w = open(), ids = KEYS.filter(k => k !== 'side').slice(0, 10), idle = ids.filter((_, i) => i % 2);
+  w.show(ids, idle);
+  w.run('for (const m of moths.values()) m.home = m.spot');
+  let s = 0;
+  for (; s < 5; s += 1 / 60) step(w, s);
+  const pos = () => w.run(`return Object.fromEntries([...moths].filter(([, m]) => m.wasLanded).map(([k, m]) => [k, [m.x, m.y]]))`);
+  // the most any landed moth but `skip` moves in a frame, over four seconds
+  const worst = skip => {
+    let most = 0;
+    for (let f = 0; f < 240; f++, s += 1 / 60) {
+      const a = pos();
+      step(w, s);
+      const b = pos();
+      for (const k of Object.keys(a)) if (b[k] && k !== skip) most = Math.max(most, Math.hypot(b[k][0] - a[k][0], b[k][1] - a[k][1]));
+    }
+    return most;
+  };
+  w.run(`raw = raw.map(s => s.id === 'blog' ? { ...s, state: 'waiting' } : s); sync()`); // blog needs you and lands; no home moves
+  const landing = worst('blog');
+  assert.ok(landing < 1, `as blog lands, the others only ride the sway: ${landing.toFixed(2)} a frame at most`);
+  const before = w.homes(), spot = w.show([...ids, 'web', 'ios'], [...idle, 'blog']); // two more join, and homes move round to make room
+  const moved = Object.keys(before).filter(k => Math.hypot(spot[k][0] - before[k][0], spot[k][1] - before[k][1]) > 20);
+  assert.ok(moved.some(k => w.run(`return moths.get('${k}').wasLanded`)), `the join moves landed moths' homes: ${moved}`);
+  const joining = worst();
+  assert.ok(joining < 15, `as homes glide round, a landed moth moves ${joining.toFixed(2)} a frame at most`);
+});

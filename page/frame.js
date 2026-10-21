@@ -634,10 +634,13 @@ function scorchStep(m, flying, now = Date.now()) {
 }
 // ---- moths -------------------------------------------------------------------
 // A session moth's home eases toward the spot sync gave it, so when sessions come or go the others slide over to make
-// room rather than jump (about 95% there in two seconds).
+// room rather than jump (about 95% there in two seconds). It goes round the ring (ringHome), the short way, never
+// across it: homes stay in the order they sit round it, which keeps landed moths' lines from crossing (perchAt).
 function glideHome(m, dt) {
-  const k = 1 - Math.exp(-1.5 * dt);
-  m.home = [m.home[0] + (m.spot[0] - m.home[0]) * k, m.home[1] + (m.spot[1] - m.home[1]) * k];
+  const k = 1 - Math.exp(-1.5 * dt), polar = ([x, y]) => [Math.atan2((y - 320) / 235, (x - 340) / 225), Math.hypot((x - 340) / 225, (y - 320) / 235)];
+  const [a, r] = polar(m.home), [b, s] = polar(m.spot), turn = (b - a + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
+  const a2 = a + turn * k, r2 = r + (s - r) * k;
+  m.home = [340 + 225 * r2 * Math.cos(a2), 320 + 235 * r2 * Math.sin(a2)];
 }
 // A landed moth's fidgets, off the wall clock like the scorch schedule (scorchClock), so every window shows them at the
 // same moments: its time splits into `slot`-second slots, shifted by its own seeded phase, and each holds one fidget
@@ -932,10 +935,10 @@ function mothZs(m, s) {
   } else if (m.zz) { m.zz.forEach(t => t.remove()); m.zz = null; m.zStart = undefined; }
 }
 
-// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its fan
-// line to level with the moth's wing joint. Every thread and dotted line on a side lies on a ray from one point, so none
-// ever crosses another, flying or landed. A landed moth's has no length; a moth behind its spot (flying in from the
-// far side) has none until it comes round.
+// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its line
+// toward home to level with the moth's wing joint. The lines on a side start up the paper in the order their homes go
+// round the ring, so no thread or dotted line crosses another, flying or landed. A landed moth's has no length; a moth
+// behind its spot (flying in from the far side) has none until it comes round.
 function threadEnds(m) {
   const [px, py] = rot(m.perch[0], m.perch[1]), [rx, ry] = rot(340 + m.perch[3][0], VIEW.top + m.perch[3][1]), ux = rx - 340, uy = ry - VIEW.top;
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
