@@ -53,12 +53,12 @@ function landed(s) {
   return mix(MOTHS.waiting, mix(MOTHS.snoozed, MOTHS.sleeping, rest ? s.sleeping / rest : 0), s.waiting ? rest / s.waiting : 0);
 }
 
-// Three strips touching, top to bottom: the sessions alive stacked by state in the moths' colours (working, waiting,
+// Three strips a hair apart, top to bottom: the sessions alive stacked by state in the moths' colours (working, waiting,
 // snoozed, sleeping, then the idle rest, rising from the strip below), the share of moths flying vs landed (blending the same
 // colours by share), and the lantern (warm or violet, quiet dim) as tall as the moths strip. Small ticks under the
 // lantern strip mark sessions starting.
 function ribbon(r, w, h) {
-  const band = Math.round(h * .24), low = h - 2 * band - 3, x = t => (t - r.from) / (r.to - r.from) * w;
+  const band = Math.round(h * .24), gap = 2, low = h - 2 * band - 2 * gap - 3, x = t => (t - r.from) / (r.to - r.from) * w;
   const most = Math.max(1, ...r.slices.map(s => s.alive));
   let svg = '';
   for (const s of r.slices) {
@@ -68,8 +68,8 @@ function ribbon(r, w, h) {
       const bh = low * n / most;
       if (bh > 0) { y -= bh; svg += `<rect x="${x0}" y="${y}" width="${sw}" height="${bh}" fill="${MOTHS[k]}"/>`; }
     }
-    if (s.flying != null) svg += `<rect x="${x0}" y="${low}" width="${sw}" height="${band}" fill="${mix(landed(s), MOTHS.working, s.flying)}"/>`;
-    if (lamp) svg += `<rect x="${x0}" y="${low + band}" width="${sw}" height="${band}" fill="${RIBBON[lamp]}"/>`;
+    if (s.flying != null) svg += `<rect x="${x0}" y="${low + gap}" width="${sw}" height="${band}" fill="${mix(landed(s), MOTHS.working, s.flying)}"/>`;
+    if (lamp) svg += `<rect x="${x0}" y="${low + 2 * gap + band}" width="${sw}" height="${band}" fill="${RIBBON[lamp]}"/>`;
   }
   for (const t of r.starts) svg += `<path d="M${x(t)} ${h - 3}V${h}" stroke="${RIBBON.mark}" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`;
   return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
@@ -78,10 +78,9 @@ function ribbon(r, w, h) {
 // A day's ribbon with its axis and legend, for the stats panel and the recap. `end` labels the right edge.
 const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
-  <div class="legend">${['working', 'waiting', 'idle'].map(k => `<span style="grid-area:${k}"><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
-    <span style="grid-area:snoozed"><i style="background:${MOTHS.snoozed}"></i><i style="background:${MOTHS.sleeping}"></i>snoozed / sleeping <span class="pair"><b data-v="snoozed"></b> / <b data-v="sleeping"></b></span></span>
-    <span style="grid-area:flying"><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
-    <span style="grid-area:lamp"><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div></div>`;
+  <div class="legend">${['working', 'waiting', 'idle', 'snoozed', 'sleeping'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
+    <span><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
+    <span><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div></div>`;
 
 // Hovering (or touching) a dayRibbon: a line follows the pointer and the legend's values show that moment; leaving
 // puts the day's totals back. Every value has a fixed-width slot, so nothing moves as they change. It returns
@@ -195,7 +194,8 @@ function renderStats(j) {
     ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
     ['slowest answers', today.slowWait == null ? '–' : ago(today.slowWait), 'one in ten waits lasted at least this long'],
     ['waits', today.waits, 'times a moth landed on the lantern for you'],
-    ['snoozed / sleeping', today.snoozedMs || today.sleepingMs ? `${ago(today.snoozedMs)} / ${ago(today.sleepingMs)}` : '–', 'moth time spent waiting while snoozed (by hand or in quiet hours), and while sleeping (snoozed for good)'],
+    ['snoozed', today.snoozedMs ? ago(today.snoozedMs) : '–', 'moth time spent waiting while snoozed (by hand or in quiet hours)'],
+    ['sleeping', today.sleepingMs ? ago(today.sleepingMs) : '–', 'moth time spent waiting while sleeping (snoozed for good)'],
     ['merged', today.merged, 'fireflies that flew home (merged PRs)'],
     ['in flight', today.open ?? '–', 'open PRs your sessions own'],
     ['stale PRs', stale, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
