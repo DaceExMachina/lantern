@@ -49,7 +49,6 @@
   "input[type=checkbox]:checked::after",
   "dev.js padding: 5px 0",
   "stats.js #3A3050",
-  "stats.js #D8CCE6",
   "dev.js padding: var(--space-1) 14px var(--space-2)",
   "dev.js font: 12.5px/1.5 var(--font-serif)"
 ]
