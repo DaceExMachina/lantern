@@ -56,7 +56,7 @@ test('an open list shows the worst four, failing and changes requested first, th
   const card = show(session({ github: prs }));
   assert.deepStrictEqual(find(card, 'pr2').map(a => a.href), [5, 3, 4, 2].map(n => pr(n).url));
   const [more] = find(card, 'more');
-  assert.strictEqual(text(more), '2 more: #1, #6');
+  assert.strictEqual(text(more), '2 more: #1#6', 'the commas are drawn after each link (CSS), so the links touch');
   const [tip] = find(card, 'badgeTip'), overflow = more.children.filter(c => c.tag === 'a');
   assert.strictEqual(tip.attrs.role, 'tooltip');
   assert.strictEqual(overflow[1].title, undefined, 'no native title over the tip');
@@ -98,7 +98,7 @@ test('an agent is three lines: dot, tag chip only when its step has one, model a
   const agent = o => ({ id: 'a', type: 'opus-implement', description: 'Build the card', model: 'Opus 5.5', started: now - 8 * 60e3, last: now - 2e3, ...o });
   const card = show(session({ state: 'working', subagents: [agent({ activity: '[card-e] Run the tests' }), agent({ id: 'b', started: now - 7 * 60e3, activity: 'Read card.js', last: now - 30e3, model: 'Haiku 4.5', type: 'Explore' })] }));
   const agents = find(card, 'agent');
-  assert.deepStrictEqual(agents.map(r => [r.tag, ...r.children.map(c => c.className)]), [['button', 'arow', 'job', 'astep'], ['button', 'arow', 'job', 'astep']], 'a native button, so the keyboard opens it too');
+  assert.deepStrictEqual(agents.map(r => [r.tag, ...r.children[0].children.map(c => c.className)]), [['button', 'arow', 'job', 'astep'], ['button', 'arow', 'job', 'astep']], 'a native button, so the keyboard opens it too');
   assert.deepStrictEqual(find(card, 'arow').map(r => r.children.map(c => c.className)), [['live', 'tag', 'model', 't'], ['live quiet', 'model', 't']], 'a tag chip only for a tagged step; dim after 10 s quiet');
   assert.deepStrictEqual(find(card, 'arow').map(text), ['card-eOpus 5.58m', 'Haiku 4.57m'], 'no type');
   assert.deepStrictEqual(find(card, 'job').map(text), ['Build the card', 'Build the card']);
@@ -237,7 +237,7 @@ test('an agent with no tag or model is two lines (job beside the dot), and a she
     { id: 'a', description: 'Tagged', model: 'Opus 5.5', activity: '[t] Step', started: now - 1e3, last: now },
     { id: 'b', description: 'Model only', model: 'Opus 5.5', activity: 'Step', started: now - 2e3 + 1e3, last: now },
     { id: 'c', description: 'Neither', activity: 'Step', started: now, last: now }] }));
-  const shape = r => r.children.map(c => [c.className, ...(c.className === 'arow' ? c.children.map(x => x.className) : [])]);
+  const shape = r => r.children[0].children.map(c => [c.className, ...(c.className === 'arow' ? c.children.map(x => x.className) : [])]);
   assert.deepStrictEqual(find(card, 'agent').map(shape), [
     [['arow', 'live', 'tag', 'model', 't'], ['job'], ['astep']],
     [['arow', 'live', 'model', 't'], ['job'], ['astep']],
@@ -246,4 +246,21 @@ test('an agent with no tag or model is two lines (job beside the dot), and a she
   assert.strictEqual(text(find(card, 'agent')[3]), 'npm run previewshell');
   const [head] = find(find(card, 'agentZone')[0], 'head');
   assert.strictEqual(text(head), 'Running3 agents · 1 shell');
+});
+
+test('a shell command shows how long it has run, from the session\'s taskStarted', () => {
+  const { show } = load();
+  const card = show(session({ state: 'paused', tasks: ['npm run preview', 'tail -f log'], taskStarted: { 'npm run preview': now - 5 * 60e3 } }));
+  assert.deepStrictEqual(find(card, 'agent').map(r => find(r, 't').map(text)), [['5m'], []], 'a start, then none');
+});
+
+test('every control is an outer button or link that fills its zone, around an inner face that\'s the visible part', () => {
+  const { show, run } = load();
+  const faced = card => [...find(card, 'open'), ...find(card, 'chip'), ...find(card, 'agent'), ...all(card).filter(n => n.tag === 'a' && /pr2|ov|^$/.test(n.className) && n.href)]
+    .map(n => [n.tag, n.children.length, n.children[0]?.className?.split(' ')[0]]);
+  const s = session({ state: 'working', subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: TEN });
+  assert.ok(faced(show(s)).every(([, n, c]) => n === 1 && c === 'face'), 'header, pill, agent, chips');
+  run('prList.s1 = true');
+  const listed = faced(show(s));
+  assert.ok(listed.length > 6 && listed.every(([, n, c]) => n === 1 && c === 'face'), 'list rows and overflow links');
 });

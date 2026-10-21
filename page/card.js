@@ -14,7 +14,7 @@ function tipSpot(tip, el) {
 function make(tag, cls = '', ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
 function link({ label, url }, text = label) {
   const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = text;
+  a.href = url; a.target = '_blank'; a.rel = 'noopener'; if (text) a.textContent = text;
   return a;
 }
 const short = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
@@ -86,14 +86,16 @@ function renderCard() {
 // A session in rows. Its header opens the session (a click on its moth does the same; shift-click snoozes).
 function sessionRows(s) {
   const now = Date.now(), waiting = s.state === 'waiting', questions = waiting && s.forYou?.questions || [], you = waiting && s.forYou?.you || [];
-  const chip = make('button', 'chip ' + (s.error && waiting ? 'error' : s.snoozed && waiting ? 'idle' : s.state),
-    s.reported ? 'reported back' : s.error && waiting ? 'error' : s.snoozed && waiting ? (s.forGood ? 'sleeping' : 'snoozed') : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state);
+  // Every control on the card is an outer button or link that fills its zone (the padding around it, up to its neighbours
+  // and the card's edges) and an inner .face that's the visible pill or hover, the size it always was (index.html).
+  const chip = make('button', 'chip ' + (s.error && waiting ? 'error' : s.snoozed && waiting ? 'idle' : s.state), make('span', 'face',
+    s.reported ? 'reported back' : s.error && waiting ? 'error' : s.snoozed && waiting ? (s.forGood ? 'sleeping' : 'snoozed') : { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' }[s.state] || s.state));
   // The top is what it wants from me: the pill, a state line only where it says more than the pill (a permission, an
   // error; not "Finished its turn", "Waiting on…", or "Asks:" with the question boxed below), the questions, and its
   // "You:" message as a quote.
   const go = make('span', 'go');
   go.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg>';
-  const open = make('button', 'open', make('span', 'name', s.title || project(s), go));
+  const open = make('button', 'open', make('span', 'face name', s.title || project(s), go));
   open.title = 'Open this session';
   open.onclick = e => { const m = moths.get(s.id); if (m) clickZone(m.zone, e.shiftKey); };
   // the pill does what a right-click on the moth does (its `menu`, state.js): snooze, then sleep, then wake
@@ -117,7 +119,7 @@ function sessionRows(s) {
     // finished one just drops out, whatever order the server's list comes in
     const agents = [...s.subagents].sort((a, b) => (a.started ?? Infinity) - (b.started ?? Infinity) || String(a.id).localeCompare(String(b.id)));
     for (const a of agents) zone.append(agentRow({ ...a, job: a.description || a.type || 'subagent' }, now));
-    for (const t of loose) zone.append(agentRow({ job: t, last: 0, kind: 'shell' }, now));
+    for (const t of loose) zone.append(agentRow({ job: t, last: 0, kind: 'shell', started: s.taskStarted?.[t] }, now)); // its start: #171
   }
   if (side.length) {
     tray.push(make('div', 'head', 'Side sessions', make('span', 'r', String(side.length))));
@@ -145,7 +147,7 @@ function agentRow({ id, job, activity = '', started, last = 0, model, kind }, no
   const lines = kind ? [make('span', 'arow', dot, name, make('span', 'model', kind), ...time)] // a shell command: its kind in the model's style
     : about.length ? [make('span', 'arow', dot, ...about, ...time), name]
     : [make('span', 'arow', dot, name, ...time)]; // nothing to say on a line of its own
-  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), ...lines, ...(step ? [make('span', 'astep', step)] : []));
+  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), make('span', 'face', ...lines, ...(step ? [make('span', 'astep', step)] : [])));
   row.setAttribute('aria-expanded', String(openAgents.has(key)));
   const toggle = () => {
     const open = !openAgents.has(key);
@@ -203,19 +205,23 @@ function prBlock(s) {
     return a;
   };
   if (!open) return [head, make('div', 'chips', ...prs.map(p => {
-    const a = link(p);
-    a.prepend(dot(p.need));
+    const a = link(p, '');
+    a.append(make('span', 'face', dot(p.need), p.label));
     a.onpointerenter = () => { ph.className = 'ph title'; ph.textContent = p.title; };
     a.onpointerleave = summary;
     return a;
   }))];
   return [head, ...prs.slice(0, PR_CAP).map(p => {
-    const a = link(p, ''), ti = make('div', 'ti', p.title);
+    const a = link(p, ''), ti = make('span', 'ti', p.title);
     a.className = 'pr2';
-    a.append(ti, make('div', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
-      ...(p.createdAt ? [make('span', 't', short(Date.now() - Date.parse(p.createdAt)))] : []))); // how long it's been open
+    a.append(make('span', 'face', ti, make('span', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
+      ...(p.createdAt ? [make('span', 't', short(Date.now() - Date.parse(p.createdAt)))] : [])))); // how long it's been open
     return titled(a, p, () => ti.scrollWidth > ti.clientWidth);
-  }), ...(prs.length > PR_CAP ? [make('div', 'more', `${prs.length - PR_CAP} more: `, ...prs.slice(PR_CAP).flatMap((p, i) => [i ? ', ' : '', titled(link(p), p)]))] : []), tip];
+  }), ...(prs.length > PR_CAP ? [make('div', 'more', `${prs.length - PR_CAP} more: `, ...prs.slice(PR_CAP).map(p => { // the comma after each is its own, so the links touch
+      const a = link(p, '');
+      a.className = 'ov'; a.append(make('span', 'face', p.label));
+      return titled(a, p);
+    }))] : []), tip];
 }
 // The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
 // anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.
