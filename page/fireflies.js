@@ -77,7 +77,7 @@ function leaveStep(kind, t, [dx, dy]) {
     const x = (u - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
     return [dx * along + nx * up, dy * along + ny * up, glow, size];
   }
-  const v = u - SHAKE - LOOP, go = exit * v + 450 * FAST * FAST * v * v; // carrying on at the loop's last speed, and faster
+  const v = u - SHAKE - LOOP, go = exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
   return [dx * go, dy * go, glow, size];
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
