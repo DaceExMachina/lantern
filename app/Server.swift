@@ -461,18 +461,19 @@ final class LanternServer {
             // its transcript) still has it alive, and a shell, monitor or workflow task only when this session's own
             // transcript started it. A task a subagent started is in that subagent's transcript, and its end wakes the subagent.
             let starts = e["taskStarts"] as? [String: Double] ?? [:] // looked up off the main queue (see taskStarts)
-            var since: [String: Double] = [:], described: [Any] = [], awaited: [String] = []
+            var since: [String: Double] = [:], described: [Any] = [], awaited: [String] = [], began: JSON = [:]
             for t in e["background_tasks"] as? [JSON] ?? [] where !truthy(t["status"]) || str(t["status"]) == "running" {
                 let tid = str(t["id"])
                 if str(t["type"]) == "subagent" { awaited.append(tid); continue } // awaitedAgents() keeps the ones still alive
                 // when it started, from the transcript line that started it, so a restart doesn't make an old server fresh
                 guard let at = starts[tid] else { continue }
                 since[tid] = at
-                if truthy(t["description"]) { described.append(t["description"]!) }
+                if truthy(t["description"]) { described.append(t["description"]!); began[str(t["description"])] = at }
             }
             s["taskSince"] = since
             s["agentsAwaited"] = awaited
             s["tasks"] = Array(described.prefix(4))
+            s["taskStarted"] = began.isEmpty ? nil : began // description -> when it started, for the card's elapsed time
             let q = questionIn(e["last_assistant_message"]), open = openWork(s, id)
             s["forYou"] = forYou(e["last_assistant_message"])
             if wordsOn {
@@ -513,6 +514,7 @@ final class LanternServer {
             s["turn"] = "running"
             s["note"] = ""
             s["tasks"] = [Any]()
+            s["taskStarted"] = nil
             s["error"] = false
             s["snoozed"] = false // a snooze only covers the wait it was set on
             if ev == "UserPromptSubmit" && truthy(e["prompt"]) { s["prompt"] = cleanPrompt(str(e["prompt"])) }

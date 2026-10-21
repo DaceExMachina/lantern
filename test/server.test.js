@@ -330,6 +330,18 @@ test('a background shell task younger than the threshold keeps its session worki
   assert.deepStrictEqual((({ state, note }) => ({ state, note }))(await s1(base)), { state: 'paused', note: 'Waiting on 1 background task' });
 });
 
+// The card shows how long each background task has run, from the transcript line that started it.
+test('a background task\'s start reaches the page with its description, and goes when the session moves on', async t => {
+  let home;
+  const at = Date.now() - 5 * 60e3, stamp = new Date(at).toISOString();
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1', at)]) }, h => home = h, bg(0.1, 600));
+  await post(base, '/event', stopWith(home, SERVER));
+  const s = await until(async () => { const x = await s1(base); return x?.taskStarted && x; }, 'the task\'s start');
+  assert.deepStrictEqual([s.tasks, s.taskStarted], [['preview server'], { 'preview server': Date.parse(stamp) }]);
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await until(async () => (await s1(base)).taskStarted === undefined, 'it to go with the tasks');
+});
+
 test('a background task open past the threshold with no agent activity rests after the sweep, and stays old across turns', async t => {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h, bg(0.1, 0.5));
