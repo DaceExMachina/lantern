@@ -114,6 +114,13 @@
     () => { enterZone(moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { hideCard(); },
     () => { toggleDevPanel(); }, snap('dev'),
   ];
+  // The PR toggle's hit area is the rest of its header row: its top and bottom right corners and just left of its icon
+  // all land on it (CONTRIBUTING.md, "Button bars").
+  const hits = () => {
+    const card = $('card'), row = card.querySelector('.phead').getBoundingClientRect(), tog = card.querySelector('.tog'), icon = tog.querySelector('svg').getBoundingClientRect();
+    for (const [where, x, y] of [['top-right corner', row.right - 1, row.top + 1], ['bottom-right corner', row.right - 1, row.bottom - 1], ['left of its icon', icon.left - 4, icon.top + icon.height / 2]])
+      if (document.elementFromPoint(x, y)?.closest('.tog') !== tog) errs.push(`the PR toggle's hit area misses its row's ${where}`);
+  };
   const steps = [
     () => {
       catchScorch();
@@ -125,7 +132,7 @@
     },
     run(6),
     ...(Q.has('chrome') ? chrome() : []),
-    ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), () => { hideCard(); }] : []),
+    ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), hits, () => { hideCard(); }] : []),
     ...(Q.has('chrome') ? [] : [
       () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
       run(14), snap('t20'), // T = LAST
