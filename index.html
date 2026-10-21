@@ -89,11 +89,11 @@
   :is(#stats, #recap) .legend [data-v] { min-width: 5.4em; } /* fits "188h 58m" of moth time and "100% warm", so hovering never moves anything */
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
   :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: -4px; }
-  /* The legend wraps: each item is at least 13em (the widest, "moths flying" and its value slot, is 141px at 11px) and
-     grows to share its row, so a short last row stretches instead of leaving blank cells. */
+  /* The legend's six items sit in even columns, 3 across when there's room and 2 when narrow: each column is at least
+     13em (the widest item, "moths flying" and its value slot, is 141px at 11px). Idle is only in the ribbon, as the grey. */
   :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: 8px; }
-  :is(#stats, #recap) .legend { flex-wrap: wrap; gap: 4px 14px; margin-top: 0; }
-  :is(#stats, #recap) .legend span { flex: 1 0 13em; white-space: nowrap; }
+  :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(13em, 1fr)); gap: 4px 14px; margin-top: 0; }
+  :is(#stats, #recap) .legend span { white-space: nowrap; }
   :is(#stats, #recap) .legend i { display: inline-block; width: 12px; height: 7px; border-radius: 2px; margin: 0 4px 0 2px; }
   :is(#stats, #recap) dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px 14px; margin: 4px 0 0; }
   :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }

@@ -78,7 +78,7 @@ function ribbon(r, w, h) {
 // A day's ribbon with its axis and legend, for the stats panel and the recap. `end` labels the right edge.
 const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
-  <div class="legend">${['working', 'waiting', 'idle', 'snoozed', 'sleeping'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
+  <div class="legend">${['working', 'waiting', 'snoozed', 'sleeping'].map(k => `<span><i style="background:${MOTHS[k]}"></i>${k} <b data-v="${k}"></b></span>`).join('')}
     <span><i style="background:linear-gradient(90deg, ${MOTHS.waiting}, ${MOTHS.working})"></i>moths flying <b data-v="flying"></b></span>
     <span><i style="background:${RIBBON.warm}"></i>lantern <b data-v="lamp"></b></span></div></div>`;
 
