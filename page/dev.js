@@ -31,7 +31,7 @@ function toggleDevPanel() {
   devPanel = document.createElement('div');
   devPanel.style.cssText = 'position: fixed; top: var(--space-3); left: var(--space-3); z-index: var(--z-overlay); width: 260px; max-height: calc(100vh - 24px); overflow-y: auto;'
     + 'box-sizing: border-box; padding: var(--space-1) 14px var(--space-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);'
-    + 'color: var(--ink); font: 12.5px/1.5 Georgia, serif; box-shadow: var(--shadow-lg)';
+    + 'color: var(--ink); font: 12.5px/1.5 var(--font-serif); box-shadow: var(--shadow-lg)';
   const sections = new Map();
   for (const r of devRows) {
     if (!sections.has(r.section)) {
