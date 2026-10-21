@@ -12,6 +12,31 @@ function tipSpot(tip, el) {
 }
 // an element with a class and its children (text or nodes)
 function make(tag, cls = '', ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
+// `el` with a key, so a redraw (morph) gives each row back its own element: agents by id, PRs by url, sessions by id
+const keyed = (key, el) => { el.dataset.key = key; return el; };
+// Redraws build fresh nodes, then morph patches the live ones to match instead of swapping them in, so whatever the browser
+// holds on an element survives: hover, keyboard focus, scroll, and a press between mousedown and click. Children are
+// matched by tag and key (unkeyed ones in order), patched in place (attributes, the handlers below, text), and new ones go
+// in where they belong; whatever's left over goes. Elements only move when the order changes, and a move drops focus,
+// so the focused element gets it back afterwards.
+const HANDLERS = ['onclick', 'onpointerenter', 'onpointerleave', 'onfocus', 'onblur']; // ponytail: the ones the card sets; add any new one here
+function morph(el, kids) {
+  const old = [...el.childNodes], f = /** @type {HTMLElement | null} */ (document.activeElement);
+  const next = kids.map(n => {
+    const i = old.findIndex(o => o && o.nodeName === n.nodeName && o.dataset?.key === n.dataset?.key);
+    if (i < 0) return n;
+    const o = old[i]; old[i] = null;
+    if (o.nodeType !== 1) { if (o.nodeValue !== n.nodeValue) o.nodeValue = n.nodeValue; return o; }
+    for (const { name } of [...o.attributes]) if (!n.hasAttribute(name)) o.removeAttribute(name);
+    for (const { name, value } of n.attributes) if (o.getAttribute(name) !== value) o.setAttribute(name, value);
+    for (const h of HANDLERS) o[h] = n[h];
+    morph(o, [...n.childNodes]);
+    return o;
+  });
+  for (const o of old) o?.remove();
+  next.forEach((n, i) => { if (el.childNodes[i] !== n) el.insertBefore(n, el.childNodes[i] ?? null); });
+  if (f !== document.activeElement && f?.isConnected) f.focus({ preventScroll: true });
+}
 function link({ label, url }, text = label) {
   const a = document.createElement('a');
   a.href = url; a.target = '_blank'; a.rel = 'noopener'; if (text) a.textContent = text;
@@ -66,20 +91,18 @@ function enterZone(a) {
 function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (Tapping the card's header runs the action.)
 function tapZone(zone) { if (hovered === zone.target) hideCard(); else enterZone(zone); }
-function hideCard() { hovered = held = shown = null; openAgents.clear(); $('card').classList.remove('show'); }
+function hideCard() { hovered = held = shown = null; openAgents.clear(); prOver.card = ''; $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
 
 function renderCard() {
+  dropTip();
   const m = hovered, s = m?.session;
   if (m?.stale) return renderStaleCard(m.stale);
   if (m?.ghost) return renderGhostCard(m.ghost);
   if (!s) return;
-  // the header stays put and the rest scrolls when the card would be taller than the window. A redraw of the same
-  // session keeps its place (the PR toggle redraws under the pointer); another session's card starts at the top.
-  const [head, ...rest] = sessionRows(s), body = make('div', 'cardBody', ...rest), was = $('card').children[1];
-  const top = was?.dataset?.id === s.id ? was.scrollTop : 0; // read before it's taken out, which zeroes it
-  body.dataset.id = s.id;
-  $('card').replaceChildren(head, body);
-  body.scrollTop = top;
+  // the header stays put and the rest scrolls when the card would be taller than the window. The body is keyed by its
+  // session, so another session's card gets a fresh one, at the top.
+  const [head, ...rest] = sessionRows(s);
+  morph($('card'), [head, keyed(s.id, make('div', 'cardBody', ...rest))]);
   $('card').classList.add('show');
 }
 
@@ -139,7 +162,7 @@ function sessionRows(s, full = false) {
 // then its job; then its current step. With neither, two: the dot, the job and the time; then the step. A shell command
 // left running has "shell" where an agent's model goes, then the command below. The job and step are cut to a line each; a
 // click opens the agent to show them in full, and it stays open, by id, through the redraws until the card closes. A
-// button, so the keyboard gets it too.
+// button, so the keyboard gets it too. Keyed by id, so a redraw keeps each row's element (and its focus) with its agent.
 const TAG = /^\[([^\]]+)\]\s*/;
 const openAgents = new Set();
 /** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string }} a */
@@ -150,15 +173,10 @@ function agentRow({ id, job, activity = '', started, last = 0, model }, now, ful
   const lines = about.length ? [make('span', 'arow', dot, ...about, ...time), name]
     : [make('span', 'arow', dot, name, ...time)]; // nothing to say on a line of its own
   const face = make('span', 'face', ...lines, ...(step ? [make('span', 'astep', step)] : []));
-  if (full) return make('div', 'agent open', face); // the sidebar shows it in full already, so there's nothing to open
-  const row = make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), face);
+  if (full) return keyed(key, make('div', 'agent open', face)); // the sidebar shows it in full already, so there's nothing to open
+  const row = keyed(key, make('button', 'agent' + (openAgents.has(key) ? ' open' : ''), face));
   row.setAttribute('aria-expanded', String(openAgents.has(key)));
-  const toggle = () => {
-    const open = !openAgents.has(key);
-    if (open) openAgents.add(key); else openAgents.delete(key);
-    row.classList.toggle('open', open); row.setAttribute('aria-expanded', String(open));
-  };
-  row.onclick = toggle;
+  row.onclick = () => { if (!openAgents.delete(key)) openAgents.add(key); renderCard(); };
   return row;
 }
 
@@ -171,6 +189,10 @@ const SHORT = { ...NEED, ready: 'ready', failing: 'failing' };
 const PR_CAP = 4;
 /** @type {Record<string, boolean>} */
 let prList = {};
+const prOver = { card: '', dock: '' }; // the url of the PR chip under the pointer in each, whose title its header shows
+let tipFor = null; // the link #prTip was shown for
+// a redraw that took away the link the tip was showing for takes the tip too
+function dropTip() { if (!tipFor?.isConnected) $('prTip').classList.remove('show'); }
 const rank = (/** @type {string} */ need) => (ORDER.indexOf(need) + 1) || ORDER.length + 1;
 function prSummary(prs) {
   const n = {};
@@ -181,8 +203,8 @@ function prBlock(s, full = false) {
   // in the sidebar they're listed in full until that pin's own toggle (kept with the pin) turns them into chips
   const pin = full && pinned.find(p => p.id === s.id), cap = full ? Infinity : PR_CAP;
   const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = full ? !pin?.chips : prList[s.id] ?? prs.length <= 3;
-  const ph = make('span', 'ph'), summary = () => { ph.className = 'ph'; ph.replaceChildren(make('span', 'sum', make('b', '', 'PRs'), ` · ${prSummary(prs)}`)); };
-  summary();
+  const where = full ? 'dock' : 'card', over = !open && prs.find(p => p.url === prOver[where]), redraw = full ? renderSidebar : renderCard;
+  const ph = over ? make('span', 'ph title', over.title) : make('span', 'ph', make('span', 'sum', make('b', '', 'PRs'), ` · ${prSummary(prs)}`));
   const tog = make('button', 'tog'), label = open ? 'Show PRs as chips' : 'List PRs with their titles';
   tog.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
   tog.setAttribute('aria-expanded', String(open)); tog.setAttribute('aria-label', label); tog.title = label;
@@ -195,40 +217,40 @@ function prBlock(s, full = false) {
   const dot = need => { const i = make('i'); i.style.background = FLY[need] || FLY.quiet; return i; };
   const head = make('div', 'phead', ph, tog);
   // A PR's title where the card doesn't already show it in full: an overflow link past the cap (a bare number), or a
-  // list row whose title is cut short. It's the badges' tooltip, shown while hovered or focused and placed as a badge's
-  // is (tipSpot). The tip is fixed, so out of the card's flow, but the card's transform makes the card its frame, so the
-  // window spot is taken back to the card's. A chip names itself in the header instead.
-  const tip = make('div', 'badgeTip');
-  tip.setAttribute('role', 'tooltip');
-  const titled = (/** @type {HTMLElement} */ a, p, cut = () => true) => {
-    a.onpointerenter = a.onfocus = () => {
-      if (!cut()) return;
+  // list row whose title is cut short. It's the badges' tooltip (#prTip, outside the redrawn rows so a redraw leaves it
+  // be), shown while hovered or focused and placed as a badge's is (tipSpot). A chip names itself in the header instead.
+  // The handlers measure the element the event came to: after a redraw that's the live one, not the one built here.
+  const titled = (/** @type {HTMLElement} */ a, p, cut = (/** @type {Element} */ _) => true) => {
+    a.onpointerenter = a.onfocus = e => {
+      const tip = $('prTip'), el = /** @type {HTMLElement} */ (e.currentTarget);
+      if (!cut(el)) return;
+      tipFor = el;
       tip.textContent = p.title;
-      const at = tipSpot(tip, a), card = $('card'), c = card.getBoundingClientRect();
-      tip.style.left = `${at.left - c.left - card.clientLeft}px`; tip.style.top = `${at.top - c.top - card.clientTop}px`;
+      const at = tipSpot(tip, el);
+      tip.style.left = `${at.left}px`; tip.style.top = `${at.top}px`;
       tip.classList.add('show');
     };
-    a.onpointerleave = a.onblur = () => tip.classList.remove('show');
+    a.onpointerleave = a.onblur = () => $('prTip').classList.remove('show');
     return a;
   };
   if (!open) return [head, make('div', 'chips', ...prs.map(p => {
-    const a = link(p, '');
+    const a = keyed(p.url, link(p, ''));
     a.append(make('span', 'face', dot(p.need), p.label));
-    a.onpointerenter = () => { ph.className = 'ph title'; ph.textContent = p.title; };
-    a.onpointerleave = summary;
+    a.onpointerenter = () => { prOver[where] = p.url; redraw(); };
+    a.onpointerleave = () => { prOver[where] = ''; redraw(); };
     return a;
   }))];
   return [head, ...prs.slice(0, cap).map(p => {
-    const a = link(p, ''), ti = make('span', 'ti', p.title);
+    const a = keyed(p.url, link(p, '')), ti = make('span', 'ti', p.title);
     a.className = 'pr2';
     a.append(make('span', 'face', ti, make('span', 'me', dot(p.need), make('b', '', p.label), NEED[p.need] || p.need,
       ...(p.createdAt ? [make('span', 't', short(Date.now() - Date.parse(p.createdAt)))] : [])))); // how long it's been open
-    return titled(a, p, () => ti.scrollWidth > ti.clientWidth);
+    return titled(a, p, el => { const t = el.querySelector('.ti'); return t.scrollWidth > t.clientWidth; });
   }), ...(prs.length > cap ? [make('div', 'more', `${prs.length - cap} more: `, ...prs.slice(cap).map(p => { // the comma after each is its own, so the links touch
-      const a = link(p, '');
+      const a = keyed(p.url, link(p, ''));
       a.className = 'ov'; a.append(make('span', 'face', p.label));
       return titled(a, p);
-    }))] : []), tip];
+    }))] : [])];
 }
 // ---- the pinned sidebar ------------------------------------------------------------
 // Sessions pinned from their cards show in full, stacked in the order they were pinned (the newest at the bottom, so
@@ -259,6 +281,7 @@ function setPins(/** @type {typeof pinned} */ pins) {
   if (hovered) renderCard(); // its pin shows the change
 }
 function renderSidebar() {
+  dropTip();
   for (const id of pinnedLast.keys()) if (!isPinned(id)) pinnedLast.delete(id);
   for (const o of sessions) if (isPinned(o.id)) pinnedLast.set(o.id, o);
   const ids = pinnable() ? pinned.map(p => p.id).filter(id => pinnedLast.has(id)) : [];
@@ -266,8 +289,8 @@ function renderSidebar() {
   $('dock').inert = !ids.length; // out of the tab order and the accessibility tree while closed
   if (!ids.length) return; // ponytail: what it showed stays, so it slides out whole
   const live = new Set(sessions.map(o => o.id));
-  // one section per session in the column's scroller (index.html), which keeps its scroll through a redraw
-  $('dock').children[0].replaceChildren(...ids.map(id => make('section', live.has(id) ? '' : 'ended', ...sessionRows(pinnedLast.get(id), true))));
+  // one section per session in the column's scroller (index.html)
+  morph($('dock').children[0], ids.map(id => keyed(id, make('section', live.has(id) ? '' : 'ended', ...sessionRows(pinnedLast.get(id), true)))));
 }
 // The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
 // anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.

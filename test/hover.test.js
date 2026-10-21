@@ -43,7 +43,7 @@ test('shift+click runs an area\'s snooze menu, a plain click runs its click acti
 
 test('a tap shows a moth\'s card without running its click, and tapping the same moth again puts it away', () => {
   const calls = [], card = { classList: { add() {}, remove: () => calls.push('hide') } };
-  vm.runInContext('globalThis.$ = () => globalThis.cardEl; globalThis.clearTimeout = () => {}; globalThis.hovered = null; globalThis.renderCard = () => {}', page);
+  vm.runInContext('globalThis.$ = id => id === "card" ? globalThis.cardEl : { classList: { remove() {} } }; globalThis.clearTimeout = () => {}; globalThis.hovered = null; globalThis.renderCard = () => {}', page);
   page.cardEl = card;
   const moth = {}, other = {};
   const hoverZone = vm.runInContext('hoverZone', page);

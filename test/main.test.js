@@ -116,56 +116,15 @@ test('a click on a session\'s card body opens it only where the card covers its 
   assert.deepStrictEqual(opened, [zone, 'wisp'], 'a stale PR\'s card');
 });
 
-test('the open card isn\'t redrawn while a finger is on it', () => {
-  const { page, every, fire } = withCard();
-  let draws = 0;
-  page.renderCard = () => draws++;
+test('the open card and the sidebar redraw on every tick, whatever is under the pointer or focused (card.js morph keeps it)', () => {
+  const busy = { addEventListener() {}, matches: () => true }; // the pointer, focus and a press on both, whatever's asked
+  const { page, every } = open('', { card: busy, dock: busy });
+  let cards = 0, sidebars = 0;
+  page.renderCard = () => cards++; page.renderSidebar = () => sidebars++;
+  const tick = () => every(500).forEach(f => f());
+  tick();
+  assert.deepStrictEqual([cards, sidebars], [0, 1], 'no card open: only the sidebar');
   vm.runInContext('hovered = {}', page);
-  const tick = () => every(500).forEach(f => f());
-  tick();
-  assert.strictEqual(draws, 1);
-  fire('touchstart');
-  tick();
-  assert.strictEqual(draws, 1, 'mid-swipe');
-  fire('touchend');
-  tick();
-  assert.strictEqual(draws, 2);
-});
-
-test('a card under the pointer or keyboard focus isn\'t redrawn, unless its session\'s state or snooze changes (its own pill)', () => {
-  const { page, every, fire } = withCard();
-  let draws = 0, over = true;
-  page.renderCard = () => draws++;
-  const handlers = page.document.getElementById('card'); // the card withCard made: its matches answers for pointer and focus alike
-  handlers.matches = sel => over && sel.includes(':hover') && sel.includes(':focus-visible');
-  const tick = () => every(500).forEach(f => f());
-  page.s = { id: 's1', state: 'waiting', snoozed: false };
-  vm.runInContext('hovered = { session: s }', page);
-  tick();
-  assert.strictEqual(draws, 1, 'a new card is drawn');
-  tick();
-  assert.strictEqual(draws, 1, 'not redrawn under the pointer, or while a control has keyboard focus');
-  vm.runInContext('hovered = { session: { ...s, snoozed: true } }', page); // the pill was clicked and the server says so
-  tick();
-  assert.strictEqual(draws, 2, 'redrawn, so the pill now offers what comes next');
-  tick();
-  assert.strictEqual(draws, 2);
-  over = false;
-  tick();
-  assert.strictEqual(draws, 3, 'away from the card it redraws as before');
-});
-
-// The dock's matches() answers like WebKit's does for the state named: hovered (also :hover), pressed (also :hover and
-// :active), keyboard focus inside (:focus-within, :has(:focus-visible)), or a mouse-focused control (:focus-within only).
-test('the sidebar redraws under the pointer, but not mid-press or while a control in it has keyboard focus', () => {
-  const MATCH = { '': [], hovered: [':hover'], pressed: [':hover', ':active'], keyboard: [':focus-within', ':has(:focus-visible)'], mouseFocus: [':focus-within'] };
-  let now = '';
-  const dock = { matches: sel => sel.split(', ').some(s => MATCH[now].includes(s)) };
-  const { page, every } = open('', { dock });
-  let draws = 0;
-  page.renderSidebar = () => draws++;
-  const tick = () => every(500).forEach(f => f());
-  const drawn = state => { now = state; const was = draws; tick(); return draws > was; };
-  assert.deepStrictEqual(Object.keys(MATCH).map(drawn), [true, true, false, false, true],
-    'redrawn on the timer, under the pointer and after a mouse click focuses a control; not mid-press (it would swallow the click) or with keyboard focus inside');
+  tick(); tick();
+  assert.deepStrictEqual([cards, sidebars], [2, 3]);
 });
