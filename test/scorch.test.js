@@ -236,7 +236,7 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
   const step = (m, dt = 0.05) => {
     ctx.perf.t += dt * 1000; clock.wall += dt * 1000;
     const s = ctx.perf.t / 1000;
-    drawSparks(dt, s, 1);
+    drawSparks(dt, s, { size: 1, tip: [340, 200] });
     ctx.mothTarget(m.key, m, dt, s);
   };
   const m = make('sess-grow');
