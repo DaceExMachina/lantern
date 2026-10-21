@@ -1157,6 +1157,14 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
   for (const p of s.github) assert.ok(p.since >= at, `the change is timed from when it was seen: ${p.since} vs ${at}`);
   const changes = prChanges(path.join(home, 'data/stats.sqlite')).map(c => [c.url, c.change]);
   assert.deepStrictEqual(changes.filter(([, c]) => c !== 'appeared').sort(), [[prUrl(1), 'merged'], [prUrl(2), 'closed'], [prUrl(3), 'need'], [prUrl(4), 'gone']]);
+  // a third refresh with the same answer, inside the minute: both stay as they were (the title change marks the refresh as done)
+  fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { reviews: { nodes: [] }, mine: { nodes: [{ ...prNode(3, iso(Date.now())), isDraft: false, title: 'PR 3 again' }] },
+    closed: { nodes: [{ url: prUrl(1), state: 'MERGED' }, { url: prUrl(2), state: 'CLOSED' }] } } }));
+  await post(base, '/settings', { github: true });
+  const again = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.some(p => p.title === 'PR 3 again')), 'a third refresh');
+  assert.deepStrictEqual(again.github.map(p => [p.url, p.need, p.since]).sort(), s.github.map(p => [p.url, p.need, p.since]).sort(), 'merged and closed are kept, with the same since');
+  assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')).map(c => [c.url, c.change]).filter(([, c]) => c !== 'appeared').sort(),
+    changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
 // Séance and Ghostbuster count PRs, not events: one PR revived five times this week is one revival, and one PR leaving the

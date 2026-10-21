@@ -3,7 +3,7 @@
 // ---- fireflies -----------------------------------------------------------------
 // One per PR, keyed by its URL. The colour says what it needs (swarm says how they come and go). Failing checks swell
 // faster. Drafts are amber, and one waiting on review is sky blue.
-const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '#FFD27A', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF' };
+const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '#FFD27A', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
 // A firefly is light, drawn by the background shader (background.js) under the SVG scene: a white-hot core in a bloom
 // of its colour, fading into a deeper, more saturated haze, adding up where glows cross. Each frame the fireflies and
 // the stale wisps (stale.js) leave theirs in flyLights (x, y, radius, brightness, r, g, b apiece) for it to draw.
@@ -45,6 +45,7 @@ const lanternFlies = new Map(); // reviews requested from me hang around the lan
 // One flying off is removed only once it and its bloom are wholly outside the window.
 const ARRIVE = 2; // seconds to fly in
 const LEAVING = new Set(['merged', 'closed']);
+const SHAKE = 0.6, LOOP = 1 / 1.3; // a merge's shake, then its loop (30% faster than it first was), in seconds
 const viewBox = () => VIEW.box || [40, 20, 600, 600];
 const offScreen = (x, y, r) => { const [bx, by, bw, bh] = viewBox(); return x < bx - r || x > bx + bw + r || y < by - r || y > by + bh + r; };
 // the way out of the window nearest to x, y: a unit step and how far the edge is
@@ -56,21 +57,22 @@ function nearestEdge(x, y) {
 // step): [dx, dy, a factor on its brightness, one on its bloom's size]
 function leaveStep(kind, t, [dx, dy]) {
   if (kind === 'closed') { const go = 30 * t + 250 * t * t; return [dx * go, dy * go, 1 - 0.45 * Math.min(1, t / 0.4), 1]; }
-  const flare = 1.6, shake = 7, loop = 40, SHAKE = 0.6, FAST = 1.3, LOOP = 1 / FAST; // the loop runs 30% faster than it first did
+  const flare = 1.6, shake = 7, loop = 40;
   const lit = Math.min(1, t / 0.12) * (0.6 + 0.4 * Math.exp(-3 * t)), glow = 1 + flare * lit, size = 1 + 0.35 * flare * lit; // flares at once, then holds bright
-  // one motion, smooth the whole way (no stop or jump at either hand-off): the shake dies away as its last swing draws back
-  // along the heading and shoots into the loop at the loop's own entry speed, and the loop's exit speed is the exit's
-  const enter = loop * Math.PI / LOOP, exit = 3 * enter;
+  // one motion, smooth the whole way (no stop or jump at either hand-off): the shake dies away as its last quarter second speeds up
+  // along the heading to the loop's own entry speed, and the loop's exit speed is the exit's. That last run ends K ahead
+  // of where the shake began, so the loop and the exit carry on from there.
+  const enter = loop * Math.PI / LOOP, exit = 3 * enter, RUN = 0.25, K = enter * RUN * 2 / 3;
   if (t < SHAKE) {
-    const a = shake * Math.sin(Math.PI * t / SHAKE) ** 2, q = Math.max(0, 1 - (SHAKE - t) / 0.12), kick = -enter * 0.12 * q * q * (1 - q);
+    const a = shake * Math.sin(Math.PI * t / SHAKE) ** 4, q = Math.max(0, 1 - (SHAKE - t) / RUN), kick = enter * RUN * (q * q - q ** 3 / 3);
     return [a * Math.sin(t * 55) + dx * kick, a * 0.6 * Math.sin(t * 43 + 1) + dy * kick, glow, size];
   }
   const [nx, ny] = dx > 0 ? [dy, -dx] : [-dy, dx]; // up the screen, across its heading
   if (t < SHAKE + LOOP) { // forward, up and over, round and back to where it started, speeding up as it goes
-    const x = (t - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = loop * Math.sin(th), up = loop * (1 - Math.cos(th));
+    const x = (t - SHAKE) / LOOP, th = Math.PI * (x + x * x), along = K + loop * Math.sin(th), up = loop * (1 - Math.cos(th));
     return [dx * along + nx * up, dy * along + ny * up, glow, size];
   }
-  const v = t - SHAKE - LOOP, go = exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
+  const v = t - SHAKE - LOOP, go = K + exit * v + 400 * v * v; // carrying on at the loop's last speed, steadily faster: about double it by the window's edge
   return [dx * go, dy * go, glow, size];
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
@@ -86,13 +88,13 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
   for (const [url, f] of flies) {
     const p = want.get(url), kind = !p ? 'gone' : LEAVING.has(p.need) ? p.need : null;
     if (!kind) { f.p = p; f.leave = null; }
-    else if (f.leave?.kind !== kind) {
+    else if (f.leave?.kind !== kind && !(kind === 'gone' && f.leave)) { // a merge or close in progress isn't cut short by its moth leaving
       // merged goes out the side away from its moth (a swarm in the middle, the lantern's, picks a side by its URL)
       const side = cx < CX - 20 ? 1 : cx > CX + 20 ? -1 : f.side, h = Math.hypot(1, f.tilt);
       f.leave = { kind, at: kind === 'gone' ? now : p.since || now, d: kind === 'merged' ? [side / h, f.tilt / h] : nearestEdge(cx, cy) };
     }
     const t = f.leave ? (now - f.leave.at) / 1000 : 0, gone = f.leave?.kind === 'gone';
-    if (gone && t >= 2.5 || t > 15) { flies.delete(url); continue; }
+    if (gone && t >= 2.5) { flies.delete(url); continue; }
     const a = f.a + f.w * Math.min(s, f.leave ? f.leave.at / 1000 : s); // a leaving one stops circling where it was
     // the one a landed moth's thread is tied to (f.near) eases in to a small orbit near the cluster's middle, still moving
     f.k = (f.k ?? 1) + ((f.near ? 0.2 : 1) - (f.k ?? 1)) * Math.min(1, dt * 1.5);
@@ -118,7 +120,7 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
       x += ox; y += oy; glow *= g; size *= z;
     }
     f.x = x; f.y = y; f.size = size;
-    if (f.leave && !gone && offScreen(x, y, size)) { flies.delete(url); continue; }
+    if (f.leave && !gone && t > (f.leave.kind === 'merged' ? SHAKE + LOOP : 0) && offScreen(x, y, size)) { flies.delete(url); continue; } // only on its way out: a loop near the top edge dips off screen and back
     addFlyLight(x, y, size, glow, f.col);
   }
 }

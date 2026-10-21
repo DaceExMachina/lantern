@@ -37,7 +37,7 @@ test('merged, closed and just gone each leave their own way', () => {
   const left = [150, 320]; // a moth's home left of the lantern, nearer the left edge than any other
   { // merged: a flare, a loop up and over, then out the far (right) side, still bright
     const win = window(), [bx, , bw] = win.box, { lights, at } = play(win, left, merged);
-    assert.ok(at, 'it goes in the end');
+    assert.ok(at && at - T0 < 4000, `it flies off promptly: ${at && at - T0}ms`);
     assert.ok(Math.max(...lights.map(l => l[3])) > 1.1, 'it flares brighter than a firefly ever swells (1 at most)');
     assert.ok(Math.min(...lights.map(l => l[1])) < lights[0][1] - 50, 'it loops up');
     const last = lights.at(-1);
@@ -46,7 +46,7 @@ test('merged, closed and just gone each leave their own way', () => {
   }
   { // closed: dimmer, out the nearest (left) edge
     const win = window(), [bx] = win.box, { lights, at } = play(win, left, closed);
-    assert.ok(at, 'it goes in the end');
+    assert.ok(at && at - T0 < 4000, `it flies off promptly: ${at && at - T0}ms`);
     assert.ok(Math.max(...lights.map(l => l[3])) <= 1, 'no flare');
     assert.ok(lights.at(-1)[3] < 0.6, 'it dims');
     assert.ok(lights.at(-1)[0] < bx, `it leaves through the left edge: ${lights.at(-1)}`);
@@ -65,7 +65,7 @@ for (const [name, kx, ky] of [['square', 1, 1], ['wide', 3, 1], ['tall', 1, 3]])
       const home = [340 + Math.cos(i * Math.PI / 6) * 160, 320 + Math.sin(i * Math.PI / 6) * 160];
       for (const then of [merged, closed]) {
         const win = window(kx, ky), [bx, by, bw, bh] = win.box, { fly, at } = play(win, home, then), { x, y, size } = fly;
-        assert.ok(at, `${then.need} from ${home}: it goes in the end`);
+        assert.ok(at && at - T0 < 4000, `${then.need} from ${home}: it goes once it's off screen, promptly: ${at && at - T0}ms`);
         assert.ok(x < bx - size || x > bx + bw + size || y < by - size || y > by + bh + size,
           `${then.need} from ${home.map(Math.round)}: removed at ${x.toFixed(0)},${y.toFixed(0)} with its ${size.toFixed(0)}-unit bloom still reaching ${bx},${by} ${bw}x${bh}`);
       }
@@ -86,5 +86,56 @@ test('a firefly is in the same spot in every window, and a merged one takes the 
   for (let i = skip; i < a.lights.length; i++) {
     assert.ok(Math.hypot(a.lights[i][0] - b.lights[i][0], a.lights[i][1] - b.lights[i][1]) < 1e-3, `frame ${i}: ${a.lights[i]} vs ${b.lights[i]}`); // the lights are 32-bit
     assert.ok(Math.abs(a.lights[i][3] - b.lights[i][3]) < 1e-5, `frame ${i}: brightness`);
+  }
+});
+
+test('a merged firefly near the top edge plays its whole loop before it can be removed', () => {
+  // its loop dips off the top of the window and back; only the exit takes it away for good
+  const win = window(), { at } = play(win, [340, 10], merged), exitAt = win.run('(SHAKE + LOOP) * 1000');
+  assert.ok(at - T0 >= exitAt, `removed at ${at - T0}ms, before the exit starts at ${exitAt.toFixed(0)}ms`);
+});
+
+test('a moth leaving mid-merge does not cut the merge short or make its firefly jump', () => {
+  const win = window(), home = [150, 320], live = new Map([[URL, { need: 'draft', seen: 0, since: 0 }]]);
+  for (let i = -180; i < 0; i++) win.run('step')(win.flies, live, home, T0 + i * FRAME);
+  const fly = win.flies.get(URL);
+  let prev, step, worst = 0, last;
+  for (let i = 0; i < 1200; i++) {
+    const now = T0 + i * FRAME, light = win.run('step')(win.flies, now < T0 + 800 ? new Map([[URL, merged]]) : new Map(), home, now); // the moth goes at 0.8s
+    if (!light) break;
+    const next = prev && [light[0] - prev[0], light[1] - prev[1]]; // this frame's step
+    if (step && i > 40) worst = Math.max(worst, Math.hypot(next[0] - step[0], next[1] - step[1])); // how much it changed from the last frame's
+    prev = light; step = next; last = i;
+  }
+  assert.strictEqual(fly.leave.kind, 'merged', 'still a merge');
+  assert.ok(last * FRAME > 1500, `it carried on to its exit: ${last * FRAME}ms`);
+  assert.ok(worst < 4, `no jump: its step changed by ${worst.toFixed(1)} units in a frame`);
+});
+
+test('a reopened PR fades up from the closed colour, not the fallback blue', () => {
+  const win = window(), home = [150, 320], hex = c => win.run(`hex(FLY.${c}).map(v => v / 255)`);
+  for (let i = -60; i < 0; i++) win.run('step')(win.flies, new Map([[URL, { need: 'draft', seen: 0, since: 0 }]]), home, T0 + i * FRAME);
+  for (let i = 0; i < 18; i++) win.run('step')(win.flies, new Map([[URL, closed]]), home, T0 + i * FRAME); // flying off, 0.3s in
+  const back = T0 + 18 * FRAME;
+  win.run('step')(win.flies, new Map([[URL, { need: 'draft', was: 'closed', seen: 0, since: back }]]), home, back);
+  const col = win.run('[...flyLights.slice(4, 7)]');
+  assert.notDeepStrictEqual(hex('closed').map(v => v.toFixed(3)), hex('quiet').map(v => v.toFixed(3)), 'closed has a colour of its own');
+  assert.deepStrictEqual(col.map(v => v.toFixed(3)), hex('closed').map(v => v.toFixed(3)), 'it starts from the closed colour');
+});
+
+// The merge is one motion: the shake's last run speeds up into the loop, and the loop's last speed carries into the exit.
+// Position over time has no jump and no stall at either hand-off.
+test('the merge has no jump or stall where the shake becomes the loop and the loop becomes the exit', () => {
+  const win = window(), h = 1e-4;
+  for (const d of [[1, 0], [-1, 0], [0.6, 0.8]]) {
+    const at = t => win.run(`leaveStep('merged', ${t}, [${d}])`), pos = t => at(t).slice(0, 2);
+    const back = t => Math.hypot(...pos(t).map((v, i) => v - pos(t - h)[i])) / h, fwd = t => Math.hypot(...pos(t + h).map((v, i) => v - pos(t)[i])) / h;
+    for (const join of [win.run('SHAKE'), win.run('SHAKE + LOOP')]) {
+      assert.ok(Math.abs(back(join) / fwd(join) - 1) < 0.02, `heading ${d}, ${join.toFixed(2)}s: speed ${back(join).toFixed(1)} going in, ${fwd(join).toFixed(1)} coming out`);
+      const jump = Math.hypot(...pos(join + 1e-6).map((v, i) => v - pos(join - 1e-6)[i]));
+      assert.ok(jump < 1e-3, `heading ${d}, ${join.toFixed(2)}s: jumps ${jump} units`);
+    }
+    const entry = fwd(win.run('SHAKE'));
+    for (let t = 0.5; t <= 1.5; t += 0.005) assert.ok(back(t) > entry / 2, `heading ${d}: at ${t.toFixed(3)}s it slows to ${back(t).toFixed(0)} units/s, entering the loop at ${entry.toFixed(0)}`);
   }
 });

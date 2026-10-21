@@ -155,11 +155,13 @@ extension LanternServer {
             DispatchQueue.main.async {
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
                 let t = now()
-                self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
-                self.stale = dead
-                for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
-                // a failed query would make every PR look gone, so only a complete answer goes in the log
-                if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
+                // a failed query would make every PR look gone (and fly off, then back in), so only a complete answer updates the lists and the log
+                if results.allSatisfy({ $0 != nil }) {
+                    self.stale = dead
+                    self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
+                    for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
+                    if !results.isEmpty { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
+                }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
                 self.saveGitHubCache()
                 self.refreshing = false
