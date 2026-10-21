@@ -35,9 +35,9 @@ The scene stretches to fill any window shape, wide, tall or square, and the lant
 
 ## Cards, clicks and snooze
 
-Hover a session's moth for its card: its name, what it's doing right now, your last prompt, any question it's asking, and what each of its agents is up to. The hover area stays put while the moth wanders, so the card holds still while you read.
+Hover a session's moth for its card. The top says what it needs from you: its questions, and its "You:" line (from a `**You:**` status footer, or else the last paragraph of its final message). Below, under Running, are its agents and the shell commands it left going, then its PRs as chips, or as a list with the arrow. Click an agent to read it in full. The hover area stays put while the moth wanders, so the card holds still while you read.
 
-A landed session's card says what it needs from you. You get its "You:" line, any links it mentioned (clickable), how many questions it asked, and one line per PR with its state and title. If your sessions end their turns with a status footer, the "You:" line comes from its `**You:**` line. Otherwise it's the last paragraph of the final message. Click the card to open the session.
+Click the card's header to open the session, or its status to snooze it.
 
 Click a moth to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. "N need you" in the footer opens whichever session has waited longest, then the next one. "N snoozed" and "N sleeping" step through their sessions the same way.
 

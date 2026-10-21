@@ -924,6 +924,15 @@ final class LanternServer {
                     settings["quietEndOn"] = on.boolValue; ok = true
                     if ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now() { settings["quietUntil"] = quietEndsAt() }
                 }
+                // whether a session's card lists its PRs (true) or shows them as chips, so every window agrees; only live
+                // sessions are kept
+                if let list = j["prList"] as? JSON {
+                    var kept = (settings["prList"] as? JSON ?? [:]).filter { sessions[$0.key] != nil }
+                    for (id, v) in list where sessions[id] != nil {
+                        if let on = v as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() { kept[id] = on.boolValue; ok = true }
+                    }
+                    settings["prList"] = kept
+                }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }
             if !ok { return respond(c, 400) }

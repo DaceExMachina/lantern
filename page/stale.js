@@ -170,8 +170,7 @@ function drawStale(dt, s) {
 
 // a ghost moth's card: the old session, when it was last active, and the stale PRs it made
 function renderGhostCard(m) {
-  const h = document.createElement('h3'), chip = document.createElement('span');
-  h.textContent = m.o.title || m.o.id.slice(0, 8); chip.className = 'chip idle'; chip.textContent = 'gone quiet'; h.append(chip);
+  const h = make('h3', '', m.o.title || m.o.id.slice(0, 8), make('span', 'chip idle', make('span', 'face', 'gone quiet'))); // the pill is its face, as on a session's card
   const days = Math.round((Date.now() - m.o.last) / 864e5), where = String(m.o.cwd || '').split('/').filter(Boolean).pop() || '';
   $('card').replaceChildren(h, line(`${where ? where + ' · ' : ''}last active ${days ? `${days} days ago` : 'today'}`, 'dim'), ...prRows(m.prs));
   $('card').classList.add('show');
@@ -179,8 +178,7 @@ function renderGhostCard(m) {
 
 // a stale PR's card: what it is, how long since anyone touched it, and what it needs
 function renderStaleCard(p) {
-  const h = document.createElement('h3'), chip = document.createElement('span');
-  h.textContent = p.label; chip.className = 'chip idle'; chip.textContent = 'stale'; h.append(chip);
+  const h = make('h3', '', p.label, make('span', 'chip idle', make('span', 'face', 'stale')));
   const days = Math.max(7, Math.round((Date.now() - Date.parse(p.updatedAt)) / 864e5));
   const made = p.owner ? [line(`Made by ${p.owner.title || 'an old session'}`, 'dim')] : [];
   $('card').replaceChildren(h, line(p.title || ''), line(`${NEED[p.need] || p.need} · untouched for ${days} days`, 'dim'), ...made);

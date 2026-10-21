@@ -22,8 +22,6 @@ const raw = (prop, value) => RAW_COLOUR.test(value) || SIZED.test(prop) && /(?<!
   || prop === 'font-weight' && /^(?:\d+|normal|bold)$/.test(value) || prop === 'z-index' && /^-?\d+$/.test(value);
 const declarations = body => body.split(';').map(d => d.split(':')).filter(d => d.length > 1).map(([p, ...v]) => [p.trim(), v.join(':').trim()]);
 
-// The hover card is being redesigned (page/card.js and its CSS), so it joins the tokens once that lands, not before.
-const LATER = { css: /#card\b|\.starCard\b/, files: ['card.js'] };
 // What's left to migrate. It only shrinks: an entry that no longer has a raw value fails too, so delete it.
 const DEBT = new Set(require('./tokens-debt.json'));
 
@@ -32,10 +30,10 @@ const DEBT = new Set(require('./tokens-debt.json'));
 function offenders() {
   const found = new Set();
   for (const [, sel, body] of style.replace(/:root\s*\{[^}]*\}/g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g))
-    if (!LATER.css.test(sel) && declarations(body).some(([p, v]) => raw(p, v))) found.add(sel.trim().replace(/\s+/g, ' '));
+    if (declarations(body).some(([p, v]) => raw(p, v))) found.add(sel.trim().replace(/\s+/g, ' '));
   for (const [, attr] of html.split('</style>')[1].replace(/<svg[\s\S]*?<\/svg>/g, '').matchAll(/style="([^"]*)"/g))
     if (declarations(attr).some(([p, v]) => raw(p, v))) found.add(`index.html style="${attr}"`);
-  for (const file of UI.filter(f => !LATER.files.includes(f))) {
+  for (const file of UI) {
     const src = fs.readFileSync(path.join(PAGE, file), 'utf8').replace(/^\s*\/\/.*$|\s\/\/\s.*$/gm, '');
     for (const [c] of src.matchAll(/#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\([^)]*\)/gi)) found.add(`${file} ${c}`);
     for (const [d, p, v] of src.matchAll(/\b([a-z-]+)\s*:\s*([^;'"`{}]*px[^;'"`{}]*)/g)) if (raw(p, v.trim())) found.add(`${file} ${d.trim()}`);

@@ -114,6 +114,24 @@
     () => { enterZone(moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { hideCard(); },
     () => { toggleDevPanel(); }, snap('dev'),
   ];
+  // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): the PR toggle's is the rest of its header row (its top
+  // and bottom right corners and just left of its icon), and each corner of the header's buttons, an agent row and a PR
+  // row lands on that control, the header's out to the card's own corners.
+  const hits = () => {
+    const card = $('card'), row = card.querySelector('.phead').getBoundingClientRect(), tog = card.querySelector('.tog'), icon = tog.querySelector('svg').getBoundingClientRect();
+    const probe = (el, what, points) => { for (const [where, x, y] of points) if (document.elementFromPoint(x, y)?.closest('a, button') !== el) errs.push(`${what}'s hit area misses its ${where}`); };
+    probe(tog, 'the PR toggle', [['row\'s top-right corner', row.right - 1, row.top + 1], ['row\'s bottom-right corner', row.right - 1, row.bottom - 1], ['left of its icon', icon.left - 4, icon.top + icon.height / 2]]);
+    const c = card.getBoundingClientRect();
+    probe(card.querySelector('h3 .open'), 'the header\'s open button', [['card\'s top-left corner', c.left + 3, c.top + 3]]);
+    probe(card.querySelector('h3 .chip'), 'the status pill', [['card\'s top-right corner', c.right - 3, c.top + 3]]);
+    // a row's zone runs out to the edges of the band or tray it sits in, and the gap below it is half its own
+    for (const [sel, what] of [['.agent', 'an agent row'], ['a.pr2', 'a PR row']]) {
+      const el = card.querySelector(sel), face = el.querySelector('.face').getBoundingClientRect(), edge = el.closest('.tray').getBoundingClientRect();
+      probe(el, what, [['tray\'s left edge', edge.left + 1, face.top + 2], ['tray\'s right edge', edge.right - 1, face.top + 2]]);
+    }
+    const [one, two] = [...card.querySelectorAll('a.pr2 .face')].map(f => f.getBoundingClientRect()), between = document.elementFromPoint(one.left + 10, (one.bottom + two.top) / 2);
+    if (!between?.closest('a.pr2')) errs.push('the gap between two PR rows belongs to neither');
+  };
   const steps = [
     () => {
       catchScorch();
@@ -125,7 +143,9 @@
     },
     run(6),
     ...(Q.has('chrome') ? chrome() : []),
-    ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), () => { hideCard(); }] : []),
+    ...(Q.has('hover') ? [() => { enterZone(moths.get('sess-bravo').zone); }, snap('hover'), hits, () => { hideCard(); },
+      // a stale PR's card and a ghost's, with their pills
+      () => { enterZone([...wisps.values()][0].zone); }, snap('stale'), () => { hideCard(); enterZone([...ghosts.values()][0].zone); }, snap('ghost'), () => { hideCard(); }] : []),
     ...(Q.has('chrome') ? [] : [
       () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
       run(14), snap('t20'), // T = LAST
