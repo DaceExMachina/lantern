@@ -39,7 +39,7 @@
     --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
     --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s;
   }
-  html, body { margin: 0; height: 100%; background: #1E1930; color: #C9B8DA; font: 14px/1.4 Georgia, 'Times New Roman', serif; }
+  html, body { margin: 0; height: 100%; background: var(--night); color: var(--ink-soft); font: 14px/1.4 Georgia, 'Times New Roman', serif; }
   body { display: grid; grid-template-rows: minmax(0, 1fr) auto; }
   #scene { position: relative; min-height: 0; -webkit-user-select: none; user-select: none; } /* the scene is a picture: no selecting the zz or the session text */
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -51,19 +51,19 @@
   /* the quiet, stats and settings buttons: each one's click area runs the bar's full height and meets its neighbours',
      so there's no dead spot between or around them */
   .corners { position: absolute; top: 0; right: 0; bottom: 0; display: flex; }
-  .corner { all: unset; cursor: pointer; color: #C3B2FF; display: flex; align-items: center; padding: 0 6px; }
+  .corner { all: unset; cursor: pointer; color: var(--accent-violet); display: flex; align-items: center; padding: 0 6px; }
   .corner:last-child { padding-right: 16px; }
-  .corner:hover { color: #F0E8FF; }
+  .corner:hover { color: var(--ink-hover); }
   #quiet.on svg path:first-child { fill: currentColor; } /* a full moon... well, a filled one, while quiet is on */
-  .corner:focus-visible { outline: 1px solid #B9A8FF; outline-offset: -3px; }
-  .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: rgba(30, 24, 46, .96); border: 1px solid #4A3B68; border-radius: 10px;
-    padding: 12px 14px; color: #D8CCE6; font-size: 12.5px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
+  .corner:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
+  .flyup { inset: auto 12px 52px auto; margin: 0; width: 260px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; color: var(--ink); font-size: 12.5px; line-height: 1.5; box-shadow: var(--shadow-lg); }
   .flyup:popover-open { display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 72px); overflow-y: auto; }
-  #help { border-top: 1px solid #3A2E52; padding-top: 10px; }
-  #help summary { cursor: pointer; color: #C3B2FF; }
-  #help summary:hover { color: #F0E8FF; }
+  #help { border-top: 1px solid var(--line-soft); padding-top: 10px; }
+  #help summary { cursor: pointer; color: var(--accent-violet); }
+  #help summary:hover { color: var(--ink-hover); }
   #help p { margin: 6px 0 0; }
-  #help b { color: #F0E8FF; font-weight: 600; }
+  #help b { color: var(--ink-hover); font-weight: 600; }
   #help .key { white-space: nowrap; }
   #help .swatch { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 2px 0 6px; }
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
@@ -86,12 +86,12 @@
   #menu input[type=time] { width: 8.6em; } /* one width for every time, the widest value's, so their edges line up */
   .pill { display: flex; }
   .pill button { all: unset; cursor: pointer; display: flex; align-items: center; padding: 5px 0; }
-  .pill button span { display: flex; align-items: center; padding: 0 8px; border: 1px solid #4A3B68; background: #2B2440; color: #C3B2FF; }
+  .pill button span { display: flex; align-items: center; padding: 0 8px; border: 1px solid var(--line); background: var(--surface-raised); color: var(--accent-violet); }
   .pill button:first-child span { border-radius: 6px 0 0 6px; }
   .pill button:last-child span { border-radius: 0 6px 6px 0; border-left: none; }
-  .pill button[aria-pressed=true] span { background: #4A3B68; color: #F5E9FF; }
-  .pill button:hover span { color: #F0E8FF; }
-  .pill button:focus-visible span { outline: 1px solid #B9A8FF; outline-offset: 1px; }
+  .pill button[aria-pressed=true] span { background: var(--surface-selected); color: var(--ink-strong); }
+  .pill button:hover span { color: var(--ink-hover); }
+  .pill button:focus-visible span { outline: 1px solid var(--focus); outline-offset: 1px; }
   #menu #style { flex: 1; }
   #menu > :has(+ .tip + #gh) { padding-bottom: 10px; } /* the last row reaches down to the GitHub section's line */
   #menu #help { margin-top: 5px; }
@@ -99,30 +99,30 @@
   #menu .unavailable { opacity: .4; }
   #ribbons { flex: 1; display: flex; } /* the swatches touch, and each one's click area runs the row's height */
   #ribbons button { all: unset; flex: 1; display: flex; justify-content: center; padding: 5px 0; cursor: pointer; }
-  #ribbons button::before { content: ''; width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); } /* a pale rim so the dark ones read */
-  #ribbons button[aria-pressed=true]::before { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22), 0 0 0 1.5px #1E1930, 0 0 0 2.6px #F0E8FF; }
-  #ribbons button:focus-visible::before { outline: 1px solid #B9A8FF; outline-offset: 4px; }
+  #ribbons button::before { content: ''; width: 16px; height: 16px; border-radius: 50%; background: var(--c); box-shadow: var(--rim); } /* a pale rim so the dark ones read */
+  #ribbons button[aria-pressed=true]::before { box-shadow: var(--rim), 0 0 0 1.5px var(--night), 0 0 0 2.6px var(--ink-hover); }
+  #ribbons button:focus-visible::before { outline: 1px solid var(--focus); outline-offset: 4px; }
   #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
   #stats, #recap { inset: 24px 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
   #stats:popover-open { gap: var(--space-4); }
   #recap:popover-open { gap: var(--space-3); }
-  #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
-  #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: 500; color: #8F7FA6; letter-spacing: .04em; text-transform: uppercase; }
+  #stats h3 { margin: 0; font-size: 13px; font-weight: 500; color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
+  #stats h4 { margin: var(--space-4) 0 0; font-size: 11px; font-weight: 500; color: var(--ink-dim); letter-spacing: .04em; text-transform: uppercase; }
   #statsBody { display: flex; flex-direction: column; gap: var(--space-4); container-type: inline-size; }
   #statsWeek { display: flex; flex-direction: column; gap: var(--space-2); } /* a heading, then its content; each heading after the first starts a new section */
   #statsWeek h4:first-child { margin-top: 0; }
   :is(#stats, #recap) .headline { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
-  :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, 40px); line-height: 1; font-weight: 600; color: #FFC266; font-variant-numeric: tabular-nums; }
-  :is(#stats, #recap) .headline span { display: block; margin-top: var(--space-1); color: #C9B8DA; }
+  :is(#stats, #recap) .headline b { display: block; white-space: nowrap; font-size: clamp(28px, 10vw, 40px); line-height: 1; font-weight: 600; color: var(--accent-warm); font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) .headline span { display: block; margin-top: var(--space-1); color: var(--ink-soft); }
   :is(#stats, #recap) .ribbon svg { display: block; width: 100%; height: 50px; }
   #stats .ribbon svg { height: 68px; }
   :is(#stats, #recap) .ribbon { position: relative; touch-action: pan-y; }
-  :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: #F5E9FF; pointer-events: none; }
-  :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: #D8CCE6; font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) .cursor { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -.5px; background: var(--ink-strong); pointer-events: none; }
+  :is(#stats, #recap) [data-v] { display: inline-block; font-weight: normal; color: var(--ink); font-variant-numeric: tabular-nums; }
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
-  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: #8F7FA6; font-size: 11px; margin-top: calc(-1 * var(--space-1)); }
+  :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: 11px; margin-top: calc(-1 * var(--space-1)); }
   /* The legend's four moth states in a plain grid, 2 by 2 when there's room, else 1 across. A column is 16em: the swatch,
      "snoozed / sleeping" (the longest label) and a 5.4em slot that fits "188h 58m", the longest value, so nothing wraps.
      Four across would need about 700px, more than the panel has. */
@@ -135,70 +135,70 @@
   /* the stats panel's six numbers: 3 by 2 when there's room (380px), else 2 by 3 */
   #stats dl { grid-template-columns: repeat(2, 1fr); }
   @container (min-width: 380px) { #stats dl { grid-template-columns: repeat(3, 1fr); } }
-  :is(#stats, #recap) dt { color: #8F7FA6; font-size: 11px; }
-  :is(#stats, #recap) dd { margin: 0; color: #F5E9FF; font-size: 16px; font-variant-numeric: tabular-nums; }
+  :is(#stats, #recap) dt { color: var(--ink-dim); font-size: 11px; }
+  :is(#stats, #recap) dd { margin: 0; color: var(--ink-strong); font-size: 16px; font-variant-numeric: tabular-nums; }
   #stats .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
   #stats .day svg, #stats .day .none { display: block; width: 100%; height: 26px; }
-  #stats .day .none { border: 1px dashed #3A2E52; border-radius: 3px; box-sizing: border-box; }
-  #stats .day b { color: #D8CCE6; font-weight: 500; }
-  :is(#stats, #recap) .dim { color: #8F7FA6; margin: 0; }
+  #stats .day .none { border: 1px dashed var(--line-soft); border-radius: 3px; box-sizing: border-box; }
+  #stats .day b { color: var(--ink); font-weight: 500; }
+  :is(#stats, #recap) .dim { color: var(--ink-dim); margin: 0; }
   :is(#stats, #recap) .badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-  #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: #5A3E2A; color: #FFE2BE; white-space: nowrap; }
-  #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
-  .badgeTip { position: fixed; z-index: 10; pointer-events: none; max-width: 240px; padding: 8px 10px; border: 1px solid #4A3B68;
+  #stats .badge, #recap .badge { all: unset; cursor: pointer; font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: var(--accent-warm-surface); color: var(--accent-warm-ink); white-space: nowrap; }
+  #stats .badge:focus-visible, #recap .badge:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
+  .badgeTip { position: fixed; z-index: 10; pointer-events: none; max-width: 240px; padding: 8px 10px; border: 1px solid var(--line);
     border-radius: 10px; background: rgba(30, 24, 46, .97); box-shadow: 0 8px 24px rgba(0,0,0,.45); font-size: 12px; line-height: 1.45;
     opacity: 0; transition: opacity .12s; }
   .badgeTip.show { opacity: 1; }
-  .badgeTip b { color: #F5E9FF; font-weight: 600; }
-  .badgeTip .dim { color: #8F7FA6; }
-  #stats .badge.unearned { background: none; color: #6B5C88; box-shadow: inset 0 0 0 1px #3A2E52; }
+  .badgeTip b { color: var(--ink-strong); font-weight: 600; }
+  .badgeTip .dim { color: var(--ink-dim); }
+  #stats .badge.unearned { background: none; color: var(--ink-faint); box-shadow: inset 0 0 0 1px var(--line-soft); }
   #stats .badge small { opacity: .7; font-size: 10px; }
   #stats .shelf { margin-top: var(--space-2); }
-  #stats .shelf summary { cursor: pointer; color: #C3B2FF; font-size: 12px; margin-bottom: var(--space-2); }
-  #stats .shelf summary:hover { color: #F0E8FF; }
-  #stats .day { all: unset; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: #8F7FA6; min-width: 0; }
+  #stats .shelf summary { cursor: pointer; color: var(--accent-violet); font-size: 12px; margin-bottom: var(--space-2); }
+  #stats .shelf summary:hover { color: var(--ink-hover); }
+  #stats .day { all: unset; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; color: var(--ink-dim); min-width: 0; }
   #stats button.day { cursor: pointer; border-radius: 4px; }
-  #stats button.day:hover span, #stats button.day:hover b { color: #F0E8FF; }
-  #stats button.day:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
-  #stats h3 .link { all: unset; cursor: pointer; float: right; text-transform: none; letter-spacing: 0; color: #C3B2FF; font-size: 12px; }
-  #stats h3 .link:hover { color: #F0E8FF; }
+  #stats button.day:hover span, #stats button.day:hover b { color: var(--ink-hover); }
+  #stats button.day:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
+  #stats h3 .link { all: unset; cursor: pointer; float: right; text-transform: none; letter-spacing: 0; color: var(--accent-violet); font-size: 12px; }
+  #stats h3 .link:hover { color: var(--ink-hover); }
   /* the daily recap: the stats panel's look */
-  #recap h3 { margin: 0; font-size: 15px; font-weight: 500; color: #F5E9FF; display: flex; justify-content: space-between; }
-  #recap .close { all: unset; cursor: pointer; color: #8F7FA6; font-size: 18px; line-height: 1; }
-  #recap .close:hover { color: #F0E8FF; }
+  #recap h3 { margin: 0; font-size: 15px; font-weight: 500; color: var(--ink-strong); display: flex; justify-content: space-between; }
+  #recap .close { all: unset; cursor: pointer; color: var(--ink-dim); font-size: 18px; line-height: 1; }
+  #recap .close:hover { color: var(--ink-hover); }
   #recap dl { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
   #recap dd { font-size: 15px; }
   #recap .starsBox { position: relative; }
   #recap .star.lit circle:first-child { opacity: .35; }
   #recap .stars { display: block; width: 100%; height: auto; overflow: visible; } /* dots at the day's edges show whole */
   #recap .star { cursor: default; outline: none; }
-  #recap .star:focus-visible circle:last-child { stroke: #F5E9FF; stroke-width: 1; }
+  #recap .star:focus-visible circle:last-child { stroke: var(--ink-strong); stroke-width: 1; }
   #recap .starCard { z-index: 10; box-sizing: border-box; max-width: none; display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-content: start; }
   #recap .starCard h3 { grid-column: 1 / -1; display: block; height: 20px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #recap .starCard > div { min-width: 0; }
   #recap .starCard > div + div { margin-top: 0; }
-  #recap .star.picked circle:last-child { stroke: #F5E9FF; stroke-width: 1.2; }
+  #recap .star.picked circle:last-child { stroke: var(--ink-strong); stroke-width: 1.2; }
   #recap .starCard h3 .link { all: unset; cursor: pointer; border-bottom: 1px solid #5B4A8A; }
   #recap .starCard h3 .link:hover { color: #F0E8FF; border-color: #B9A8FF; }
   #recap .starCard.show { opacity: 1; pointer-events: auto; } /* beats the shared card rule, whose #card lends it an id's weight */
   #gh { border-top: 1px solid #3A2E52; padding-top: 10px; }
   #status.waiting { color: #B9A8FF; }
-  #status .warm { color: #8F7FA6; }
+  #status .warm { color: var(--ink-dim); }
   #status.offline { color: #8A7A99; font-style: italic; }
-  #gh h3 { margin: 0 0 4px; font-size: 13px; color: #F5E9FF; display: flex; align-items: center; gap: 6px; }
-  #gh h3 svg { color: #C3B2FF; }
+  #gh h3 { margin: 0 0 4px; font-size: 13px; color: var(--ink-strong); display: flex; align-items: center; gap: 6px; }
+  #gh h3 svg { color: var(--accent-violet); }
   #gh .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 3px 0; }
-  #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: #F5E9FF; margin: 6px 0; }
-  #gh button { all: unset; cursor: pointer; color: #C3B2FF; text-decoration: underline dotted; text-underline-offset: 3px; }
-  #gh button:hover, #gh a:hover, #help a:hover { color: #F0E8FF; }
-  #gh a, #help a { color: #C3B2FF; }
-  #gh .dim { color: #8F7FA6; font-size: 11.5px; }
-  #gh .warn { color: #E8C8A8; }
+  #gh .code { font: 600 20px/1.2 ui-monospace, monospace; letter-spacing: .12em; color: var(--ink-strong); margin: 6px 0; }
+  #gh button { all: unset; cursor: pointer; color: var(--accent-violet); text-decoration: underline dotted; text-underline-offset: 3px; }
+  #gh button:hover, #gh a:hover, #help a:hover { color: var(--ink-hover); }
+  #gh a, #help a { color: var(--accent-violet); }
+  #gh .dim { color: var(--ink-dim); font-size: 11.5px; }
+  #gh .warn { color: var(--warn-ink); }
   #status .next { all: unset; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;
     padding: 12px 0; margin: -12px 0; } /* clickable to the bar's top and bottom edges, without moving the text */
   #status .next:hover { color: #E4DAFF; }
   .panel #status .next { padding: 6px 0; margin: -6px 0; }
-  #status .next:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  #status .next:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
   .panel footer { --corners: 86px; font-size: 11px; padding: 6px 0; } /* room for the quiet, stats and menu buttons */
   .panel .corner { padding: 0 4px; }
@@ -217,19 +217,19 @@
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
     display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: 12px 30px 13px;
-    border-radius: 99px; text-align: center; color: #2B2440; opacity: 0; font-family: Georgia, 'Times New Roman', serif; } /* the book pages' face */
+    border-radius: 99px; text-align: center; color: var(--surface-raised); opacity: 0; font-family: Georgia, 'Times New Roman', serif; } /* the book pages' face */
   #flash .pill b { font-size: 16.8px; font-weight: 700; }
   #flash .pill span { font-size: 14.4px; font-weight: 700; color: #3A2E52; }
-  #flash .pill:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 4px; }
+  #flash .pill:focus-visible { outline: 1px solid var(--focus); outline-offset: 4px; }
   .panel #flash .pill { top: 12px; padding: 8px 20px; max-width: calc(100vw - 24px); }
   .panel #flash .pill b { font-size: 14.4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   label { cursor: pointer; user-select: none; display: inline-flex; align-items: center; gap: 6px; }
   label.unavailable { cursor: default; }
   label.unavailable input { cursor: default; }
-  input[type=checkbox] { appearance: none; margin: 0; width: 13px; height: 13px; border: 1px solid #6B5C88; border-radius: 3px; background: #2B2440; display: grid; place-content: center; cursor: pointer; }
-  input[type=checkbox]:checked { background: #7B5CFF; border-color: #7B5CFF; }
+  input[type=checkbox] { appearance: none; margin: 0; width: 13px; height: 13px; border: 1px solid var(--ink-faint); border-radius: 3px; background: var(--surface-raised); display: grid; place-content: center; cursor: pointer; }
+  input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
   input[type=checkbox]:checked::after { content: ''; width: 6px; height: 3px; border: solid #F6F0FF; border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }
-  input[type=checkbox]:focus-visible { outline: 1px solid #B9A8FF; outline-offset: 2px; }
+  input[type=checkbox]:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
   .moth { pointer-events: none; }
@@ -245,7 +245,7 @@
   :is(#card, .starCard) a { color: #C3B2FF; text-decoration: none; border-bottom: 1px solid #5B4A8A; }
   :is(#card, .starCard) a:hover { color: #F0E8FF; border-color: #B9A8FF; }
   :is(#card, .starCard) .note a { color: #F0E8FF; border-color: #8C78C8; } /* stand out from the violet "You:" line around them */
-  select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: #2B2440; border: 1px solid #4A3B68; border-radius: 6px; padding: 2px 6px; }
+  select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: 6px; padding: 2px 6px; }
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity .15s; max-width: 300px;
     background: rgba(30, 24, 46, .92); border: 1px solid #4A3B68; border-radius: 10px; padding: 10px 12px; color: #D8CCE6;
     font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 28px rgba(0,0,0,.45); backdrop-filter: blur(6px); }
@@ -317,7 +317,7 @@
       <p><b>Big moths</b> are your sessions and <b>small ones</b> are their agents. The more of them working, the brighter the flame.</p>
       <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
       <p><b>Hover</b> a moth for its card. <b>Click</b> to jump to its session, or <b>shift-click</b> or <b>right-click</b> to snooze it. Do it again and it sleeps, snoozed until you wake it.</p>
-      <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:#C8F48A"></span>ready</span><span class="key"><span class="swatch" style="background:#FF9E8C"></span>failing</span><span class="key"><span class="swatch" style="background:#FFAA6E"></span>changes</span><span class="key"><span class="swatch" style="background:#FFD27A"></span>draft</span><span class="key"><span class="swatch" style="background:#8CCBFF"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
+      <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:var(--pr-ready)"></span>ready</span><span class="key"><span class="swatch" style="background:var(--pr-failing)"></span>failing</span><span class="key"><span class="swatch" style="background:var(--pr-changes)"></span>changes</span><span class="key"><span class="swatch" style="background:var(--pr-draft)"></span>draft</span><span class="key"><span class="swatch" style="background:var(--pr-in-review)"></span>in review</span>. The pale <b>wisps</b> drifting low are stale PRs nobody owns.</p>
       <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span id="quietUntil">until 8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
       <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
