@@ -158,3 +158,19 @@ test('two windows show the same breaths and hops at the same moments, and hop to
   }
   assert.ok(hops > 30, `moths hopped while both watched: ${hops} hop frames`);
 });
+
+// Each window is a view of the server's latest snapshot and nothing else. A window open through a snapshot that briefly
+// left an agent or a session out (a sweep dropping it a moment before the next one finds it again) used to keep that agent's moth
+// marked as leaving after the agent came back, so it flew off and was gone until some later snapshot, while a window
+// opened afterwards showed it: "windows that have been open for longer have different # of agents".
+test('two windows opened at different times show the same sessions and agents', () => {
+  const snap = (docs, ...agents) => JSON.stringify([{ id: 'api', state: 'paused', subagents: agents.map(id => ({ id, type: 'sonnet-implement' })) },
+    ...docs ? [{ id: 'docs', state: 'waiting', subagents: [] }] : []]);
+  const shows = w => w.run(`return [...moths].filter(([, m]) => !m.leaving).map(([k]) => k).sort()`);
+  const early = open();
+  for (const s of [snap(true, 'a1', 'a2'), snap(false, 'a1'), snap(true, 'a1', 'a2')]) early.run(`raw = ${s}; sync()`); // docs and a2 gone for one
+  const late = open();
+  late.run(`raw = ${snap(true, 'a1', 'a2')}; sync()`);
+  assert.deepStrictEqual(shows(late), ['api', 'api/a1', 'api/a2', 'docs']);
+  assert.deepStrictEqual(shows(early), shows(late));
+});
