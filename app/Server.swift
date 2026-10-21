@@ -294,7 +294,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -431,6 +431,10 @@ final class LanternServer {
             if ev != "PermissionRequest" && ev != "Notification" { return }
         }
 
+        // Hooks are posted async, so a turn's Stop can land after the next prompt has started (a queued message starts 50 ms
+        // after the Stop): a Stop or StopFailure from the turn the latest prompt replaced is old news. Only that one: a
+        // prompt whose UPS was lost, or a turn that started without one, still ends with its own Stop.
+        if ev == "Stop" || ev == "StopFailure", let p = e["prompt_id"] as? String, p == s["replacedPrompt"] as? String { return }
         // Events record what happened (the turn's `turn` and what it handed over to, `awaits`); derive() turns that into the state.
         switch ev {
         case "SessionStart":
@@ -501,6 +505,7 @@ final class LanternServer {
             s["error"] = false
             s["snoozed"] = false // a snooze only covers the wait it was set on
             if ev == "UserPromptSubmit" && truthy(e["prompt"]) { s["prompt"] = cleanPrompt(str(e["prompt"])) }
+            if ev == "UserPromptSubmit", let p = e["prompt_id"] as? String, p != s["promptId"] as? String { s["replacedPrompt"] = s["promptId"]; s["promptId"] = p }
             if ev == "PreToolUse" { s["activity"] = describe(e["tool_name"] as? String, e["tool_input"] as? JSON ?? [:]) }
             if ev == "UserPromptSubmit" { s["activity"] = "Thinking about your message" }
         }

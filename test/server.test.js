@@ -430,6 +430,7 @@ const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...mor
 const STOP = ev('Stop', { last_assistant_message: 'Done.' }), ASK = ev('Stop', { last_assistant_message: 'Should I merge it?' });
 // the table's server points transcript_path at a transcript that started b1
 const TASK = { background_tasks: [SERVER], transcript_path: '' }, UPS = ev('UserPromptSubmit', { prompt: 'go' });
+const P1 = '6af18942-63c0-492b-b1ed-970d71ebe4ad', P2 = '77b5c98f-e092-40dd-8a2d-be5f73cbd3c3';
 const STATE_TABLE = [
   ['a prompt', [UPS], 'working', ''],
   ['a tool call', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} })], 'working', ''],
@@ -462,6 +463,14 @@ const STATE_TABLE = [
   ['a lost manual compact while waiting on a task, then an idle nudge', [UPS, { ...STOP, ...TASK }, ev('PreCompact', { trigger: 'manual' }), ev('Notification', { notification_type: 'idle_prompt', message: 'Claude is waiting' })], 'paused', 'Waiting on 1 background task'],
   // a /compact answers whatever the session was waiting on, an idle nudge included
   ['a manual compact after an idle nudge', [UPS, STOP, ev('Notification', { notification_type: 'idle_prompt', message: 'Claude is waiting' }), ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), ev('SessionStart', { source: 'compact' })], 'idle', ''],
+  // jwt, Oct 20: the turn of prompt 6af18942 ended at 20:57:05.852Z and a queued prompt (77b5c98f) started 50 ms later;
+  // both hooks are posted async, so the old turn's Stop can land after the new prompt
+  ['a late Stop from the turn before', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, { ...STOP, prompt_id: P1 }], 'working', ''],
+  ['a late API error from the turn before', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, ev('StopFailure', { prompt_id: P1 })], 'working', ''],
+  ['the new turn\'s own Stop', [{ ...UPS, prompt_id: P1 }, { ...UPS, prompt_id: P2 }, { ...STOP, prompt_id: P1 }, { ...ASK, prompt_id: P2 }], 'waiting', 'Asks: Should I merge it?'],
+  ['a Stop from a prompt whose UPS was lost', [{ ...UPS, prompt_id: P1 }, { ...STOP, prompt_id: P2 }], 'waiting', 'Finished its turn'],
+  ['a Stop with no prompt_id after a prompt with one', [{ ...UPS, prompt_id: P1 }, STOP], 'waiting', 'Finished its turn'],
+  ['a Stop with no prompt seen (a restart mid-turn)', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} }), { ...STOP, prompt_id: P1 }], 'waiting', 'Finished its turn'],
   ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
 ];
 test('the state table: what each run of hook events leaves a session showing', async t => {
