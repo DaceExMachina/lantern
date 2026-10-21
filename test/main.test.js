@@ -46,6 +46,16 @@ test('the fallback timer ticks only while the page shows', () => {
   assert.strictEqual(ticks, 1, 'one tick while shown, none while hidden');
 });
 
+// WebKit can't tell the screensaver's window is on screen, so its page may report hidden while it shows
+// (screensaver/LanternView.swift), and macOS can stop calling animateOneFrame: the timer is then all that draws.
+test('the screensaver\'s fallback timer ticks even when its page says it\'s hidden', () => {
+  const { page, every } = open('?screensaver');
+  let ticks = 0;
+  page.lanternTick = () => ticks++;
+  page.hidden = true; every(16)[0]();
+  assert.strictEqual(ticks, 1);
+});
+
 test('a tap outside the moths and the card puts the card away; a mouse click or a tap on the card doesn\'t', () => {
   const { page, listeners } = open();
   let hides = 0;

@@ -111,7 +111,10 @@ let rafAt = 0;
 const loop = t => { rafAt = performance.now(); frame(t); requestAnimationFrame(loop); };
 requestAnimationFrame(loop);
 window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 100) { rafAt = now - 86; frame(now); } }; // at most ~70 fps
-setInterval(() => document.hidden || lanternTick(), 16); // not while the page is hidden (a minimised or covered window, a closed panel): rAF stops then too
+// Not while the page is hidden (a minimised or covered window, a closed panel), since rAF stops then too. Except in the
+// screensaver: WebKit can't tell its window is on screen (screensaver/LanternView.swift), so it may say hidden while showing.
+const SAVER = Q.has('screensaver');
+setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
 setInterval(() => hovered && !$('card').matches(':hover') && renderCard(), 500); // don't redraw links under the pointer
 $('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
