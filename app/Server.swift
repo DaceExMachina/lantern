@@ -668,7 +668,8 @@ final class LanternServer {
     func logPRs(open: Set<String>, quiet: Set<String>, closed: [String: String]) {
         var owned: [String: (need: String, session: String, title: Any)] = [:]
         for (id, s) in sessions.items {
-            for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
+            // a merged or closed one the list keeps for its firefly's exit is logged as it leaves, below
+            for p in s["github"] as? [JSON] ?? [] where owned[str(p["url"])] == nil && !["merged", "closed"].contains(str(p["need"])) { owned[str(p["url"])] = (str(p["need"]), id, p["title"] ?? NSNull()) }
         }
         // A session no refresh has looked at yet (it joined while one ran, or is still reading its transcript) keeps what it
         // owned: not looked at isn't owning nothing.

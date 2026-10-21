@@ -1131,6 +1131,34 @@ test('stats: a session no refresh has looked at keeps the PRs it owned', async t
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: 's2', url: prUrl(1), change: 'appeared' }], 'no stray');
 });
 
+// A firefly's exit says how its PR went: one the session owned that is now merged or closed stays in its list with that
+// need, the need it had before, and when the change was seen, while one that just vanished is dropped. A PR that's new
+// carries when it was first seen, and one whose need changes says what it was and when it changed. The stats log still has one merged and one closed, with no need change to either.
+test('a PR that leaves the list merged or closed stays a while saying so', async t => {
+  const { gh, repo } = ghRepo([prNode(1, iso(Date.now()), 'feat'), prNode(2, iso(Date.now())), prNode(3, iso(Date.now())), prNode(4, iso(Date.now()))]);
+  const id = UUID(9), file = `.claude/projects/-work-9/${id}.jsonl`, made = n => [
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${n}`, content: prUrl(n) + '\n' }] } }];
+  let home = '';
+  const base = await serve(t, { [file]: jsonl([user('Fix it'), ...made(2), ...made(3), ...made(4)]) }, h => home = h, { LANTERN_GH: gh });
+  const before = Date.now();
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const first = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === 4), 'a refresh to find all four');
+  for (const p of first.github) assert.ok(p.seen >= before && p.since === p.seen && p.was === undefined, `first seen now: ${JSON.stringify(p)}`);
+  const at = Date.now();
+  fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { reviews: { nodes: [] }, mine: { nodes: [{ ...prNode(3, iso(Date.now())), isDraft: false }] },
+    closed: { nodes: [{ url: prUrl(1), state: 'MERGED' }, { url: prUrl(2), state: 'CLOSED' }] } } }));
+  await post(base, '/settings', { github: true });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === 3), 'a refresh to see them go');
+  const seen = new Set(first.github.map(p => p.seen));
+  assert.deepStrictEqual(s.github.map(p => [p.url, p.need, p.was, seen.has(p.seen)]).sort(),
+    [[prUrl(1), 'merged', 'draft', true], [prUrl(2), 'closed', 'draft', true], [prUrl(3), 'waiting', 'draft', true]], 'PR 4 just went');
+  for (const p of s.github) assert.ok(p.since >= at, `the change is timed from when it was seen: ${p.since} vs ${at}`);
+  const changes = prChanges(path.join(home, 'data/stats.sqlite')).map(c => [c.url, c.change]);
+  assert.deepStrictEqual(changes.filter(([, c]) => c !== 'appeared').sort(), [[prUrl(1), 'merged'], [prUrl(2), 'closed'], [prUrl(3), 'need'], [prUrl(4), 'gone']]);
+});
+
 // Séance and Ghostbuster count PRs, not events: one PR revived five times this week is one revival, and one PR leaving the
 // stale list merged five times yesterday is one. Five different PRs closed today do make a Ghostbuster.
 test('stats: Séance and Ghostbuster count each PR once', async t => {

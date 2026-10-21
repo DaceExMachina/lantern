@@ -26,6 +26,27 @@ func prNeed(_ p: JSON) -> String {
     if str(p["reviewDecision"]) == "APPROVED" && !running { return "ready" }
     return truthy(p["isDraft"]) ? "draft" : "waiting"
 }
+// When the page animates a PR's firefly from, so every window plays it at the same moment: `seen` when this list first
+// had it (it flies in), `since` when its need last changed, and `was` the need before (its colour crossfades). One that
+// left the list merged or closed stays a minute with that as its need, for its firefly's exit.
+func stamp(_ prs: [JSON], was old: [JSON], closed: [String: String], at t: Double) -> [JSON] {
+    let before = Dictionary(old.map { (str($0["url"]), $0) }, uniquingKeysWith: { a, _ in a })
+    var out = prs.map { p -> JSON in
+        var p = p
+        guard let o = before[str(p["url"])] else { p["seen"] = t; p["since"] = t; return p }
+        p["seen"] = o["seen"] ?? 0
+        if str(o["need"]) == str(p["need"]) { p["since"] = o["since"] ?? 0; p["was"] = o["was"] } else { p["since"] = t; p["was"] = o["need"] }
+        return p
+    }
+    let still = Set(prs.map { str($0["url"]) })
+    for var o in old where !still.contains(str(o["url"])) {
+        guard let state = closed[str(o["url"])] else { continue }
+        let need = state == "MERGED" ? "merged" : "closed"
+        if str(o["need"]) == need { if t - ((o["since"] as? NSNumber)?.doubleValue ?? 0) < 60_000 { out.append(o) } }
+        else if !["merged", "closed"].contains(str(o["need"])) { o["was"] = o["need"]; o["need"] = need; o["since"] = t; out.append(o) }
+    }
+    return out
+}
 func git(_ cwd: String, _ args: [String]) -> String? {
     let r = run("/usr/bin/git", ["-C", cwd] + args, timeout: 5)
     return r.ok ? r.out.trim : nil
@@ -133,9 +154,10 @@ extension LanternServer {
             }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }
             DispatchQueue.main.async {
                 for (login, error) in errors { self.accounts[login]?["error"] = error }
-                self.reviews = wanted.items.map(\.1)
+                let t = now()
+                self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
                 self.stale = dead
-                for (id, g) in github { self.sessions[id]?["github"] = g }
+                for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
                 // a failed query would make every PR look gone, so only a complete answer goes in the log
                 if !results.isEmpty && results.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
