@@ -6,6 +6,7 @@
 // chrome to snap the menu, stats, recap, a card and the dev panel instead of the later scene (with /stats from statsLog),
 // pinned to dock sess-alpha and sess-bravo in the sidebar and check the scene refitted beside it. morph runs
 // test/morph.test.js's checks instead of taking pictures: its steps answer with the mouse events to send (test/morph/main.swift).
+// sway, with screensaver, swings the lantern to the end of its swing and checks the page doesn't scroll (test/morph.test.js too).
 (() => {
   let seed = 0x5eed;
   Math.random = () => { // mulberry32
@@ -239,6 +240,20 @@
       },
     ];
   };
+  // The screensaver has no footer under the scene, so the lantern's layers, turned as it swings, reach past the bottom of
+  // the screen near the ends of a swing. The page must not scroll for that: a scrollbar narrows the scene, and fitView
+  // refits everything to it, which shook the whole screen each time the scrollbar came or went.
+  const sway = () => {
+    let was;
+    return [() => { was = fitted; swing.a = 6; swing.v = 0; }, run(1 / 60),
+      async () => {
+        await new Promise(r => realSetTimeout(r, 100)); // WebKit adds a scrollbar once it next lays out, between frames
+        const layer = $('lanternLayer').getBoundingClientRect(), page = document.documentElement;
+        if (layer.bottom <= innerHeight) return errs.push(`the swung lantern's layer ends at ${layer.bottom}, inside the ${innerHeight} px window, so the check would prove nothing`);
+        if (page.scrollHeight > page.clientHeight) errs.push(`the swung lantern scrolls the page: ${page.scrollHeight} px in a ${page.clientHeight} px window`);
+      },
+      run(1 / 60), () => { if (fitted !== was) errs.push(`the scene refitted from ${was} to ${fitted} as the lantern swung`); }];
+  };
   const steps = [
     () => {
       catchScorch();
@@ -255,7 +270,8 @@
       // a stale PR's card and a ghost's, with their pills
       () => { enterZone([...wisps.values()][0].zone); }, snap('stale'), () => { hideCard(); enterZone([...ghosts.values()][0].zone); }, snap('ghost'), () => { hideCard(); }] : []),
     ...(Q.has('morph') ? morph() : []),
-    ...(Q.has('chrome') || Q.has('pinned') || Q.has('morph') ? [] : [
+    ...(Q.has('sway') ? sway() : []),
+    ...(Q.has('chrome') || Q.has('pinned') || Q.has('morph') || Q.has('sway') ? [] : [
       () => { emit('message', sessionsAt(1)); emit('stale', stale(true)); },
       run(14), snap('t20'), // T = LAST
     ]),
