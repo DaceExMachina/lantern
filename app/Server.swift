@@ -379,7 +379,18 @@ final class LanternServer {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.broadcastDue = false; self.sendState() }
     }
     // The sessions go out every time; the PR lists only when they differ from what the pages last got.
+    /// A snooze outlives a restart: the snoozed ids are kept in settings (a preview keeps none, its sessions are the app's), and
+    /// put back once the sessions are back from disk. Rebuilding the list from the sessions drops a snooze when the session
+    /// does something new, is woken or goes, so none is left to meet a later session with the same id.
+    /// ponytail: a hook that reaches a restarted app before the sessions are seeded keeps its snooze; it's the same session.
+    var snoozesBack = false
+    func keepSnoozes() {
+        guard snoozesBack else { return }
+        let ids = sessions.items.filter { truthy($0.1["snoozed"]) }.map { $0.0 }
+        if ids != settings["snoozed"] as? [String] ?? [] { settings["snoozed"] = ids; saveSettings() }
+    }
     func sendState() {
+        keepSnoozes()
         observe()
         var msg = ""
         let r = jsonText(reviews), g = jsonText(staleOut())

@@ -529,7 +529,12 @@ extension LanternServer {
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
                 self.add(seeded)
-                if !mirroring { print("Seeded \(self.sessions.count) session(s) from disk"); self.dropEndedPins() }
+                if !mirroring {
+                    print("Seeded \(self.sessions.count) session(s) from disk"); self.dropEndedPins()
+                    for id in self.settings["snoozed"] as? [String] ?? [] where self.sessions[id] != nil { self.sessions[id]!["snoozed"] = true }
+                    self.snoozesBack = true
+                    self.keepSnoozes()
+                }
                 self.linkSpawned()
                 // last known PR status, until the first refresh replaces it
                 if let cache, (self.settings["githubAccounts"] as? [Any])?.isEmpty == false || truthy(self.settings["github"]) {

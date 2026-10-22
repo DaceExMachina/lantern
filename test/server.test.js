@@ -1818,3 +1818,22 @@ test('the pinned sessions are a list in the settings: toggled, kept in order wit
   await until(async () => (await snapshot(again)).sessions.some(s => s.id === back), 'the session to be seeded');
   await until(async () => { try { assert.deepStrictEqual((await snapshot(again)).settings.pinned, [{ id: back, chips: true }]); return true; } catch { return false; } }, 'the ended pin to go and the other to stay'); // in any key order
 });
+
+// A snooze lasts until the session does something new, and a restart doesn't end it: the second server starts from the
+// settings.json the first one saved, and finds the same session on disk.
+test('a snooze survives a restart, and new activity after it still ends the snooze', async t => {
+  const id = UUID(4), files = transcript(id, [user('Look'), answer('The glow sits a little higher on the paper than before.'), turnEnd]);
+  const session = async base => (await snapshot(base)).sessions.find(s => s.id === id);
+  let home;
+  const first = await serve(t, files, h => home = h);
+  await until(async () => (await session(first))?.state === 'waiting', 'the transcript to be seeded as waiting');
+  assert.strictEqual((await post(first, '/snooze', { id, snoozed: true })).status, 204);
+  const saved = await until(() => { try { const s = fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8'); return JSON.parse(s).snoozed?.length && s; } catch {} }, 'the snooze to be saved');
+  let home2;
+  const second = await serve(t, { ...files, 'data/settings.json': saved }, h => home2 = h);
+  const back = await until(() => session(second), 'the transcript to be seeded again');
+  assert.deepStrictEqual([back.state, back.snoozed], ['waiting', true], 'still snoozed after the restart');
+  await post(second, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await until(async () => (await session(second)).snoozed === false, 'new activity to end the snooze');
+  await until(() => JSON.parse(fs.readFileSync(path.join(home2, 'data/settings.json'), 'utf8')).snoozed?.length === 0, 'the ended snooze to leave settings.json');
+});
