@@ -1958,3 +1958,85 @@ test('a hook whose transcript is under ~/.claude-work finds its project when tha
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go', transcript_path: path.join(home, '.claude-work/projects/-w/s1.jsonl') });
   assert.deepStrictEqual((await snapshot(base)).sessions.map(x => [x.id, x.project]), [['s1', '-w']]);
 });
+
+// GitHub App user tokens last 8 hours, so the account has to trade its refresh token for a new pair on a 401 (or just before
+// the token runs out) instead of asking to reconnect. A stand-in GitHub answers /graphql only for tokens it has granted, and
+// /login/oauth/access_token for the refresh tokens in `grants` (refresh token -> [access token, next refresh token]). A
+// stand-in `security` keeps the Keychain item in a file, so these tests never touch the real Keychain.
+async function githubAccount(t, item, grants) {
+  const live = new Set(), seen = { bearers: [], refreshes: [] }, kc = fs.mkdtempSync(path.join(tmp, 'kc-')), security = path.join(kc, 'security');
+  const stub = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      const reply = (status, json) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(json)); };
+      if (req.url === '/graphql') {
+        const bearer = req.headers.authorization.replace('Bearer ', '');
+        seen.bearers.push(bearer);
+        return live.has(bearer) ? setTimeout(reply, 500, 200, { data: { reviews: { nodes: [] }, mine: { nodes: [] }, closed: { nodes: [] } } }) : reply(401, { message: 'Bad credentials' }); // a good answer takes a moment, so a test can look before it lands
+      }
+      const sent = JSON.parse(body);
+      assert.deepStrictEqual([sent.grant_type, sent.client_id], ['refresh_token', 'Iv23liGsGuBVmd5HoOSn']);
+      seen.refreshes.push(sent.refresh_token);
+      const grant = grants[sent.refresh_token];
+      if (!grant) return reply(200, { error: 'bad_refresh_token' });
+      live.add(grant[0]);
+      reply(200, { access_token: grant[0], refresh_token: grant[1], expires_in: 28800, refresh_token_expires_in: 15811200 });
+    });
+  });
+  await new Promise(r => stub.listen(0, '127.0.0.1', r));
+  t.after(() => stub.close());
+  const url = `http://127.0.0.1:${stub.address().port}`;
+  fs.writeFileSync(path.join(kc, 'octo'), item);
+  fs.writeFileSync(security, `#!/bin/sh\ncmd=$1; shift\nwhile [ $# -gt 0 ]; do case $1 in -a) a=$2; shift;; -w) [ "$cmd" = add-generic-password ] && { w=$2; shift; };; -s|-l) shift;; esac; shift; done\n` +
+    `if [ "$cmd" = add-generic-password ]; then printf %s "$w" > '${kc}/'"$a"; else /bin/cat '${kc}/'"$a"; fi\n`, { mode: 0o755 });
+  const base = await serve(t, { 'data/settings.json': '{"githubAccounts":["octo"]}' }, () => {}, { LANTERN_SECURITY: security, LANTERN_GITHUB_WEB: url, LANTERN_GITHUB_API: url });
+  const stored = () => JSON.parse(fs.readFileSync(path.join(kc, 'octo'), 'utf8'));
+  const error = () => new Promise((done, fail) => { // the account row's error, off the start of the event stream
+    const req = http.get(base + '/events', res => {
+      let text = '';
+      res.on('data', chunk => {
+        text += chunk;
+        const block = text.split('\n\n').find(b => b.startsWith('event: github') || b.includes('\nevent: github'));
+        if (block) { req.destroy(); done(JSON.parse(block.match(/^data: (.*)$/m)[1]).accounts[0]?.error); }
+      });
+    });
+    req.on('error', e => e.code !== 'ECONNRESET' && fail(e));
+  });
+  return { base, seen, stored, error, live };
+}
+const far = Date.now() + 86400000 * 30;
+
+test('a 401 refreshes the GitHub token once, retries and keeps the account connected', async t => {
+  const g = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'r1', refreshExpires: far }), { r1: ['fresh1', 'r2'] });
+  await until(() => g.seen.bearers.includes('fresh1'), 'the retry with the new token');
+  assert.deepStrictEqual(g.seen.bearers, ['old', 'fresh1']);
+  assert.deepStrictEqual(g.seen.refreshes, ['r1']);
+  assert.strictEqual(await g.error(), '', 'the 401 was retried in the same poll, so it never said reconnect'); // the retry's answer is still on its way
+});
+
+test('the rotated GitHub refresh token is saved and used for the next refresh', async t => {
+  const g = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'r1', refreshExpires: far }), { r1: ['fresh1', 'r2'], r2: ['fresh2', 'r3'] });
+  await until(() => g.seen.bearers.includes('fresh1'), 'the first refresh');
+  assert.strictEqual(g.stored().refresh, 'r2', 'the Keychain holds the new refresh token');
+  g.live.delete('fresh1'); // the token runs out again
+  await post(g.base, '/settings', { github: true });
+  await until(() => g.seen.bearers.includes('fresh2'), 'the second refresh');
+  assert.deepStrictEqual(g.seen.refreshes, ['r1', 'r2'], 'the second refresh used the rotated token, not the first');
+  assert.deepStrictEqual([g.stored().token, g.stored().refresh], ['fresh2', 'r3']);
+});
+
+test('a GitHub token about to expire is refreshed before it is used', async t => {
+  const g = await githubAccount(t, JSON.stringify({ token: 'old', expires: Date.now() + 60000, refresh: 'r1', refreshExpires: far }), { r1: ['fresh1', 'r2'] });
+  await until(() => g.seen.bearers.length, 'a query');
+  assert.deepStrictEqual(g.seen.bearers, ['fresh1'], 'the old token was never sent');
+});
+
+test('a GitHub refresh that fails, or a token with no refresh token, marks the account to reconnect', async t => {
+  const dead = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'gone', refreshExpires: far }), {});
+  await until(async () => (await dead.error()) === 'expired', 'the dead refresh token to say reconnect');
+  assert.deepStrictEqual(dead.seen.refreshes, ['gone']);
+  const bare = await githubAccount(t, 'old', { r1: ['fresh1', 'r2'] }); // saved before refresh tokens were kept
+  await until(async () => (await bare.error()) === 'expired', 'a bare token to say reconnect');
+  assert.deepStrictEqual(bare.seen.refreshes, []);
+});
