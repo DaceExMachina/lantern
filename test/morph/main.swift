@@ -7,13 +7,15 @@ import WebKit
 
 let root = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fixture = try! String(contentsOf: root.appendingPathComponent("test/snapshots/fixture.js"), encoding: .utf8)
+let FAR = NSScreen.screens.map(\.frame.maxX).max()! + 10000 // beyond every display, never on one (a negative origin once landed on the laptop screen)
 let SIZE = NSSize(width: 900, height: 420) // short, so the big card scrolls, and wide enough to pin (card.js PIN_MIN)
 
 final class Driver: NSObject, WKNavigationDelegate {
-  let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -30000, y: -30000), size: SIZE), styleMask: .borderless, backing: .buffered, defer: false)
+  let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: FAR, y: 0), size: SIZE), styleMask: .borderless, backing: .buffered, defer: false)
   var web: WKWebView!
   override init() {
     super.init()
+    window.collectionBehavior = [.transient, .ignoresCycle]
     let config = WKWebViewConfiguration()
     config.userContentController.addUserScript(WKUserScript(source: fixture, injectionTime: .atDocumentStart, forMainFrameOnly: true))
     web = WKWebView(frame: NSRect(origin: .zero, size: SIZE), configuration: config)
