@@ -31,8 +31,6 @@ async function open(kx = 1) {
     fly: s => { for (const [k, m] of moths) if (!m.parentId && !m.satellite) { const aim = frame.mothTarget(k, m, 1 / 60, s); if (aim) frame.mothMove(m, aim, 1 / 60, s); } },
   };
 }
-// the two sweeps over every lantern, window shape and crowd take a while: thousands of frames, a page afresh for each
-const SLOW = { timeout: 120000 };
 const KEYS = ['blog', 'api', 'docs', 'infra', 'site', 'lantern', 'admin', 'extension', 'gitops', 'notes', 'scratch', 'web', 'ios', 'data', 'ops', 'side', 'music'];
 const closest = homes => {
   const h = Object.values(homes);
@@ -128,7 +126,7 @@ const apart = ([a, b], [c, d]) => {
 // and whether they're settled or gliding. As the lantern sways, a spot on it moves with it and a home doesn't, so two
 // lines can cross when the sway carries one's spot further than the gap between them at rest: two homes gliding through
 // each other, or a home on the inner ring (past 16 sessions) just beyond a neighbour's line. This holds them to that.
-test('no thread or dotted line crosses another at rest, flying or landed, as sessions come and go; swaying, only ones closer than the sway reaches', SLOW, async () => {
+test('no thread or dotted line crosses another at rest, flying or landed, as sessions come and go; swaying, only ones closer than the sway reaches', async () => {
   const own = KEYS.filter(k => k !== 'side'), more = [...own, ...'abcdefgh'.split('').map(c => 'more-' + c)];
   // one by one up to sixteen, then a few leave from the middle and the ends, then some come back, then up to 24 (an
   // inner ring past 16) and back down
@@ -277,7 +275,7 @@ const spots = w => {
 // perchAt starts each line as high on the paper as its home is round the ring, so landed moths use most of the paper's
 // height in their homes' order. On main, every line fanned out from one point at the paper's middle height, and most
 // moths landed within a few units of a neighbour (2.5 to 7.4 apart at worst, on a fifth to a half of the height).
-test('landed moths spread up and down the paper, in their homes\' order, never on top of each other', SLOW, async () => {
+test('landed moths spread up and down the paper, in their homes\' order, never on top of each other', async () => {
   const own = KEYS.filter(k => k !== 'side');
   for (const key of ['chochin', 'moroccan', 'barrel', 'candle']) for (const kx of [1, 1.6]) for (const n of [3, 5, 8]) for (const total of [n, 12, 16]) for (const skip of [1, 3, 7]) {
     const w = await open(kx), ids = own.slice(0, total), idle = ids.filter((_, i) => (i * skip) % total < n);

@@ -71,7 +71,7 @@ test('the candle is the fourth lantern in the menu', () => {
 
 // The sway turns #lanternLayer and #lanternBack, the lantern's own layers, by a CSS transform, so WebKit turns the picture it has rather
 // than drawing the lantern afresh; nothing writes a turn onto the drawing (#lantern) itself.
-test('a standing lantern holds still with nothing to hang from; every hanging one sways on one, turning its layer', { timeout: 30_000 }, () => {
+test('a standing lantern holds still with nothing to hang from; every hanging one sways on one, turning its layer', () => {
   assert.deepStrictEqual(styles.filter(k => STYLES[k].stands), ['candle'], 'the candle, and only the candle, stands');
   // 30 seconds of frames for each style, the clock running on from one style to the next
   let start = 0;
@@ -117,7 +117,7 @@ const flameHalf = (() => {
   assert.ok(src, 'background.js has flameHalf');
   return new Function(src[0].replace('float flameHalf(float t)', 'return t =>').replace(/\bfloat /g, 'let ').replace(/\b(sqrt|pow)\(/g, 'Math.$1('))();
 })();
-test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', { timeout: 30_000 }, () => {
+test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', () => {
   const [fx, fy, k] = STYLES.candle.flame, clear = 10, tallest = 96 * FLAME_STRETCH;
   // the outer tongue's outline at full size, as background.js FLAME draws it: at its tallest, leaning as far as
   // stepFlame lets it either way, its middle bent and swollen by the most turbulence a gust and a moth give at full size
