@@ -20,6 +20,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     var window: NSWindow!
     var web: WKWebView!
     var server: LanternServer!
+    var term: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         // Settings live in Application Support, since an app can't write inside itself. The page comes from the app,
@@ -28,6 +29,12 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         server = LanternServer(port: UInt16(port) ?? 7717, data: data, web: checkout ?? Bundle.main.resourcePath!)
         server.start()
         server.buildChrome()
+        // SIGTERM (a relaunch, install.js) quits properly, which stops the vite watcher and closes the event log. If the main
+        // thread is wedged, it leaves anyway after 3 s.
+        signal(SIGTERM, SIG_IGN)
+        term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
+        term?.setEventHandler { DispatchQueue.main.async { NSApp.terminate(nil) }; DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) } }
+        term?.resume()
         // Hooks need the server even with no window open, so an installed copy opens at login. That's offered once;
         // turning it off in System Settings > General > Login Items sticks.
         if !UserDefaults.standard.bool(forKey: "loginItemOffered"), Bundle.main.bundlePath.contains("/Applications/") {

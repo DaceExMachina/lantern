@@ -1609,19 +1609,20 @@ test('a Vite build in dist/ is the web root: its files get their content types, 
   const versions = versionsOf(t, base);
   await until(() => versions.length, 'the first version');
   fs.rmSync(path.join(web, 'dist/assets/app-1a.js')); // a rebuild replaced a hashed file
-  await until(() => versions.length > 1, 'a version event after a file in dist/ was deleted');
   assert.strictEqual((await get('/assets/app-1a.js')).status, 404, 'the replaced file');
   const at = new Date(Date.now() + 60000); // clearly newer than the files above, whatever the clock's granularity
   fs.writeFileSync(path.join(web, 'dist/assets/app-2b.js'), 'js2');
   fs.utimesSync(path.join(web, 'dist/assets/app-2b.js'), at, at);
-  await until(() => versions.length > 2, 'a version event after a file in dist/ was added');
+  await until(() => versions.length > 1, 'a version event after a file in dist/ was added');
   assert.strictEqual(await (await get('/assets/app-2b.js')).text(), 'js2');
-  assert.strictEqual(new Set(versions).size, 3);
+  assert.strictEqual(new Set(versions).size, 2);
   // a rebuild that empties dist/ for a moment: the page waits (503), it doesn't fall back to the checkout's index.html
   fs.rmSync(path.join(web, 'dist/index.html'));
   for (const url of ['/', '/index.html']) {
     const res = await get(url);
-    assert.ok(res.status === 503 && !/CHECKOUT/.test(await res.text()), `${url} gave ${res.status}`);
+    const body = await res.text();
+    assert.ok(res.status === 503 && !/CHECKOUT/.test(body), `${url} gave ${res.status}`);
+    assert.match(body, /http-equiv="refresh"/, `${url}: a page that lands in the gap tries again by itself`);
   }
   assert.strictEqual((await get('/page/main.js')).status, 404, 'still dist mode');
   fs.writeFileSync(path.join(web, 'dist/index.html'), 'BUILT AGAIN');
@@ -1635,6 +1636,26 @@ test('without dist/index.html the checkout serves itself, and dist/ files are no
   for (const url of ['/dist/assets/app-1a.js', '/assets/app-1a.js', '/dist/index.html']) assert.strictEqual((await fetch(base + url)).status, 404, url);
 });
 
+test('a rebuild that empties dist/ for a moment neither reloads windows into the gap nor leaves one stuck there', async t => {
+  const web = webRoot({ 'index.html': 'CHECKOUT', 'dist/index.html': 'BUILT 1', 'dist/assets/app-1.js': 'js1' });
+  const base = await serve(t, {}, () => {}, { LANTERN_WEB: web });
+  const versions = versionsOf(t, base);
+  await until(() => versions.length, 'the first version');
+  // what `vite build --watch` does: empty dist/ (its folder stays), then write the new files
+  for (const f of fs.readdirSync(path.join(web, 'dist'))) fs.rmSync(path.join(web, 'dist', f), { recursive: true });
+  const landed = await fetch(base + '/'); // a window that reloads right now
+  assert.strictEqual(landed.status, 503);
+  assert.match(await landed.text(), /http-equiv="refresh"/);
+  await wait(2500); // a couple of the server's one-second version checks
+  assert.strictEqual(versions.length, 1, 'no reload while dist/ is empty');
+  fs.mkdirSync(path.join(web, 'dist/assets'));
+  fs.writeFileSync(path.join(web, 'dist/assets/app-2.js'), 'js2');
+  fs.writeFileSync(path.join(web, 'dist/index.html'), 'BUILT 2');
+  await until(() => versions.length > 1, 'the reload once the new build is there');
+  assert.strictEqual(await (await fetch(base + '/')).text(), 'BUILT 2');
+  assert.strictEqual(await (await fetch(base + '/assets/app-2.js')).text(), 'js2');
+});
+
 // The app keeps dist/ built by running `vite build --watch` in the checkout it serves, when that has Vite and a config (a
 // preview or test server only does when asked, as LANTERN_BUILD, since only the app should). A stand-in vite logs where and
 // how it ran; it exits at once (which shows the restart), or with `stay` keeps running, as the real one does.
@@ -1643,7 +1664,7 @@ const fakeVite = (config, vite, stay) => {
   if (config) fs.writeFileSync(path.join(dir, 'vite.config.js'), '');
   if (vite) {
     fs.mkdirSync(path.join(dir, 'node_modules/.bin'), { recursive: true });
-    const body = stay ? 'echo $$ > "$HERE/../../vite.pid"\ntrap \'kill $!\' TERM\n/bin/sleep 300 &\nwait\n' : '';
+    const body = stay ? 'echo $$ > "$HERE/../../vite.pid"\ntrap \'kill $!\' TERM\n/bin/sleep 120 </dev/null >/dev/null 2>&1 &\nwait\n' : '';
     fs.writeFileSync(path.join(dir, 'node_modules/.bin/vite'), `#!/bin/sh\nHERE=\${0%/*}\necho "$PWD $* $PATH" >> "$HERE/../../vite.log"\n${body}`, { mode: 0o755 });
   }
   return dir;
@@ -1653,13 +1674,16 @@ const alive = pid => { try { process.kill(pid, 0); return true; } catch { return
 // a stand-in for node, in a folder of its own that the watcher's PATH should start with
 const fakeNode = () => { const dir = fs.mkdtempSync(path.join(tmp, 'node-')); fs.writeFileSync(path.join(dir, 'node'), '#!/bin/sh\n', { mode: 0o755 }); return dir; };
 test('the app runs vite build --watch only in a checkout that has vite and its config, never in a preview, and brings it back when it exits', async t => {
-  const [ready, noConfig, noVite, preview] = [fakeVite(true, true), fakeVite(false, true), fakeVite(true, false), fakeVite(true, true)];
+  const [ready, noConfig, noVite, preview, noNode] = [fakeVite(true, true), fakeVite(false, true), fakeVite(true, false), fakeVite(true, true), fakeVite(true, true)];
+  const noShell = path.join(fs.mkdtempSync(path.join(tmp, 'sh-')), 'shell'); // a login shell that finds no node
+  fs.writeFileSync(noShell, '#!/bin/sh\n', { mode: 0o755 });
   const env = { LANTERN_NODE: path.join(fakeNode(), 'node') };
   await serve(t, {}, () => {}, { LANTERN_WEB: preview }); // no LANTERN_BUILD
+  await serve(t, {}, () => {}, { LANTERN_WEB: noNode, LANTERN_BUILD: '1', SHELL: noShell }); // no node: said once, no vite
   for (const dir of [noConfig, noVite, ready]) await serve(t, {}, () => {}, { LANTERN_WEB: dir, LANTERN_BUILD: '1', ...env });
   await until(() => viteLog(ready).length >= 2, 'vite to start and come back after exiting');
   assert.ok(viteLog(ready)[0].startsWith(`${fs.realpathSync(ready)} build --watch `), viteLog(ready)[0]);
-  for (const dir of [noConfig, noVite, preview]) assert.ok(!fs.existsSync(path.join(dir, 'vite.log')), `${dir} started a watcher`);
+  for (const dir of [noConfig, noVite, preview, noNode]) assert.ok(!fs.existsSync(path.join(dir, 'vite.log')), `${dir} started a watcher`);
 });
 test('vite gets the node that LANTERN_NODE names, or else the one the login shell finds, first on its PATH', async t => {
   const [viaEnv, viaShell] = [fakeVite(true, true), fakeVite(true, true)];
@@ -1671,6 +1695,14 @@ test('vite gets the node that LANTERN_NODE names, or else the one the login shel
   await until(() => viteLog(viaEnv).length && viteLog(viaShell).length, 'both to start vite');
   assert.ok(viteLog(viaEnv)[0].includes(` ${envNode}:`), viteLog(viaEnv)[0]);
   assert.ok(viteLog(viaShell)[0].includes(` ${shellNode}:`), viteLog(viaShell)[0]);
+});
+test('a login shell that leaves a background process holding its output does not stop node being found', async t => {
+  const web = fakeVite(true, true), node = fakeNode(), dir = fs.mkdtempSync(path.join(tmp, 'sh-')), shell = path.join(dir, 'shell');
+  fs.writeFileSync(shell, `#!/bin/sh\n/bin/sleep 60 &\necho $! > ${dir}/sleep.pid\necho ${node}/node\n`, { mode: 0o755 });
+  t.after(() => { try { process.kill(Number(fs.readFileSync(path.join(dir, 'sleep.pid'), 'utf8')), 'SIGKILL'); } catch {} });
+  await serve(t, {}, () => {}, { LANTERN_WEB: web, LANTERN_BUILD: '1', SHELL: shell });
+  await until(() => viteLog(web).length, 'vite to start without waiting for the shell\'s background process', 10000);
+  assert.ok(viteLog(web)[0].includes(` ${node}:`), viteLog(web)[0]);
 });
 test('the watcher stops with the server, and a watcher an earlier run left behind is stopped before a new one starts', async t => {
   const web = fakeVite(true, true, true), fake = `${fakeNode()}/node`;
@@ -1691,6 +1723,25 @@ test('the watcher stops with the server, and a watcher an earlier run left behin
   t.server.kill('SIGTERM'); // how the app is relaunched
   await until(() => !alive(mine), 'the watcher to stop with the server');
   assert.ok(!fs.existsSync(recorded), 'the pid file is gone');
+});
+test('the pid file only ever stops this checkout\'s vite, and only a stopping server\'s own pid is removed from it', async t => {
+  const web = fakeVite(true, true, true), other = fakeVite(true, true, true), fake = `${fakeNode()}/node`;
+  const recorded = path.join(web, 'node_modules/.lantern-vite.pid');
+  // another project's vite, running on a pid the file names (as if the pid had been reused)
+  const elsewhere = spawn(path.join(other, 'node_modules/.bin/vite'), ['build', '--watch'], { stdio: 'ignore' });
+  t.after(() => elsewhere.kill('SIGKILL'));
+  await until(() => fs.existsSync(path.join(other, 'vite.pid')), 'the other project\'s vite to start');
+  const theirs = Number(fs.readFileSync(path.join(other, 'vite.pid'), 'utf8'));
+  fs.writeFileSync(recorded, String(theirs));
+  await serve(t, {}, () => {}, { LANTERN_WEB: web, LANTERN_BUILD: '1', LANTERN_NODE: fake });
+  const mine = await until(() => fs.existsSync(path.join(web, 'vite.pid')) && Number(fs.readFileSync(path.join(web, 'vite.pid'), 'utf8')), 'this checkout\'s watcher');
+  assert.ok(alive(theirs), 'the other project\'s vite was left alone');
+  await until(() => fs.readFileSync(recorded, 'utf8') === String(mine), 'the server to record its watcher'); // it writes after the watcher starts
+  // a newer app has taken over the pid file; this one stopping must not delete it
+  fs.writeFileSync(recorded, '999999');
+  t.server.kill('SIGTERM');
+  await until(() => !alive(mine), 'the watcher to stop with the server');
+  assert.strictEqual(fs.readFileSync(recorded, 'utf8'), '999999');
 });
 
 // Whether a session's card lists its PRs or shows chips is a shared setting, so every window shows the same.
