@@ -30,13 +30,13 @@ let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 // doesn't see your shell's env, so the installer writes it there), or ~/.claude. Settings can override it at startup.
 var CLAUDE_CONFIG_DIR = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
 // Lantern reads every config folder there is, so a work account's sessions show beside the personal ones: the one above (or
-// ~/.claude), ~/.claude-work when it exists, and any more in LANTERN_CLAUDE_DIRS (colon-separated) or `claudeDirs` in the
+// ~/.claude), ~/.claude-work and ~/.claude-personal when they exist, and any more in LANTERN_CLAUDE_DIRS (colon-separated) or `claudeDirs` in the
 // settings. Each folder's projects are resolved to their real path and listed once, so a work folder whose projects are a
 // symlink into the personal one isn't read twice.
 var EXTRA_CLAUDE_DIRS = (ProcessInfo.processInfo.environment["LANTERN_CLAUDE_DIRS"] ?? "").split(separator: ":").map(String.init)
 var CLAUDE_DIRS: [String] = claudeDirs()
 func claudeDirs() -> [String] {
-    let main = CLAUDE_CONFIG_DIR ?? HOME + "/.claude", more = [HOME + "/.claude", HOME + "/.claude-work"] + EXTRA_CLAUDE_DIRS // the rest only when they exist
+    let main = CLAUDE_CONFIG_DIR ?? HOME + "/.claude", more = [HOME + "/.claude", HOME + "/.claude-work", HOME + "/.claude-personal"] + EXTRA_CLAUDE_DIRS // the rest only when they exist
     var seen = Set<String>()
     return ([main] + more.map { ($0 as NSString).expandingTildeInPath }.filter { FileManager.default.fileExists(atPath: $0) })
         .filter { seen.insert((($0 + "/projects") as NSString).resolvingSymlinksInPath).inserted }
