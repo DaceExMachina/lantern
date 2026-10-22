@@ -2,14 +2,14 @@
 // stays in that module; this holds the rest, mostly what wiring.ts hears from the server. Plain on purpose: frame()
 // reads it every frame.
 
-import type { GitHub, Hovered, Moth, Pin, Review, Session, StalePR, Stats } from '../types';
+import type { Hovered, Moth, Pin, Review, Session, StalePR, Stats } from '../types';
 
 /** One of the candle's fluttering leaves (frame.ts drawLeaves). */
 export interface Leaf { e: Element; x: number; y: number; k: number; low: number; deg: number; ph: number }
 
 interface Live {
-  raw: Session[]; reviews: Review[]; stalePRs: StalePR[]; recentProse: string[]; pagesData: boolean; firstName: string; github: GitHub;
-  quietUntil: number; quietEnd: string; quietEndOn: boolean; dayStart: string; supervisor: RegExp; usingGh: boolean; staleOn: boolean;
+  raw: Session[]; reviews: Review[]; stalePRs: StalePR[]; recentProse: string[]; pagesData: boolean; firstName: string;
+  quietUntil: number; quietEnd: string; quietEndOn: boolean; dayStart: string; supervisor: RegExp; staleOn: boolean;
   prList: Record<string, boolean>; pinned: Pin[]; recapSeen: string | null;
   moths: Map<string, Moth>; hovered: Hovered | null; hideTimer: ReturnType<typeof setTimeout> | undefined;
   tally: Stats['tally']; pinnedBadge: string | null; cdLeaves: Leaf[] | null; farWall: HTMLCanvasElement | null;
@@ -24,12 +24,10 @@ export const live: Live = {
   recentProse: [], // words from recent transcripts, for the barrel's pages (pages.ts)
   pagesData: false, // whether the server has sent any yet
   firstName: '', // the user's first name, for Jerrett's pencil (pencil.ts)
-  github: { accounts: [], signIn: null }, // the GitHub accounts connected, and a sign-in under way (github.ts)
   // ---- from settings.json (wiring.ts)
   // quiet hours: until when (0 for none), when they end and whether they do, and the day rollover ("HH:MM")
   quietUntil: 0, quietEnd: '08:00', quietEndOn: true, dayStart: '00:00',
   supervisor: /supervisor|orchestrat/i, // which agent types count as supervisors (medium moths)
-  usingGh: false, // whether GitHub status is on
   staleOn: true, // whether stale PRs show
   prList: {}, // each session's card: its PRs listed or as chips (card.ts)
   pinned: [], // the pinned sessions, oldest first, each with whether its PRs show as chips

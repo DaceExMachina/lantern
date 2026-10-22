@@ -4,13 +4,13 @@
 import { live } from './scene/live';
 import { $, Q, post } from './scene/scene';
 import { devKey, toggleDevPanel } from './dev';
-import { RIBBONS, STYLES, applyStyle, isStyleKey, paintRibbon, style } from './scene/lanterns';
-import { isGitHub, isReview, isSession, isStalePR, isRecord, isString, parseJson, parseSettings } from './types';
+import { STYLES, applyStyle, isStyleKey, paintRibbon, style } from './scene/lanterns';
+import { isReview, isSession, isStalePR, isRecord, isString, isTime, parseJson, parseSettings } from './types';
 import { showPencil } from './scene/pencil';
-import { renderGitHub } from './scene/github';
+import './scene/github'; // its dev toggle
 import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
 import { fitView, frame } from './scene/frame';
-import { lanternText, setLanternText } from './scene/pages';
+import { setLanternText } from './scene/pages';
 import { clickZone, enterZone, hideCard, renderCard, renderSidebar, tapZone, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
@@ -39,22 +39,16 @@ listen('settings', t => {
   if (key && isStyleKey(key) && STYLES[key] !== style) applyStyle(key);
   const quietStarted = live.recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   live.quietUntil = st.quietUntil || 0;
-  const isTime = (s: string | undefined): s is string => /^\d{1,2}:\d{2}$/.test(s || ''), hhmm = (s: string) => s.padStart(5, '0');
   if (isTime(st.quietEnd)) live.quietEnd = st.quietEnd;
   if (isTime(st.dayStart)) live.dayStart = st.dayStart;
-  $('quietEnd', HTMLInputElement).value = hhmm(live.quietEnd); $('dayStart', HTMLInputElement).value = hhmm(live.dayStart);
-  if (isTime(st.quietFrom)) $('quietFrom', HTMLInputElement).value = hhmm(st.quietFrom);
-  showSwitch($('quietFromRow'), isTime(st.quietFrom));
-  live.quietEndOn = st.quietEndOn !== false; showSwitch($('quietEndRow'), live.quietEndOn);
+  live.quietEndOn = st.quietEndOn !== false;
   paintRibbon(st.ribbon);
   const until = live.quietEndOn ? `until ${quietEndLabel()}` : 'until you press it again';
   $('quiet').title = `Treat everything as snoozed ${until}`;
-  $('quietUntil').textContent = until;
-  setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('textToggle', HTMLInputElement).checked = lanternText !== 'off';
+  setLanternText(st.lanternText === 'off' ? 'off' : 'sessions');
   try { if (st.supervisorPattern) live.supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   live.recapSeen = [live.recapSeen || '', st.recapSeen || ''].sort().pop() ?? ''; maybeRecap(quietStarted); // the later of ours and the server's
-  live.usingGh = !!st.github; renderGitHub();
-  live.staleOn = st.stale !== false; $('staleToggle', HTMLInputElement).checked = live.staleOn;
+  live.staleOn = st.stale !== false;
   live.prList = st.prList || {}; // each session's card: its PRs listed or as chips
   live.pinned = st.pinned ?? []; // the sessions in the sidebar, in the order they were pinned, with their PR view
   sync(); renderSidebar();
@@ -91,46 +85,7 @@ $('quiet').onclick = () => {
   post('/settings', { quietUntil: quiet() ? 0 : live.quietEndOn ? morning.getTime() : QUIET_FOREVER });
 };
 
-listen('github', t => { const gh = parseJson(t); if (isGitHub(gh)) live.github = gh; renderGitHub(); });
-
-const textToggle = $('textToggle', HTMLInputElement);
-textToggle.onchange = () => {
-  setLanternText(textToggle.checked ? 'sessions' : 'off');
-  post('/settings', { lanternText });
-};
-// times of day: quiet from and quiet until (each switched off or on, with a time), and the day rollover
-for (const id of ['quietFrom', 'quietEnd', 'dayStart']) { const input = $(id, HTMLInputElement); input.onchange = () => input.value && post('/settings', { [id]: input.value }); }
-function showSwitch(row: Element, on: boolean) {
-  const input = row.querySelector('input');
-  if (input) input.disabled = !on;
-  for (const b of row.querySelectorAll('.pill button')) if (b instanceof HTMLElement) b.setAttribute('aria-pressed', String(!!b.dataset['on'] === on));
-}
-for (const b of document.querySelectorAll('#menu .pill button')) if (b instanceof HTMLButtonElement) b.onclick = () => {
-  const row = b.closest('.switch'), on = !!b.dataset['on'];
-  if (!row) return;
-  showSwitch(row, on);
-  post('/settings', row.id === 'quietFromRow' ? { quietFrom: on ? $('quietFrom', HTMLInputElement).value || '22:00' : null } : { quietEndOn: on });
-};
-for (const [name, [front]] of Object.entries(RIBBONS)) {
-  const b = document.createElement('button');
-  b.dataset['name'] = name; b.title = name; b.setAttribute('aria-label', `${name} ribbon`); b.style.setProperty('--c', front);
-  b.onclick = () => { paintRibbon(name); post('/settings', { ribbon: name }); };
-  $('ribbons').append(b);
-}
 paintRibbon('cerulean'); // until the server says which
-const staleToggle = $('staleToggle', HTMLInputElement);
-staleToggle.onchange = () => {
-  live.staleOn = staleToggle.checked;
-  post('/settings', { stale: live.staleOn });
-};
-
-// lantern picker
-const picker = $('style', HTMLSelectElement);
-for (const [key, st] of Object.entries(STYLES)) picker.append(new Option(st.name, key, false, st === style));
-picker.onchange = () => {
-  applyStyle(picker.value);
-  post('/settings', { style: picker.value });
-};
 applyStyle(PINNED && isStyleKey(PINNED) ? PINNED : 'barrel'); // until the server says which lantern is chosen
 
 // The macOS screensaver's web view never fires requestAnimationFrame, so when it goes quiet a timer takes over,
@@ -186,29 +141,6 @@ $('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
 $('card').addEventListener('pointerleave', e => { if (!isTouch(e)) live.hideTimer = setTimeout(hideCard, 400); });
-
-// An option's tip (the .tip after its row) docks just above the settings menu at the menu's width, like the recap's session card
-// below its panel; with no room above (a short window) it sits at the window's top edge. A pointer over a row or keyboard focus
-// in it shows its tip; aria-describedby links each control to its tip for screen readers.
-const menu = $('menu');
-let tipped: HTMLElement | null = null;
-function showTip(e: Event, on = true) {
-  const row = on && e.target instanceof Element ? e.target.closest('#menu > :not(.tip)') : null, next = row?.nextElementSibling;
-  const tip = next instanceof HTMLElement && next.matches('.tip') ? next : null;
-  if (e.type === 'focusin' && !(e.target instanceof Element && e.target.matches(':focus-visible'))) return;
-  if (tip === tipped) return;
-  tipped?.classList.remove('show'); tipped = tip;
-  if (!tip) return;
-  const r = menu.getBoundingClientRect();
-  tip.style.left = `${r.left}px`; tip.style.width = `${r.width}px`;
-  tip.style.top = `${Math.max(8, r.top - 8 - tip.offsetHeight)}px`;
-  tip.classList.add('show');
-}
-menu.addEventListener('pointerover', showTip);
-menu.addEventListener('focusin', showTip);
-menu.addEventListener('pointerleave', e => showTip(e, false));
-menu.addEventListener('focusout', e => showTip(e, false));
-menu.addEventListener('toggle', e => { if ('newState' in e && e.newState === 'closed') showTip(e, false); });
 
 // the daily recap: checked when the window comes back into view, and every minute (a window left open overnight)
 addEventListener('visibilitychange', () => maybeRecap());

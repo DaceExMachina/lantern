@@ -83,7 +83,7 @@
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
   #menu { padding-top: 7px; }
   #menu:popover-open { gap: 0; }
-  /* each option's tip is a docked card like the recap's, above the menu at its width (src/wiring.ts docks it). It shows after a
+  /* each option's tip is a docked card like the recap's, above the menu at its width (src/components/SettingsMenu.vue docks it). It shows after a
      short hover on the row, or when a control in it has keyboard focus. */
   #menu .tip { max-width: none; box-sizing: border-box; z-index: var(--z-tip); transition-delay: .5s; }
   #menu .tip.show { opacity: 1; }
@@ -437,36 +437,7 @@
   <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="21" height="21" aria-hidden="true" fill="currentColor"><circle cx="8" cy="8" r="1.3"/><path d="M8 1.2l.9 4.9L8 6.6l-.9-.5zM8 14.8l-.9-4.9.9-.5.9.5zM1.2 8l4.9-.9.5.9-.5.9zM14.8 8l-4.9.9-.5-.9.5-.9z"/><path d="M3.2 3.2l3.4 2.6-.3.5-.5.3zM12.8 12.8l-3.4-2.6.3-.5.5-.3zM3.2 12.8l2.6-3.4.5.3.3.5zM12.8 3.2l-2.6 3.4-.5-.3-.3-.5z" opacity=".7"/></svg></button>
   </div>
   <!-- settings fly up from the corner; a popover closes itself on a click elsewhere or Escape -->
-  <div id="menu" class="flyup" popover>
-    <label class="notify"><input type="checkbox" id="notify" aria-describedby="tip-notify"> notify me when a session needs me</label>
-    <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications.</span>
-    <label><input type="checkbox" id="staleToggle" aria-describedby="tip-stale"> show stale PRs</label>
-    <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns and nobody has touched for a week, as pale wisps drifting low in the scene. It needs GitHub status.</span>
-    <label><input type="checkbox" id="textToggle" aria-describedby="tip-text"> show session text</label>
-    <span class="tip" role="tooltip" id="tip-text">Prints lines your sessions wrote onto the lantern's paper, fading in and out. Only the barrel and the round chōchin have paper, so it's greyed out on the Moroccan and the candle.</span>
-    <label><select id="style" aria-label="Lantern style" aria-describedby="tip-style"></select></label>
-    <span class="tip" role="tooltip" id="tip-style">Picks the lantern for every window, the iTerm2 panel and the screensaver. Choose from the barrel, the round chōchin, the brass Moroccan and the pillar candle. Some of the options here only work on certain lanterns.</span>
-    <div class="ribbon"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour" aria-describedby="tip-ribbon"></span></div>
-    <span class="tip" role="tooltip" id="tip-ribbon">Colours the bookmark ribbon that hangs inside the barrel lantern. The other lanterns have no ribbon, so these are greyed out on them.</span>
-    <div class="time switch" id="quietFromRow"><span>quiet from</span><span class="pill" role="group" aria-label="Quiet from" aria-describedby="tip-from"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietFrom" value="22:00" aria-label="Quiet from" aria-describedby="tip-from" disabled></label></div>
-    <span class="tip" role="tooltip" id="tip-from">Turns quiet on by itself every night at this time, even with no window open. It snoozes every session until quiet hours end.</span>
-    <div class="time switch" id="quietEndRow"><span>quiet until</span><span class="pill" role="group" aria-label="Quiet until" aria-describedby="tip-until"><button data-on=""><span>off</span></button><button data-on="1"><span>on</span></button></span><label><input type="time" id="quietEnd" value="08:00" aria-label="Quiet until" aria-describedby="tip-until"></label></div>
-    <span class="tip" role="tooltip" id="tip-until">Sets when quiet hours end and moths can call you again. Switch it off and quiet lasts until you press the moon.</span>
-    <label class="time">day rollover <input type="time" id="dayStart" value="00:00" aria-describedby="tip-day"></label>
-    <span class="tip" role="tooltip" id="tip-day">Sets when one day ends and the next begins in your stats, badges and recap. Set it later than midnight to keep late nights with the day they belong to.</span>
-    <section id="gh" aria-label="GitHub"></section>
-    <details id="help">
-      <summary>What's what?</summary>
-      <p><b>Big moths</b> are your sessions and <b>small ones</b> are their agents. The more of them working, the brighter the flame.</p>
-      <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
-      <p><b>Hover</b> a moth for its card. <b>Click</b> the moth or the card's header to jump to its session, or <b>right-click</b> the moth (or click the card's status) to snooze it. Do it again and it sleeps, snoozed until you wake it.</p>
-      <p><b>Pin</b> a card to keep it open on the side.</p>
-      <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:var(--pr-ready)"></span>ready</span><span class="key"><span class="swatch" style="background:var(--pr-failing)"></span>failing</span><span class="key"><span class="swatch" style="background:var(--pr-changes)"></span>changes</span><span class="key"><span class="swatch" style="background:var(--pr-draft)"></span>draft</span><span class="key"><span class="swatch" style="background:var(--pr-in-review)"></span>in review</span>. The faint moths and fireflies in the background are stale PRs and the sessions that made them.</p>
-      <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span id="quietUntil">until 8am</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>
-      <p>The <b>day rollover</b> is when a new day starts in your stats. Set it past midnight to keep late nights with the day before.</p>
-      <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
-    </details>
-  </div>
+  <div id="menu" class="flyup" popover></div>
   <div id="stats" class="flyup" popover aria-label="Stats"></div>
   <div id="recap" class="flyup" popover aria-label="Recap"></div>
 </footer>

@@ -1,6 +1,7 @@
 // Sessions from the server, turned into moths (session moths and their agents), with their hover areas.
 
 import type { AgentMoth, CardAt, Moth, Session, SessionMoth, Zone } from '../types';
+import { timeLabel } from '../types';
 import { live } from './live';
 import { $, AMBIENT, CX, CY, EDGES, NS, SIZE, WING_SIDE, WING_UP, pathOf, post, ringHome, stretch } from './scene';
 import { hash, seeded } from './lanterns';
@@ -10,7 +11,7 @@ import { alertMe } from './notify';
 export let sessions: Session[] = [];
 let seenWaiting = new Set<string>(), nextUp: Record<string, number> = {}; // nextUp: where each status bar count's clicks have got to
 // what the server sends, and the settings, are in live.ts
-export const quietEndLabel = () => { const [h = 0, m = 0] = live.quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
+export const quietEndLabel = () => timeLabel(live.quietEnd);
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();

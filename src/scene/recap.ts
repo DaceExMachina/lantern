@@ -7,7 +7,7 @@
 import { nextTick } from 'vue';
 import { live } from './live';
 import { $, nth, post } from './scene';
-import { box } from './notify';
+import { notifying } from './notify';
 import { dayKey } from './stats';
 import { useLanternStore } from '../stores/lantern';
 import { fetchStats } from '../types';
@@ -79,7 +79,7 @@ export async function openRecap(i: number, auto = false) {
   await nextTick();
   $('stats').hidePopover();
   $('recap').showPopover();
-  if (auto && box.checked && Notification.permission === 'granted') {
+  if (auto && notifying() && Notification.permission === 'granted') {
     const badges = j.achievements.filter(a => a[1] === dayKey(d.start)).length;
     new Notification(`Lantern: ${isToday ? 'today' : 'yesterday'}`, { body: `${d.warmMoths}% warm moths${badges ? `, ${badges} badge${badges === 1 ? '' : 's'}` : ''}`, silent: true });
   }
