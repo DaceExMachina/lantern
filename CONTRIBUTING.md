@@ -8,9 +8,11 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 
 | Where | What |
 |---|---|
-| `index.html` | The page's markup and styles. It loads the scripts in `page/`. |
-| `page/*.js` | One classic script per part of the scene (moths, lanterns, fireflies, the card, stats and so on). They share globals and load in the order `index.html` lists them, with `main.js` last to wire everything up. |
-| `page-globals.d.ts`, `tsconfig.page.json` | Type-check the page scripts as one program, with no build step. |
+| `index.html` | The page's markup and styles, and Vite's entry. It loads `src/main.ts` and the scripts in `public/page/`. |
+| `src/` | The page's TypeScript modules, bundled by Vite. Only `main.ts` so far. |
+| `public/page/*.js` | One classic script per part of the scene (moths, lanterns, fireflies, the card, stats and so on). Vite copies them to `dist/` as they are. They share globals and load in the order `index.html` lists them, with `main.js` last to wire everything up. |
+| `public/` | The scripts above and the icons, copied to `dist/` untouched. |
+| `vite.config.mts`, `tsconfig*.json` | The Vite and Vitest config, and the TypeScript projects: Node scripts (`tsconfig.json`), `src/` (`tsconfig.app.json`), and the page scripts as one program (`tsconfig.page.json`, with `page-globals.d.ts`). |
 | `app/Server.swift` | The server: state, hook events, the HTTP and SSE plumbing. |
 | `app/Transcripts.swift` | Reading hook payloads and transcripts, and rebuilding sessions from them. |
 | `app/Terminals.swift` | Finding a session's terminal tab and bringing it to the front. |
@@ -18,19 +20,31 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | `app/Stats.swift` | The event log behind the stats panel. Its schema is described at the top of the file. |
 | `app/main.swift` | The app's window, Dock badge and login item. |
 | `screensaver/`, `iterm/` | The screensaver and the iTerm2 toolbelt panel. Both show the page served by the app. |
-| `scripts/` | `npm run preview` and `npm run snapshots`. |
-| `install.js` | The installer: hooks, building the app and screensaver, the iTerm2 panel. |
+| `scripts/` | `npm run preview` and `npm run snapshots`, and `serve.js`, which builds the page and serves it for the snapshots and the morph test. |
+| `install.js` | The installer: hooks, building the page, the app and the screensaver, the iTerm2 panel. |
 | `fake.js` | Plays every lantern state without real sessions, on a throwaway lantern (see below). |
 | `test/` | The tests and the snapshots (see below). |
 
 On startup, the server rebuilds your open sessions from their transcripts in `~/.claude/projects` (or under `CLAUDE_CONFIG_DIR`), so a restart doesn't lose them.
 
+## Building the page
+
+Vite builds the page into `dist/`, which isn't committed. It needs Node 20.19 or 22.12 and up.
+
+```bash
+npm install
+npm run build
+```
+
+`install.js` runs both when you install from a checkout. Lantern.app then serves `dist/` and keeps it built: it runs `vite build --watch` in that checkout, so a saved change rebuilds within a second or two and every open window reloads. If a build fails, the last good `dist/` keeps being served and the error lands in the app's log. The app doesn't run `npm install` itself, so after a pull that changes `package-lock.json`, run `install` (or `npm install`) in that checkout.
+
 ## Work in a worktree
 
-Lantern.app serves the page straight from the checkout you installed from, and every open window reloads whenever `index.html` or a script in `page/` changes. Edit that checkout and your live lantern changes under you mid-edit. Work in a separate worktree instead:
+Lantern.app serves the page straight from the checkout you installed from. Edit that checkout and your live lantern changes under you mid-edit. Work in a separate worktree instead:
 
 ```bash
 git worktree add ../lantern-my-change -b my-change
+npm install
 ```
 
 ## Previewing a change
@@ -41,7 +55,7 @@ To try a branch with your real sessions, PRs and session text, run this in its w
 npm run preview
 ```
 
-It builds the branch's server without the app's window, hands it a copy of your settings, PR cache and stats from `~/Library/Application Support/Lantern`, and prints a URL on a spare port. Page options go after `--`, as in `npm run preview -- style=chochin`. Edits to `index.html` or `page/` reload the page by themselves. After changing `app/`, stop it with Ctrl-C and run it again.
+It builds the branch's server without the app's window, hands it a copy of your settings, PR cache and stats from `~/Library/Application Support/Lantern`, and prints a URL on a spare port. That URL is a Vite dev server, which serves the page and passes the server's endpoints (`/events`, `/settings`, `/snooze` and the rest) on to it. Page options go after `--`, as in `npm run preview -- style=chochin`. Edits to the page reload it by themselves. After changing `app/`, stop it with Ctrl-C and run it again.
 
 The preview reads `~/.claude` and never writes there. Settings you change in it stay in its copy, which is deleted when it stops. Three things do reach the outside world: it polls GitHub on its own while it runs, clicking a moth really does bring that session's terminal to the front, and snoozing, sleeping or waking a moth changes it in the app. Claude Code's hooks only talk to the app, so while the app is running the preview shows the app's sessions, as the app sends them, and a snooze goes to the app too (one the app doesn't answer fails). If the app quits, the preview keeps showing its last sessions until the app is back. A preview started while the app is closed finds sessions once from their processes and transcripts, they don't change after that, and it doesn't start following the app when the app opens. It also subscribes to ghbus, if that's running, which only reads from it.
 
@@ -73,13 +87,13 @@ macOS treats every rebuild of an app signed on your own Mac as a new app, so it 
 npm install && npm run check && npm test
 ```
 
-`npm run check` type-checks the JavaScript, both the Node scripts and the page, with TypeScript. There's no build step.
+`npm run check` runs `vue-tsc` over three projects: the Node scripts, `src/` and the page scripts.
 
-`npm test` uses Node's built-in test runner. It needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with a temporary home folder of its own, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, plus `expect` steps holding the sessions the page should have by that point.
+`npm test` runs Node's built-in test runner over `test/*.test.js`, then Vitest over `test/*.spec.js` (with happy-dom). New tests go in `.spec.js` files; the older ones move over as they're touched. It needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with a temporary home folder of its own, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, plus `expect` steps holding the sessions the page should have by that point.
 
 `test/saver.test.js` builds the screensaver and loads it in an off-screen window (`test/saver/main.swift`) to check it stops its page and quits when macOS ends the screensaver. That posts macOS's own "screensaver ended" notification to the whole Mac, so the test skips itself while a screensaver is running.
 
-`test/morph.test.js` loads the page the same way (`test/morph/main.swift`) to check that a redraw of the card keeps keyboard focus, scroll, the element under the pointer and a press mid-click, since only a real browser has those.
+`test/morph.test.js` builds the page, serves it over http and loads it the same way (`test/morph/main.swift`) to check that a redraw of the card keeps keyboard focus, scroll, the element under the pointer and a press mid-click, since only a real browser has those.
 
 When you change what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps to match. Read the diff before you commit it. If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
 
@@ -101,7 +115,7 @@ The zombie and jwt tests in `test/server.test.js` (fixtures in `test/fixtures/zo
 npm run snapshots
 ```
 
-This checks that the page still looks the same. It renders a few scenes in WebKit and compares them pixel by pixel with the pictures in `test/snapshots/`: each lantern, the second screen's ambient view, a hover card, and the chrome (the settings menu with its help open, the stats panel, a recap, a card and the dev panel) at full width, a phone's width (375) and the iTerm2 panel's (300). A wider window (1100) docks two sessions in the pinned sidebar, and checks the scene refitted to the room left beside it. The chrome scenes read a made-up stats log from the fixture's `statsLog`. The scenes are deterministic, with a seeded `Math.random`, a clock that only moves when the script steps it, and a made-up event stream (`test/snapshots/fixture.js`) that has sessions in every state, every PR colour, satellites, subagents, review fireflies, stale wisps and ghosts, and session text on the barrel. The candle's scene also catches a scorched moth. The fixture moves its wall clock so sess-alpha touches the flame half a second before the last picture, and picks a scorch where the candle's smoke is 2 to 3.5 seconds into its curl then. WebKit runs in a window that is never shown, so nothing pops up or takes focus.
+This checks that the page still looks the same. It builds the page, serves the build over http, and renders a few scenes of it in WebKit and compares them pixel by pixel with the pictures in `test/snapshots/`: each lantern, the second screen's ambient view, a hover card, and the chrome (the settings menu with its help open, the stats panel, a recap, a card and the dev panel) at full width, a phone's width (375) and the iTerm2 panel's (300). A wider window (1100) docks two sessions in the pinned sidebar, and checks the scene refitted to the room left beside it. The chrome scenes read a made-up stats log from the fixture's `statsLog`. The scenes are deterministic, with a seeded `Math.random`, a clock that only moves when the script steps it, and a made-up event stream (`test/snapshots/fixture.js`) that has sessions in every state, every PR colour, satellites, subagents, review fireflies, stale wisps and ghosts, and session text on the barrel. The candle's scene also catches a scorched moth. The fixture moves its wall clock so sess-alpha touches the flame half a second before the last picture, and picks a scorch where the candle's smoke is 2 to 3.5 seconds into its curl then. WebKit runs in a window that is never shown, so nothing pops up or takes focus.
 
 Run it before and after a change that shouldn't change what you see, like a refactor or a speedup. When a scene differs, it says how many pixels, and writes the new picture and a diff (the differences in red) to `test/snapshots/out/`. When you change the look on purpose, refresh the pictures, then look at them before you commit:
 
@@ -111,7 +125,7 @@ npm run snapshots -- --update
 
 It needs macOS, so it isn't part of `npm test` or CI. The pictures were made on a Retina Mac, and a Mac with a different screen may draw a few pixels differently. If a scene fails before you've changed anything, run `--update` on main first and compare against that.
 
-CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the type check and the tests on every pull request and push to main, and makes sure the app and the screensaver compile.
+CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the build, the type check and the tests on every pull request and push to main, and makes sure the app and the screensaver compile.
 
 ## Design tokens
 

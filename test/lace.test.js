@@ -16,7 +16,7 @@ function setup() {
   const canvas = () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => 'data:baked' + built.length });
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, farWallTex: {}, document: { getElementById: id => id === 'cutouts' ? mask : null, createElement: canvas },
     Image, devicePixelRatio: 1, setTimeout: f => timers.push(f), clearTimeout: () => { timers.length = 0; } });
-  for (const f of ['scene', 'dev', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const resize = px => { vm.runInContext(`VIEW.px = ${px}; bakeCutouts()`, page); };
   const settle = async () => { while (timers.length || decodes.length) { timers.splice(0).forEach(f => f()); decodes.splice(0).forEach(r => r()); await new Promise(r => setImmediate(r)); } };
   return { mask, timers, decodes, built, resize, settle, fail };

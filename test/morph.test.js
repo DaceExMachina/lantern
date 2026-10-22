@@ -6,17 +6,21 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync, spawnSync } = require('child_process');
+const { execFileSync, execFile } = require('child_process');
+const { promisify } = require('util');
+const { serveBuild } = require('../scripts/serve');
 
 const ROOT = path.join(__dirname, '..');
 
-test('a redraw keeps focus, scroll, hover and a press, and another session\'s card starts at the top', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lantern-morph-'));
+test('a redraw keeps focus, scroll, hover and a press, and another session\'s card starts at the top', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'lantern-morph-')), page = await serveBuild();
   try {
     execFileSync('swiftc', ['-o', path.join(tmp, 'harness'), 'test/morph/main.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
-    const run = spawnSync(path.join(tmp, 'harness'), [ROOT], { encoding: 'utf8', timeout: 90000 });
-    assert.strictEqual(run.status, 0, run.stdout + run.stderr);
+    // not spawnSync: this process serves the page the harness loads
+    const run = await promisify(execFile)(path.join(tmp, 'harness'), [ROOT, page.url], { timeout: 90000 }).catch(e => e);
+    assert.strictEqual(run.code ?? 0, 0, run.stdout + run.stderr);
   } finally {
+    await page.close();
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

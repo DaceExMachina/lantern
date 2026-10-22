@@ -24,10 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
+        with: { node-version: 22, cache: npm } # Vite needs 20.19 or 22.12 and up
       - run: npm ci
-      - run: npm run check
-      - run: npm test # builds the Swift server headless and replays hook events against it
+      - run: npm run build
+      - run: npm run check # vue-tsc
+      - run: npm test # node:test (builds the Swift server headless and replays hook events against it), then vitest run
   swift:
     if: github.event.action != 'labeled' || github.event.label.name == 'run-ci'
     runs-on: macos-latest
