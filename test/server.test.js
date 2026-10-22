@@ -1563,6 +1563,90 @@ test('page files always revalidate: Cache-Control no-cache, and a 304 when the E
   assert.strictEqual((await fetch(base + '/page/nope.js')).status, 404);
 });
 
+// A Vite build in dist/ (dist/index.html and hashed files under dist/assets/) becomes the web root, and a change to anything
+// in it reloads open windows like a change to page/ does. Without dist/index.html the checkout serves itself, as before.
+const webRoot = files => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'web-'));
+  for (const [file, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); fs.writeFileSync(path.join(dir, file), text); }
+  return dir;
+};
+const versionsOf = (t, base) => {
+  const versions = [];
+  const req = http.get(base + '/events', res => {
+    let text = '';
+    res.on('data', chunk => {
+      text += chunk;
+      const parts = text.split('\n\n'); text = parts.pop();
+      for (const b of parts) if (b.includes('event: version')) versions.push(b.match(/event: version\ndata: (.*)$/m)[1]);
+    });
+  });
+  t.after(() => req.destroy());
+  return versions;
+};
+test('a Vite build in dist/ is the web root: its files get their content types, a vanished file is a 404, and a change reloads windows', async t => {
+  const web = webRoot({ 'index.html': 'CHECKOUT', 'icon.png': 'CHECKOUT ICON', 'page/main.js': 'CHECKOUT PAGE', 'dist/index.html': 'BUILT', 'dist/assets/app-1a.js': 'js', 'dist/assets/app-1a.css': 'css',
+    'dist/favicon.svg': 'svg', 'dist/assets/font-2.woff2': 'font', 'dist/manifest.json': '{}', 'dist/assets/app-1a.js.map': '{}', 'dist/notes.txt': 'txt' });
+  const base = await serve(t, {}, () => {}, { LANTERN_WEB: web });
+  const get = async (url, headers) => fetch(base + url, { headers });
+  for (const [url, type, body] of [['/', 'text/html; charset=utf-8', 'BUILT'], ['/index.html', 'text/html; charset=utf-8', 'BUILT'], ['/?panel', 'text/html; charset=utf-8', 'BUILT'],
+    ['/assets/app-1a.js', 'text/javascript; charset=utf-8', 'js'], ['/assets/app-1a.css', 'text/css; charset=utf-8', 'css'], ['/favicon.svg', 'image/svg+xml', 'svg'],
+    ['/assets/font-2.woff2', 'font/woff2', 'font'], ['/manifest.json', 'application/json', '{}'], ['/assets/app-1a.js.map', 'application/json', '{}']]) {
+    const res = await get(url);
+    assert.strictEqual(res.status, 200, url);
+    assert.strictEqual(res.headers.get('content-type'), type, url);
+    assert.strictEqual(res.headers.get('cache-control'), 'no-cache', url);
+    assert.strictEqual(await res.text(), body, url);
+    assert.strictEqual((await get(url, { 'If-None-Match': res.headers.get('etag') })).status, 304, url);
+  }
+  // nothing else: the checkout's own files, unknown types, folders and ways out of dist/ are all 404
+  for (const url of ['/icon.png', '/page/main.js', '/notes.txt', '/assets', '/assets/', '/assets/nope.js', '/.hidden.js', '/assets/.x.js']) assert.strictEqual((await get(url)).status, 404, url);
+  for (const url of ['/assets/../../index.html', '/../index.html', '/assets/../../page/main.js', '/..%2findex.html']) { // fetch tidies these, so send them as they are
+    const res = await new Promise((done, fail) => http.get({ host: new URL(base).hostname, port: new URL(base).port, path: url }, r => { let b = ''; r.on('data', c => b += c); r.on('end', () => done({ status: r.statusCode, body: b })); }).on('error', fail));
+    assert.ok(res.status === 404 && !/CHECKOUT/.test(res.body), `${url} gave ${res.status} ${res.body}`);
+  }
+  // the API is untouched
+  assert.strictEqual((await get('/stats')).status, 200);
+  const versions = versionsOf(t, base);
+  await until(() => versions.length, 'the first version');
+  fs.rmSync(path.join(web, 'dist/assets/app-1a.js')); // a rebuild replaced a hashed file
+  await until(() => versions.length > 1, 'a version event after a file in dist/ was deleted');
+  assert.strictEqual((await get('/assets/app-1a.js')).status, 404, 'the replaced file');
+  const at = new Date(Date.now() + 60000); // clearly newer than the files above, whatever the clock's granularity
+  fs.writeFileSync(path.join(web, 'dist/assets/app-2b.js'), 'js2');
+  fs.utimesSync(path.join(web, 'dist/assets/app-2b.js'), at, at);
+  await until(() => versions.length > 2, 'a version event after a file in dist/ was added');
+  assert.strictEqual(await (await get('/assets/app-2b.js')).text(), 'js2');
+  assert.strictEqual(new Set(versions).size, 3);
+});
+test('without dist/index.html the checkout serves itself, and dist/ files are not served', async t => {
+  const web = webRoot({ 'index.html': 'CHECKOUT', 'page/main.js': 'PAGE', 'dist/assets/app-1a.js': 'js' });
+  const base = await serve(t, {}, () => {}, { LANTERN_WEB: web });
+  assert.strictEqual(await (await fetch(base + '/')).text(), 'CHECKOUT');
+  assert.strictEqual(await (await fetch(base + '/page/main.js')).text(), 'PAGE');
+  for (const url of ['/dist/assets/app-1a.js', '/assets/app-1a.js', '/dist/index.html']) assert.strictEqual((await fetch(base + url)).status, 404, url);
+});
+
+// The server keeps dist/ built by running `vite build --watch` in the checkout it serves, when that has Vite and a config.
+// A stand-in vite logs where and how it ran, then exits at once, which also shows the restart.
+test('the server runs vite build --watch only in a checkout that has vite and its config, and brings it back when it exits', async t => {
+  const web = (config, vite) => {
+    const dir = fs.mkdtempSync(path.join(tmp, 'web-'));
+    fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html>');
+    if (config) fs.writeFileSync(path.join(dir, 'vite.config.js'), '');
+    if (vite) {
+      fs.mkdirSync(path.join(dir, 'node_modules/.bin'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'node_modules/.bin/vite'), '#!/bin/sh\necho "$PWD $*" >> "${0%/*}/../../vite.log"\n', { mode: 0o755 });
+    }
+    return dir;
+  };
+  const [ready, noConfig, noVite] = [web(true, true), web(false, true), web(true, false)];
+  for (const dir of [noConfig, noVite, ready]) await serve(t, {}, () => {}, { LANTERN_WEB: dir });
+  const lines = () => fs.existsSync(path.join(ready, 'vite.log')) ? fs.readFileSync(path.join(ready, 'vite.log'), 'utf8').trim().split('\n') : [];
+  await until(() => lines().length >= 2, 'vite to start and come back after exiting');
+  assert.strictEqual(lines()[0], `${fs.realpathSync(ready)} build --watch`);
+  for (const dir of [noConfig, noVite]) assert.ok(!fs.existsSync(path.join(dir, 'vite.log')), `${dir} started a watcher`);
+});
+
 // Whether a session's card lists its PRs or shows chips is a shared setting, so every window shows the same.
 const settingsStream = base => {
   const seen = [];

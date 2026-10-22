@@ -268,7 +268,34 @@ final class LanternServer {
         broadcast()
     }
 
+    // Keeps dist/ built. A checkout with Vite installed gets `vite build --watch` as a child of the server, so a saved change
+    // rebuilds, pageVersion() notices and open windows reload. If it exits, it comes back after a growing pause (a broken
+    // config must not spin); one that ran for half a minute starts the pause over. Its output joins the app's log.
+    // ponytail: an app's PATH is minimal, so only Homebrew's node is found; add nvm and friends if someone needs them.
+    var vite: Process?
+    func buildChrome(pause: Double = 1) {
+        let bin = web + "/node_modules/.bin/vite"
+        guard FileManager.default.isExecutableFile(atPath: bin),
+              ["js", "ts", "mjs", "mts"].contains(where: { FileManager.default.fileExists(atPath: web + "/vite.config." + $0) }) else { return }
+        let p = Process(), began = Date()
+        p.executableURL = URL(fileURLWithPath: bin)
+        p.arguments = ["build", "--watch"]
+        p.currentDirectoryURL = URL(fileURLWithPath: web)
+        p.environment = ProcessInfo.processInfo.environment.merging(["PATH": "/opt/homebrew/bin:/usr/local/bin:" + (ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin")]) { $1 }
+        p.standardInput = FileHandle.nullDevice
+        p.terminationHandler = { [weak self] _ in DispatchQueue.main.async {
+            guard let self, self.vite === p else { return }
+            let next = Date().timeIntervalSince(began) > 30 ? 1 : min(pause * 2, 60)
+            print("vite build --watch exited; trying again in \(Int(pause)) s")
+            DispatchQueue.main.asyncAfter(deadline: .now() + pause) { if self.vite === p { self.buildChrome(pause: next) } }
+        } }
+        guard (try? p.run()) != nil else { return print("vite build --watch won't start") }
+        vite = p
+    }
+    func stopBuilding() { let p = vite; vite = nil; p?.terminate() }
+
     func begin() {
+        buildChrome()
         stats.open()
         stats.begin("server")
         ownedPRs = stats.ownedPRs()
@@ -346,12 +373,15 @@ final class LanternServer {
         let text = String(decoding: (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
         DispatchQueue.global().async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
     }
-    // the newest change to index.html or any of its scripts in page/
+    // The newest change to the page: index.html and its scripts in page/, or anything in dist/ (a Vite build, which may not exist)
     func pageVersion() -> Double {
-        let scripts = ((try? FileManager.default.contentsOfDirectory(atPath: web + "/page")) ?? []).map { web + "/page/" + $0 }
-        return ([web + "/index.html"] + scripts).compactMap { fileTimes($0)?.mtime }.max() ?? 0
+        let fm = FileManager.default
+        let scripts = ((try? fm.contentsOfDirectory(atPath: web + "/page")) ?? []).map { "/page/" + $0 }
+        let built = (fm.enumerator(atPath: web + "/dist")?.allObjects as? [String] ?? []).map { "/dist/" + $0 } // folders too, so a deleted file counts
+        return (["/index.html", "/dist"] + scripts + built).compactMap { fileTimes(web + $0)?.mtime }.max() ?? 0
     }
-
+    // Where the static page is served from: a Vite build in dist/ when there is one, else the checkout itself.
+    var root: String { FileManager.default.fileExists(atPath: web + "/dist/index.html") ? web + "/dist" : web }
     // MARK: hook events
 
     let prep = DispatchQueue(label: "lantern.events")
@@ -784,7 +814,8 @@ final class LanternServer {
     // A page file. `no-cache` makes browsers ask every time (heuristic caching kept a phone on old files after updates), and
     // the ETag (modification time and size) lets that ask end in a 304 with no body when nothing changed.
     func serveFile(_ c: NWConnection, _ req: Request, _ path: String, _ type: String) {
-        guard let data = FileManager.default.contents(atPath: web + path), let mtime = fileTimes(web + path)?.mtime else { return respond(c, 404) }
+        let file = root + path
+        guard let data = FileManager.default.contents(atPath: file), let mtime = fileTimes(file)?.mtime else { return respond(c, 404) }
         let etag = "\"\(Int(mtime))-\(data.count)\""
         let headers = "Cache-Control: no-cache\r\nETag: \(etag)\r\n"
         if req.headers["if-none-match"] == etag { return respond(c, 304, headers: headers) }
@@ -992,11 +1023,19 @@ final class LanternServer {
         if req.method == "GET" && req.url == "/stats" {
             return stats.report(warmGoal: warmGoal) { self.respond(c, 200, "application/json", Data(jsonText($0).utf8)) }
         }
-        let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
+        if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
+        if root != web { // a Vite build: any file in dist/ with a known extension, in plain folders (no dot-names, so no ..)
+            let types = ["js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
+                         "woff2": "font/woff2", "json": "application/json", "map": "application/json"]
+            if page.range(of: #"^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$"#, options: .regularExpression) != nil, let type = types[(page as NSString).pathExtension] {
+                return serveFile(c, req, page, type)
+            }
+            return respond(c, 404)
+        }
+        let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = files[page] { return serveFile(c, req, page, type) }
         if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil { return serveFile(c, req, page, "text/javascript; charset=utf-8") }
-        if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
         respond(c, 404)
     }
 }
