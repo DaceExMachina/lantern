@@ -101,7 +101,7 @@ setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
 // Redraw the sidebar twice a second. It's patched in place (card.ts morph), so hover, focus, scroll and a press mid-click
 // all survive the redraw. It shows or goes as the window crosses PIN_MIN. (The card is Vue's: SessionCard.vue.)
-setInterval(renderSidebar, 500);
+setInterval(() => renderSidebar(), 500);
 addEventListener('resize', renderSidebar);
 $('card').addEventListener('pointerenter', () => clearTimeout(live.hideTimer));
 // A session's card opens it from its header (card.ts), or from a click on its body where the card covers its own moth (a

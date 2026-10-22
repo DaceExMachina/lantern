@@ -12,7 +12,8 @@ import SessionRows from './SessionRows.vue';
 
 const store = useLanternStore();
 const shown = shallowRef<Hovered | null>(null), opened = ref(0);
-watch(() => store.hovered, (h, was) => { if (h) shown.value = h; if (h && !was) opened.value++; }, { immediate: true });
+// sync, so a card hidden and opened again before Vue next patches still starts afresh
+watch(() => store.hovered, (h, was) => { if (h) shown.value = h; if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
 // a session's card finds its session in the store, or while its moth leaves, the one the moth last had
 const session = computed<Session | undefined>(() => { const h = shown.value; return h && 'key' in h ? store.sessions.find(o => o.id === h.key) ?? h.session : undefined; });
 const days = (ms: number) => Math.round(ms / 864e5);

@@ -1,15 +1,21 @@
-// The moth's hover card (src/scene/card.ts): the PR header that sums the PRs up and names a hovered chip, the list capped at
-// the worst few, the per-session toggle from the server's settings, and the agent rows (job, time, model, a tag chip
-// only for a tagged step). It runs against index.html's real card and dock, with the real morph patching them in happy-dom;
-// test/morph.test.js checks the same patching in WebKit.
+// The moth's hover card (src/components/SessionCard.vue, mounted in index.html's real #card as src/main.ts does): the PR
+// header that sums the PRs up and names a hovered chip, the list capped at the worst few, the per-session toggle from the
+// server's settings, the agent rows (job, time, model, a tag chip only for a tagged step), times that tick, and controls
+// that keep their elements through a re-render. Then the pinned sidebar (src/scene/card.ts), with the real morph patching
+// it in happy-dom; test/morph.test.js checks the same patching, and the card's, in WebKit.
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test, vi } from 'vitest';
+import { createApp, nextTick } from 'vue';
+import SessionCard from '../src/components/SessionCard.vue';
 import { $ } from '../src/scene/scene';
-import { live } from '../src/scene/live';
-import { sync } from '../src/scene/state';
-import { HANDLERS, hideCard, hoverZone, openAgents, renderCard, renderSidebar } from '../src/scene/card';
+import { chrome, live } from '../src/scene/live';
+import { sessionMoth, sessions, sync } from '../src/scene/state';
+import { HANDLERS, enterZone, hideCard, hoverZone, renderSidebar } from '../src/scene/card';
+import { useLanternStore } from '../src/stores/lantern';
+import { parseSettings } from '../src/types';
 
 const text = n => n.textContent;
 const find = (n, cls) => [...n.querySelectorAll('.' + cls)];
@@ -18,13 +24,25 @@ const anchors = n => [...n.querySelectorAll('a')];
 const posts = [];
 const setSessions = (...ss) => { live.raw = ss; sync(); };
 // the page as it first loads: nothing hovered, listed, pinned or known, the card and dock empty, 1440 wide
+let app, store;
+// the card as src/main.ts mounts it, with the scene's side of the store wired the same way
+const mount = () => {
+  app?.unmount();
+  const pinia = createPinia();
+  store = useLanternStore(pinia);
+  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.pinned = live.pinned; store.now = Date.now(); };
+  app = createApp(SessionCard).use(pinia);
+  app.mount($('card'));
+};
+// the server's settings for every window: which sessions list their PRs (wiring.ts and events.ts hear them)
+const settings = o => { store.settings = parseSettings(o); };
 const reset = () => {
-  live.hovered = null; live.prList = {}; live.pinned = []; live.moths = new Map();
+  live.hovered = null; live.pinned = []; live.moths = new Map();
   setSessions();
   hideCard();
   document.body.className = '';
   vi.stubGlobal('innerWidth', 1440);
-  $('card').replaceChildren(); $('dock').children[0].replaceChildren();
+  mount(); $('dock').children[0].replaceChildren();
   renderSidebar();
 };
 beforeEach(() => {
@@ -33,34 +51,40 @@ beforeEach(() => {
   for (const [k, v] of [['offsetWidth', 240], ['offsetHeight', 40]]) Object.defineProperty($('prTip'), k, { value: v, configurable: true }); // no layout in happy-dom
   reset();
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => { app?.unmount(); app = null; vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-const show = s => { live.hovered = { session: s }; renderCard(); return $('card'); };
+// the card for `s`, as the server sends it: its moth hovered, after Vue has patched
+const show = async s => {
+  live.raw = [...live.raw.filter(o => o.id !== s.id), s]; sync();
+  enterZone(sessionMoth(s.id).zone);
+  await nextTick();
+  return $('card');
+};
 const now = Date.now();
 const pr = (n, need) => ({ url: `https://github.com/o/r/pull/${n}`, label: `#${n}`, need, title: `PR ${n} title` });
 const session = o => ({ id: 's1', cwd: '/w/proj', title: 'proj', state: 'waiting', started: now - 3600e3, last: now - 60e3, subagents: [], github: [], ...o });
 const TEN = [pr(1, 'draft'), pr(2, 'ready'), pr(3, 'draft'), pr(4, 'waiting'), pr(5, 'waiting'), pr(6, 'draft'), pr(7, 'draft'), pr(8, 'draft'), pr(9, 'draft'), pr(10, 'draft'), pr(11, 'draft')];
 const fire = (el, type, init = {}) => el.dispatchEvent(Object.assign(new Event(type), init));
 
-test('the PR header sums them up, and a hovered chip puts its title there until the pointer leaves', () => {
-  const card = show(session({ github: TEN }));
+test('the PR header sums them up, and a hovered chip puts its title there until the pointer leaves', async () => {
+  const card = await show(session({ github: TEN }));
   const [ph] = find(card, 'ph');
   assert.strictEqual(text(ph), 'PRs · 1 ready · 2 in review · 8 drafts');
   const chips = [...find(card, 'chips')[0].children];
   assert.strictEqual(chips.length, 11, 'more than three PRs start as chips');
   assert.deepStrictEqual(chips.slice(0, 3).map(text), ['#2', '#4', '#5'], 'worst first: ready, then in review, then drafts');
   const header = () => text(find(card, 'ph')[0]);
-  fire(chips[1], 'pointerenter');
+  fire(chips[1], 'pointerenter'); await nextTick();
   assert.strictEqual(header(), 'PR 4 title');
-  assert.strictEqual(header(), text(find(show(session({ github: TEN })), 'ph')[0]), 'and keeps it through a redraw');
-  fire(find(card, 'chips')[0].children[1], 'pointerleave');
+  assert.strictEqual(header(), text(find(await show(session({ github: TEN })), 'ph')[0]), 'and keeps it through a redraw');
+  fire(find(card, 'chips')[0].children[1], 'pointerleave'); await nextTick();
   assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
 });
 
-test('an open list shows the worst four, failing and changes requested first, then the rest as links', () => {
+test('an open list shows the worst four, failing and changes requested first, then the rest as links', async () => {
   const tip = $('prTip'), prs = [pr(1, 'draft'), pr(2, 'waiting'), pr(3, 'changes'), pr(4, 'ready'), pr(5, 'failing'), pr(6, 'draft')];
-  live.prList.s1 = true;
-  const card = show(session({ github: prs }));
+  settings({ prList: { s1: true } });
+  const card = await show(session({ github: prs }));
   assert.deepStrictEqual(find(card, 'pr2').map(a => a.href), [5, 3, 4, 2].map(n => pr(n).url));
   const [more] = find(card, 'more');
   assert.strictEqual(text(more), '2 more: #1#6', 'the commas are drawn after each link (CSS), so the links touch');
@@ -77,29 +101,29 @@ test('an open list shows the worst four, failing and changes requested first, th
   fire(overflow[1], 'pointerleave');
   assert.strictEqual(tip.className, 'badgeTip', 'and leaving hides it');
   assert.strictEqual(find(card, 'chips').length, 0);
-  live.prList = {};
-  assert.strictEqual(find(show(session({ github: prs.slice(0, 3) })), 'pr2').length, 3, 'three or fewer are listed until toggled');
+  settings({});
+  assert.strictEqual(find(await show(session({ github: prs.slice(0, 3) })), 'pr2').length, 3, 'three or fewer are listed until toggled');
 });
 
-test('the toggle flips the session\'s view, tells the server, and the server\'s settings decide what every window shows', () => {
-  const card = show(session({ github: TEN }));
+test('the toggle flips the session\'s view, tells the server, and the server\'s settings decide what every window shows', async () => {
+  const card = await show(session({ github: TEN }));
   const [tog] = find(card, 'tog');
   assert.strictEqual(tog.getAttribute('aria-label'), 'List PRs with their titles');
   assert.strictEqual(tog.title, 'List PRs with their titles', 'a tooltip too');
   assert.strictEqual(text(tog), '', 'an icon, no text');
   tog.click(); // a button, which the card's own click handler leaves alone (wiring.ts)
   assert.strictEqual(JSON.stringify(posts), JSON.stringify([['/settings', { prList: { s1: true } }]]));
-  assert.strictEqual(find(show(session({ github: TEN })), 'pr2').length, 4, 'now listed');
-  // another window gets the setting from the server (wiring.ts: live.prList = st.prList)
+  assert.strictEqual(find(await show(session({ github: TEN })), 'pr2').length, 4, 'now listed');
+  // another window gets the setting from the server (events.ts: store.settings)
   reset();
-  live.prList = { s1: true, s2: false };
-  assert.strictEqual(find(show(session({ github: TEN })), 'pr2').length, 4);
-  assert.strictEqual(find(show(session({ id: 's2', github: [pr(1, 'ready')] })), 'pr2').length, 0, 's2 chose chips with one PR');
+  settings({ prList: { s1: true, s2: false } });
+  assert.strictEqual(find(await show(session({ github: TEN })), 'pr2').length, 4);
+  assert.strictEqual(find(await show(session({ id: 's2', github: [pr(1, 'ready')] })), 'pr2').length, 0, 's2 chose chips with one PR');
 });
 
-test('an agent is three lines: dot, tag chip only when its step has one, model and time; its job; its step', () => {
+test('an agent is three lines: dot, tag chip only when its step has one, model and time; its job; its step', async () => {
   const agent = o => ({ id: 'a', type: 'opus-implement', description: 'Build the card', model: 'Opus 5.5', started: now - 8 * 60e3, last: now - 2e3, ...o });
-  const card = show(session({ state: 'working', subagents: [agent({ activity: '[card-e] Run the tests' }), agent({ id: 'b', started: now - 7 * 60e3, activity: 'Read card.ts', last: now - 30e3, model: 'Haiku 4.5', type: 'Explore' })] }));
+  const card = await show(session({ state: 'working', subagents: [agent({ activity: '[card-e] Run the tests' }), agent({ id: 'b', started: now - 7 * 60e3, activity: 'Read card.ts', last: now - 30e3, model: 'Haiku 4.5', type: 'Explore' })] }));
   const agents = find(card, 'agent');
   assert.deepStrictEqual(agents.map(r => [r.localName, ...[...r.children[0].children].map(c => c.className)]), [['button', 'arow', 'job', 'astep'], ['button', 'arow', 'job', 'astep']], 'a native button, so the keyboard opens it too');
   assert.deepStrictEqual(find(card, 'arow').map(r => [...r.children].map(c => c.className)), [['live', 'tag', 'model', 't'], ['live quiet', 'model', 't']], 'a tag chip only for a tagged step; dim after 10 s quiet');
@@ -108,107 +132,109 @@ test('an agent is three lines: dot, tag chip only when its step has one, model a
   assert.deepStrictEqual(find(card, 'astep').map(text), ['Run the tests', 'Read card.ts'], 'the tag comes off the step');
 });
 
-test('a click opens an agent in full and another closes it; it stays open through redraws until the card closes', () => {
+test('a click opens an agent in full and another closes it; it stays open through redraws until the card closes', async () => {
   const s = session({ state: 'working', subagents: [{ id: 'a', description: 'One', started: now - 2e3, last: now }, { id: 'b', description: 'Two', started: now - 1e3, last: now }] });
   const states = card => find(card, 'agent').map(r => [r.className, r.getAttribute('aria-expanded')]);
-  let card = show(s);
+  let card = await show(s);
   assert.deepStrictEqual(states(card), [['agent', 'false'], ['agent', 'false']]);
-  find(card, 'agent')[1].click();
+  const pressed = find(card, 'agent')[1];
+  pressed.click(); await nextTick();
   assert.deepStrictEqual(states(card), [['agent', 'false'], ['agent open', 'true']], 'opens in place');
-  card = show(s);
+  assert.strictEqual(find(card, 'agent')[1], pressed, 'the same button, opened');
+  card = await show(s);
   assert.deepStrictEqual(states(card), [['agent', 'false'], ['agent open', 'true']], 'still open after a redraw');
   find(card, 'agent')[1].click();
-  assert.deepStrictEqual(states(show(s)), [['agent', 'false'], ['agent', 'false']], 'another click closes it');
-  find(show(s), 'agent')[0].click();
-  assert.deepStrictEqual(states(show(s)), [['agent open', 'true'], ['agent', 'false']], 'the first is open now');
+  assert.deepStrictEqual(states(await show(s)), [['agent', 'false'], ['agent', 'false']], 'another click closes it');
+  find(await show(s), 'agent')[0].click();
+  assert.deepStrictEqual(states(await show(s)), [['agent open', 'true'], ['agent', 'false']], 'the first is open now');
   hideCard();
-  assert.deepStrictEqual(states(show(s)), [['agent', 'false'], ['agent', 'false']], 'a new card starts closed');
+  assert.deepStrictEqual(states(await show(s)), [['agent', 'false'], ['agent', 'false']], 'a new card starts closed');
 });
 
-test('a session\'s header opens the session, and shift-click on it snoozes', () => {
-  const calls = [], m = {};
+test('a session\'s header opens the session, and shift-click on it snoozes', async () => {
+  const calls = [], m = { key: 's1' };
   m.zone = hoverZone(() => m, () => calls.push('open'), 48);
   m.zone.menu = () => calls.push('snooze');
   live.moths = new Map([['s1', m]]);
-  const h = () => show(session({})).children[0].children[0];
-  assert.deepStrictEqual([h().localName, h().title], ['button', 'Open this session'], 'a native button in the header');
-  fire(h(), 'click', { shiftKey: false });
-  fire(h(), 'click', { shiftKey: true });
+  const h = async () => (await show(session({}))).children[0].children[0];
+  assert.deepStrictEqual([(await h()).localName, (await h()).title], ['button', 'Open this session'], 'a native button in the header');
+  fire(await h(), 'click', { shiftKey: false });
+  fire(await h(), 'click', { shiftKey: true });
   assert.deepStrictEqual(calls, ['open', 'snooze']);
 });
 
-test('compact shows every agent, oldest first, and the order holds however the list or their activity changes', () => {
+test('compact shows every agent, oldest first, and the order holds however the list or their activity changes', async () => {
   const agent = (id, startedAgo, lastAgo) => ({ id, type: 'Explore', description: `Agent ${id}`, started: now - startedAgo, last: now - lastAgo, activity: '' });
-  const jobs = subagents => find(show(session({ state: 'working', subagents })), 'job').map(text);
-  const first = jobs([agent('c', 3e5, 1e3), agent('a', 9e5, 50e3), agent('e', 1e5, 2e3), agent('b', 6e5, 30e3), agent('d', 6e5, 5e3)]);
+  const jobs = async subagents => find(await show(session({ state: 'working', subagents })), 'job').map(text);
+  const first = await jobs([agent('c', 3e5, 1e3), agent('a', 9e5, 50e3), agent('e', 1e5, 2e3), agent('b', 6e5, 30e3), agent('d', 6e5, 5e3)]);
   assert.deepStrictEqual(first, ['Agent a', 'Agent b', 'Agent d', 'Agent c', 'Agent e'], 'by start, ties by id, all five');
   // the next snapshot: the list in another order and who was heard from last turned around
-  assert.deepStrictEqual(jobs([agent('d', 6e5, 50e3), agent('e', 1e5, 30e3), agent('b', 6e5, 1e3), agent('a', 9e5, 2e3), agent('c', 3e5, 5e3)]), first);
-  assert.deepStrictEqual(find(show(session({ subagents: [agent('a', 9e5, 1e3)] })), 'more'), [], 'no "more" line');
+  assert.deepStrictEqual(await jobs([agent('d', 6e5, 50e3), agent('e', 1e5, 30e3), agent('b', 6e5, 1e3), agent('a', 9e5, 2e3), agent('c', 3e5, 5e3)]), first);
+  assert.deepStrictEqual(find(await show(session({ subagents: [agent('a', 9e5, 1e3)] })), 'more'), [], 'no "more" line');
 });
 
-test('the state line shows only what the pill doesn\'t already say', () => {
-  const state = note => find(show(session({ note, forYou: { you: [], questions: note.startsWith('Asks') ? ['Merge it?'] : [] } })), 'state').map(text);
-  for (const note of ['Finished its turn', 'Finished its turn (2 still running)', 'Waiting on 2 agents', 'Asks: Merge it?']) assert.deepStrictEqual(state(note), [], note);
-  assert.deepStrictEqual(state('Wants permission to use Bash'), ['Wants permission to use Bash']);
-  assert.deepStrictEqual(state('Turn ended with an API error'), ['Turn ended with an API error']);
+test('the state line shows only what the pill doesn\'t already say', async () => {
+  const state = async note => find(await show(session({ note, forYou: { you: [], questions: note.startsWith('Asks') ? ['Merge it?'] : [] } })), 'state').map(text);
+  for (const note of ['Finished its turn', 'Finished its turn (2 still running)', 'Waiting on 2 agents', 'Asks: Merge it?']) assert.deepStrictEqual(await state(note), [], note);
+  assert.deepStrictEqual(await state('Wants permission to use Bash'), ['Wants permission to use Bash']);
+  assert.deepStrictEqual(await state('Turn ended with an API error'), ['Turn ended with an API error']);
 });
 
-test('a background task that is one of the agents is listed once, as the agent', () => {
-  const card = show(session({ state: 'paused', tasks: ['Build the card', 'preview server'], subagents: [{ id: 'a', description: 'Build the card', last: now }] }));
+test('a background task that is one of the agents is listed once, as the agent', async () => {
+  const card = await show(session({ state: 'paused', tasks: ['Build the card', 'preview server'], subagents: [{ id: 'a', description: 'Build the card', last: now }] }));
   assert.deepStrictEqual(find(card, 'job').map(text), ['Build the card', 'preview server']);
 });
 
-test('the header stays outside the scrolling body, which is keyed by its session', () => {
-  const card = show(session({ github: TEN }));
-  assert.deepStrictEqual([...card.children].map(c => [c.localName, c.className, c.dataset.key]), [['h3', '', undefined], ['div', 'cardBody', 's1']]);
+test('the header stays outside the scrolling body', async () => {
+  const card = await show(session({ github: TEN }));
+  assert.deepStrictEqual([...card.children].map(c => [c.localName, c.className]), [['h3', ''], ['div', 'cardBody']]);
 });
 
-test('an agent with no start time sorts after the timed ones, by id, and stays put', () => {
+test('an agent with no start time sorts after the timed ones, by id, and stays put', async () => {
   const agent = (id, started) => ({ id, description: `Agent ${id}`, started, last: now });
-  const jobs = subagents => find(show(session({ state: 'working', subagents })), 'job').map(text);
+  const jobs = async subagents => find(await show(session({ state: 'working', subagents })), 'job').map(text);
   const want = ['Agent x', 'Agent a', 'Agent b'];
-  assert.deepStrictEqual(jobs([agent('b'), agent('x', now - 1e3), agent('a')]), want);
-  assert.deepStrictEqual(jobs([agent('a'), agent('b'), agent('x', now - 1e3)]), want);
+  assert.deepStrictEqual(await jobs([agent('b'), agent('x', now - 1e3), agent('a')]), want);
+  assert.deepStrictEqual(await jobs([agent('a'), agent('b'), agent('x', now - 1e3)]), want);
 });
 
-test('agents sit in a band of their own in the tray, apart from the side sessions and PRs', () => {
-  const card = show(session({ state: 'working', tasks: ['preview server'], subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: [pr(1, 'ready')] }));
+test('agents sit in a band of their own in the tray, apart from the side sessions and PRs', async () => {
+  const card = await show(session({ state: 'working', tasks: ['preview server'], subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: [pr(1, 'ready')] }));
   const [tray] = find(card, 'tray'), [zone] = find(card, 'agentZone');
   assert.strictEqual(tray.children[0], zone, 'first in the tray');
   assert.deepStrictEqual(find(zone, 'job').map(text), ['Build', 'preview server'], 'the agents and the background tasks');
   assert.deepStrictEqual(find(zone, 'phead'), [], 'the PRs are outside it');
 });
 
-test('a listed PR shows how long it has been open, at the end of its second line', () => {
-  live.prList.s1 = true;
-  const card = show(session({ github: [{ ...pr(1, 'ready'), createdAt: new Date(now - 3 * 86400e3 - 60e3).toISOString() }, pr(2, 'draft')] }));
+test('a listed PR shows how long it has been open, at the end of its second line', async () => {
+  settings({ prList: { s1: true } });
+  const card = await show(session({ github: [{ ...pr(1, 'ready'), createdAt: new Date(now - 3 * 86400e3 - 60e3).toISOString() }, pr(2, 'draft')] }));
   const lines = find(card, 'me');
   assert.deepStrictEqual(lines.map(l => l.childNodes[l.childNodes.length - 1].className), ['t', undefined], 'only with a createdAt');
   assert.strictEqual(text(lines[0].lastChild), '3d');
 });
 
-test('the status pill does what a right-click on the moth does (snooze, sleep, wake), and doesn\'t open the session', () => {
-  const calls = [], m = {}, snoozes = [];
+test('the status pill does what a right-click on the moth does (snooze, sleep, wake), and doesn\'t open the session', async () => {
+  const calls = [], m = { key: 's1' }, snoozes = [];
   m.zone = hoverZone(() => m, () => calls.push('open'), 48);
   m.zone.menu = () => snoozes.push('/snooze'); // state.ts's menu posts the next snooze
   live.moths = new Map([['s1', m]]);
-  const pill = o => find(show(session(o)), 'chip')[0];
-  const p = pill({});
+  const pill = async o => find(await show(session(o)), 'chip')[0];
+  const p = await pill({});
   assert.strictEqual(p.localName, 'button');
-  assert.deepStrictEqual([...show(session({})).children[0].children].map(c => c.className), ['open', 'chip waiting', 'pin'], 'beside the open button, not inside it, so its click can\'t reach it (then the pin)');
+  assert.deepStrictEqual([...(await show(session({}))).children[0].children].map(c => c.className), ['open', 'chip waiting', 'pin'], 'beside the open button, not inside it, so its click can\'t reach it (then the pin)');
   p.click();
   assert.deepStrictEqual([calls, snoozes], [[], ['/snooze']], 'the snooze, and not the open');
-  assert.deepStrictEqual([pill({}).title, pill({ snoozed: true }).title, pill({ snoozed: true, forGood: true }).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
-  assert.strictEqual(pill({}).getAttribute('aria-label'), 'needs you: snooze');
+  assert.deepStrictEqual([(await pill({})).title, (await pill({ snoozed: true })).title, (await pill({ snoozed: true, forGood: true })).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
+  assert.strictEqual((await pill({})).getAttribute('aria-label'), 'needs you: snooze');
 });
 
-test('no PR link shows a native "#n" title; a list row shows its title in the tip only when it is cut short', () => {
+test('no PR link shows a native "#n" title; a list row shows its title in the tip only when it is cut short', async () => {
   const tip = $('prTip');
   const titles = card => anchors(card).map(a => a.title);
-  assert.deepStrictEqual(titles(show(session({ github: TEN }))).filter(Boolean), [], 'chips');
-  live.prList.s1 = true;
-  const card = show(session({ github: TEN }));
+  assert.deepStrictEqual(titles(await show(session({ github: TEN }))).filter(Boolean), [], 'chips');
+  settings({ prList: { s1: true } });
+  const card = await show(session({ github: TEN }));
   assert.deepStrictEqual(titles(card).filter(Boolean), [], 'list rows and overflow links');
   const [row] = find(card, 'pr2'), [ti] = find(row, 'ti');
   vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ left: 10, right: 200, top: 300, bottom: 330, width: 190 });
@@ -223,8 +249,8 @@ test('no PR link shows a native "#n" title; a list row shows its title in the ti
   assert.strictEqual(tip.className, 'badgeTip');
 });
 
-test('an agent with no tag or model is two lines (job beside the dot), and a shell command has "shell" in the model\'s place', () => {
-  const card = show(session({ state: 'working', tasks: ['npm run preview'], subagents: [
+test('an agent with no tag or model is two lines (job beside the dot), and a shell command has "shell" in the model\'s place', async () => {
+  const card = await show(session({ state: 'working', tasks: ['npm run preview'], subagents: [
     { id: 'a', description: 'Tagged', model: 'Opus 5.5', activity: '[t] Step', started: now - 1e3, last: now },
     { id: 'b', description: 'Model only', model: 'Opus 5.5', activity: 'Step', started: now - 2e3 + 1e3, last: now },
     { id: 'c', description: 'Neither', activity: 'Step', started: now, last: now }] }));
@@ -239,28 +265,55 @@ test('an agent with no tag or model is two lines (job beside the dot), and a she
   assert.strictEqual(text(head), 'Running3 agents · 1 shell');
 });
 
-test('a shell command shows how long it has run, from the session\'s taskStarted', () => {
-  const card = show(session({ state: 'paused', tasks: ['npm run preview', 'tail -f log'], taskStarted: { 'npm run preview': now - 5 * 60e3 } }));
+test('a shell command shows how long it has run, from the session\'s taskStarted', async () => {
+  const card = await show(session({ state: 'paused', tasks: ['npm run preview', 'tail -f log'], taskStarted: { 'npm run preview': now - 5 * 60e3 } }));
   assert.deepStrictEqual(find(card, 'agent').map(r => find(r, 't').map(text)), [['5m'], []], 'a start, then none');
 });
 
-test('every control is an outer button or link that fills its zone, around an inner face that\'s the visible part', () => {
+test('every control is an outer button or link that fills its zone, around an inner face that\'s the visible part', async () => {
   const faced = card => [...find(card, 'open'), ...find(card, 'chip'), ...find(card, 'agent'), ...anchors(card).filter(n => /pr2|ov|^$/.test(n.className) && n.href)]
     .map(n => [n.localName, n.children.length, n.children[0]?.className?.split(' ')[0]]);
   const s = session({ state: 'working', subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: TEN });
-  assert.ok(faced(show(s)).every(([, n, c]) => n === 1 && c === 'face'), 'header, pill, agent, chips');
-  live.prList.s1 = true;
-  const listed = faced(show(s));
+  assert.ok(faced(await show(s)).every(([, n, c]) => n === 1 && c === 'face'), 'header, pill, agent, chips');
+  settings({ prList: { s1: true } });
+  const listed = faced(await show(s));
   assert.ok(listed.length > 6 && listed.every(([, n, c]) => n === 1 && c === 'face'), 'list rows and overflow links');
 });
 
-test('one PR with changes requested reads singular, and two shell commands with the same description open separately', () => {
-  const card = show(session({ github: [pr(3, 'ready'), pr(4, 'changes')] }));
+test('one PR with changes requested reads singular, and two shell commands with the same description open separately', async () => {
+  const card = await show(session({ github: [pr(3, 'ready'), pr(4, 'changes')] }));
   assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · 1 change requested · 1 ready');
-  assert.strictEqual(text(find(show(session({ github: [pr(1, 'changes'), pr(2, 'changes')] })), 'ph')[0]), 'PRs · 2 changes requested');
-  const s = session({ state: 'paused', tasks: ['npm test', 'npm test'] }), rows = () => find(show(s), 'agent');
-  rows()[1].click();
-  assert.deepStrictEqual(rows().map(r => r.className), ['agent', 'agent open'], 'only the one clicked');
+  assert.strictEqual(text(find(await show(session({ github: [pr(1, 'changes'), pr(2, 'changes')] })), 'ph')[0]), 'PRs · 2 changes requested');
+  const s = session({ state: 'paused', tasks: ['npm test', 'npm test'] }), rows = async () => find(await show(s), 'agent');
+  (await rows())[1].click();
+  assert.deepStrictEqual((await rows()).map(r => r.className), ['agent', 'agent open'], 'only the one clicked');
+});
+
+// The bug Dace shelved: relative times went stale. They count from the store's `now`, which ticks every second.
+test('the card\'s times move on with the clock, a second at a time, with nothing else happening', async () => {
+  vi.useFakeTimers({ now });
+  mount(); // a store made on the fake clock, so its tick is one
+  const card = await show(session({ state: 'working', last: now - 58e3, subagents: [{ id: 'a', description: 'Build', started: now - 59e3, last: now }] }));
+  const times = () => [text(find(card, 'foot')[0]).split(' · ').at(-1), text(find(card, 't')[0])];
+  assert.deepStrictEqual(times(), ['active 58s ago', '59s']);
+  vi.advanceTimersByTime(2000); await nextTick();
+  assert.deepStrictEqual(times(), ['active 1m ago', '1m'], 'two seconds on');
+});
+
+// WebKit drops a click when the button pressed is replaced before the release, so a re-render (a server update, the
+// clock's tick) must patch every control in place. test/morph.test.js presses one for real in WebKit.
+test('a re-render between press and release keeps every control\'s element', async () => {
+  const s = session({ state: 'working', activity: 'Step 1', subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: TEN });
+  const card = await show(s);
+  const controls = () => [...card.querySelectorAll('button, a')];
+  const before = controls(), tog = find(card, 'tog')[0];
+  assert.ok(before.length > 10 && tog, `the open button, pill, pin, agent, toggle and chips: ${before.length}`);
+  fire(tog, 'pointerdown');
+  await show({ ...s, activity: 'Step 2', last: now + 1e3 }); // the next snapshot from the server lands mid-press
+  assert.strictEqual(text(find(card, 'state')[0]), 'Step 2', 'it re-rendered');
+  assert.ok(controls().every((c, i) => c === before[i]) && controls().length === before.length, 'each control is the element it was');
+  tog.click(); await nextTick();
+  assert.strictEqual(find(card, 'pr2').length, 4, 'and the release toggles the list');
 });
 
 // The pinned sidebar: the pin in a card's header pins or unpins its session, the server's list decides what every
@@ -270,18 +323,18 @@ const docked = () => document.body.classList.contains('pinned') ? find($('dock')
 const sections = () => [...$('dock').querySelectorAll('section')];
 const list = () => JSON.stringify(posts.map(([, b]) => b.pinned.map(p => p.id)));
 
-test('the card\'s pin toggles its session in the list, newest at the bottom, and each section\'s own pin unpins it', () => {
+test('the card\'s pin toggles its session in the list, newest at the bottom, and each section\'s own pin unpins it', async () => {
   const a = session({ title: 'alpha' }), b = session({ id: 's2', title: 'bravo' }), c = session({ id: 's3', title: 'charlie' });
   setSessions(a, b, c);
-  const pin = pinOf(show(a));
+  const pin = pinOf(await show(a));
   assert.deepStrictEqual([pin.localName, pin.getAttribute('aria-label'), text(pin)], ['button', 'Pin alpha to the sidebar', ''], 'an icon button with a label');
-  pin.click();
+  pin.click(); await nextTick();
   assert.deepStrictEqual(docked(), ['alpha']);
   assert.deepStrictEqual([pinOf($('card')).getAttribute('aria-label'), pinOf($('card')).className], ['Unpin alpha', 'pin on'], 'the open card\'s pin shows it');
-  pinOf(show(c)).click();
-  pinOf(show(b)).click();
+  pinOf(await show(c)).click();
+  pinOf(await show(b)).click();
   assert.deepStrictEqual(docked(), ['alpha', 'charlie', 'bravo'], 'stacked in the order they were pinned');
-  pinOf(show(c)).click();
+  pinOf(await show(c)).click();
   assert.deepStrictEqual(docked(), ['alpha', 'bravo'], 'a pinned session\'s card pin unpins it, and the rest keep their places');
   pinOf(sections()[0]).click();
   assert.deepStrictEqual(docked(), ['bravo'], 'a section\'s own pin');
@@ -295,17 +348,17 @@ test('the card\'s pin toggles its session in the list, newest at the bottom, and
   assert.deepStrictEqual(docked(), ['bravo', 'alpha']);
 });
 
-test('the sidebar shows each session in full: the whole prompt, every PR listed, no toggle', () => {
+test('the sidebar shows each session in full: the whole prompt, every PR listed, no toggle', async () => {
   const long = 'x'.repeat(200);
   setSessions(session({ state: 'idle', prompt: long, github: TEN }));
   live.pinned = [{ id: 's1' }]; renderSidebar();
   assert.strictEqual(find($('dock'), 'prompt').map(text)[0], `“${long}”`, 'not cut at 110');
   assert.strictEqual(find($('dock'), 'pr2').length, 11, 'every PR, however many');
   assert.deepStrictEqual([find($('dock'), 'more').length, find($('dock'), 'chips').length], [0, 0], 'no cap, and listed though the card would show chips');
-  assert.strictEqual(find(show(session({ state: 'idle', prompt: long, github: TEN })), 'prompt').map(text)[0].length, 113, 'the card still cuts it');
+  assert.strictEqual(find(await show(session({ state: 'idle', prompt: long, github: TEN })), 'prompt').map(text)[0].length, 113, 'the card still cuts it');
 });
 
-test('a pinned session that ends stays in its place, dimmed, as it last was, until unpinned', () => {
+test('a pinned session that ends stays in its place, dimmed, as it last was, until unpinned', async () => {
   const a = session({ title: 'alpha', state: 'working', activity: 'Last step' }), b = session({ id: 's2', title: 'bravo' });
   setSessions(a, b);
   live.pinned = [{ id: 's1' }, { id: 's2' }]; renderSidebar();
@@ -324,23 +377,23 @@ test('a pinned session that ends stays in its place, dimmed, as it last was, unt
   assert.deepStrictEqual(docked(), ['bravo']);
 });
 
-test('no pin and no sidebar under 800px wide, in the iTerm panel or the screensavers; they come back when there\'s room', () => {
+test('no pin and no sidebar under 800px wide, in the iTerm panel or the screensavers; they come back when there\'s room', async () => {
   const s = session({});
   setSessions(s);
   live.pinned = [{ id: 's1' }];
   for (const [width, mode] of [[799, ''], [375, ''], [1440, 'panel'], [1440, 'screensaver'], [1440, 'ambient']]) {
     vi.stubGlobal('innerWidth', width); document.body.className = mode;
-    assert.ok(!pinOf(show(s).children[0]), `${width} ${mode}: no pin`); // not strictEqual: a failure would print the whole DOM node
+    assert.ok(!pinOf((await show(s)).children[0]), `${width} ${mode}: no pin`); // not strictEqual: a failure would print the whole DOM node
     renderSidebar();
     assert.deepStrictEqual(docked(), [], `${width} ${mode}: no sidebar`);
   }
   vi.stubGlobal('innerWidth', 800); document.body.className = '';
-  assert.ok(pinOf(show(s).children[0]), '800 wide has the pin');
+  assert.ok(pinOf((await show(s)).children[0]), '800 wide has the pin');
   renderSidebar();
   assert.deepStrictEqual(docked(), ['proj'], 'and the remembered pin docks again');
 });
 
-test('each pinned section\'s PRs toggle to chips on their own, kept with the pin, apart from the card\'s', () => {
+test('each pinned section\'s PRs toggle to chips on their own, kept with the pin, apart from the card\'s', async () => {
   const a = session({ github: TEN }), b = session({ id: 's2', title: 'bravo', github: TEN });
   setSessions(a, b);
   live.pinned = [{ id: 's1' }, { id: 's2' }]; renderSidebar();
@@ -351,9 +404,9 @@ test('each pinned section\'s PRs toggle to chips on their own, kept with the pin
   tog.click();
   assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'only that section turns to chips');
   assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's1', chips: true }, { id: 's2' }] }]), 'kept with its pin');
-  assert.deepStrictEqual([find(show(a), 'chips').length, find(show(a), 'pr2').length], [1, 0], 'the card keeps its own rule (chips past three PRs)');
-  assert.strictEqual(JSON.stringify(live.prList), '{}', 'and the card\'s setting is untouched');
-  live.prList = { s2: false }; renderSidebar();
+  assert.deepStrictEqual([find(await show(a), 'chips').length, find(await show(a), 'pr2').length], [1, 0], 'the card keeps its own rule (chips past three PRs)');
+  assert.strictEqual(store.settings.prList, undefined, 'and the card\'s setting is untouched');
+  settings({ prList: { s2: false } }); renderSidebar();
   assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'nor does the card\'s setting reach the sidebar');
   find(sections()[0], 'tog')[0].click();
   assert.deepStrictEqual(listed(), [[11, 0], [11, 0]], 'and back');
@@ -364,7 +417,7 @@ test('each pinned section\'s PRs toggle to chips on their own, kept with the pin
   assert.deepStrictEqual(sections().map(sec => [find(sec, 'pr2').length, find(sec, 'chips').length]), [[11, 0], [0, 1]]);
 });
 
-test('the closed sidebar is inert: out of the tab order and the accessibility tree, with nothing pinned or under 800px', () => {
+test('the closed sidebar is inert: out of the tab order and the accessibility tree, with nothing pinned or under 800px', async () => {
   setSessions(session({}));
   renderSidebar();
   assert.strictEqual($('dock').inert, true, 'nothing pinned');
@@ -375,28 +428,27 @@ test('the closed sidebar is inert: out of the tab order and the accessibility tr
   assert.strictEqual($('dock').inert, true, 'too narrow');
 });
 
-test('pinning sends only the pins this window can show, so one whose session it never saw goes', () => {
+test('pinning sends only the pins this window can show, so one whose session it never saw goes', async () => {
   const a = session({ title: 'alpha' }), b = session({ id: 's2', title: 'bravo' });
   setSessions(a, b);
   live.pinned = [{ id: 'gone' }, { id: 's2', chips: true }]; renderSidebar();
-  pinOf(show(a)).click();
+  pinOf(await show(a)).click();
   assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's2', chips: true }, { id: 's1' }] }]));
   assert.deepStrictEqual(docked(), ['bravo', 'alpha']);
 });
 
-test('in the sidebar an agent is a plain row, shown in full, that leaves the card\'s open agents alone', () => {
+test('in the sidebar an agent is a plain row, shown in full, that leaves the card\'s open agents alone', async () => {
   const s = session({ state: 'working', tasks: ['npm test'], subagents: [{ id: 'a', description: 'Build', started: now, last: now }] });
   setSessions(s);
   live.pinned = [{ id: 's1' }]; renderSidebar();
   const rows = find($('dock'), 'agent');
   assert.strictEqual(rows.length, 2, 'the agent and the shell command');
   assert.deepStrictEqual(rows.map(r => [r.localName, r.className, r.onclick, r.getAttribute('aria-expanded')]), [['div', 'agent open', null, null], ['div', 'agent open', null, null]]);
-  assert.strictEqual(openAgents.size, 0);
-  assert.deepStrictEqual(find(show(s), 'agent').map(r => [r.localName, r.className]), [['button', 'agent'], ['button', 'agent']], 'the card\'s are still buttons, closed');
+  assert.deepStrictEqual(find(await show(s), 'agent').map(r => [r.localName, r.className]), [['button', 'agent'], ['button', 'agent']], 'the card\'s are still buttons, closed');
 });
 
-test('every handler property the card and its stale cards set is one morph copies onto the live element', () => {
-  const src = ['card', 'stale'].map(f => fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', f + '.ts'), 'utf8')).join('\n');
+test('every handler property the sidebar sets is one morph copies onto the live element', async () => {
+  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'card.ts'), 'utf8');
   const set = [...new Set([...src.matchAll(/\.(on[a-z]+) =/g)].map(m => m[1]))];
   assert.ok(set.includes('onclick') && set.includes('onfocus'), `found ${set}`);
   assert.deepStrictEqual(set.filter(h => !HANDLERS.includes(h)), [], 'set but not copied, so a redraw would keep the old handler');
