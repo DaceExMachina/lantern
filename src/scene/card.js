@@ -25,7 +25,7 @@ const keyed = (key, el) => { el.dataset.key = key; return el; };
 // matched by tag and key (unkeyed ones in order), patched in place (attributes, the handlers below, text), and new ones go
 // in where they belong; whatever's left over goes. Elements only move when the order changes, and a move drops focus,
 // so the focused element gets it back afterwards.
-const HANDLERS = ['onclick', 'onpointerenter', 'onpointerleave', 'onfocus', 'onblur']; // ponytail: the ones the card sets; add any new one here
+export const HANDLERS = ['onclick', 'onpointerenter', 'onpointerleave', 'onfocus', 'onblur']; // ponytail: the ones the card sets; add any new one here
 export function morph(el, kids) {
   const old = [...el.childNodes], f = /** @type {HTMLElement | null} */ (document.activeElement);
   const next = kids.map(n => {
@@ -170,7 +170,7 @@ function sessionRows(s, full = false) {
 // click opens the agent to show them in full, and it stays open, by id, through the redraws until the card closes. A
 // button, so the keyboard gets it too. Keyed by id, so a redraw keeps each row's element (and its focus) with its agent.
 const TAG = /^\[([^\]]+)\]\s*/;
-const openAgents = new Set();
+export const openAgents = new Set();
 /** @param {{ id?: string, job: string, activity?: string, started?: number, last?: number, model?: string }} a */
 function agentRow({ id, job, activity = '', started, last = 0, model }, now, full = false) {
   const tag = activity.match(TAG)?.[1], step = activity.replace(TAG, ''), key = id || job;
@@ -299,7 +299,7 @@ export function renderSidebar() {
 // Then it eases over to the new spot instead of snapping, so it reads as following rather than shaking.
 const CARD_HOLD = 40;
 let held = null, shown = null; // the anchor in screen px, and where the card is now on its way there
-function holdAnchor(zone, x, y) {
+export function holdAnchor(zone, x, y) {
   if (!held || held.zone !== zone || Math.hypot(x - held.x, y - held.y) >= CARD_HOLD) held = { zone, x, y };
   return held;
 }

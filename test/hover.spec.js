@@ -1,15 +1,13 @@
 // Moths' hover areas can overlap (a flying moth's area sits on its home, 48 wide). Where they do, a point belongs to the
-// nearest moth whose area it's in (page/card.js's zoneAt), so neighbours split the overlap down the middle instead of
+// nearest moth whose area it's in (src/scene/card.js's zoneAt), so neighbours split the overlap down the middle instead of
 // whichever is drawn on top covering the other.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+import assert from 'node:assert';
+import { test } from 'vitest';
+import { $, WING_SIDE, WING_UP, caster, wing3d } from '../src/scene/scene.js';
+import { clickZone, holdAnchor, hoverZone, tapZone, zoneAt } from '../src/scene/card.js';
+import { mothZones } from '../src/scene/frame.js';
+import { live } from '../src/scene/live.js';
 
-const page = vm.createContext({});
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
-const zoneAt = vm.runInContext('zoneAt', page);
 const circle = (x, y, r) => ({ x, y, r, off: false });
 
 test('two overlapping hover areas split at the midpoint, and a point outside both picks neither', () => {
@@ -31,10 +29,8 @@ test('a landed moth keeps its own body next to a flying moth\'s wider area', () 
 
 test('shift+click runs an area\'s snooze menu, a plain click runs its click action', () => {
   const calls = [];
-  vm.runInContext('globalThis.$ = () => ({ classList: { remove() {} } }); globalThis.clearTimeout = () => {}; globalThis.hideTimer = 0', page);
-  const zone = vm.runInContext('hoverZone', page)({}, () => calls.push('click'));
+  const zone = hoverZone({}, () => calls.push('click'));
   zone.menu = () => calls.push('snooze');
-  const clickZone = vm.runInContext('clickZone', page);
   clickZone(zone, false);
   assert.deepStrictEqual(calls, ['click']);
   clickZone(zone, true);
@@ -42,20 +38,20 @@ test('shift+click runs an area\'s snooze menu, a plain click runs its click acti
 });
 
 test('a tap shows a moth\'s card without running its click, and tapping the same moth again puts it away', () => {
-  const calls = [], card = { classList: { add() {}, remove: () => calls.push('hide') } };
-  vm.runInContext('globalThis.$ = id => id === "card" ? globalThis.cardEl : { classList: { remove() {} } }; globalThis.clearTimeout = () => {}; globalThis.hovered = null; globalThis.renderCard = () => {}', page);
-  page.cardEl = card;
+  const calls = [], card = $('card');
+  live.hovered = null;
   const moth = {}, other = {};
-  const hoverZone = vm.runInContext('hoverZone', page);
   const zone = hoverZone(moth, () => calls.push('click')), zone2 = hoverZone(other, () => calls.push('click'));
-  const tapZone = vm.runInContext('tapZone', page), hovered = () => vm.runInContext('hovered', page);
+  card.classList.add('show');
   tapZone(zone);
-  assert.strictEqual(hovered(), moth, 'first tap shows its card');
+  assert.strictEqual(live.hovered, moth, 'first tap shows its card');
   tapZone(zone2);
-  assert.strictEqual(hovered(), other, 'tapping another moth moves the card to it');
+  assert.strictEqual(live.hovered, other, 'tapping another moth moves the card to it');
+  assert.ok(card.classList.contains('show'), 'which is still showing');
   tapZone(zone2);
-  assert.strictEqual(hovered(), null, 'the same moth again dismisses');
-  assert.deepStrictEqual(calls, ['hide'], 'and no tap ran a click action');
+  assert.strictEqual(live.hovered, null, 'the same moth again dismisses');
+  assert.ok(!card.classList.contains('show'), 'and puts the card away');
+  assert.deepStrictEqual(calls, [], 'and no tap ran a click action');
 });
 
 test('landed moths 20 apart (r 32) still split at their midpoint', () => {
@@ -65,13 +61,9 @@ test('landed moths 20 apart (r 32) still split at their midpoint', () => {
 });
 
 test('a landed moth\'s area is centred on its drawn body, so a point on the lower of two close moths picks it', () => {
-  const frame = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-  for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
-  const mothZones = vm.runInContext('mothZones', frame);
-  const zone = () => ({});
   // a moth folded on flat paper, its body pointing up the screen: the wings the way mothWings draws them, as caster() sums them up
-  const shade = vm.runInContext('(x, y) => caster(x, y, 0, 1, [...wing3d(WING_UP, [0, -1, 0], [0, 0, 1], 0.1), ...wing3d(WING_SIDE, [0, -1, 0], [0, 0, 1], 0.16)])', frame);
-  const landed = y => { const m = { x: 300, y, size: 1, tilt: 0, zone: zone(), shade: shade(300, y) }; mothZones(m, true); return m; };
+  const shade = (x, y) => caster(x, y, 0, 1, [...wing3d(WING_UP, [0, -1, 0], [0, 0, 1], 0.1), ...wing3d(WING_SIDE, [0, -1, 0], [0, 0, 1], 0.16)]);
+  const landed = y => { const m = { x: 300, y, size: 1, tilt: 0, zone: {}, shade: shade(300, y) }; mothZones(m, true); return m; };
   const upper = landed(78), lower = landed(100); // anchors 22 apart; the wings stand about 16 above each anchor
   // 14 above the lower anchor is the middle of the lower moth's drawn wings (they span roughly 100 - 28 to 100 - 4)
   assert.strictEqual(zoneAt([upper.zone, lower.zone], 298, 86), lower.zone);
@@ -79,7 +71,7 @@ test('a landed moth\'s area is centred on its drawn body, so a point on the lowe
 });
 
 test('a card holds its anchor through small moves of its moth, and takes a new one once the moth is well away or another area', () => {
-  const holdAnchor = vm.runInContext('holdAnchor', page), zone = {}, other = {};
+  const zone = {}, other = {};
   const at = (z, x, y) => { const a = holdAnchor(z, x, y); return [a.x, a.y]; };
   assert.deepStrictEqual(at(zone, 100, 100), [100, 100], 'the first spot is taken');
   assert.deepStrictEqual(at(zone, 115, 90), [100, 100], 'a hop or resettle nearby changes nothing');

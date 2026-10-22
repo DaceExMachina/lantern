@@ -793,7 +793,7 @@ export function mothFireflies(m, dt, s) {
 
 // The hover area sits on the moth's home, or on its landing spot with the lantern at rest, not on the moth, so it
 // holds still while the moth wanders or the lantern swings.
-function mothZones(m, needsMe) {
+export function mothZones(m, needsMe) {
   // a landed moth rides the lantern exactly, so its area follows it and is only moth-sized: neighbours on the paper
   // no longer overlap and steal each other's card. It sits on the middle of the wings (m.shade, from the last frame),
   // not on m.x, m.y, the joint resting on the paper, which lies below it and would hang the area over the moth below.
