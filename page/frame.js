@@ -679,9 +679,9 @@ function mothTarget(k, m, dt, s) {
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
   // (with ?scorch none lands, so there's always a moth in the air to scorch)
   const needsMe = !SCORCH_DEMO && !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
-  // Where it lands, or would: its spot follows its home round as that glides, and as the lantern sways, so the line
-  // between them (its thread, and its fireflies' dotted line) stays on its own ray. A flying moth would land on the
-  // fresh landing's spot (alongFor).
+  // Where it lands, or would: its spot follows its home round as that glides. It's worked out on the lantern at rest, so
+  // it stays put on the paper as the lantern sways and a landed moth rides it without sliding. A flying moth would land
+  // on the fresh landing's spot (alongFor).
   if (!m.parentId && m.home) {
     if (!needsMe) m.along = alongFor(m.key);
     else {
@@ -692,7 +692,7 @@ function mothTarget(k, m, dt, s) {
       m.hopSlot = lastHop(m.key, m.session.waitingSince || 0, Date.now() / 1000);
       m.along = alongFor(m.key, m.hopSlot);
     }
-    m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
+    m.perch = perchAt(stretch(m.home), m.along);
   }
   if (m.leaving) {
     // it flies straight out from the lantern to past the window's far corner, and goes only once its wings are clear of every edge
@@ -940,7 +940,7 @@ function mothZs(m, s) {
 // round the ring, so no thread or dotted line crosses another, flying or landed. A landed moth's has no length; a moth
 // behind its spot (flying in from the far side) has none until it comes round.
 function threadEnds(m) {
-  const [px, py] = rot(m.perch[0], m.perch[1]), [rx, ry] = rot(340 + m.perch[3][0], VIEW.top + m.perch[3][1]), ux = rx - 340, uy = ry - VIEW.top;
+  const [px, py] = rot(m.perch[0], m.perch[1]), [hx, hy] = stretch(m.home), len = Math.hypot(hx - px, hy - py) || 1, ux = (hx - px) / len, uy = (hy - py) / len;
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }

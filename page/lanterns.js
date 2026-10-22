@@ -802,16 +802,17 @@ function applyStyle(key) {
   $('style').value = key;
 }
 
-// Where a moth landed for the session whose home is at `home` (on screen) sits on the lantern: `along` (0 to 1) of the
+// Where a moth landed for the session whose home is at `home` (on screen) sits on the lantern, hanging at rest: `along` (0 to 1) of the
 // way out the part of its line that's on the paper, from a quarter of the way to the end. Its line runs to its home from
 // the inner edge of its side of the paper (a third of the way out from the middle), as high there as its home is round
 // that side of the ring (ringRound): the top home's from the top of the paper, the bottom one's from the bottom. So the
 // moths spread over the paper's whole height in the order their homes go round, and the dotted lines from homes to
 // moths on one side keep that order and never cross; the two sides never meet (no home sits above or below the middle
 // third, ringHome). Spots stay within PERCH_SPREAD of the middle height, and out of the middle third of the lantern,
-// where closed wings would point nearly straight at you and thin to a sliver. Returns [x, y, normal, dir]: where it
-// sits, the surface's outward direction there, and the direction its line runs out toward home.
-/** @returns {[number, number, number[], number[]]} */
+// where closed wings would point nearly straight at you and thin to a sliver. Returns [x, y, normal]: where it sits in
+// the lantern's own frame, and the surface's outward direction there. Worked out at rest, a spot stays put on the paper
+// as the lantern sways, and its moth rides it.
+/** @returns {[number, number, number[]]} */
 function perchAt(home, along) {
   const { top, bottom, half } = style.body, mid = (top + bottom) / 2, side = home[0] < 340 ? -1 : 1, spread = (bottom - top) * PERCH_SPREAD;
   const oy = mid + spread * (1 - 2 * ringRound([340 + (home[0] - 340) / VIEW.kx, 320 + (home[1] - 320) / VIEW.ky])), ox = 340 + side * half(oy) / 3;
@@ -819,14 +820,14 @@ function perchAt(home, along) {
   const on = t => { const y = oy + uy * t, out = Math.abs(ox + ux * t - 340); return Math.abs(y - mid) <= spread && out >= half(y) / 3 && out <= half(y); };
   let end = 0;
   // Walk the line a unit at a time (a few hundred steps at most), then halve in on its exact end. The spot is redone every
-  // frame as the lantern sways, so an end rounded to a whole unit would make a landed moth jump as the swing tips it over.
+  // frame as its home glides, so an end rounded to a whole unit would make a landed moth jump as the line tips over it.
   while (on(end + 1)) end++;
   for (let step = 0.5; step > 1e-3; step /= 2) if (on(end + step)) end += step;
   const t = end * (0.25 + 0.75 * along), x = ox + ux * t, y = oy + uy * t;
   // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
   // up or down by how the lantern bulges at this height
   const sin = Math.min(1, Math.abs(x - 340) / half(y)), slope = (half(y + 1) - half(y - 1)) / 2;
-  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)]), [ux, uy]];
+  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)])];
 }
 
 // warm = everyone busy, cool = someone needs me; everything crossfades between the two

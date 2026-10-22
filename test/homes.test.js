@@ -125,12 +125,18 @@ test('no thread or dotted line ever crosses another, flying or landed, as sessio
           for (const [k, m] of moths) if (!m.parentId && !m.satellite) { const aim = mothTarget(k, m, 1 / 60, ${s}); if (aim) mothMove(m, aim, 1 / 60, ${s}); }`);
         if (f % 15) continue;
         // every moth's thread, and each landed moth's dotted line from its home to its spot, turned with the lantern
-        const segs = w.run(`return [...moths].filter(([k, m]) => ${JSON.stringify(ids)}.includes(k)).flatMap(([k, m]) => [[k + ' thread', ...threadEnds(m)],
-          ...m.wasLanded ? [[k + ' dotted line', stretch(m.home), rot(m.perch[0], m.perch[1])]] : []])`);
+        // (with its home, last)
+        const segs = w.run(`return [...moths].filter(([k, m]) => ${JSON.stringify(ids)}.includes(k)).flatMap(([k, m]) => [[k + ' thread', ...threadEnds(m), stretch(m.home)],
+          ...m.wasLanded ? [[k + ' dotted line', stretch(m.home), rot(m.perch[0], m.perch[1]), stretch(m.home)]] : []])`);
         for (const [name, [ax, ay], [bx, by]] of segs) if (name.endsWith('thread') && Math.hypot(bx - ax, by - ay) > 20) flying++;
         landed += segs.filter(([name]) => name.endsWith('line')).length;
         for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
-          assert.ok(!cross(segs[i].slice(1), segs[j].slice(1)), `${key} ${kx}x, ${ids.length} sessions, ${f} frames in: ${segs[i][0]} crosses ${segs[j][0]}`);
+          // two homes gliding through each other meet at one point for a moment, and so do their lines: an X with its
+          // middle on the homes can't be told from a V. Spots stay put as the lantern sways (perchAt works them out at
+          // rest), so a line's far end swings a little past its neighbour's then.
+          const [hx, hy] = segs[i][3], [gx, gy] = segs[j][3];
+          if (Math.hypot(hx - gx, hy - gy) < 4) continue;
+          assert.ok(!cross(segs[i].slice(1, 3), segs[j].slice(1, 3)), `${key} ${kx}x, ${ids.length} sessions, ${f} frames in: ${segs[i][0]} crosses ${segs[j][0]}`);
         }
       }
     }
@@ -260,4 +266,30 @@ test('a moth landing, or a session joining, never makes a landed moth jump', () 
   assert.ok(moved.some(k => w.run(`return moths.get('${k}').wasLanded`)), `the join moves landed moths' homes: ${moved}`);
   const joining = worst();
   assert.ok(joining < 15, `as homes glide round, a landed moth moves ${joining.toFixed(2)} a frame at most`);
+});
+
+// A landed moth's spot is worked out on the lantern at rest (perchAt), so it stays put on the paper however the lantern
+// sways, and the moth rides it. Before, the spot was worked out from the home turned into the swaying lantern's frame,
+// so it slid 5 to 8 units over a swing, further the lower it sat.
+test('a landed moth stays put on the paper as the lantern sways', () => {
+  for (const key of ['chochin', 'moroccan', 'barrel', 'candle']) {
+    const w = open(), ids = KEYS.filter(k => k !== 'side').slice(0, 12);
+    w.run(`style = STYLES.${key}`);
+    w.show(ids, ids.filter((_, i) => i % 2));
+    w.run('for (const m of moths.values()) m.home = m.spot');
+    const frame = (a, s) => w.run(`swayAngle = ${a};
+      for (const [k, m] of moths) { const aim = mothTarget(k, m, 1 / 60, ${s}); if (aim) mothMove(m, aim, 1 / 60, ${s}); }
+      return Object.fromEntries([...moths].filter(([, m]) => m.wasLanded).map(([k, m]) => [k, rot(m.x - 2 * m.size, m.y - 6 * m.size, -swayAngle)]))`); // its wing joint, on the paper, in the lantern's frame
+    let s = 0;
+    for (; s < 6; s += 1 / 60) frame(0, s); // landed and settled, the lantern still
+    const rest = frame(0, s);
+    assert.strictEqual(Object.keys(rest).length, 6, `${key}: six moths landed`);
+    for (let i = 1; i <= 600; i++) { // one full swing, out to 2.5 degrees each way (the candle never sways, but its spots hold the same)
+      const at = frame(2.5 * Math.sin(i / 600 * 2 * Math.PI), s += 1 / 60);
+      for (const k in rest) {
+        const d = Math.hypot(at[k][0] - rest[k][0], at[k][1] - rest[k][1]);
+        assert.ok(d < 0.05, `${key}: ${k}, landed at y ${rest[k][1].toFixed(0)}, has slid ${d.toFixed(2)} along the paper ${i} frames into the swing`);
+      }
+    }
+  }
 });
