@@ -1233,6 +1233,9 @@ test('an empty GitHub answer after a good one keeps the PRs until the kept answe
   await wait(1500); // the kept answer is now older than 2s: the account really is empty
   await post(base, '/settings', { github: true });
   await until(async () => (await prs())?.length === 0, 'a really empty account to show empty');
+  answer([prNode(31, iso(Date.now()))], []); // open PRs but no closed ones is a real answer, not a blip
+  await post(base, '/settings', { github: true });
+  await until(async () => (await prs())?.length === 1, 'open PRs without closed ones to show');
 });
 
 // One GitHub query failing (an expired token, a blip) must not freeze the others or make its own PRs vanish and fly back in:
