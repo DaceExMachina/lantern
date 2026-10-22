@@ -164,6 +164,31 @@ test('no thread or dotted line crosses another at rest, flying or landed, as ses
   assert.ok(landed > 5000 && flying > 5000, `checked ${landed} dotted lines and ${flying} flying moths' threads; ${swayed} crossed while swaying`);
 });
 
+// The threads bow (frame.js bowed), slowly and on their own phases; at the default bow, at rest with 4 to 12 flying
+// moths, no two curves cross. A bow of 1 does cross, so the check is live.
+test('threads bowed at the default amount cross nothing at rest', () => {
+  const crossings = bow => {
+    let n = 0;
+    for (const key of ['chochin', 'moroccan']) for (const count of [4, 8, 12]) {
+      const w = open(1);
+      w.run(`style = STYLES.${key}; threadBow = ${bow}`);
+      w.show(KEYS.slice(0, count));
+      for (let f = 0; f < 400; f++) w.run(`for (const m of moths.values()) if (m.spot) glideHome(m, 1 / 60);
+        for (const [k, m] of moths) { const aim = mothTarget(k, m, 1 / 60, ${f / 60}); if (aim) mothMove(m, aim, 1 / 60, ${f / 60}); }`);
+      for (let s = 10; s < 40; s += 1) {
+        const curves = w.run(`return [...moths.values()].filter(m => m.perch).map(m => { const [[ax, ay], [bx, by]] = threadEnds(m);
+          const [p, q] = bowed(ax, ay, bx, by, m, ${s}, threadBow).match(/Q(\\S+) (\\S+)/).slice(1).map(Number);
+          return Array.from({ length: 21 }, (_, i) => { const t = i / 20; return [(1 - t) ** 2 * ax + 2 * t * (1 - t) * p + t * t * bx, (1 - t) ** 2 * ay + 2 * t * (1 - t) * q + t * t * by]; }); })`);
+        for (let i = 0; i < curves.length; i++) for (let j = i + 1; j < curves.length; j++)
+          if (curves[i].slice(1).some((p, a) => curves[j].slice(1).some((q, b) => cross([curves[i][a], p], [curves[j][b], q])))) n++;
+      }
+    }
+    return n;
+  };
+  assert.strictEqual(crossings(0.12), 0);
+  assert.ok(crossings(1) > 0, 'a bow of 1 should cross');
+});
+
 // a frame of every session moth's aim at wall-clock `t` (ms) and frame clock `s`: what each is doing, and where along its line it sits
 const fidgets = (w, t, s) => w.run(`Date.now = () => ${t}; for (const [k, m] of moths) if (!m.parentId && !m.satellite) m.wasLanded = mothTarget(k, m, 1 / 30, ${s})?.needsMe;
   return Object.fromEntries([...moths].map(([k, m]) => [k, [m.fidget, m.along]]))`);
