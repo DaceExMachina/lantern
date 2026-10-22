@@ -634,10 +634,12 @@ function scorchStep(m, flying, now = Date.now()) {
 }
 // ---- moths -------------------------------------------------------------------
 // A session moth's home eases toward the spot sync gave it, so when sessions come or go the others slide over to make
-// room rather than jump (about 95% there in two seconds).
+// room rather than jump (about 95% there in two seconds). It goes round the ring (ringHome), the short way, never
+// across it: homes stay in the order they sit round it, which keeps landed moths' lines from crossing (perchAt).
 function glideHome(m, dt) {
-  const k = 1 - Math.exp(-1.5 * dt);
-  m.home = [m.home[0] + (m.spot[0] - m.home[0]) * k, m.home[1] + (m.spot[1] - m.home[1]) * k];
+  const k = 1 - Math.exp(-1.5 * dt), [a, r] = ringPolar(m.home), [b, s] = ringPolar(m.spot);
+  const turn = (b - a + 3 * Math.PI) % (2 * Math.PI) - Math.PI; // the short way round
+  m.home = ringPoint(a + turn * k, r + (s - r) * k);
 }
 // A landed moth's fidgets, off the wall clock like the scorch schedule (scorchClock), so every window shows them at the
 // same moments: its time splits into `slot`-second slots, shifted by its own seeded phase, and each holds one fidget
@@ -676,9 +678,9 @@ function mothTarget(k, m, dt, s) {
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
   // (with ?scorch none lands, so there's always a moth in the air to scorch)
   const needsMe = !SCORCH_DEMO && !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
-  // Where it lands, or would: its spot follows its home round as that glides, and as the lantern sways, so the line
-  // between them (its thread, and its fireflies' dotted line) stays on its own ray. A flying moth would land on the
-  // fresh landing's spot (alongFor).
+  // Where it lands, or would: its spot follows its home round as that glides. It's worked out on the lantern at rest, so
+  // it stays put on the paper as the lantern sways and a landed moth rides it without sliding. A flying moth would land
+  // on the fresh landing's spot (alongFor).
   if (!m.parentId && m.home) {
     if (!needsMe) m.along = alongFor(m.key);
     else {
@@ -689,7 +691,9 @@ function mothTarget(k, m, dt, s) {
       m.hopSlot = lastHop(m.key, m.session.waitingSince || 0, Date.now() / 1000);
       m.along = alongFor(m.key, m.hopSlot);
     }
-    m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
+    // worked out afresh only when something it depends on changes, so a settled lantern pays nothing for it
+    const key = `${m.home}|${m.along}|${style.name}|${VIEW.kx}|${VIEW.ky}`;
+    if (m.perchKey !== key) { m.perch = perchAt(m.home, m.along); m.perchKey = key; }
   }
   if (m.leaving) {
     // it flies straight out from the lantern to past the window's far corner, and goes only once its wings are clear of every edge
@@ -770,7 +774,7 @@ function mothFireflies(m, dt, s) {
   const home = stretch(m.home);
   swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt);
   // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
-  // middle of the swarm straight toward its perch, along the line that lies on (perchAt), so no two ever cross
+  // middle of the swarm straight toward its perch, along its line (perchAt), which crosses no other at rest
   m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);
   const tie = [...m.flies.values()].find(f => !f.leave && f.x !== undefined); // the oldest firefly: it eases in to the swarm's middle, where the line starts (f.near)
   const tied = m.wasLanded && !!tie;
@@ -932,12 +936,14 @@ function mothZs(m, s) {
   } else if (m.zz) { m.zz.forEach(t => t.remove()); m.zz = null; m.zStart = undefined; }
 }
 
-// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its fan
-// line to level with the moth's wing joint. Every thread and dotted line on a side lies on a ray from one point, so none
-// ever crosses another, flying or landed. A landed moth's has no length; a moth behind its spot (flying in from the
-// far side) has none until it comes round.
+// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its line
+// toward home to level with the moth's wing joint. With the lantern at rest no thread or dotted line crosses another,
+// flying or landed. As it sways, its spots move with it and the homes don't, so two lines closer than the sway carries
+// a spot (homes gliding through each other, or a home on the ring further in just past a neighbour's line) can cross
+// for a moment. A landed moth's thread has no length; a moth behind its spot (flying in from the far side) has none
+// until it comes round.
 function threadEnds(m) {
-  const [px, py] = rot(m.perch[0], m.perch[1]), [rx, ry] = rot(340 + m.perch[3][0], VIEW.top + m.perch[3][1]), ux = rx - 340, uy = ry - VIEW.top;
+  const [px, py] = rot(m.perch[0], m.perch[1]), [hx, hy] = stretch(m.home), len = Math.hypot(hx - px, hy - py), ux = (hx - px) / len, uy = (hy - py) / len;
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }

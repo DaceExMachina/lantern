@@ -42,9 +42,9 @@ test('landing spots stay out of the middle third of the lantern, and on it', () 
   }
 });
 
-// frame.js works a landed moth's spot out afresh every frame from its home turned back by the sway, so the spot has to
-// move smoothly as the sway does, or a moth sleeping on a swinging lantern jitters
-test('a landing spot slides smoothly as the lantern sways, never jumping', () => {
+// frame.js works a landed moth's spot out afresh every frame as its home glides round, so the spot has to move smoothly
+// as the home does, or a landed moth jitters. A home turned a little about where the lantern hangs stands in for one gliding.
+test('a landing spot slides smoothly as its home moves, never jumping', () => {
   // the homes in windows as wide as tall or wider (in the half-width one the top home's line runs nearly straight up
   // the middle, and a swing can tip its spot over to another stretch of paper), a little way out along their lines
   for (const key of styles) for (const h of homes.filter((_, i) => i % 3 < 2)) {
