@@ -1,66 +1,65 @@
-// The flame (page/frame.js stepFlame, page/background.js FLAME): every lantern's is drawn by a shader on its own canvas and
-// moved by a spring, a paper lantern's softened behind its paper. The page is plain classic scripts, run here
-// in a vm context in index.html's order, over a stub DOM and a stub WebGL that records the uniforms each draw sets.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+// The flame (src/scene/frame.js stepFlame, src/scene/background.js FLAME): every lantern's is drawn by a shader on its own
+// canvas and moved by a spring, a paper lantern's softened behind its paper. The page is the real modules over the real
+// markup in happy-dom (test/page.js), and a stand-in WebGL that records the uniforms each draw sets (gl.uniforms). Each
+// test loads the page afresh, so no test inherits another's lantern, spring or wind.
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import { test, vi } from 'vitest';
+import { gl, layOut } from './page.js';
 
-function context() {
-  // a WebGL that compiles anything, lists each program's uniforms from its source, and keeps the last value set for each
-  const uniforms = {}, sources = [];
-  const gl = new Proxy({
-    getShaderParameter: () => true, getProgramParameter: () => 64, isContextLost: () => false,
-    shaderSource: (_, src) => sources.push(src),
-    createProgram: () => { sources.length = 0; return {}; },
-    getActiveUniform: (_, i) => {
-      const names = sources.join('\n').match(/uniform\s+\w+\s+[^;]+;/g).flatMap(d => d.replace(/uniform\s+\w+\s+/, '').replace(';', '').split(',').map(n => n.trim().replace(/\[.*/, '[0]')));
-      return { name: names[i] ?? `unused${i}` };
-    },
-    getUniformLocation: (_, name) => name,
-  }, { get: (t, k) => k in t ? t[k] : typeof k === 'string' && k.startsWith('uniform') ? (loc, ...v) => { uniforms[loc] = v.length === 1 && v[0]?.length ? [...v[0]] : v; } : () => ({}) });
-  const node = () => ({ attrs: {}, getAttribute(k) { return this.attrs[k] ?? null; }, setAttribute(k, v) { this.attrs[k] = String(v); } });
-  const canvas = { getContext: () => gl, addEventListener() {}, width: 1200, height: 800 };
-  const els = { bg: canvas, flame: canvas, lantern: { ...node(), innerHTML: '' }, lanternPaper: { innerHTML: '' }, lanternLayer: { style: {} }, lanternBack: { style: {} }, style: { value: '' } }; // the layers the sway turns (frame.js swingLantern)
-  const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, devicePixelRatio: 2, window: {},
-    document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] } });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'background', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
-  const run = code => vm.runInContext(code, page);
-  run('VIEW.box = [40, 20, 600, 600]; VIEW.layer = [140, 20, 400, 600]; flyLightN = 0; ghostWingN = 0; farWallTex = {}'); // the Moroccan's far wall counts as baked already
-  run('realDraw = drawBackground; drawBackground = v => { drawn = v; realDraw(v); }'); // keeping what drawLight gives it
-  return { run, els, uniforms };
+// drawBackground still runs; the spy keeps what drawLight gives it
+vi.mock('../src/scene/background.js', async importOriginal => {
+  const real = await importOriginal();
+  return { ...real, drawBackground: vi.fn(real.drawBackground) };
+});
+
+async function context(search = '') {
+  layOut(search);
+  vi.resetModules();
+  const frame = await import('../src/scene/frame.js'), lanterns = await import('../src/scene/lanterns.js'), scene = await import('../src/scene/scene.js');
+  const { live } = await import('../src/scene/live.js'), { drawBackground } = await import('../src/scene/background.js');
+  Object.assign(scene.VIEW, { box: [40, 20, 600, 600], layer: [140, 20, 400, 600] });
+  Object.assign(live, { flyLightN: 0, ghostWingN: 0, farWall: {} }); // the Moroccan's far wall counts as baked already
+  vi.mocked(drawBackground).mockClear();
+  // what the last drawLight gave drawBackground
+  const drawn = () => { const calls = vi.mocked(drawBackground).mock.calls; assert.ok(calls.length, 'drawLight reached drawBackground'); return calls.at(-1)[0]; };
+  // the lantern swung to `deg` right now (swayAngle is the sway's own; this is its one way in)
+  const swayTo = deg => { frame.swing.a = deg; frame.swingLantern(0, 5); };
+  return { frame, lanterns, scene, drawn, swayTo };
 }
 // The chain's mechanics, apart from how Dace tuned it: a loose, lightly damped feel at every size (the tuned blaze is
 // damped past overshooting, so it settles without a whip)
-const loose = ctx => ctx.run('Object.assign(FEEL, { stiffness: [70, 70], falloff: [3, 3], damping: [5, 5], inertia: [15, 15] })');
+const loose = ctx => Object.assign(ctx.frame.FEEL, { stiffness: [70, 70], falloff: [3, 3], damping: [5, 5], inertia: [15, 15] });
 // a frame of the flame at page time s, `dt` on, burning at full size
-const step = (ctx, s, dt = 1 / 60) => ctx.run(`stepFlame(${dt}, ${s}, { size: 1, pulse: 1 })`);
+const step = (ctx, s, dt = 1 / 60) => ctx.frame.stepFlame(dt, s, { size: 1, pulse: 1 });
+const chainX = ctx => ctx.frame.flameChain.pts.map(p => p.x);
 
-test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between its back paper and the rest, softened, and leaning in the wind by paperWind', () => {
-  const ctx = context();
+test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between its back paper and the rest, softened, and leaning in the wind by paperWind', async () => {
+  const ctx = await context(), { frame, lanterns } = ctx;
   for (const key of ['barrel', 'chochin', 'moroccan', 'candle']) {
     const paper = key === 'barrel' || key === 'chochin';
-    ctx.run(`applyStyle('${key}'); swingLantern(1 / 60, 3)`);
+    lanterns.applyStyle(key); frame.swingLantern(1 / 60, 3);
     // a paper lantern's back paper (its glow) goes under the flame's canvas, the rest over it; any other's is all over it
-    assert.strictEqual(/id="paperGlow"/.test(ctx.els.lanternPaper.innerHTML), paper, `${key}: the back paper under the flame`);
-    if (paper) assert.ok(!/id="paperGlow"/.test(ctx.els.lantern.innerHTML), `${key}: only the front paper over the flame`);
-    assert.strictEqual(ctx.els.lanternPaper.innerHTML === '', !paper, `${key}: nothing under the flame without paper`);
-    assert.ok(/id="sparks"/.test(ctx.els.lantern.innerHTML), `${key}: somewhere for sparks`);
-    ctx.run(`drawLight(1 / 60, 3, stepFlame(1 / 60, 3, { size: 1, pulse: 1 }))`);
-    assert.ok(ctx.run('drawn').fire, `${key}: the shader's flame`);
-    assert.strictEqual(ctx.uniforms.uSoft[0] > 0, paper, `${key}: softened behind paper (${ctx.uniforms.uSoft[0]})`);
-    // a paper lantern's flame leans in the wind by paperWind (the dev panel's), however its style's is set
+    const under = document.getElementById('lanternPaper').innerHTML, over = document.getElementById('lantern').innerHTML;
+    assert.strictEqual(/id="paperGlow"/.test(under), paper, `${key}: the back paper under the flame`);
+    if (paper) assert.ok(!/id="paperGlow"/.test(over), `${key}: only the front paper over the flame`);
+    assert.strictEqual(under === '', !paper, `${key}: nothing under the flame without paper`);
+    assert.ok(/id="sparks"/.test(over), `${key}: somewhere for sparks`);
+    frame.drawLight(1 / 60, 3, frame.stepFlame(1 / 60, 3, { size: 1, pulse: 1 }));
+    assert.ok(ctx.drawn().fire, `${key}: the shader's flame`);
+    assert.strictEqual(gl.uniforms.uSoft[0] > 0, paper, `${key}: softened behind paper (${gl.uniforms.uSoft[0]})`);
+    // a paper lantern's flame leans in the wind by paperWind (the dev panel's, read from the URL at load), however its style's is set
     if (paper) {
-      const lean = w => { const c = context(); c.run(`paperWind = ${w}; STYLES.${key}.flameWind = 6; applyStyle('${key}')`); return c.run('let f; for (let i = 0; i < 120; i++) f = stepFlame(1 / 60, 7 + i / 60, { size: 1, pulse: 1 }); f').spine.at(-1); }; // two seconds of wind
-      const [none, some] = [lean(0), lean(3)];
+      const lean = async w => { const c = await context(`?paperwind=${w}`); c.lanterns.STYLES[key].flameWind = 6; c.lanterns.applyStyle(key); let f; for (let i = 0; i < 120; i++) f = c.frame.stepFlame(1 / 60, 7 + i / 60, { size: 1, pulse: 1 }); return f.spine.at(-1); }; // two seconds of wind
+      const [none, some] = [await lean(0), await lean(3)];
       assert.ok(Math.abs(some - none) > 0.5, `${key}: paperWind leans its flame (${none} at 0, ${some} at 3)`);
     }
   }
 });
 
-test('the tip the smoke, the hot air and the rim\'s shadow leave from is the shader flame\'s tip', () => {
-  const ctx = context(), src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8');
+test('the tip the smoke, the hot air and the rim\'s shadow leave from is the shader flame\'s tip', async () => {
+  const ctx = await context(), { frame, lanterns } = ctx, src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.js'), 'utf8');
   // the shader's outer tongue ends at its height (flameHalf is 0 from t = 1), its spine bent over to the full lean there,
   // and its noise gone at the tip
   const half = new Function(src.match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/)[0].replace('float flameHalf(float t)', 'return t =>')
@@ -80,51 +79,52 @@ test('the tip the smoke, the hot air and the rim\'s shadow leave from is the sha
   assert.ok(tip(80) === 1 && tip(91) > 0.4 && tip(91) < 1 && tip(94) > 0 && tip(94) < tip(91) && tip(95.9) < 0.05, `a soft tip fades out to nothing: ${[80, 91, 94, 95.9].map(tip)}`);
   assert.match(src, /q\.x -= spineX\(t\) \+ uShape\.y \* mid \*/, 'the tongues stand on the spine, and the noise is weighed by mid');
   // the spine, run as JS: a curve through the chain's points, the base's at t = 0 and the tip's at t = 1
-  const CHAIN = ctx.run('CHAIN'), glf = ctx.run('glf');
-  const spineX = (uSpine, t) => new Function('uSpine', 'clamp', ctx.run('`' + src.match(/float spineX\(float t\) \{[\s\S]*?\n\}/)[0].replace(/\\/g, '\\\\') + '`')
+  const { CHAIN, glf } = ctx.scene;
+  const spineX = (uSpine, t) => new Function('uSpine', 'clamp', new Function('CHAIN', 'glf', 'return `' + src.match(/float spineX\(float t\) \{[\s\S]*?\n\}/)[0].replace(/\\/g, '\\\\') + '`')(CHAIN, glf)
     .replace('float spineX(float t)', 'return t =>').replace(/\b(float|int) /g, 'let ').replace(/\bfloat\(j\)/, 'j').replace(/\b(min|floor)\(/g, 'Math.$1('))(uSpine, (v, a, b) => Math.min(b, Math.max(a, v)))(t);
   assert.match(src, /mid = 4\.0 \* t \* \(1\.0 - t\)/, 'mid is 0 at the tip');
   assert.match(src, /tongue\(q, 34\.0 \* swell, h, px\)/, 'the outer tongue is h tall');
   for (const key of ['candle', 'moroccan']) {
-    ctx.run(`applyStyle('${key}')`);
-    for (let i = 0; i < 240; i++) { ctx.run(`swingLantern(1 / 60, ${10 + i / 60})`); step(ctx, 10 + i / 60); } // swinging and blowing about
+    lanterns.applyStyle(key);
+    for (let i = 0; i < 240; i++) { frame.swingLantern(1 / 60, 10 + i / 60); step(ctx, 10 + i / 60); } // swinging and blowing about
     const flame = step(ctx, 14);
-    ctx.run(`drawHeat(14, ${JSON.stringify(flame)}); drawLight(1 / 60, 14, ${JSON.stringify(flame)})`);
-    const [bx, by, k] = ctx.uniforms.uBase, [h] = ctx.uniforms.uShape, spine = ctx.uniforms['uSpine[0]'];
+    frame.drawHeat(14, flame); frame.drawLight(1 / 60, 14, flame);
+    const [bx, by, k] = gl.uniforms.uBase, [h] = gl.uniforms.uShape, spine = gl.uniforms['uSpine[0]'];
     assert.strictEqual(spine.length, CHAIN + 1, `${key}: the base and each link's point`);
     spine.forEach((x, j) => assert.ok(Math.abs(spineX(spine, j / CHAIN) - x) < 1e-9, `${key}: the spine passes through point ${j}`));
     const lean = spineX(spine, 1), tip = [bx + lean * k, by - h * k];
     assert.ok(Math.abs(lean) > 0.5, `${key}: the flame leans (${lean}), so the test can tell`);
-    for (const [what, [x, y]] of [['flameTip', flame.tip], ['the rim shadow', ctx.run('drawn.flame.slice(2)')]]) {
+    for (const [what, [x, y]] of [['flameTip', flame.tip], ['the rim shadow', ctx.drawn().flame.slice(2)]]) {
       assert.ok(Math.hypot(x - tip[0], y - tip[1]) < 1e-6, `${key}: ${what} at ${x}, ${y}, the shader's tip at ${tip}`);
     }
-    if (key === 'candle') { const { x, y } = ctx.run('heat'); assert.ok(Math.hypot(x - tip[0], y - tip[1]) < 1e-6, `the hot air leaves ${x}, ${y}, not the tip ${tip}`); }
+    if (key === 'candle') { const { x, y } = frame.heat; assert.ok(Math.hypot(x - tip[0], y - tip[1]) < 1e-6, `the hot air leaves ${x}, ${y}, not the tip ${tip}`); }
   }
 });
 
-test('the flame\'s spring settles: kicked, it swings past upright and comes to rest', () => {
-  const ctx = context();
+test('the flame\'s spring settles: kicked, it swings past upright and comes to rest', async () => {
+  const ctx = await context();
   loose(ctx);
-  ctx.run(`applyStyle('candle')`);
+  ctx.lanterns.applyStyle('candle');
   const rest = step(ctx, 5).tip; // the clock held at 5: a steady wind and wobble, so it has somewhere to settle
   for (let i = 0; i < 600; i++) step(ctx, 5); // ten seconds: even the loosest spring has come to rest
   const settled = step(ctx, 5).tip;
-  ctx.run('flameChain.pts.at(-1).vx += 400');
+  const tipPoint = ctx.frame.flameChain.pts.at(-1);
+  tipPoint.vx += 400;
   const xs = Array.from({ length: 300 }, () => step(ctx, 5).tip[0] - settled[0]);
   assert.ok(Math.max(...xs) > 3, `the kick throws it over: ${Math.max(...xs)}`);
   assert.ok(Math.min(...xs) < -0.1, `it swings back past where it rests: ${Math.min(...xs)}`);
-  assert.ok(Math.abs(xs.at(-1)) < 0.01 && Math.abs(ctx.run('flameChain.pts.at(-1).vx')) < 0.1, `and settles after 5 seconds: ${xs.at(-1)}, moving ${ctx.run('flameChain.pts.at(-1).vx')}`);
+  assert.ok(Math.abs(xs.at(-1)) < 0.01 && Math.abs(tipPoint.vx) < 0.1, `and settles after 5 seconds: ${xs.at(-1)}, moving ${tipPoint.vx}`);
   assert.ok(Math.abs(rest[0] - settled[0]) < 5, 'resting where it started, give or take its first settle');
 });
 
-test('when the lantern swings off, its flame lags behind and leans back, then rights itself', () => {
-  const ctx = context();
-  ctx.run(`applyStyle('moroccan'); swayAngle = 0`);
+test('when the lantern swings off, its flame lags behind and leans back, then rights itself', async () => {
+  const ctx = await context();
+  ctx.lanterns.applyStyle('moroccan'); ctx.swayTo(0);
   for (let i = 0; i < 300; i++) step(ctx, 5);
   const still = step(ctx, 5), lean = f => f.tip[0] - f.base[0] - (still.tip[0] - still.base[0]);
   // the lantern swings off at a steady rate of turn picked up over 0.2 seconds, so its flame's base speeds up to one side
   const go = [];
-  for (let i = 1; i <= 12; i++) { ctx.run(`swayAngle = ${0.02 * i * i / 2}`); go.push(step(ctx, 5)); }
+  for (let i = 1; i <= 12; i++) { ctx.swayTo(0.02 * i * i / 2); go.push(step(ctx, 5)); }
   const ax = go.at(-1).base[0] - 2 * go.at(-2).base[0] + go.at(-3).base[0];
   assert.ok(Math.abs(ax) > 1e-3, `the base speeds up: ${ax}`);
   assert.strictEqual(Math.sign(lean(go.at(-1))), -Math.sign(ax), `it leans away from the push: ${lean(go.at(-1))} for ${ax}`);
@@ -134,9 +134,9 @@ test('when the lantern swings off, its flame lags behind and leans back, then ri
   assert.ok(Math.abs(lean(f)) < 0.05, `upright again: ${lean(f)}`);
 });
 
-test('the flame feels like an ember when idle and a blaze at full, easing between with its size', () => {
-  const ctx = context(), FEEL = ctx.run('FEEL'), at = size => ctx.run(`feelAt(${size})`);
-  for (const [k, [ember, full]] of Object.entries(FEEL)) {
+test('the flame feels like an ember when idle and a blaze at full, easing between with its size', async () => {
+  const { frame } = await context(), at = frame.feelAt;
+  for (const [k, [ember, full]] of Object.entries(frame.FEEL)) {
     assert.ok(ember !== full, `${k}: an ember and a blaze differ, so the test can tell`);
     assert.strictEqual(at(0.3)[k], ember, `${k} at an idle ember`); assert.strictEqual(at(0.1)[k], ember, `${k} below it`);
     assert.strictEqual(at(1)[k], full, `${k} at full`);
@@ -146,17 +146,17 @@ test('the flame feels like an ember when idle and a blaze at full, easing betwee
   }
 });
 
-test('a swing travels up the flame: its lower links lean first, the tip after, then all of it settles', () => {
-  const ctx = context();
+test('a swing travels up the flame: its lower links lean first, the tip after, then all of it settles', async () => {
+  const ctx = await context();
   loose(ctx);
-  ctx.run(`applyStyle('moroccan'); swayAngle = 0`);
+  ctx.lanterns.applyStyle('moroccan'); ctx.swayTo(0);
   for (let i = 0; i < 600; i++) step(ctx, 5);
-  const rest = ctx.run('flameChain.pts.map(p => p.x)'), n = rest.length;
+  const rest = chainX(ctx), n = rest.length;
   // a short shove: the lantern swings off and stops within a tenth of a second
   const lean = [];
   for (let i = 1; i <= 240; i++) {
-    ctx.run(`swayAngle = ${Math.min(i, 6) * 0.15}`); step(ctx, 5);
-    lean.push(ctx.run('flameChain.pts.map(p => p.x)').map((x, j) => x - rest[j]));
+    ctx.swayTo(Math.min(i, 6) * 0.15); step(ctx, 5);
+    lean.push(chainX(ctx).map((x, j) => x - rest[j]));
   }
   // when each point swings furthest from where it rested: from the base up, each no sooner than the one below
   const peak = j => lean.reduce((best, l, f) => Math.abs(l[j]) > Math.abs(lean[best][j]) ? f : best, 0);
@@ -169,20 +169,20 @@ test('a swing travels up the flame: its lower links lean first, the tip after, t
   assert.ok(lean.some(l => l[1] * l[n - 1] < 0 && Math.min(Math.abs(l[1]), Math.abs(l[n - 1])) > 0.03 * most), 'an S: the low links and the tip lean opposite ways at some moment');
   // and the flame comes back to rest, with its lean where it was before the shove (it stands upright in the world)
   for (let i = 0; i < 360; i++) step(ctx, 5);
-  ctx.run('flameChain.pts.map(p => p.x)').forEach((x, j) => assert.ok(Math.abs(x - rest[j]) < 0.05, `point ${j + 1} settles: ${x - rest[j]}`));
+  chainX(ctx).forEach((x, j) => assert.ok(Math.abs(x - rest[j]) < 0.05, `point ${j + 1} settles: ${x - rest[j]}`));
 });
 
-test('the links are joined: a kick to the lowest one reaches each link above it in turn', () => {
-  const ctx = context();
-  ctx.run(`applyStyle('candle')`);
+test('the links are joined: a kick to the lowest one reaches each link above it in turn', async () => {
+  const ctx = await context();
+  ctx.lanterns.applyStyle('candle');
   for (let i = 0; i < 600; i++) step(ctx, 5); // the clock held at 5, so nothing else moves it
-  const rest = ctx.run('flameChain.pts.map(p => p.x)'), n = rest.length;
-  ctx.run('flameChain.pts[0].vx += 300');
+  const rest = chainX(ctx), n = rest.length;
+  ctx.frame.flameChain.pts[0].vx += 300;
   // the first frame each point has moved a tenth of a unit from rest
   const first = Array(n).fill(-1);
   for (let f = 0; f < 120; f++) {
     step(ctx, 5);
-    ctx.run('flameChain.pts.map(p => p.x)').forEach((x, j) => { if (first[j] < 0 && Math.abs(x - rest[j]) > 0.1) first[j] = f; });
+    chainX(ctx).forEach((x, j) => { if (first[j] < 0 && Math.abs(x - rest[j]) > 0.1) first[j] = f; });
   }
   for (let j = 1; j < n; j++) {
     assert.ok(first[j] >= 0, `point ${j + 1} never moves: the kick doesn't reach it (${first})`);
@@ -191,14 +191,14 @@ test('the links are joined: a kick to the lowest one reaches each link above it 
   assert.ok(first[n - 1] > first[0], `the tip moves after the lowest link: ${first}`);
 });
 
-test('the light flickers with the flame\'s height: brighter as it stretches past its rest height, dimmer as it shrinks', () => {
-  const ctx = context();
+test('the light flickers with the flame\'s height: brighter as it stretches past its rest height, dimmer as it shrinks', async () => {
+  const ctx = await context();
   for (const key of ['chochin', 'candle']) {
-    ctx.run(`applyStyle('${key}')`);
+    ctx.lanterns.applyStyle(key);
     for (let i = 0; i < 60; i++) step(ctx, 5);
-    const rest = 96 * ctx.run('style.flame[2]'); // at size 1
+    const rest = 96 * ctx.lanterns.style.flame[2]; // at size 1
     // the tip held at a height (dt 0 skips the spring), as a fraction of the rest height
-    const at = h => { ctx.run(`flameChain.pts.forEach((p, j) => { p.y = -${h * rest} * (j + 1) / flameChain.pts.length })`); return step(ctx, 5, 0).flick; };
+    const at = h => { ctx.frame.flameChain.pts.forEach((p, j, all) => { p.y = -h * rest * (j + 1) / all.length; }); return step(ctx, 5, 0).flick; };
     const [tall, level, short] = [1.1, 1, 0.9].map(at);
     assert.ok(tall > 1.03 && tall < 1.1, `${key}: stretched 10% it brightens ${tall}`);
     assert.ok(Math.abs(level - 1) < 1e-9, `${key}: at its rest height it is unchanged ${level}`);

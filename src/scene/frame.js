@@ -214,7 +214,7 @@ function facetTone(angle, tilt = 0) {
   return mix(FACET_TONES[i], FACET_TONES[i + 1], t - i);
 }
 /** @returns {[number, number]} */
-function rot(px, py, by = swayAngle) { // `by` -swayAngle turns a point in the scene back into the lantern's own frame
+export function rot(px, py, by = swayAngle) { // `by` -swayAngle turns a point in the scene back into the lantern's own frame
   const rad = by * Math.PI / 180, top = VIEW.top;
   return [340 + (px - 340) * Math.cos(rad) - (py - top) * Math.sin(rad), top + (px - 340) * Math.sin(rad) + (py - top) * Math.cos(rad)];
 }
@@ -226,7 +226,7 @@ function rot(px, py, by = swayAngle) { // `by` -swayAngle turns a point in the s
 // (style.stands) holds still at 0, so rot() leaves everything where it's drawn; the pendulum keeps going under it, so a
 // hanging lantern picked afterwards picks up the swing where the wind has it.
 export const swing = { a: NaN, v: 0, wind: 0 };
-function swingLantern(elapsed, s) {
+export function swingLantern(elapsed, s) {
   const w = 2 * Math.PI / sway.period, dt = Math.min(0.05, elapsed), top = VIEW.top, sl = s - LAG;
   if (!(swing.a === swing.a)) { swing.a = swing.v = 0; swing.wind = GUST(s); } // first frame (or a NaN): start hanging still
   swing.wind += (GUST(s) - swing.wind) * Math.min(1, dt / sway.forget);
@@ -274,19 +274,19 @@ function swingLantern(elapsed, s) {
 // and how strongly the wind, the turbulence (its licking edge, background.js) and a moth move it. Each is a pair: for an
 // idle ember (size 0.3) and for a full blaze (size 1), eased between by the flame's size (feelAt), as Dace dialled them in:
 // an ember small, tight and smooth-edged; a blaze looser at the tip, bent further by the wind, its edge licking hard.
-const FEEL = { stiffness: [160, 65], falloff: [2, 2.25], damping: [9.5, 18], inertia: [8, 15], wind: [0.5, 1.3], turbulence: [0, 1.85], moth: [1.55, 1] };
+export const FEEL = { stiffness: [160, 65], falloff: [2, 2.25], damping: [9.5, 18], inertia: [8, 15], wind: [0.5, 1.3], turbulence: [0, 1.85], moth: [1.55, 1] };
 /** @returns {Record<keyof FEEL, number>} */
-const feelAt = size => {
+export const feelAt = size => {
   const u = Math.max(0, Math.min(1, (size - 0.3) / 0.7)), t = u * u * (3 - 2 * u);
   return /** @type {any} */ (Object.fromEntries(Object.entries(FEEL).map(([k, [ember, full]]) => [k, ember + (full - ember) * t])));
 };
 // the chain: each point above the base, its offset from the base and its speed (the last is the tip), the base's last place
 // and speed (scene units), and the style it was set for. bent(i): how much of the tip's lean point i takes at rest.
 const bent = i => (i / CHAIN) ** 1.6;
-const flameChain = { pts: /** @type {{ x: number, y: number, vx: number, vy: number }[]} */ ([]), bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
+export const flameChain = { pts: /** @type {{ x: number, y: number, vx: number, vy: number }[]} */ ([]), bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
 // One frame of the flame, `dt` on, burning at `flame` (its size and pulse): that, with its flicker (how much taller or shorter than at rest it stands,
 // which the light it gives follows), its base and tip in the scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
-function stepFlame(dt, s, flame) {
+export function stepFlame(dt, s, flame) {
   const [fx, fy, fk] = style.flame, k = flame.size * fk, [bx, by] = rot(fx + farSlide / 2, fy), ch = flameChain; // at the middle depth (farSlide)
   const flameWind = style.paper ? paperWind : style.flameWind || 0; // how far the wind leans it (lanterns.js)
   const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * flameWind; // the wind's lean, in the flame's units
@@ -379,10 +379,10 @@ function lightPaper({ size, flick, pulse }) {
 // the crown, a highlight on each grape on the side facing it, and the marble slab warming round the foot, the foot's shadow
 // on it pushed away from the lean. All of it follows this frame's flame.
 // The hot air rising off the lantern, set by drawHeat (null without any): where it leaves, how strong, and the time.
-let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
+export let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
 // How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (scene.js HEAT_COLUMN)
 // rising from where it leaves. LIGHT's heat() in background.js bends the same column, so change the two together.
-function heatAt(x, y) {
+export function heatAt(x, y) {
   if (!heat) return 0;
   const { half: h0, widen, start, fade } = HEAT_COLUMN, up = heat.y - y, half = Math.max(1, h0 + widen * up);
   const step = (a, b, v) => { const u = Math.min(1, Math.max(0, (v - a) / (b - a))); return u * u * (3 - 2 * u); };
@@ -390,7 +390,7 @@ function heatAt(x, y) {
 }
 // A speck at (x, y) on its orbit, `dt` on: in the hot air it carries it up at HEAT_RISE a second at its
 // strongest, and once out of it it sinks back a third of its lift a second, another offset on the orbit. Its lift, up.
-function liftDust(p, x, y, dt) {
+export function liftDust(p, x, y, dt) {
   return heat ? p.lift += (HEAT_RISE * heatAt(x, y - p.lift) - p.lift / 3) * dt : p.lift = 0;
 }
 // How far the wind carries a dust speck of radius r aside at s, k for its ring: at once, the lighter the further and the
@@ -463,13 +463,13 @@ export function smoke(now, s, strength, tip) {
 const HEAT_RISE = 11; // how fast the hot air carries dust up at its strongest, units a second
 // The hot air rising off the lantern this frame (style.heat), for drawLight, the background and the tip smoke leaves from:
 // from style.heat.at, swinging with the lantern, or its bare flame's tip (stepFlame), as strong as the flame burns.
-function drawHeat(s, { size, tip }) {
+export function drawHeat(s, { size, tip }) {
   const h = style.heat;
   if (!h || AMBIENT) { heat = null; return; }
   const [x, y] = h.at ? rot(...h.at) : tip;
   heat = { x, y, k: h.k * size, t: s % (2 * Math.PI) };
 }
-function drawShine(s, { size, flick, pulse, base, tip }) {
+export function drawShine(s, { size, flick, pulse, base, tip }) {
   const shine = style.shine;
   if (!shine || AMBIENT) return;
   const [fx, fy, fk] = style.flame, bright = (0.3 + 0.7 * size) * pulse, core = pal('core');
@@ -499,7 +499,7 @@ function drawShine(s, { size, flick, pulse, base, tip }) {
 // leaf also grows about its stem, to 3.5 times as drawn on the lower vine (`low` 1) and a sixth of the way there at the
 // top (0). Found and
 // read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
-function drawLeaves(s) {
+export function drawLeaves(s) {
   live.cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
     const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), low = e.getAttribute('data-low');
     return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, deg: +(e.getAttribute('data-deg') || 0), ph: (x * 0.37 + y * 0.11) % 6.283 };
@@ -516,7 +516,7 @@ function drawLeaves(s) {
 
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
 // dust, and the moths' shadows.
-function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, blue }) {
+export function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, blue }) {
   const [gx, gy] = lightAt();
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
