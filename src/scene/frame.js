@@ -74,7 +74,7 @@ const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, ite
 // new length grows in instead of snapping; anything that still goes wrong (not a number, or stretched far past its length)
 // hangs it straight from the knot again.
 /** @param {{pts?: {x: number, y: number, px: number, py: number, vx: number, vy: number}[], seg?: number, acc?: number}} r */
-function stepRibbon(r, ax, ay, length, dt, s) {
+export function stepRibbon(r, ax, ay, length, dt, s) {
   const { n, gravity, h, maxSteps, iterations } = BOOKMARK, target = length / (n - 1);
   const hang = () => { r.seg = target; r.pts = Array.from({ length: n }, (_, i) => ({ x: ax, y: ay + i * target, px: 0, py: 0, vx: 0, vy: 0 })); };
   if (!r.pts || r.seg === undefined) hang();
