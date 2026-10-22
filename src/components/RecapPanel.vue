@@ -64,7 +64,7 @@ async function showStar(i: number | null) {
   lit.value = i;
   const s = i == null ? undefined : view.value?.stars[i];
   if (!s) return;
-  shown.value = { s, alive: sessions.some(o => o.id === s.id) }; // still alive: its title goes to its terminal, like clicking its moth
+  shown.value = { s, alive: sessions.some(o => o.id === s.id) }; // still alive: its title goes to its terminal, like its card's header
   await nextTick();
   const el = card.value;
   if (!el || !popover) return;

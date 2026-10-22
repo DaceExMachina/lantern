@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A session on the hover card, or (dock) in the pinned sidebar. Hovered (compact), just the header, one line of what it's
 // doing or wants, and a count of its work. Otherwise in full: the whole prompt, agents open, every PR listed until
-// that pin's own toggle (kept with the pin) turns them into chips. The header opens the session (a click on its moth does the same; shift-click snoozes), its
+// that pin's own toggle (kept with the pin) turns them into chips. The header opens the session (shift-click snoozes, as on its moth), its
 // pill cycles the snooze as a right-click on the moth does, and its pin pins it to the sidebar; the header stays put and the
 // body below scrolls when the card would be taller than the window. The top of the body is what it wants from me (a state
 // line only where it says more than the pill, its questions, its "You:" message as a quote), then the work in its tray:

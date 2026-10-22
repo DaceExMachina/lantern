@@ -106,7 +106,7 @@ const isTouch = (e: Event) => 'pointerType' in e && e.pointerType === 'touch';
 // Leaving every area (or the scene, or the card) starts the card's grace period, once: an expanded card waits EXPANDED_GRACE
 // for the pointer to come back to it or its moth. While a card is expanded, other moths don't take it over on hover.
 const EXPANDED_GRACE = 2000;
-const hideSoon = (ms: number) => { clearTimeout(live.hideTimer); live.hideTimer = setTimeout(hideCard, live.expanded ? EXPANDED_GRACE : ms); };
+const hideSoon = (hoverMs: number) => { clearTimeout(live.hideTimer); live.hideTimer = setTimeout(hideCard, live.expanded ? EXPANDED_GRACE : hoverMs); };
 let inZone = false;
 const leaveZones = () => { if (inZone) { inZone = false; hideSoon(700); } };
 for (const type of ['pointerdown', 'pointermove'] as const) $('scene').addEventListener(type, e => {
@@ -116,16 +116,19 @@ for (const type of ['pointerdown', 'pointermove'] as const) $('scene').addEventL
   if (z && (!live.expanded || z.target === live.hovered)) { inZone = true; enterZone(z); } else leaveZones();
 });
 $('scene').addEventListener('pointerleave', e => isTouch(e) || leaveZones());
-// A click on a session's moth expands its card; on another area (or a shift-click) it runs it. A tap shows the card. It
-// listens on the scene itself: iOS only sends a tap's click to an element with a click listener of its own.
+// A click or tap on a session's moth expands its card. A click on another area (or a shift-click) runs it, and a tap
+// shows that area's card. It listens on the scene itself: iOS only sends a tap's click to an element with a click listener of its own.
 $('scene').addEventListener('click', e => {
   const z = zoneFor(e);
   if (z) 'key' in z.target && !e.shiftKey ? expandCard(z) : isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey);
 });
-// A click anywhere but the card and its own moth puts away an expanded card (or, from a tap, any card).
+// A click anywhere but the card and its own moth puts away an expanded card (or, from a tap, any card), and so does Escape.
+// It listens while the click is on its way down, before the button it lands on can take itself away (the agents' "more")
+// and leave nothing to tell it was on the card; a click on another moth then expands that one's (above).
 addEventListener('click', e => {
   if ((live.expanded || isTouch(e)) && zoneFor(e)?.target !== live.hovered && !(e.target instanceof Element && e.target.closest('#card'))) hideCard();
-});
+}, true);
+addEventListener('keydown', e => { if (e.key === 'Escape' && live.expanded) hideCard(); });
 $('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());

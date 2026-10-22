@@ -159,3 +159,18 @@ test('a click on a session\'s card body does nothing (it opens from its header);
   clickCard(300, 300); clickCard(300, 300, 'a');
   assert.deepStrictEqual(opened(), ['wisp'], 'a stale PR\'s card, but not from a link on it');
 });
+
+test('a click on a card button that takes itself away (the agents\' "more") keeps the card open, and Escape closes it', async () => {
+  const { live, scene, cardEl, fire } = await withMoth();
+  fire(scene, 'pointermove', 110, 205); fire(scene, 'click', 110, 205);
+  assert.ok(live.expanded);
+  const more = cardEl.appendChild(document.createElement('button'));
+  let reached = false;
+  more.addEventListener('click', () => more.remove()); // as Vue's v-if does, before the click bubbles out to the window
+  addEventListener('click', () => { reached = true; }, { once: true });
+  fire(more, 'click');
+  assert.ok(reached && !more.isConnected, 'the click reached the window after its button was gone');
+  assert.ok(live.expanded, 'and the card stayed open');
+  dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'Escape closes it');
+});

@@ -86,7 +86,7 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
     <summary>What's what?</summary>
     <p><b>Big moths</b> are your sessions and <b>small ones</b> are their agents. The more of them working, the brighter the flame.</p>
     <p>When a session <b>needs you</b>, its moth lands on the lantern and the light turns violet.</p>
-    <p><b>Hover</b> a moth for its card. <b>Click</b> the moth or the card's header to jump to its session, or <b>right-click</b> the moth (or click the card's status) to snooze it. Do it again and it sleeps, snoozed until you wake it.</p>
+    <p><b>Hover</b> a moth for a quick look, and <b>click</b> it for its full card. Click the card's header to jump to its session, or <b>right-click</b> the moth (or click the card's status) to snooze it. Do it again and it sleeps, snoozed until you wake it.</p>
     <p><b>Pin</b> a card to keep it open on the side.</p>
     <p><b>Fireflies</b> are its PRs:<span class="key"><span class="swatch" style="background:var(--pr-ready)"></span>ready</span><span class="key"><span class="swatch" style="background:var(--pr-failing)"></span>failing</span><span class="key"><span class="swatch" style="background:var(--pr-changes)"></span>changes</span><span class="key"><span class="swatch" style="background:var(--pr-draft)"></span>draft</span><span class="key"><span class="swatch" style="background:var(--pr-in-review)"></span>in review</span>. The faint moths and fireflies in the background are stale PRs and the sessions that made them.</p>
     <p>The <b>chart button</b> opens your stats, and the <b>moon</b> snoozes everything <span>{{ until }}</span>. Set <b>quiet from</b> to have it come on by itself each night.</p>

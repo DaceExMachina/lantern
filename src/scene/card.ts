@@ -47,11 +47,11 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
 // Hovering a session's moth shows its card compact, a tooltip the pointer passes through (`compact` on #card); a click
 // expands it (live.expanded), and it stays until a click elsewhere or the pointer has been away from it and its moth a
 // while (wiring.ts). A stale PR's and a ghost's cards are hover cards that hold while the pointer is on them, as before.
-function paint() {
+function paint(t: Hovered) {
   chrome.update();
-  const c = $('card'), h = live.hovered;
+  const c = $('card');
   c.classList.add('show');
-  if (h) c.classList.toggle('compact', 'key' in h && !live.expanded);
+  c.classList.toggle('compact', 'key' in t && !live.expanded);
 }
 export function enterZone(a: Zone) {
   clearTimeout(live.hideTimer);
@@ -59,14 +59,14 @@ export function enterZone(a: Zone) {
   if (live.hovered === t && (!a.cardAt || cardAt === a.cardAt)) return; // already showing it
   if (live.hovered !== t) live.expanded = false;
   live.hovered = t; if (a.cardAt && 'session' in t) t.cardAt = a.cardAt;
-  paint();
+  paint(t);
 }
 // A click on a session's moth expands its card; another click on it puts the card away.
 export function expandCard(zone: Zone) {
   if (live.expanded && live.hovered === zone.target) return hideCard();
   enterZone(zone);
   live.expanded = true;
-  paint();
+  paint(zone.target);
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
