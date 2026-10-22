@@ -87,10 +87,10 @@ test('the toggle flips the session\'s view, tells the server, and the server\'s 
   assert.strictEqual(tog.getAttribute('aria-label'), 'List PRs with their titles');
   assert.strictEqual(tog.title, 'List PRs with their titles', 'a tooltip too');
   assert.strictEqual(text(tog), '', 'an icon, no text');
-  tog.click(); // a button, which the card's own click handler leaves alone (events.js)
+  tog.click(); // a button, which the card's own click handler leaves alone (wiring.js)
   assert.strictEqual(JSON.stringify(posts), JSON.stringify([['/settings', { prList: { s1: true } }]]));
   assert.strictEqual(find(show(session({ github: TEN })), 'pr2').length, 4, 'now listed');
-  // another window gets the setting from the server (events.js: live.prList = st.prList)
+  // another window gets the setting from the server (wiring.js: live.prList = st.prList)
   reset();
   live.prList = { s1: true, s2: false };
   assert.strictEqual(find(show(session({ github: TEN })), 'pr2').length, 4);
@@ -288,7 +288,7 @@ test('the card\'s pin toggles its session in the list, newest at the bottom, and
   pinOf(sections()[0]).click();
   assert.deepStrictEqual(docked(), []);
   assert.strictEqual(list(), JSON.stringify([['s1'], ['s1', 's3'], ['s1', 's3', 's2'], ['s1', 's2'], ['s2'], []]), 'the whole list to the server each time');
-  // another window docks what the server says (events.js: live.pinned = st.pinned, then renderSidebar)
+  // another window docks what the server says (wiring.js: live.pinned = st.pinned, then renderSidebar)
   reset();
   setSessions(a, b);
   live.pinned = [{ id: 's2' }, { id: 's1' }]; renderSidebar();

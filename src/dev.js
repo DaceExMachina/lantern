@@ -1,4 +1,4 @@
-// The dev panel: preview and tuning controls, top left, opened with the backtick key (` ) or ?dev on load (events.js wires
+// The dev panel: preview and tuning controls, top left, opened with the backtick key (` ) or ?dev on load (wiring.js wires
 // both). Display overrides only: nothing here posts to the server or touches real sessions or settings.
 // A feature adds a control with one line, wherever it lives, and gets back its value now (from the URL, else the default):
 //   let smokeSpeed = devSlider('Temporary', 'smokespeed', 'smoke speed', 0, 3, 0.1, 1, 'How fast the smoke rises', v => { smokeSpeed = v; });

@@ -11,8 +11,8 @@ import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state.js';
 import { fitView, frame } from './scene/frame.js';
 import { lanternText, setLanternText } from './scene/pages.js';
 import { clickZone, enterZone, hideCard, renderCard, renderSidebar, tapZone, zoneAt, zones } from './scene/card.js';
-import { MIN, loadStats } from './scene/stats.js';
-import { maybeRecap, openRecap } from './scene/recap.js';
+import { MIN } from './scene/stats.js';
+import { maybeRecap } from './scene/recap.js';
 import { flashBadge } from './scene/flash.js';
 
 const es = new EventSource('/events');
@@ -195,15 +195,6 @@ menu.addEventListener('pointerleave', e => showTip(e, false));
 menu.addEventListener('focusout', e => showTip(e, false));
 menu.addEventListener('toggle', e => { if (/** @type {ToggleEvent} */ (e).newState === 'closed') showTip(e, false); });
 
-// the stats panel reads the log when it opens, and again every minute while it stays open
-let statsTimer;
-$('stats').addEventListener('toggle', e => {
-  clearInterval(statsTimer);
-  if (e.newState === 'open') { loadStats(); statsTimer = setInterval(loadStats, MIN); }
-});
-
 // the daily recap: checked when the window comes back into view, and every minute (a window left open overnight)
 addEventListener('visibilitychange', () => maybeRecap());
 setInterval(() => maybeRecap(), MIN);
-$('todayRecap').onclick = () => openRecap(7);
-$('statsWeek').addEventListener('click', e => { const day = e.target.closest('.day'); if (day && day.dataset.day) openRecap(+day.dataset.day); });

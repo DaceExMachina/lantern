@@ -338,7 +338,7 @@ function sleepPages() { stopPages(); forget(); waitFrom = performance.now(); }
 addEventListener('resize', () => legible() ? wakePages() : pagesTimer && sleepPages());
 
 // Turning words off takes the ink out quickly (then the timer stops); turning them on brings a full page in the way the
-// first appearance does, from the words already here. Called by events.js with the shared setting.
+// first appearance does, from the words already here. Called by wiring.js with the shared setting.
 export function setLanternText(value) {
   if (value === lanternText) return;
   lanternText = value;

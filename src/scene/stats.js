@@ -1,12 +1,12 @@
-// The stats panel (Stats in the settings menu): today's numbers from the event log (GET /stats), the day ribbon,
-// and the week before as mini ribbons. Hygiene over volume: the headline is how much of the moths' time was warm.
+// What the stats panel (src/components/StatsPanel.vue) and the recap share: the ribbons, headline and badge tips. The panel
+// itself is Vue and imports these. Hygiene over volume: the headline is how much of the moths' time was warm.
 
 import { live } from './live.js';
 import { $ } from './scene.js';
 import { COOL, MOTH_CALL, MOTH_IDLE, MOTH_RESTING, WARM, mix } from './lanterns.js';
 import { ago, tipSpot } from './card.js';
 
-export const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+export const MIN = 60 * 1000;
 // The middle and bottom strips use the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working
 // in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour; snoozed for good,
 // sleeping, counts as snoozed here, since the two can't be told apart on the graph).
@@ -58,7 +58,7 @@ const landed = s => mix(MOTHS.waiting, MOTHS.snoozed, s.waiting ? (s.snoozed + s
 // snoozed (sleeping too), then the idle rest, rising from the strip below), the share of moths flying vs landed (blending the same
 // colours by share), and the lantern (warm or violet, quiet dim) as tall as the moths strip. Small ticks under the
 // lantern strip mark sessions starting.
-function ribbon(r, w, h) {
+export function ribbonBody(r, w, h) {
   const band = Math.round(h * .24), gap = 2, low = h - 2 * band - 2 * gap - 3, x = t => (t - r.from) / (r.to - r.from) * w;
   const most = Math.max(1, ...r.slices.map(s => s.alive));
   let svg = '';
@@ -73,8 +73,9 @@ function ribbon(r, w, h) {
     if (lamp) svg += `<rect x="${x0}" y="${low + 2 * gap + band}" width="${sw}" height="${band}" fill="${RIBBON[lamp]}"/>`;
   }
   for (const t of r.starts) svg += `<path d="M${x(t)} ${h - 3}V${h}" stroke="var(--ink)" stroke-width="1.2" vector-effect="non-scaling-stroke"/>`;
-  return `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${svg}</svg>`;
+  return svg;
 }
+const ribbon = (r, w, h) => `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${ribbonBody(r, w, h)}</svg>`;
 
 // A day's ribbon with its axis and a legend of the moth states (snoozed counts sleeping too) with their times, for the stats panel and the recap. `end` labels the right edge.
 export const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
@@ -85,7 +86,7 @@ export const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon"
 // is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed and sleeping
 // ones aside), moths flying is of all session time summed over the sessions (waiting, snoozed and sleeping count as landed).
 // Hovering the ribbon swaps them for that moment's lantern state and share of moths flying (see followRibbon).
-const pct = v => v == null ? '–' : `${v}%`;
+export const pct = v => v == null ? '–' : `${v}%`;
 const LAMP_WORD = { warm: 'warm', violet: 'waiting', quiet: 'quiet' }; // the lantern's headline while hovering (no lamp at all reads "off")
 export const headline = d => `<div class="headline">
   <div><b data-v="lamp">${pct(d.warmLantern)}</b><span>lantern warmth</span></div>
@@ -128,6 +129,7 @@ export function followRibbon(box, r, day, onMoment = t => {}) {
 
 // Badges the server gives from the event log (Stats.swift decides when). They're not sorted into good or bad: what
 // each one means is up to whoever earns it. [name, how it's earned]
+/** @type {Record<string, [string, string]>} */
 export const ACHIEVEMENTS = {
   warm_all_day: ['Warm all day', 'The lantern stayed warm nine tenths of a day with sessions running'],
   clear_night: ['Clear night', 'No stale PRs for a whole week'],
@@ -172,7 +174,7 @@ function showBadge(el) {
   tip.classList.add('show');
 }
 // back to the pinned badge's tip, or none
-function restoreBadge(root) {
+export function restoreBadge(root) {
   const el = live.pinnedBadge && root.querySelector(`.badge[data-id="${live.pinnedBadge}"]`);
   if (el) { const shelf = el.closest('details'); if (shelf) shelf.open = true; showBadge(el); } // only on the shelf: open it to show the badge
   else root.querySelector('.badgeTip')?.classList.remove('show');
@@ -190,49 +192,4 @@ for (const root of [$('stats'), $('recap')]) {
     live.pinnedBadge = live.pinnedBadge === el.dataset.id ? null : el.dataset.id;
     restoreBadge(root);
   });
-}
-
-function renderStats(j) {
-  const days = j.days, today = days[days.length - 1];
-  const r = slices(today, j.spans, j.gauges, 160);
-  const stale = today.stale == null ? '–' : today.stale + (today.staleChange ? ` (${today.staleChange > 0 ? '+' : ''}${today.staleChange})` : '');
-  const nums = [
-    ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
-    ['slowest answers', today.slowWait == null ? '–' : ago(today.slowWait), 'one in ten waits lasted at least this long'],
-    ['waits', today.waits, 'times a moth landed on the lantern for you'],
-    ['merged', today.merged, 'fireflies that flew home (merged PRs)'],
-    ['in flight', today.open ?? '–', 'open PRs your sessions own'],
-    ['stale PRs', stale, 'open PRs no session owns and nobody touched for a week, and the change since this morning'],
-  ];
-  const week = days.slice(0, -1).map((d, i) => {
-    const mini = slices(d, j.spans, j.gauges, 48), name = DAY_NAMES[new Date(d.start).getDay()];
-    return mini ? `<button class="day" data-day="${i}" title="${clock(mini.from)} to ${clock(mini.to)}: open the recap"><span>${name}</span>
-      ${ribbon(mini, 120, 26)}<b>${pct(d.warmMoths)}</b></button>`
-      : `<div class="day" title="nothing recorded"><span>${name}</span><i class="none"></i><b>–</b></div>`;
-  }).join('');
-  $('statsBody').innerHTML = `
-    ${today.warmMoths == null ? '<p class="dim">No moths yet today. Your first session starts the day.</p>' : headline(today)}
-    ${r ? dayRibbon(r, today.end >= Date.now() - MIN ? 'now' : clock(r.to)) : ''}
-    <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
-  if (r) followRibbon($('statsBody').querySelector('.dayRibbon'), r, today);
-  live.tally = j.tally;
-  const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
-  $('statsWeek').innerHTML = `
-    <h4>The week before</h4>
-    <div class="week">${week}</div>
-    ${days.slice(0, -1).some(d => d.mothMs) ? '' : '<p class="dim">The lantern started keeping a log recently, so the week fills in as the days go by.</p>'}
-    <h4>Badges this week</h4>
-    ${j.achievements.length ? `<div class="badges">${j.achievements.slice().reverse().map(([id, day]) =>
-      badge(id, ` <small>${day === dayKey(Date.now()) ? 'today' : DAY_NAMES[new Date(day + 'T12:00').getDay()]}</small>`)).join('')}</div>`
-      : '<p class="dim">None yet this week. They come from the log as the days go by.</p>'}
-    ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}
-    <details class="shelf"><summary>All badges</summary><div class="badges">${Object.keys(ACHIEVEMENTS).map(id =>
-      badge(id, live.tally[id]?.[0] > 1 ? ` <small>×${live.tally[id][0]}</small>` : '', !live.tally[id])).join('')}</div></details>`;
-  if (shelfOpen) $('statsWeek').querySelector('.shelf').open = true;
-  restoreBadge($('statsWeek'));
-}
-
-export async function loadStats() {
-  try { renderStats(await (await fetch('/stats')).json()); }
-  catch { $('statsBody').innerHTML = '<p class="dim">Couldn’t read the stats. Is the Lantern app running?</p>'; }
 }

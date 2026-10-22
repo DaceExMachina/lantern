@@ -11,10 +11,10 @@ import { FLY } from '../src/scene/fireflies.js';
 import { WARM } from '../src/scene/lanterns.js';
 import { MOTHS, RIBBON } from '../src/scene/stats.js';
 
-const ROOT = path.join(import.meta.dirname, '..'), SRC = path.join(ROOT, 'src'), SCENE_DIR = path.join(SRC, 'scene');
+const ROOT = path.join(import.meta.dirname, '..'), SRC = path.join(ROOT, 'src'), SCENE_DIR = path.join(SRC, 'scene'), COMPONENTS = path.join(SRC, 'components');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
-const UI = ['dev.js', 'events.js', 'scene/card.js', 'scene/github.js', 'scene/notify.js', 'scene/recap.js', 'scene/stats.js'];
+const UI = ['dev.js', 'wiring.js', 'scene/card.js', 'scene/github.js', 'scene/notify.js', 'scene/recap.js', 'scene/stats.js'];
 const SCENE = ['scene/background.js', 'scene/fireflies.js', 'scene/flash.js', 'scene/frame.js', 'scene/lanterns.js', 'scene/live.js', 'scene/pages.js', 'scene/pencil.js', 'scene/scene.js', 'scene/stale.js', 'scene/state.js'];
 
 const RAW_COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\(/i;
@@ -40,6 +40,13 @@ function offenders() {
     const src = fs.readFileSync(path.join(SRC, file), 'utf8').replace(/^\s*\/\/.*$|\s\/\/\s.*$/gm, '');
     for (const [c] of src.matchAll(/#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\([^)]*\)/gi)) found.add(`${path.basename(file)} ${c}`);
     for (const [d, p, v] of src.matchAll(/\b([a-z-]+)\s*:\s*([^;'"`{}]*px[^;'"`{}]*)/g)) if (raw(p, v.trim())) found.add(`${path.basename(file)} ${d.trim()}`);
+  }
+  // the Vue components: their <style> rules and style attributes, and colours anywhere in the file
+  for (const file of fs.readdirSync(COMPONENTS).filter(f => f.endsWith('.vue'))) {
+    const src = fs.readFileSync(path.join(COMPONENTS, file), 'utf8'), css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]).join('').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const [, sel, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) if (declarations(body).some(([p, v]) => raw(p, v))) found.add(`${file} ${sel.trim().replace(/\s+/g, ' ')}`);
+    for (const [, attr] of src.matchAll(/style="([^"]*)"/g)) if (declarations(attr).some(([p, v]) => raw(p, v))) found.add(`${file} style="${attr}"`);
+    for (const [c] of src.replace(/^\s*\/\/.*$|\s\/\/\s.*$/gm, '').matchAll(/#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\([^)]*\)/gi)) found.add(`${file} ${c}`);
   }
   return found;
 }

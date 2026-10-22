@@ -27,9 +27,9 @@
   // the WebGL background keeps its last frame, so a snapshot sees what frame() drew
   const getContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (type, opts) { return getContext.call(this, type, type === 'webgl' ? { ...opts, preserveDrawingBuffer: true } : opts); };
-  let es;
-  window.EventSource = class { constructor() { es = this; this.l = {}; } addEventListener(t, f) { (this.l[t] ||= []).push(f); } };
-  const emit = (type, data) => { const e = { data: JSON.stringify(data) }; if (type === 'message') es.onmessage(e); else (es.l[type] || []).forEach(f => f(e)); };
+  const sources = []; // the scene's EventSource and the chrome's
+  window.EventSource = class { constructor() { sources.push(this); this.l = {}; } addEventListener(t, f) { (this.l[t] ||= []).push(f); } };
+  const emit = (type, data) => { const e = { data: JSON.stringify(data) }; for (const es of sources) if (type === 'message') es.onmessage?.(e); else (es.l[type] || []).forEach(f => f(e)); };
   window.fetch = url => Promise.resolve(new Response(String(url).endsWith('/stats') ? JSON.stringify(statsLog()) : '{}'));
   addEventListener('DOMContentLoaded', () => {
     const st = document.createElement('style');
@@ -115,7 +115,7 @@
   const chrome = () => [
     () => { page.$('menu').showPopover(); page.$('help').open = true; }, snap('menu'),
     () => { page.live.github = { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }; page.renderGitHub(); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
-    async () => { page.$('stats').showPopover(); await page.loadStats(); }, snap('stats'), () => { page.$('stats').hidePopover(); },
+    async () => { page.$('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { page.$('stats').hidePopover(); },
     async () => { await page.openRecap(6); }, snap('recap'), () => { page.$('recap').hidePopover(); },
     () => { page.enterZone(page.live.moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { page.hideCard(); },
     () => { page.toggleDevPanel(); }, snap('dev'),
@@ -156,7 +156,7 @@
         if (document.elementFromPoint(x, y)?.closest('.pin') !== pin) errs.push(`the pin's hit area misses its header's ${where}`);
     }
   };
-  // A big card (6 agents, 10 PRs) redrawn the way the 500ms tick does (events.js), checked to keep what the browser holds.
+  // A big card (6 agents, 10 PRs) redrawn the way the 500ms tick does (wiring.js), checked to keep what the browser holds.
   const morph = () => {
     const now = Date.now(), q = sel => page.$('card').querySelector(sel), fail = msg => errs.push(msg); // $ isn't defined yet
     const big = { id: 'sess-big', cwd: '/Users/x/projects/big', title: 'sess-big', state: 'working', activity: 'Editing', started: now - 50 * MIN, last: now,

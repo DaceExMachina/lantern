@@ -9,8 +9,8 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | Where | What |
 |---|---|
 | `index.html` | The page's markup and styles, and Vite's entry. It loads `src/main.ts`. |
-| `src/main.ts` | The entry: it loads `events.js`, and puts the modules on `window.lanternModules` for the snapshot fixture and the console. |
-| `src/events.js` | The wiring: the event stream from the server, the controls, and the animation clock. |
+| `src/main.ts` | The entry: it loads `wiring.js` (the scene), then `expose.ts`, which puts the modules on `window.lanternModules` for the snapshot fixture and the console, then mounts the Vue chrome. |
+| `src/wiring.js` | The wiring: the event stream from the server, the controls, and the animation clock. |
 | `src/scene/*.js` | One ES module per part of the scene (moths, lanterns, fireflies, the card, stats and so on), each importing what it uses. |
 | `src/scene/live.js` | The state more than one module writes, in one plain object: what the server sends, the settings, the moths, the hovered moth. Whatever only one module writes stays in that module. |
 | `src/dev.js` | The dev panel's controls. |
@@ -134,7 +134,7 @@ CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the build
 
 The page has two kinds of look. The **UI chrome** (the footer, settings menu, cards, stats panel, recap, tips, dev panel and the badge's flash pill) is one design, and takes every colour, space, radius, type size, shadow and layer from the custom properties in index.html's `:root`. The **scene art** (the lantern drawings, moths, fireflies, wisps, smoke and the shaders) keeps its own palettes in the scene modules, because each tone is tuned against its neighbours in the drawing.
 
-In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F7FA6`. If nothing fits, add a token here and in `:root` rather than a one-off value. `test/tokens.spec.js` fails on a raw colour, a px value in spacing, radius, type or shadow, or a bare weight or z-index in UI CSS, in index.html's style attributes outside the scene's SVG, and in the UI modules (`src/dev.js`, `src/events.js`, and `card`, `github`, `notify`, `recap` and `stats` in `src/scene/`). Rules that predate the tokens are listed in `test/tokens-debt.json`. That list only shrinks: migrate a rule and the test tells you to delete its entry, and a new raw value anywhere fails. A new page module has to be named as UI or scene in the test.
+In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F7FA6`. If nothing fits, add a token here and in `:root` rather than a one-off value. `test/tokens.spec.js` fails on a raw colour, a px value in spacing, radius, type or shadow, or a bare weight or z-index in UI CSS, in index.html's style attributes outside the scene's SVG, and in the UI modules (`src/dev.js`, `src/wiring.js`, and `card`, `github`, `notify`, `recap` and `stats` in `src/scene/`). Rules that predate the tokens are listed in `test/tokens-debt.json`. That list only shrinks: migrate a rule and the test tells you to delete its entry, and a new raw value anywhere fails. A new page module has to be named as UI or scene in the test.
 
 | Group | Tokens |
 |---|---|

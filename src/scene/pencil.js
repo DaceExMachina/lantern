@@ -1,4 +1,4 @@
-// Jerrett made the candle, so when he's the one at it (his first name, from the server's `name` event, events.js) a worn
+// Jerrett made the candle, so when he's the one at it (his first name, from the server's `name` event, wiring.js) a worn
 // yellow pencil, its point snapped off beside it, lies on the pedestal under the vine. It goes into the candle's drawing
 // once, in the spot lanterns.js keeps for it (#cdPencil), hidden by index.html's CSS until showPencil says so; ?pencil
 // (the dev panel's Demo toggle) shows it for anyone.

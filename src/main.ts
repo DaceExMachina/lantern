@@ -1,5 +1,12 @@
-document.title = 'L33';
-import './events.js';
+// The scene first: modules load in import order, and the dev panel lists its controls in the order they load.
+import './wiring.js';
+import './expose';
+import { createPinia } from 'pinia';
+import { createApp } from 'vue';
+import StatsPanel from './components/StatsPanel.vue';
+import { connect } from './events';
+import { useLanternStore } from './stores/lantern';
 
-// The page's modules by path, for the harnesses that drive it from outside (test/snapshots/fixture.js) and the console.
-Object.assign(window, { lanternModules: import.meta.glob(['./scene/*.js', './dev.js', './events.js'], { eager: true }) });
+const pinia = createPinia();
+createApp(StatsPanel).use(pinia).mount('#stats'); // into the native popover, which keeps its attributes
+connect(useLanternStore(pinia));

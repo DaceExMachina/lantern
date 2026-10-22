@@ -58,7 +58,7 @@
   #scene { position: relative; min-height: 0; overflow: clip; -webkit-user-select: none; user-select: none; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
-     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, src/events.js) */
+     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, src/wiring.js) */
   footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
   #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 var(--space-3); } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
@@ -83,7 +83,7 @@
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
   #menu { padding-top: 7px; }
   #menu:popover-open { gap: 0; }
-  /* each option's tip is a docked card like the recap's, above the menu at its width (src/events.js docks it). It shows after a
+  /* each option's tip is a docked card like the recap's, above the menu at its width (src/wiring.js docks it). It shows after a
      short hover on the row, or when a control in it has keyboard focus. */
   #menu .tip { max-width: none; box-sizing: border-box; z-index: var(--z-tip); transition-delay: .5s; }
   #menu .tip.show { opacity: 1; }
@@ -467,8 +467,7 @@
       <p><a href="https://github.com/DaceExMachina/lantern/blob/main/docs/guide.md" target="_blank" rel="noopener">The full guide</a></p>
     </details>
   </div>
-  <div id="stats" class="flyup" popover aria-label="Stats"><h3>Today <button id="todayRecap" class="link">recap</button></h3><div id="statsBody"><p class="dim">Reading the log…</p></div>
-    <div id="statsWeek"></div></div>
+  <div id="stats" class="flyup" popover aria-label="Stats"></div>
   <div id="recap" class="flyup" popover aria-label="Recap"></div>
 </footer>
 <script type="module" src="/src/main.ts"></script>

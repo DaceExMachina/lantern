@@ -1,9 +1,9 @@
 // The scene's shared state, one plain object: what more than one module writes. Whatever only its own module writes
-// stays in that module; this holds the rest, mostly what events.js hears from the server. Plain on purpose: frame()
+// stays in that module; this holds the rest, mostly what wiring.js hears from the server. Plain on purpose: frame()
 // reads it every frame.
 
 export const live = {
-  // ---- from the server's event stream (events.js)
+  // ---- from the server's event stream (wiring.js)
   raw: [], // the sessions as the server sent them (state.js sync turns them into `sessions` and moths)
   reviews: [], // PRs waiting on my review (GitHub status on)
   stalePRs: [], // PRs gone stale, as wisps and ghosts (stale.js)
@@ -11,7 +11,7 @@ export const live = {
   pagesData: false, // whether the server has sent any yet
   firstName: '', // the user's first name, for Jerrett's pencil (pencil.js)
   github: { accounts: [], signIn: null }, // the GitHub accounts connected, and a sign-in under way (github.js)
-  // ---- from settings.json (events.js)
+  // ---- from settings.json (wiring.js)
   // quiet hours: until when (0 for none), when they end and whether they do, and the day rollover ("HH:MM")
   quietUntil: 0, quietEnd: '08:00', quietEndOn: true, dayStart: '00:00',
   supervisor: /supervisor|orchestrat/i, // which agent types count as supervisors (medium moths)

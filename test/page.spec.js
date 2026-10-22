@@ -332,7 +332,7 @@ test('the candle\'s wax under the rim takes the flame\'s colour', () => {
 });
 
 test('on the candle the session text and ribbon controls grey out', () => {
-  $('ribbons').innerHTML = '<button></button>'.repeat(3); // the swatches, which events.js adds
+  $('ribbons').innerHTML = '<button></button>'.repeat(3); // the swatches, which wiring.js adds
   applyStyle('candle');
   assert.strictEqual(/** @type {HTMLInputElement} */ ($('textToggle')).disabled, true);
   assert.ok([...$('ribbons').children].every(b => /** @type {HTMLButtonElement} */ (b).disabled), 'every swatch');

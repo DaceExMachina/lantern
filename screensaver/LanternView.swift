@@ -73,7 +73,7 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         failures = 0; retrying = false // a retry left waiting by stop() would block new ones
         load()
         // Every 10s, check the page is still drawing. This runs on its own timer, so it keeps going even if macOS stops
-        // calling animateOneFrame (the page then draws from its own timer, see src/events.js).
+        // calling animateOneFrame (the page then draws from its own timer, see src/wiring.js).
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in self?.check() }
         RunLoop.main.add(timer, forMode: .common)
         health = timer
