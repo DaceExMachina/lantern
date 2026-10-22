@@ -16,7 +16,7 @@ let saved = FileManager.default.contents(atPath: data + "/settings.json").flatMa
 let port = env["LANTERN_PORT"] ?? (saved?["port"] as? NSNumber)?.stringValue ?? "7717"
 let home = URL(string: "http://127.0.0.1:\(port)/")!
 
-final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var server: LanternServer!
@@ -71,9 +71,22 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         window.isReleasedWhenClosed = false // closing hides it; the page keeps running for the badge
         window.center()
         window.setFrameAutosaveName("Lantern") // remembers size and position between launches
+        window.delegate = self
         window.makeKeyAndOrderFront(nil)
+        // Autosave stores only the frame, and in full screen that frame is the whole display, so full screen is remembered
+        // separately. The autosaved frame puts the window back on its display first; full screen then takes over that display.
+        if UserDefaults.standard.bool(forKey: "fullScreen") { DispatchQueue.main.async { self.window.toggleFullScreen(nil) } }
         web.load(URLRequest(url: home))
     }
+
+    // Save the real frame before full screen replaces it, so leaving full screen (or relaunching) lands back where the window was.
+    func windowWillEnterFullScreen(_ note: Notification) { window.saveFrame(usingName: "Lantern") }
+    // Rectangle and other window managers move windows through Accessibility, which autosave can miss; record every move and resize.
+    func saveFrame() { if !window.styleMask.contains(.fullScreen) { window.saveFrame(usingName: "Lantern") } }
+    func windowDidMove(_ note: Notification) { saveFrame() }
+    func windowDidResize(_ note: Notification) { saveFrame() }
+    func windowDidEnterFullScreen(_ note: Notification) { UserDefaults.standard.set(true, forKey: "fullScreen") }
+    func windowDidExitFullScreen(_ note: Notification) { UserDefaults.standard.set(false, forKey: "fullScreen") }
 
     func applicationWillTerminate(_ note: Notification) { server.stopBuilding(); server.stats.shutdown() } // close the event log's open spans
 
