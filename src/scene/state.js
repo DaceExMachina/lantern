@@ -18,7 +18,7 @@ export const quiet = () => live.quietUntil > Date.now();
 export const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
 // Which of the status bar's counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
 // waits, snoozed (until it does something new, or for quiet hours) or needing me.
-const restOf = s => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
+export const restOf = s => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
 
 export function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps

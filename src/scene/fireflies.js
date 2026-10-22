@@ -59,7 +59,7 @@ export const byUrgency = (prs, flies) => {
 // A merge's three motions overlap, each fading out as the next fades in, both already moving: the shake, the loop (30%
 // faster than it first was) and the exit. Seconds: the loop starts at `start` (picked per heading, below), the shake gone
 // BLEND later; the exit starts BLEND/2 before the loop's end, and the loop is gone BLEND after it starts.
-const LOOP = 1 / 1.3, BLEND = 0.2, exitAt = start => start + LOOP - BLEND / 2;
+export const LOOP = 1 / 1.3, BLEND = 0.2, exitAt = start => start + LOOP - BLEND / 2;
 const viewBox = () => VIEW.box || [40, 20, 600, 600];
 const offScreen = (x, y, r) => { const [bx, by, bw, bh] = viewBox(); return x < bx - r || x > bx + bw + r || y < by - r || y > by + bh + r; };
 // the way out of the window nearest to x, y: a unit step and how far the edge is
@@ -69,7 +69,7 @@ function nearestEdge(x, y) {
 }
 // Where a merged or closed firefly is `t` seconds after it went, from the spot on its circle it left, heading `d` (a unit
 // step): [dx, dy, a factor on its brightness, one on its bloom's size]
-function leaveStep(kind, t, [dx, dy], start = 0.45) {
+export function leaveStep(kind, t, [dx, dy], start = 0.45) {
   if (kind === 'closed') { const go = 30 * t + 250 * t * t; return [dx * go, dy * go, 1 - 0.45 * Math.min(1, t / 0.4), 1]; }
   const flare = 1.6, shake = 7, loop = 40;
   const lit = Math.min(1, t / 0.12) * (0.6 + 0.4 * Math.exp(-3 * t)), glow = 1 + flare * lit, size = 1 + 0.35 * flare * lit; // flares at once, then holds bright
@@ -87,7 +87,7 @@ function leaveStep(kind, t, [dx, dy], start = 0.45) {
 }
 // When a merge's loop starts for a firefly heading `d`: the shake's wiggle is two waves that now and then both slow, so
 // the start (between 0.3s and 0.5s) is the one where the shake and the loop, blending, never come close to a stop.
-function loopStart(d) {
+export function loopStart(d) {
   let best = -1, at = 0.45;
   for (let start = 0.3; start <= 0.5; start += 0.005) {
     let slowest = Infinity;

@@ -11,7 +11,7 @@ export const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'F
 // in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour; snoozed for good,
 // sleeping, counts as snoozed here, since the two can't be told apart on the graph).
 export const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
-const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050' };
+export const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050' };
 
 // the day a time falls on (yyyy-MM-dd): a day starts at the day rollover (dayStart) and is named for the date it starts on
 export const dayKey = t => { const d = new Date(t), [h, m] = live.dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
@@ -46,7 +46,7 @@ export function slices(day, spans, gauges, count) {
 // What the lantern was in a slice (a RIBBON colour), or null while the app wasn't running.
 const lampOf = s => s.ran < .5 ? null : s.quiet > .5 ? 'quiet' : s.violet > .5 ? 'violet' : 'warm';
 // A slice's sessions alive by state. The working count is a gauge, so it only fills what the waits leave.
-function states(s) {
+export function states(s) {
   const working = Math.max(0, Math.min(s.working ?? 0, s.alive - s.waiting));
   return { working, waiting: s.waiting - s.snoozed - s.sleeping, snoozed: s.snoozed + s.sleeping, idle: Math.max(0, s.alive - s.waiting - working) };
 }

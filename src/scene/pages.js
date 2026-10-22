@@ -78,21 +78,21 @@ function pickText() {
 // Down a round lantern the paper turns away toward the top and bottom just as it does round the sides, so the page is
 // unrolled by latitude: `flatY` is how far down the unrolled page a height on the paper is, and `paperY` the way back. A
 // line squashes as it nears the top or bottom, as it narrows round the sides. On the barrel both are the height itself.
-const flatY = (d, y) => d.ry ? d.cy + d.ry * Math.asin(Math.max(-1, Math.min(1, (y - d.cy) / d.ry))) : y;
+export const flatY = (d, y) => d.ry ? d.cy + d.ry * Math.asin(Math.max(-1, Math.min(1, (y - d.cy) / d.ry))) : y;
 const paperY = (d, v) => d.ry ? d.cy + d.ry * Math.sin((v - d.cy) / d.ry) : v;
 
 // The part of the unrolled paper worth filling: from 60° left of the front to 60° right, and the rows where the paper is
 // at least half its widest (past that the type is squeezed to under half its size), split into loose cells of 3 across
 // by 4 down, in paper units and rows.
-const COLS = 3, BANDS = 4;
-const span = d => d.r * Math.PI / 3;
+export const COLS = 3, BANDS = 4;
+export const span = d => d.r * Math.PI / 3;
 // the rows worth filling, [first, past the last]: `lines` to each gap between wires
-const fillRows = d => {
+export const fillRows = d => {
   const ok = d.ribs.slice(1).map((y, g) => d.half((d.ribs[g] + y) / 2) >= d.r / 2), first = ok.indexOf(true);
   return [d.lines * first, d.lines * (ok.lastIndexOf(true) + 1)];
 };
 // Where a block's lines land on the unrolled paper, once flipped if it's mirrored: [left, right, first row, last row].
-const extent = b => {
+export const extent = b => {
   const w = b.width, [l, r] = b.mirror ? [-b.from - w, -b.from] : [b.from, b.from + w];
   return [l, r, b.row, b.row + b.lines.length];
 };
@@ -116,7 +116,7 @@ function cellCover(d, showing) {
 
 // A new block's middle goes in the least-covered cell (ties broken at random), nudged up to a third of a cell either way
 // so the blocks overlap loosely rather than sitting on a grid.
-function place(block, showing, r = Math.random) {
+export function place(block, showing, r = Math.random) {
   const d = style.surface, [first, rows] = fillRows(d), U = span(d), cover = cellCover(d, showing);
   let best = Infinity, band = 0, col = 0;
   cover.forEach((cells, b) => cells.forEach((v, c) => { if (v + r() * 0.05 < best) { best = v + r() * 0.05; band = b; col = c; } }));
@@ -175,7 +175,7 @@ function typeset(ctx, b) {
 // the paper, in paper units: across, from cx + half sin a, half being the paper's half-width at the tile's middle height,
 // so it narrows as it turns away; down, each edge at its height on the paper, moved by the bow a wire there would have,
 // cos² a / 2 of it, as the words used to ride it one glyph at a time.
-function tile(d, a0, a1, v0, v1) {
+export function tile(d, a0, a1, v0, v1) {
   const c = Math.cos((a0 + a1) / 2) ** 2 / 2, top = paperY(d, v0), bottom = paperY(d, v1), h = d.half((top + bottom) / 2);
   return {
     u0: d.r * a0, u1: d.r * a1, x0: d.cx + h * Math.sin(a0), x1: d.cx + h * Math.sin(a1),

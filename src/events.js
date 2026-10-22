@@ -54,7 +54,7 @@ es.addEventListener('settings', e => {
 });
 // The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
 // 9px, and only wraps past that. Text scales with its font size, so one measurement gives the size that fits.
-function fitStatus() {
+export function fitStatus() {
   const st = $('status'), cs = getComputedStyle(st), pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
   st.style.fontSize = st.style.whiteSpace = '';
   const fit = (st.clientWidth - pad) / (st.scrollWidth - pad), size = Math.floor(10 * parseFloat(cs.fontSize) * fit) / 10;

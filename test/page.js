@@ -4,6 +4,7 @@
 // query string, or state no other test touched) calls layOut(search) and vi.resetModules(), then imports src/ afresh.
 import fs from 'node:fs';
 import path from 'node:path';
+import { vi } from 'vitest';
 
 const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'index.html'), 'utf8').replace(/<script[^]*?<\/script>/g, '');
 export function layOut(search = '') {
@@ -28,3 +29,12 @@ export const gl = new Proxy(Object.assign(recorded, { uniforms: {} }), {
 });
 const getContext = HTMLCanvasElement.prototype.getContext;
 HTMLCanvasElement.prototype.getContext = function (type, ...rest) { return type === 'webgl' ? gl : getContext.call(this, type, ...rest); };
+
+// happy-dom has no 2d canvas: a test whose page draws text calls this for a context that accepts anything and a canvas that
+// encodes nothing. It lasts until vi.restoreAllMocks() and vi.unstubAllGlobals().
+export function stubCanvas2d() {
+  const webgl = HTMLCanvasElement.prototype.getContext, anything = new Proxy(function () {}, { get: () => anything, apply: () => anything });
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (type, ...rest) { return type === '2d' ? anything : webgl.call(this, type, ...rest); });
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(done => done(null));
+  vi.stubGlobal('OffscreenCanvas', undefined); // so a page is encoded on the main thread, by toBlob
+}

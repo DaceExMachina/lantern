@@ -761,7 +761,7 @@ export function dropMoth(k, m) {
 // Fireflies around a session moth's home, only for PRs the session owns (ones it created, or its branch's), never ones
 // it merely mentioned. With GitHub on: every owned open PR, brightest for the ones that need me. Without it:
 // created PRs its last You: line points at. A leaving moth's fireflies drift off.
-function mothFireflies(m, dt, s) {
+export function mothFireflies(m, dt, s) {
   const want = new Map(), gh = m.session.github;
   if (m.leaving) {} // nothing: they all drift off
   else if (gh) {
