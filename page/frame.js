@@ -928,14 +928,14 @@ function threadEnds(m) {
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }
-// The slow sway of a line's bow: it always bows to the same side (so neighbours lean together), from none to the full
-// `bow` share of its length, each moth on its own phase. Lines are a non-crossing fan, so only the share is dialed.
+// The slow sway of a line's bow: it swings to both sides of straight, out to the `bow` share of its length, each moth on
+// its own phase. Lines are a non-crossing fan, so only the share is dialed.
 let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.12, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
 // A busy lantern bows gentler: full up to 4 moths, easing down to half by 12 (m.bowK follows it, so a session joining doesn't jump)
 const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...moths.values()].filter(o => !o.satellite && !o.leaving).length - 4) / 8));
 const bowed = (ax, ay, bx, by, m, s, k) => {
   k *= m.bowK ?? crowd();
-  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * (1 + Math.sin(s * 0.8 + m.phase)) / 2;
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * Math.sin(s * 0.8 + m.phase);
   return `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${(ax + dx / 2 - dy / len * bow).toFixed(1)} ${(ay + dy / 2 + dx / len * bow).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;
 };
 // Each session moth's thread (threadEnds). Satellites fly untethered.
