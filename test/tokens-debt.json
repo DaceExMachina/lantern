@@ -40,7 +40,7 @@
   ".panel #flash .pill",
   ".panel #flash .pill b",
   "input[type=checkbox]:checked::after",
-  "dev.ts padding: 5px 0",
   "stats.ts #3A3050",
-  "dev.ts padding: var(--space-1) 14px var(--space-2)"
+  "DevPanel.vue .dev",
+  "DevPanel.vue label"
 ]

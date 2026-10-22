@@ -2,7 +2,9 @@
 // flying off goes only once it and its bloom are wholly outside the window, and the path is the same in every window,
 // timed from when the server saw the change, in the same spot.
 import assert from 'node:assert';
+import { mount } from '@vue/test-utils';
 import { afterEach, test, vi } from 'vitest';
+import DevPanel from '../src/components/DevPanel.vue';
 import { toggleDevPanel } from '../src/dev';
 import { BLEND, FLY, exitAt, flyLights, leaveStep, loopStart, swarm } from '../src/scene/fireflies';
 import { mothFireflies } from '../src/scene/frame';
@@ -150,8 +152,8 @@ test('the dev panel\'s play merge button plays a merge on a firefly of a moth', 
   openWindow();
   step(flies, drafts, [150, 320], now); // a moth's firefly, circling
   live.moths.set('m', { flies });
-  vi.stubGlobal('Option', function (text) { return Object.assign(document.createElement('option'), { textContent: text }); }); // happy-dom has none, and the panel's selects use it
   toggleDevPanel();
+  const panel = mount(DevPanel, { attachTo: document.body });
   const play = [...document.querySelectorAll('button')].find(b => b.textContent === 'play merge');
   assert.ok(play, 'the dev panel has the button');
   play.click();
@@ -162,6 +164,7 @@ test('the dev panel\'s play merge button plays a merge on a firefly of a moth', 
   }
   assert.ok(lights.length > 60 && lights.length < 240, `it plays and goes: ${lights.length} frames`);
   assert.ok(Math.max(...lights.map(l => l[3])) > 1.1, 'a merge flares');
+  panel.unmount();
   live.moths.clear();
 });
 
