@@ -14,9 +14,6 @@ const pinia = createPinia();
 // each into its native popover, which keeps its attributes
 createApp(StatsPanel).use(pinia).mount('#stats');
 createApp(RecapPanel).use(pinia).mount('#recap');
-<<<<<<< HEAD
 createApp(DevPanel).mount(document.body.appendChild(document.createElement('div'))); // the dev panel is fixed, so its wrapper takes no room
-=======
 createApp(SettingsMenu).use(pinia).mount('#menu');
->>>>>>> origin/main
 connect(useLanternStore(pinia));
