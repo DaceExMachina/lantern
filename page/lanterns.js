@@ -4,8 +4,8 @@
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame, with `inside` (if any) just in front of the flame; the flame
 // and `inside` slide together as #inside (frame.js farSlide). `flame` places the flame's base and sets its size,
-// `light` is where the glow and threads come from, `paper` draws the flame in the SVG softened as if it's behind paper
-// (any other's is drawn by the background's shader, background.js BARE_FLAME, under the whole SVG), and `body`
+// `light` is where the glow and threads come from, `paper` puts `back` behind the flame (the rest of a lantern is all in
+// front of it) and softens the flame as if it's seen through paper (background.js FLAME), and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
 // the solid top and bottom that the light can't pass: their heights and half-width. `dim` turns the room's light down
 // for a lantern that holds some back (pierced brass). `holder` is the edge below its flame that bounds its light (a
@@ -17,14 +17,6 @@
 // leaves, `at` in the lantern's own units (swinging with it), or its bare flame's tip without one, and how strong at full flame.
 // `scorches` puts its bare flame in moths' reach, so a moth whose session has failing PR checks gets scorched (frame.js).
 // Its solid horizontal brass is tagged class band: each throws a soft, wide shadow in the room (frame.js).
-// The halo looks like a wide tongue (46 by 118) blurred by 7, faked without a blur, which WebKit would re-run every frame:
-// two soft ellipses in its colour, a body and a tip, their fades fitted to that blur where it shows past the outer tongue.
-// Behind paper, the tongues are softened; the halo is soft already. Only a paper lantern draws it (frame.js drawFlame).
-const HALO_FADE = (id, stops) => `<radialGradient id="${id}">${stops.map(([o, a]) => `<stop offset="${o}" stop-color="currentColor" stop-opacity="${a}"/>`).join('')}</radialGradient>`;
-const FLAME = `<g id="flame"><g id="fHalo" opacity="0.8">
-  ${HALO_FADE('haloBody', [[0.4, 0.96], [0.55, 0.77], [0.7, 0.36], [0.8, 0.13], [0.9, 0.03], [1, 0]])}<ellipse cx="340" cy="346" rx="49" ry="69" fill="url(#haloBody)"/>
-  ${HALO_FADE('haloTip', [[0, 0.94], [0.2, 0.82], [0.4, 0.57], [0.55, 0.33], [0.7, 0.13], [0.8, 0.05], [1, 0]])}<ellipse cx="340" cy="304" rx="26.5" ry="49" fill="url(#haloTip)"/></g>
-  <g filter="url(#behindPaper)"><g id="tongues"><path id="fOuter"/><path id="fMid"/><path id="fCore"/><ellipse id="fBase" cx="340" cy="384" rx="10" ry="5" opacity="0.55"/></g></g></g>`;
 const MOCK = (svg, dy = 0) => `<g transform="translate(112 ${20 + dy}) scale(2.4)">${svg}</g>`; // drawn on the mockup's 190-wide tile, centred on 340; dy nudges it down
 const PAPER_GRAD = cy => `<defs><radialGradient id="pg" cy="${cy}" r=".65"><stop class="paperStop" offset="0" stop-opacity=".9"/><stop class="paperStop" offset="1" stop-opacity="0"/></radialGradient></defs>`;
 // The Moroccan: polished brass, pierced edge to edge with arabesque lace. Its lace and openings are one mask (#cutouts):
@@ -42,6 +34,10 @@ const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // 
 // and force its colour warm or violet, whatever the sessions say (frame.js)
 let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
 let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
+// a paper lantern's flame, seen through its paper: how soft its tongues' edges are, in scene units (background.js FLAME), and
+// how far the wind leans it (in place of style.flameWind, frame.js stepFlame), the paper sheltering it from most of what leans the candle's (6)
+let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 9, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
+let paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { paperWind = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
@@ -781,10 +777,12 @@ function drawHang() {
 function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
-  $('lantern').innerHTML = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
-    : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back
-    + `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})">${style.paper ? FLAME : ''}<g id="sparks"></g></g>${style.inside || ''}</g>`
+  const back = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
+    : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back;
+  const front = `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})"><g id="sparks"></g></g>${style.inside || ''}</g>`
     + style.front;
+  $('lanternPaper').innerHTML = style.paper ? back : '';
+  $('lantern').innerHTML = style.paper ? front : back + front;
   drawHang();
   bakeFarWall(); bakeCutouts();
   // only a paper lantern has paper to print on and shows session text; elsewhere the toggle stays put but can't be used

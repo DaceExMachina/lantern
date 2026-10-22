@@ -9,7 +9,7 @@ const Q = new URLSearchParams(location.search);
 const AMBIENT = Q.has('ambient');
 // POST a JSON body to the server (settings, focus, snooze, and the rest)
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-// FLAME_STRETCH: the most a bare flame stretches past its height (frame.js stepFlame)
+// FLAME_STRETCH: the most a flame stretches past its height (frame.js stepFlame)
 const CX = 340, CY = 330, FLAME_BASE = 388, FLAME_STRETCH = 1.15;
 // the original two-petal moth, split into its wings as absolute quadratic curves from the joint at 0,0
 const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
@@ -111,17 +111,19 @@ function fitView() {
   fitted = size;
   VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
-  for (const s of document.querySelectorAll('#scene > svg:not(#lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  for (const s of document.querySelectorAll('#scene > svg:not(.lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
   VIEW.box = [x, y, w, h];
   VIEW.px = width / w; // CSS pixels per unit
   // the lantern's layer spans LANTERN_SPAN either side of its middle, the window's full height (a chain or column runs edge
   // to edge), its left edge on a whole device pixel so the lantern lands on the same pixels it would in the scene, and it
   // turns about where the lantern hangs from (frame.js swingLantern)
-  const layer = $('lanternLayer'), dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
-  Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
-  layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
-  const canvas = $('bg'), k = (devicePixelRatio || 1) * bgScale; // background.js
-  canvas.width = Math.round(width * k); canvas.height = Math.round(height * k);
+  // turns about where the lantern hangs from (frame.js swingLantern); the flame's canvas covers the same strip, unturned
+  const dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
+  for (const layer of [$('lanternBack'), $('lanternLayer'), $('flame')]) Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
+  for (const layer of document.querySelectorAll('.lanternLayer')) layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
+  VIEW.layer = [x0, y, 2 * LANTERN_SPAN, h]; // the lantern's strip in scene units, which the flame's canvas covers
+  const k = dpr * bgScale; // background.js
+  for (const [canvas, cw] of [[$('bg'), width], [$('flame'), 2 * LANTERN_SPAN * VIEW.px]]) { canvas.width = Math.round(cw * k); canvas.height = Math.round(height * k); }
   VIEW.top = y;
   drawHang(); // the string or chain runs from the top of the window down to the lantern
   bakeCutouts(); // the Moroccan's lace, at the new size (lanterns.js)
