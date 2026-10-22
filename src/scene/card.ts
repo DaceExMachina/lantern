@@ -16,7 +16,7 @@ export function tipSpot(tip: HTMLElement, el: Element) {
   return { left: Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)), top: r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8 };
 }
 // an element with a class and its children (text or nodes)
-export function make<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', ...kids: (Node | string)[]) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
+function make<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', ...kids: (Node | string)[]) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
 // `el` with a key, so a redraw (morph) gives each row back its own element: agents by id, PRs by url, sessions by id
 const keyed = <E extends HTMLElement>(key: string, el: E) => { el.dataset['key'] = key; return el; };
 // Redraws build fresh nodes, then morph patches the live ones to match instead of swapping them in, so whatever the browser
@@ -27,7 +27,7 @@ const keyed = <E extends HTMLElement>(key: string, el: E) => { el.dataset['key']
 export const HANDLERS = ['onclick', 'onpointerenter', 'onpointerleave', 'onfocus', 'onblur'] as const; // ponytail: the ones the sidebar sets; add any new one here
 const copyHandler = <K extends typeof HANDLERS[number]>(to: HTMLElement, from: HTMLElement, h: K) => { to[h] = from[h]; };
 const keyOf = (n: Node) => n instanceof HTMLElement ? n.dataset['key'] : undefined;
-export function morph(el: Element, kids: Node[]) {
+function morph(el: Element, kids: Node[]) {
   const old: (ChildNode | null)[] = [...el.childNodes], f = document.activeElement;
   const next = kids.map(n => {
     const i = old.findIndex(o => o && o.nodeName === n.nodeName && keyOf(o) === keyOf(n));
