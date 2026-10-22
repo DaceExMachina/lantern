@@ -1,11 +1,9 @@
 // The moth's hover card (src/components/SessionCard.vue, mounted in index.html's real #card as src/main.ts does): the PR
 // header that sums the PRs up and names a hovered chip, the list capped at the worst few, the per-session toggle from the
 // server's settings, the agent rows (job, time, model, a tag chip only for a tagged step), times that tick, and controls
-// that keep their elements through a re-render. Then the pinned sidebar (src/scene/card.ts), with the real morph patching
-// it in happy-dom; test/morph.test.js checks the same patching, and the card's, in WebKit.
+// that keep their elements through a re-render. (The pinned sidebar is test/pinned-dock.spec.js's; test/morph.test.js
+// checks both in WebKit.)
 import assert from 'node:assert';
-import fs from 'node:fs';
-import path from 'node:path';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
@@ -13,7 +11,7 @@ import SessionCard from '../src/components/SessionCard.vue';
 import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
-import { HANDLERS, enterZone, hideCard, hoverZone, renderSidebar } from '../src/scene/card';
+import { enterZone, hideCard, hoverZone } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 import { parseSettings } from '../src/types';
 
@@ -23,27 +21,26 @@ const anchors = n => [...n.querySelectorAll('a')];
 
 const posts = [];
 const setSessions = (...ss) => { live.raw = ss; sync(); };
-// the page as it first loads: nothing hovered, listed, pinned or known, the card and dock empty, 1440 wide
+// the page as it first loads: nothing hovered, listed, pinned or known, the card empty, 1440 wide
 let app, store;
 // the card as src/main.ts mounts it, with the scene's side of the store wired the same way
 const mount = () => {
   app?.unmount();
   const pinia = createPinia();
   store = useLanternStore(pinia);
-  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.pinned = live.pinned; store.now = Date.now(); };
+  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.now = Date.now(); };
   app = createApp(SessionCard).use(pinia);
   app.mount($('card'));
 };
 // the server's settings for every window: which sessions list their PRs (wiring.ts and events.ts hear them)
 const settings = o => { store.settings = parseSettings(o); };
 const reset = () => {
-  live.hovered = null; live.pinned = []; live.moths = new Map();
+  live.hovered = null; live.moths = new Map();
   setSessions();
   hideCard();
   document.body.className = '';
   vi.stubGlobal('innerWidth', 1440);
-  mount(); $('dock').children[0].replaceChildren();
-  renderSidebar();
+  mount();
 };
 beforeEach(() => {
   posts.length = 0;
@@ -314,142 +311,4 @@ test('a re-render between press and release keeps every control\'s element', asy
   assert.ok(controls().every((c, i) => c === before[i]) && controls().length === before.length, 'each control is the element it was');
   tog.click(); await nextTick();
   assert.strictEqual(find(card, 'pr2').length, 4, 'and the release toggles the list');
-});
-
-// The pinned sidebar: the pin in a card's header pins or unpins its session, the server's list decides what every
-// window docks, and the dock stacks them in full, in the order they were pinned.
-const pinOf = el => el.querySelector('.pin');
-const docked = () => document.body.classList.contains('pinned') ? find($('dock'), 'name').map(text) : [];
-const sections = () => [...$('dock').querySelectorAll('section')];
-const list = () => JSON.stringify(posts.map(([, b]) => b.pinned.map(p => p.id)));
-
-test('the card\'s pin toggles its session in the list, newest at the bottom, and each section\'s own pin unpins it', async () => {
-  const a = session({ title: 'alpha' }), b = session({ id: 's2', title: 'bravo' }), c = session({ id: 's3', title: 'charlie' });
-  setSessions(a, b, c);
-  const pin = pinOf(await show(a));
-  assert.deepStrictEqual([pin.localName, pin.getAttribute('aria-label'), text(pin)], ['button', 'Pin alpha to the sidebar', ''], 'an icon button with a label');
-  pin.click(); await nextTick();
-  assert.deepStrictEqual(docked(), ['alpha']);
-  assert.deepStrictEqual([pinOf($('card')).getAttribute('aria-label'), pinOf($('card')).className], ['Unpin alpha', 'pin on'], 'the open card\'s pin shows it');
-  pinOf(await show(c)).click();
-  pinOf(await show(b)).click();
-  assert.deepStrictEqual(docked(), ['alpha', 'charlie', 'bravo'], 'stacked in the order they were pinned');
-  pinOf(await show(c)).click();
-  assert.deepStrictEqual(docked(), ['alpha', 'bravo'], 'a pinned session\'s card pin unpins it, and the rest keep their places');
-  pinOf(sections()[0]).click();
-  assert.deepStrictEqual(docked(), ['bravo'], 'a section\'s own pin');
-  pinOf(sections()[0]).click();
-  assert.deepStrictEqual(docked(), []);
-  assert.strictEqual(list(), JSON.stringify([['s1'], ['s1', 's3'], ['s1', 's3', 's2'], ['s1', 's2'], ['s2'], []]), 'the whole list to the server each time');
-  // another window docks what the server says (wiring.ts: live.pinned = st.pinned, then renderSidebar)
-  reset();
-  setSessions(a, b);
-  live.pinned = [{ id: 's2' }, { id: 's1' }]; renderSidebar();
-  assert.deepStrictEqual(docked(), ['bravo', 'alpha']);
-});
-
-test('the sidebar shows each session in full: the whole prompt, every PR listed, no toggle', async () => {
-  const long = 'x'.repeat(200);
-  setSessions(session({ state: 'idle', prompt: long, github: TEN }));
-  live.pinned = [{ id: 's1' }]; renderSidebar();
-  assert.strictEqual(find($('dock'), 'prompt').map(text)[0], `“${long}”`, 'not cut at 110');
-  assert.strictEqual(find($('dock'), 'pr2').length, 11, 'every PR, however many');
-  assert.deepStrictEqual([find($('dock'), 'more').length, find($('dock'), 'chips').length], [0, 0], 'no cap, and listed though the card would show chips');
-  assert.strictEqual(find(await show(session({ state: 'idle', prompt: long, github: TEN })), 'prompt').map(text)[0].length, 113, 'the card still cuts it');
-});
-
-test('a pinned session that ends stays in its place, dimmed, as it last was, until unpinned', async () => {
-  const a = session({ title: 'alpha', state: 'working', activity: 'Last step' }), b = session({ id: 's2', title: 'bravo' });
-  setSessions(a, b);
-  live.pinned = [{ id: 's1' }, { id: 's2' }]; renderSidebar();
-  assert.deepStrictEqual(sections().map(n => n.className), ['', '']);
-  setSessions(b);
-  renderSidebar();
-  assert.deepStrictEqual(docked(), ['alpha', 'bravo'], 'still docked, in its place');
-  assert.deepStrictEqual(sections().map(n => n.className), ['ended', ''], 'dimmed');
-  assert.deepStrictEqual(find(sections()[0], 'state').map(text), ['Last step'], 'as it last was');
-  pinOf(sections()[0]).click();
-  assert.deepStrictEqual(docked(), ['bravo']);
-  // a window that never saw it leaves it out
-  reset();
-  setSessions(b);
-  live.pinned = [{ id: 'gone' }, { id: 's2' }]; renderSidebar();
-  assert.deepStrictEqual(docked(), ['bravo']);
-});
-
-test('no pin and no sidebar under 800px wide, in the iTerm panel or the screensavers; they come back when there\'s room', async () => {
-  const s = session({});
-  setSessions(s);
-  live.pinned = [{ id: 's1' }];
-  for (const [width, mode] of [[799, ''], [375, ''], [1440, 'panel'], [1440, 'screensaver'], [1440, 'ambient']]) {
-    vi.stubGlobal('innerWidth', width); document.body.className = mode;
-    assert.ok(!pinOf((await show(s)).children[0]), `${width} ${mode}: no pin`); // not strictEqual: a failure would print the whole DOM node
-    renderSidebar();
-    assert.deepStrictEqual(docked(), [], `${width} ${mode}: no sidebar`);
-  }
-  vi.stubGlobal('innerWidth', 800); document.body.className = '';
-  assert.ok(pinOf((await show(s)).children[0]), '800 wide has the pin');
-  renderSidebar();
-  assert.deepStrictEqual(docked(), ['proj'], 'and the remembered pin docks again');
-});
-
-test('each pinned section\'s PRs toggle to chips on their own, kept with the pin, apart from the card\'s', async () => {
-  const a = session({ github: TEN }), b = session({ id: 's2', title: 'bravo', github: TEN });
-  setSessions(a, b);
-  live.pinned = [{ id: 's1' }, { id: 's2' }]; renderSidebar();
-  const listed = () => sections().map(sec => [find(sec, 'pr2').length, find(sec, 'chips').length]);
-  assert.deepStrictEqual(listed(), [[11, 0], [11, 0]], 'listed by default');
-  const tog = find(sections()[0], 'tog')[0];
-  assert.strictEqual(tog.getAttribute('aria-label'), 'Show PRs as chips', 'the card\'s toggle');
-  tog.click();
-  assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'only that section turns to chips');
-  assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's1', chips: true }, { id: 's2' }] }]), 'kept with its pin');
-  assert.deepStrictEqual([find(await show(a), 'chips').length, find(await show(a), 'pr2').length], [1, 0], 'the card keeps its own rule (chips past three PRs)');
-  assert.strictEqual(store.settings.prList, undefined, 'and the card\'s setting is untouched');
-  settings({ prList: { s2: false } }); renderSidebar();
-  assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'nor does the card\'s setting reach the sidebar');
-  find(sections()[0], 'tog')[0].click();
-  assert.deepStrictEqual(listed(), [[11, 0], [11, 0]], 'and back');
-  // another window, from the server's settings
-  reset();
-  setSessions(a, b);
-  live.pinned = [{ id: 's1' }, { id: 's2', chips: true }]; renderSidebar();
-  assert.deepStrictEqual(sections().map(sec => [find(sec, 'pr2').length, find(sec, 'chips').length]), [[11, 0], [0, 1]]);
-});
-
-test('the closed sidebar is inert: out of the tab order and the accessibility tree, with nothing pinned or under 800px', async () => {
-  setSessions(session({}));
-  renderSidebar();
-  assert.strictEqual($('dock').inert, true, 'nothing pinned');
-  live.pinned = [{ id: 's1' }]; renderSidebar();
-  assert.strictEqual($('dock').inert, false, 'open');
-  vi.stubGlobal('innerWidth', 799);
-  renderSidebar();
-  assert.strictEqual($('dock').inert, true, 'too narrow');
-});
-
-test('pinning sends only the pins this window can show, so one whose session it never saw goes', async () => {
-  const a = session({ title: 'alpha' }), b = session({ id: 's2', title: 'bravo' });
-  setSessions(a, b);
-  live.pinned = [{ id: 'gone' }, { id: 's2', chips: true }]; renderSidebar();
-  pinOf(await show(a)).click();
-  assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's2', chips: true }, { id: 's1' }] }]));
-  assert.deepStrictEqual(docked(), ['bravo', 'alpha']);
-});
-
-test('in the sidebar an agent is a plain row, shown in full, that leaves the card\'s open agents alone', async () => {
-  const s = session({ state: 'working', tasks: ['npm test'], subagents: [{ id: 'a', description: 'Build', started: now, last: now }] });
-  setSessions(s);
-  live.pinned = [{ id: 's1' }]; renderSidebar();
-  const rows = find($('dock'), 'agent');
-  assert.strictEqual(rows.length, 2, 'the agent and the shell command');
-  assert.deepStrictEqual(rows.map(r => [r.localName, r.className, r.onclick, r.getAttribute('aria-expanded')]), [['div', 'agent open', null, null], ['div', 'agent open', null, null]]);
-  assert.deepStrictEqual(find(await show(s), 'agent').map(r => [r.localName, r.className]), [['button', 'agent'], ['button', 'agent']], 'the card\'s are still buttons, closed');
-});
-
-test('every handler property the sidebar sets is one morph copies onto the live element', async () => {
-  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'card.ts'), 'utf8');
-  const set = [...new Set([...src.matchAll(/\.(on[a-z]+) =/g)].map(m => m[1]))];
-  assert.ok(set.includes('onclick') && set.includes('onfocus'), `found ${set}`);
-  assert.deepStrictEqual(set.filter(h => !HANDLERS.includes(h)), [], 'set but not copied, so a redraw would keep the old handler');
 });

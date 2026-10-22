@@ -171,20 +171,18 @@
     const big = { id: 'sess-big', cwd: '/Users/x/projects/big', title: 'sess-big', state: 'working', activity: 'Editing', started: now - 50 * MIN, last: now,
       subagents: Array.from({ length: 6 }, (_, i) => ({ id: `b${i}`, type: 'Explore', description: `Agent ${i}`, activity: `Step ${i}`, started: now - (9 - i) * MIN, last: now })),
       github: Array.from({ length: 10 }, (_, i) => pr(200 + i, needs[i % 5])) };
+    const settingsNow = { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' };
     const mid = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; };
     let row, body, tog, open, redraws = 0;
     const update = () => emit('message', [...sessionsAt(0), big]);
+    const dq = sel => page.$('dock').querySelector(sel);
     const redraw = async () => { // Vue patches on a microtask, queued before this await's
       big.activity = `Editing ${++redraws}`; update(); await Promise.resolve();
       if (q('.state')?.textContent !== big.activity) fail(`the card never re-rendered: ${q('.state')?.textContent}`);
     };
-    // the patched sidebar's children against a fresh build of the same render: a copy of them, then the render again into
-    // the emptied element, which builds every child afresh
-    const fresh = (el, render) => {
-      const patched = [...el.cloneNode(true).childNodes];
-      el.replaceChildren(); render();
-      const kids = [...el.childNodes];
-      return patched.length === kids.length && patched.every((n, i) => n.isEqualNode(kids[i]));
+    const redrawDock = async () => { // the same for the sidebar
+      big.activity = `Editing ${++redraws}`; update(); await Promise.resolve();
+      if (dq('.state')?.textContent !== big.activity) fail(`the sidebar never re-rendered: ${dq('.state')?.textContent}`);
     };
     // the patched card against a fresh one: a copy of its children, then the card closed and opened again, which builds its
     // session's rows afresh (so the live elements are gone after this)
@@ -256,13 +254,29 @@
         if (q('.cardBody').scrollTop !== 0) fail(`sess-alpha's card opened scrolled to ${q('.cardBody').scrollTop}`);
         page.hideCard();
       },
-      () => { // a pinned session ends, then comes back: the sidebar matches a fresh one each way (its class comes and goes)
-        page.live.pinned = [{ id: 'sess-big' }, { id: 'sess-alpha' }]; page.renderSidebar();
+      // ---- the pinned sidebar, patched the same way
+      async () => { // two sessions pinned: the big one's section first
+        emit('settings', { ...settingsNow, pinned: [{ id: 'sess-big' }, { id: 'sess-alpha' }] }); await Promise.resolve();
+        if (page.$('dock').querySelectorAll('section').length !== 2) fail(`the sidebar shows ${page.$('dock').querySelectorAll('section').length} sections, not 2`);
+      },
+      async () => { // keyboard focus on a section's PR toggle, through three redraws
+        tog = dq('.tog'); tog.focus();
+        if (document.activeElement !== tog) return fail('the sidebar\'s PR toggle didn\'t take focus');
+        for (let i = 0; i < 3; i++) await redrawDock();
+        if (document.activeElement !== tog || !tog.isConnected) fail(`focus lost in a sidebar redraw: ${document.activeElement?.className}`);
+        tog.blur();
+      },
+      () => { tog = dq('.tog'); tog.scrollIntoView({ block: 'nearest' }); open = tog.getAttribute('aria-expanded'); return `down ${mid(tog).join(' ')}`; },
+      async () => { await redrawDock(); return `up ${mid(tog).join(' ')}`; }, // a server update lands between press and release
+      () => {
+        if (dq('.tog') !== tog) fail('a re-render mid-press replaced the sidebar\'s PR toggle, so WebKit drops the click');
+        if (dq('.tog').getAttribute('aria-expanded') === open) fail('a press on the sidebar\'s PR toggle across a redraw didn\'t toggle');
+      },
+      async () => { // a pinned session ends, then comes back: its section is dimmed while it's gone
         const stack = page.$('dock').children[0];
         for (const alpha of [false, true]) {
-          emit('message', [...sessionsAt(0).filter(o => alpha || o.id !== 'sess-alpha'), big]); page.renderSidebar();
+          emit('message', [...sessionsAt(0).filter(o => alpha || o.id !== 'sess-alpha'), big]); await Promise.resolve();
           if (stack.children[1]?.classList.contains('ended') === alpha) return fail(`sess-alpha's section is ${stack.children[1]?.className || 'unclassed'} with it ${alpha ? 'back' : 'gone'}`);
-          if (!fresh(stack, page.renderSidebar)) fail(`with sess-alpha ${alpha ? 'back' : 'gone'}, the patched sidebar differs from a fresh one`);
         }
       },
     ];
@@ -284,7 +298,7 @@
   const steps = [
     () => {
       catchScorch();
-      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31', pinned: Q.has('pinned') ? [{ id: 'sess-alpha' }, { id: 'sess-bravo', chips: true }] : undefined });
+      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
       emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too' }]);
       emit('stale', stale(false));
       emit('prose', words(3));
@@ -292,7 +306,9 @@
     },
     run(6),
     ...(Q.has('chrome') ? chrome() : []),
-    ...(Q.has('pinned') ? [() => { page.renderSidebar(); }, run(0.1), refitted, snap('open')] : []),
+    ...(Q.has('pinned') ? [() => { // docked once the lantern has settled: the settings sync also brings the dock's clock up to date
+      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31', pinned: [{ id: 'sess-alpha' }, { id: 'sess-bravo', chips: true }] });
+    }, run(0.1), refitted, snap('open')] : []),
     ...(Q.has('hover') ? [() => { page.enterZone(page.live.moths.get('sess-bravo').zone); }, snap('hover'), hits, () => { page.hideCard(); },
       // a stale PR's card and a ghost's, with their pills
       () => { page.enterZone([...page.wisps.values()][0].zone); }, snap('stale'), () => { page.hideCard(); page.enterZone([...page.ghosts.values()][0].zone); }, snap('ghost'), () => { page.hideCard(); }] : []),

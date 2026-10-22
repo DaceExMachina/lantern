@@ -58,8 +58,9 @@
   #scene { position: relative; min-height: 0; overflow: clip; -webkit-user-select: none; user-select: none; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
-     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, src/wiring.ts) */
+     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (StatusLine.vue) */
   footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
+  #statusSlot { display: contents; } /* StatusLine.vue mounts here; its #status is the footer's grid item */
   #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 var(--space-3); } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
   /* the quiet, stats and settings buttons: each one's click area runs the bar's full height and meets its neighbours',
@@ -384,7 +385,7 @@
   :is(#card, #dock) .pin .face { display: flex; margin-top: var(--space-0-5); color: var(--ink-faint); }
   :is(#card, #dock) .pin.on .face { color: var(--accent); }
   :is(#card, #dock) .pin:hover .face { color: var(--ink-hover); }
-  /* The pinned sidebar (card.ts renderSidebar): a column right of the scene, opening as the scene narrows, with one
+  /* The pinned sidebar (src/components/PinnedDock.vue): a column right of the scene, opening as the scene narrows, with one
      section per pinned session, scrolling as a whole. A section is a card's body without the card: the same padding, so
      the shared header and tray rules fit it. Its content keeps its full width while the column slides, so nothing
      reflows. Nothing is cut short in it. */
@@ -430,7 +431,7 @@
 <div id="card" role="tooltip"></div>
 <div id="prTip" class="badgeTip" role="tooltip"></div>
 <footer>
-  <span id="status" class="offline">connecting…</span>
+  <span id="statusSlot"></span>
   <div class="corners">
   <button id="quiet" class="corner" aria-label="Quiet" title="Treat everything as snoozed until 8am"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M10.5 2.6a5.6 5.6 0 1 0 3 9.8 4.6 4.6 0 0 1-3-9.8z"/><path d="M13 2.5v2.4M11.8 3.7h2.4"/></svg></button>
   <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 1.2 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M1.6 14.3h12.8v.8H1.6z"/><path d="M3.7 14.3V9.6c0-.5-.4-.7-.9-.8V8.4h3v.4c-.5.1-.9.3-.9.8v4.7zM7.4 14.3V4.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v9.9zM11.1 14.3V7.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v6.9z"/></svg></button>
