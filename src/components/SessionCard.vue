@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The hover card, inside #card: a session's (SessionRows, compact until a click expands it), a stale PR's or a ghost
-// moth's. The scene says what it's for (store.hovered, from src/scene/card.ts enterZone and hideCard), shows and hides #card, and places it every frame; this
+// The hover card, inside #card: a session's (SessionRows, compact until a click expands it; also for a stale PR whose
+// session is known), an orphan stale PR's or a ghost moth's. The scene says what it's for
+// (store.hovered, from src/scene/card.ts enterZone and hideCard), shows and hides #card, and places it every frame; this
 // only fills it. Relative times count from store.now, which ticks every second. Once hidden, the card keeps showing what it
 // last showed while it fades out; each time it opens it starts afresh (its agents closed, scrolled to the top).
 import { computed, onBeforeUpdate, onUpdated, ref, shallowRef, watch } from 'vue';
@@ -15,8 +16,14 @@ const shown = shallowRef<Hovered | null>(null), opened = ref(0), full = ref(fals
 // sync, so a card hidden and opened again before Vue next patches still starts afresh. A session's card is compact on hover
 // and full once a click expands it (store.expanded); fading out, it stays as it was.
 watch([() => store.hovered, () => store.expanded], ([h, x], [was]) => { if (h) { shown.value = h; full.value = x; } if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
-// a session's card finds its session in the store, or while its moth leaves, the one the moth last had
-const session = computed<Session | undefined>(() => { const h = shown.value; return h && 'key' in h ? store.sessions.find(o => o.id === h.key) ?? h.session : undefined; });
+// a session's card finds its session in the store, or while its moth leaves, the one the moth last had; a stale PR's wisp
+// shows its owner's card when Lantern knows that session, and only an orphan gets the PR-only card
+const session = computed<Session | undefined>(() => {
+  const h = shown.value;
+  if (!h) return undefined;
+  if ('key' in h) return store.sessions.find(o => o.id === h.key) ?? h.session;
+  return 'stale' in h ? store.sessions.find(o => o.id === h.stale.owner?.id) : undefined;
+});
 const days = (ms: number) => Math.round(ms / 864e5);
 const where = (cwd: string | null | undefined) => String(cwd || '').split('/').filter(Boolean).pop() || '';
 // A re-render that moves an element (a PR that re-ranks) drops its focus in WebKit, so the focused element gets it back.
@@ -31,18 +38,18 @@ onUpdated(() => {
 
 <template>
   <template v-if="shown">
-    <template v-if="'stale' in shown">
-      <h3>{{ shown.stale.label }}<span class="chip idle"><span class="face">stale</span></span></h3>
+    <SessionRows v-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" />
+    <template v-else-if="'stale' in shown">
+      <h3><span class="title"><span class="face">{{ shown.stale.label }}</span></span><span class="chip idle"><span class="face">stale</span></span></h3>
       <div>{{ shown.stale.title || '' }}</div>
       <div class="dim">{{ `${NEED[shown.stale.need] || shown.stale.need} · untouched for ${Math.max(7, days(store.now - Date.parse(shown.stale.updatedAt)))} days` }}</div>
       <div v-if="shown.stale.owner" class="dim">{{ `Made by ${shown.stale.owner.title || 'an old session'}` }}</div>
     </template>
     <template v-else-if="'ghost' in shown">
-      <h3>{{ shown.ghost.o.title || shown.ghost.o.id.slice(0, 8) }}<span class="chip idle"><span class="face">gone quiet</span></span></h3>
+      <h3><span class="title"><span class="face">{{ shown.ghost.o.title || shown.ghost.o.id.slice(0, 8) }}</span></span><span class="chip idle"><span class="face">gone quiet</span></span></h3>
       <div class="dim">{{ `${where(shown.ghost.o.cwd) ? where(shown.ghost.o.cwd) + ' · ' : ''}last active ${days(store.now - shown.ghost.o.last) ? `${days(store.now - shown.ghost.o.last)} days ago` : 'today'}` }}</div>
       <div class="agents">{{ `PRs (${shown.ghost.prs.length})` }}</div>
       <div v-for="p in shown.ghost.prs" :key="p.url" class="pr"><i :style="{ background: flyColour(p.need) }"></i><a :href="p.url" target="_blank" rel="noopener">{{ p.label }}</a>{{ ` ${NEED[p.need] || p.need} · ` }}<span :title="p.title ?? ''">{{ p.title ?? '' }}</span></div>
     </template>
-    <SessionRows v-else-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" />
   </template>
 </template>

@@ -287,10 +287,10 @@
   :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .more, .tog, .pr2, .ov, .pin), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
   :is(#card, #dock) :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
   :is(#card, #dock) .face { display: block; border-radius: var(--radius-md); }
-  /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill */
-  :is(#card, #dock) h3:has(.open) { margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0; gap: 0; align-items: stretch; }
-  :is(#card, #dock) h3 .open { flex: 1; min-width: 0; display: flex; align-items: flex-start; padding: calc(var(--space-3) - var(--space-0-5)) 0 var(--space-0-5) var(--space-2); }
-  :is(#card, #dock) h3 .open .face { flex: 1; min-width: 0; padding: var(--space-0-5) var(--space-1); }
+  /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill (a stale PR's or a ghost's has a plain .title and pill, same layout) */
+  :is(#card, #dock) h3:has(:is(.open, .title)) { margin: calc(-1 * var(--space-3)) calc(-1 * var(--space-3)) 0; gap: 0; align-items: stretch; }
+  :is(#card, #dock) h3 :is(.open, .title) { flex: 1; min-width: 0; display: flex; align-items: flex-start; padding: calc(var(--space-3) - var(--space-0-5)) 0 var(--space-0-5) var(--space-2); }
+  :is(#card, #dock) h3 :is(.open, .title) .face { flex: 1; min-width: 0; padding: var(--space-0-5) var(--space-1); }
   :is(#card, #dock) h3 .open:hover .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
   :is(#card, #dock) h3 .chip { flex: none; display: flex; align-items: flex-start; padding: var(--space-3) var(--space-3) 0 var(--space-1); }
   :is(#card, #dock) .chip .face { white-space: nowrap; margin-top: var(--space-0-5); font-size: var(--text-xs); font-weight: var(--weight-regular); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-selected); color: var(--accent-warm-ink); }

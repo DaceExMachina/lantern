@@ -342,3 +342,32 @@ test('the expanded card lists five agents and "n more", which lists the rest', a
   hideCard();
   assert.strictEqual(find(await show(session({ state: 'working', subagents })), 'job').length, 5, 'and five again on a new card');
 });
+
+// a stale PR's wisp or a ghost moth, hovered
+const hoverStale = async (stale) => {
+  const target = { stale, zone: hoverZone(() => target, () => {}, 12) };
+  enterZone(target.zone);
+  await nextTick();
+  return $('card');
+};
+const wisp = { url: 'https://github.com/o/r/pull/9', label: '#9', title: 'Old PR', need: 'review', updatedAt: new Date(now - 9 * 864e5).toISOString() };
+
+test('a wisp whose session Lantern knows shows that session\'s card, and an orphan keeps the PR-only card', async () => {
+  const s = { id: 'known', state: 'idle', subagents: [], title: 'My session', last: now };
+  setSessions(s);
+  let card = await hoverStale({ ...wisp, owner: { id: 'known', title: 'My session', last: now } });
+  assert.strictEqual(find(card, 'open').length, 1, 'the session header, which opens the session');
+  assert.ok(!text(card).includes('Made by'), 'not the PR-only card');
+  hideCard();
+  card = await hoverStale({ ...wisp, owner: { id: 'gone', title: 'Old one', last: now } });
+  assert.ok(text(card).includes('Made by Old one'), 'an owner Lantern has forgotten is only a PR');
+  hideCard();
+  card = await hoverStale(wisp);
+  assert.ok(text(card).includes('untouched for 9 days'), 'no owner at all');
+});
+
+test('the PR-only card\'s header is laid out like a session\'s: a .title and a pill, not bare text', async () => {
+  const card = await hoverStale(wisp);
+  assert.strictEqual(find(card, 'title').length, 1);
+  assert.strictEqual(find(card.querySelector('h3'), 'chip').length, 1);
+});
