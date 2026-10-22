@@ -9,7 +9,7 @@ const Q = new URLSearchParams(location.search);
 const AMBIENT = Q.has('ambient');
 // POST a JSON body to the server (settings, focus, snooze, and the rest)
 const post = (url, body) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-// FLAME_STRETCH: the most a bare flame stretches past its height (frame.js stepFlame)
+// FLAME_STRETCH: the most a flame stretches past its height (frame.js stepFlame)
 const CX = 340, CY = 330, FLAME_BASE = 388, FLAME_STRETCH = 1.15;
 // the original two-petal moth, split into its wings as absolute quadratic curves from the joint at 0,0
 const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
@@ -73,10 +73,23 @@ const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
 // stand is, and the one at the top within 60, where the string or chain hangs. The i-th, clockwise from the bottom left;
 // a moth doubling up on a taken spot (`layer` 1, 2...) sits a little further in, and half a spot round. Each session wanders around its home.
 function ringHome(i, n, layer = 0) {
-  const k = 1 - 0.18 * layer, low = Math.asin(Math.min(1, 150 / 225 / k)), high = Math.asin(60 / 225 / k), side = Math.PI - low - high; // the arc each side
+  const k = 1 - 0.18 * layer, [low, high] = ringGaps(k), side = Math.PI - low - high; // the arc each side
   let a = (i + 0.5 + layer / 2) * 2 * side / n; // a second layer sits between two spots, so no two share a direction
   if (a > side) a += 2 * high; // over the top
-  return [340 + 225 * k * Math.cos(Math.PI / 2 + low + a), 320 + 235 * k * Math.sin(Math.PI / 2 + low + a)];
+  return ringPoint(Math.PI / 2 + low + a, k);
+}
+// The oval homes sit on (on the 600x600 square): the point at angle `a` on a ring k of the way out, and a point's
+// [angle, how far out] (1 on the ring itself).
+const RING = { x: 340, y: 320, rx: 225, ry: 235 };
+const ringPoint = (a, k = 1) => [RING.x + RING.rx * k * Math.cos(a), RING.y + RING.ry * k * Math.sin(a)];
+const ringPolar = ([x, y]) => { const p = (x - RING.x) / RING.rx, q = (y - RING.y) / RING.ry; return [Math.atan2(q, p), Math.hypot(p, q)]; };
+// The gaps at the bottom and top of a ring k of the way out, as angles from straight down and straight up.
+const ringGaps = k => [Math.asin(Math.min(1, 150 / RING.rx / k)), Math.asin(60 / RING.rx / k)];
+// The point on the ring `u` of the way round its side (`side` -1 the left, 1 the right), from the bottom gap (0) to the
+// top one (1).
+function ringAt(u, side) {
+  const [low, high] = ringGaps(1);
+  return ringPoint(Math.PI / 2 - side * (low + u * (Math.PI - low - high))); // from straight down, round toward `side`
 }
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
 
@@ -98,17 +111,19 @@ function fitView() {
   fitted = size;
   VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
   const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
-  for (const s of document.querySelectorAll('#scene > svg:not(#lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  for (const s of document.querySelectorAll('#scene > svg:not(.lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
   VIEW.box = [x, y, w, h];
   VIEW.px = width / w; // CSS pixels per unit
   // the lantern's layer spans LANTERN_SPAN either side of its middle, the window's full height (a chain or column runs edge
   // to edge), its left edge on a whole device pixel so the lantern lands on the same pixels it would in the scene, and it
   // turns about where the lantern hangs from (frame.js swingLantern)
-  const layer = $('lanternLayer'), dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
-  Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
-  layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
-  const canvas = $('bg'), k = (devicePixelRatio || 1) * bgScale; // background.js
-  canvas.width = Math.round(width * k); canvas.height = Math.round(height * k);
+  // turns about where the lantern hangs from (frame.js swingLantern); the flame's canvas covers the same strip, unturned
+  const dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
+  for (const layer of [$('lanternBack'), $('lanternLayer'), $('flame')]) Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
+  for (const layer of document.querySelectorAll('.lanternLayer')) layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
+  VIEW.layer = [x0, y, 2 * LANTERN_SPAN, h]; // the lantern's strip in scene units, which the flame's canvas covers
+  const k = dpr * bgScale; // background.js
+  for (const [canvas, cw] of [[$('bg'), width], [$('flame'), 2 * LANTERN_SPAN * VIEW.px]]) { canvas.width = Math.round(cw * k); canvas.height = Math.round(height * k); }
   VIEW.top = y;
   drawHang(); // the string or chain runs from the top of the window down to the lantern
   bakeCutouts(); // the Moroccan's lace, at the new size (lanterns.js)

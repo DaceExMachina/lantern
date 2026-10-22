@@ -232,11 +232,15 @@
   /* The lantern in a layer of its own, swung by a CSS transform (frame.js swingLantern) about where it hangs from: WebKit
      turns the picture it has instead of drawing the lantern afresh every frame, redrawing only the parts that change
      (its flame and light), and the wisps, threads and moths moving round it no longer make it redraw the lantern under
-     them. Only as wide as the lanterns (scene.js fitView). */
-  #lanternLayer { right: auto; will-change: transform; }
+     them. Only as wide as the lanterns (scene.js fitView). It's two layers, turned together: a paper lantern's back paper
+     (#lanternBack) and the rest (#lanternLayer), with the flame's canvas between them (background.js drawFlame), so the
+     flame burns behind the front paper and over the back. The flame's canvas is as wide but never turned: its shader
+     draws the flame upright at its swung base. */
+  .lanternLayer { right: auto; will-change: transform; }
+  #flame { right: auto; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
   #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
-  .ambient #lantern { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
+  .ambient #lantern, .ambient #lanternPaper, .ambient #flame { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
   /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: var(--z-flash); }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -400,7 +404,7 @@
   <g id="staleCloud" style="display: none"><circle r="16" fill="#C9C0DC" opacity="0.05"/><circle cx="-7" cy="3" r="9" fill="#C9C0DC" opacity="0.06"/><circle cx="8" cy="-2" r="8" fill="#C9C0DC" opacity="0.06"/><text id="staleCloudCount" y="3" text-anchor="middle" font-size="7" fill="#8F7FA6"></text></g>
   <g id="threads" fill="none" stroke-width="1.5" stroke-dasharray="3 6"></g>
 </svg>
-<svg id="lanternLayer" aria-hidden="true">
+<svg id="lanternBack" class="lanternLayer" aria-hidden="true">
   <defs>
     <radialGradient id="paperGrad" cx="340" cy="350" r="140" gradientUnits="userSpaceOnUse">
       <stop class="paperStop" offset="0" stop-opacity="0.85"/>
@@ -410,10 +414,11 @@
       <stop offset="0" stop-color="#CFB28C"/><stop offset=".28" stop-color="#F0D9BC"/><stop offset=".5" stop-color="#F8E8D2"/>
       <stop offset=".72" stop-color="#F0D9BC"/><stop offset="1" stop-color="#C9AA84"/>
     </linearGradient>
-    <filter id="behindPaper" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="1.8"/></filter>
   </defs>
-  <g id="lantern"></g>
+  <g id="lanternPaper"></g>
 </svg>
+<canvas id="flame"></canvas>
+<svg id="lanternLayer" class="lanternLayer" aria-hidden="true"><g id="lantern"></g></svg>
 <svg aria-hidden="true">
   <g id="moths"></g>
   <g id="flies"></g>

@@ -6,3 +6,4 @@ node_modules/
 github-cache.json
 app/build/
 test/snapshots/out/
+dist/

@@ -9,20 +9,24 @@ const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
 // the browser scales it up: at 0.6 that's about a third of the pixels and of the GPU time, and it looks the same, the
 // far wall's lace included (below 0.5 that starts to soften). fitView sizes it.
 const bgScale = 0.6;
-// A GPU reset (sleep, a display change, the GPU process restarting) loses the context and every shader and buffer on it.
+// The flame has a canvas of its own, between the lantern's back paper and the rest (index.html), so a WebGL of its own.
+const fgl = $('flame').getContext('webgl', { antialias: false });
+// A GPU reset (sleep, a display change, the GPU process restarting) loses a context and every shader and buffer on it.
 // Asking for it back (preventDefault) and reloading once it's restored rebuilds them all from scratch.
-$('bg').addEventListener('webglcontextlost', e => e.preventDefault());
-$('bg').addEventListener('webglcontextrestored', () => location.reload());
-function program(vert, frag) {
-  const p = gl.createProgram();
-  for (const [type, src] of [[gl.VERTEX_SHADER, vert], [gl.FRAGMENT_SHADER, frag]]) {
-    const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
-    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh));
-    gl.attachShader(p, sh);
+for (const c of [$('bg'), $('flame')]) {
+  c.addEventListener('webglcontextlost', e => e.preventDefault());
+  c.addEventListener('webglcontextrestored', () => location.reload());
+}
+function program(vert, frag, ctx = gl) {
+  const p = ctx.createProgram();
+  for (const [type, src] of [[ctx.VERTEX_SHADER, vert], [ctx.FRAGMENT_SHADER, frag]]) {
+    const sh = ctx.createShader(type); ctx.shaderSource(sh, src); ctx.compileShader(sh);
+    if (!ctx.getShaderParameter(sh, ctx.COMPILE_STATUS)) throw new Error(ctx.getShaderInfoLog(sh));
+    ctx.attachShader(p, sh);
   }
-  gl.linkProgram(p);
+  ctx.linkProgram(p);
   const u = {}; // uniform locations by name
-  for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i++) { const n = gl.getActiveUniform(p, i).name; u[n] = gl.getUniformLocation(p, n); }
+  for (let i = 0; i < ctx.getProgramParameter(p, ctx.ACTIVE_UNIFORMS); i++) { const n = ctx.getActiveUniform(p, i).name; u[n] = ctx.getUniformLocation(p, n); }
   return { p, u };
 }
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
@@ -391,17 +395,17 @@ function drawFarWall({ slide, col, heat }, w, h, box) {
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
-// ---- the bare flame ---------------------------------------------------------------------------------------------------
-// The candle's and the Moroccan's flame (frame.js stepFlame moves it; a paper lantern's stays in the SVG, drawFlame), drawn
-// last, over the far wall, on a quad round it. Layered tongues as the SVG's (outer, middle, core, 34, 24 and 13 wide), in
-// its halo, the blue root over them, all in the flame's own units (a unit is uBase.z in the scene, x across, y up from its
-// base). Each tongue stands on one spine, frame.js's chain (uSpine: each point's offset across, evenly up to the outer
-// tongue's tip uShape.x up, the tip frame.js passes on to the smoke, heat and rim shadow). Noise rising up through it licks
-// at its edges and bends its middle (uShape.y, the tip and base stay put), and a strong gust (uShape.z) tears at its top half.
-const BARE_FLAME = program(`attribute vec2 a; uniform vec4 uBox; varying vec2 vP;
+// ---- the flame ---------------------------------------------------------------------------------------------------------
+// Every lantern's flame (frame.js stepFlame moves it), drawn on its own canvas (fgl) on a quad round it. Layered tongues
+// (outer, middle, core, 34, 24 and 13 wide) in a halo, the blue root over them, all in the flame's own units (a unit is
+// uBase.z in the scene, x across, y up from its base). Each tongue stands on one spine, frame.js's chain (uSpine: each
+// point's offset across, evenly up to the outer tongue's tip uShape.x up, the tip frame.js passes on to the smoke, heat and
+// rim shadow). Noise rising up through it licks at its edges and bends its middle (uShape.y, the tip and base stay put),
+// and a strong gust (uShape.z) tears at its top half. Behind paper its tongues' edges soften over uSoft scene units.
+const FLAME = program(`attribute vec2 a; uniform vec4 uBox; varying vec2 vP;
 void main() { vP = a; gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y - uBox.y) / uBox.w * 2.0, 0.0, 1.0); }`, `
 precision highp float;
-uniform vec4 uBase, uBlue; uniform vec3 uShape; uniform float uSpine[${CHAIN + 1}]; uniform float uPx, uAlpha, uBlueA; uniform vec3 uHaloC, uOuterC, uMidC, uCoreC, uBlueC;
+uniform vec4 uBase, uBlue; uniform vec3 uShape; uniform float uSpine[${CHAIN + 1}]; uniform float uPx, uSoft, uAlpha, uBlueA; uniform vec3 uHaloC, uOuterC, uMidC, uCoreC, uBlueC;
 varying vec2 vP;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) { // smooth value noise, -1 to 1
@@ -409,7 +413,7 @@ float noise(vec2 p) { // smooth value noise, -1 to 1
   return 2.0 * mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y) - 1.0;
 }
 // A tongue's half-width t of the way up it (0 its base, 1 its tip) as a share of its widest, at 0.3: round below that,
-// dipping 0.04 under its base (lanterns.js keeps landed moths clear of it), its shoulders full like the SVG's tongues, and
+// dipping 0.04 under its base (lanterns.js keeps landed moths clear of it), its shoulders full, and
 // coming to a point at the tip.
 // Scalars only, so the test can run it as JS.
 float flameHalf(float t) {
@@ -429,22 +433,23 @@ float spineX(float t) {
   if (s == 0.0) a = 2.0 * b - c; if (s == ${glf(CHAIN - 1)}) d = 2.0 * c - b; // past the ends, carry straight on
   return 0.5 * (2.0 * b + (c - a) * f + (2.0 * a - 5.0 * b + 4.0 * c - d) * f * f + (3.0 * b - a - 3.0 * c + d) * f * f * f);
 }
-// How much of a tongue w wide and h tall covers q (x from the spine), its edge eased over a pixel (px, in flame units).
-// None where it has no width (above its tip, below its base): eased there, the spine's own pixel would show half covered,
-// a thin line straight up off the tip. Scalars and q.x, q.y only, so the test can run it as JS.
+// How much of a tongue w wide and h tall covers q (x from the spine), its edge eased over px (in flame units): a pixel,
+// or wider behind paper. Its tip and base fade in over px inside them, so none of it shows where it has no width (above
+// its tip, below its base): eased there, the spine's own pixel would show half covered, a thin line straight up off the
+// tip. Scalars and q.x, q.y only, so the test can run it as JS.
 float tongue(vec2 q, float w, float h, float px) {
   float hw = 0.72 * w * flameHalf(q.y / h);
-  return hw > 0.0 ? clamp((hw - abs(q.x)) / px + 0.5, 0.0, 1.0) : 0.0;
+  return clamp((hw - abs(q.x)) / px + 0.5, 0.0, 1.0) * clamp((h - q.y) / px, 0.0, 1.0) * clamp((q.y + 0.04 * h) / px, 0.0, 1.0);
 }
 void main() {
   vec2 q = vec2(vP.x - uBase.x, uBase.y - vP.y) / uBase.z;
-  float h = uShape.x, time = uBase.w, px = uPx / uBase.z, t = clamp(q.y / h, 0.0, 1.0), mid = 4.0 * t * (1.0 - t);
+  float h = uShape.x, time = uBase.w, px = max(uPx, uSoft) / uBase.z, t = clamp(q.y / h, 0.0, 1.0), mid = 4.0 * t * (1.0 - t);
   float n1 = noise(vec2(q.x * 0.09, q.y * 0.06 - time * 3.0)), n2 = noise(vec2(q.x * 0.13 + 7.0, q.y * 0.1 - time * 5.0));
   vec2 root = q; // unbent, for the blue root
   q.x -= spineX(t) + uShape.y * mid * (2.5 * n1 + 0.8 * n2);
   float swell = 1.0 + uShape.y * 0.12 * mid * n2;
   float tear = 1.0 - uShape.z * smoothstep(0.45, 0.9, t) * smoothstep(0.0, 0.5, noise(vec2(q.x * 0.05, q.y * 0.12 - time * 9.0)));
-  // the halo: a wide soft body and a tip, as the SVG's (lanterns.js FLAME), stretched with the flame
+  // the halo: a wide soft body and a tip, a wide tongue (46 by 118) blurred by 7, stretched with the flame
   float k = h / 96.0;
   float body = 0.96 * smoothstep(1.0, 0.4, length((q - vec2(0.0, 42.0 * k)) / vec2(49.0, 69.0 * k)));
   float top = 0.94 * smoothstep(1.0, 0.0, length((q - vec2(0.0, 84.0 * k)) / vec2(26.5, 49.0 * k)));
@@ -455,16 +460,19 @@ void main() {
   vec2 b = (root - uBlue.xy) / uBlue.zw;
   c = mix(c, vec4(uBlueC, 1.0), uBlueA * smoothstep(1.0, 0.8, length(b)));
   gl_FragColor = c * uAlpha;
-}`);
-const flameQuad = gl.createBuffer();
-function drawBareFlame({ flame: [bx, by, tx, ty], fire: f }, w, box) {
-  const k = f.scale, h = (by - ty) / k, u = BARE_FLAME.u;
+}`, fgl);
+const flameQuad = fgl.createBuffer();
+// Clears the flame's canvas and draws `fire`, the flame's base and tip in `flame`.
+function drawFlame({ flame: [bx, by, tx, ty], fire: f }) {
+  const c = $('flame'), box = VIEW.layer, gl = fgl;
+  gl.viewport(0, 0, c.width, c.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  const k = f.scale, h = (by - ty) / k, u = FLAME.u;
   const x0 = bx + (Math.min(...f.spine) - 60) * k, x1 = bx + (Math.max(...f.spine) + 60) * k, y0 = by - h * 1.45 * k, y1 = by + 30 * k;
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // its colours come premultiplied
-  gl.useProgram(BARE_FLAME.p);
+  gl.useProgram(FLAME.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, flameQuad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([x0, y0, x1, y0, x0, y1, x1, y1]), gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  gl.uniform4f(u.uBox, ...box); gl.uniform1f(u.uPx, box[2] / w);
+  gl.uniform4f(u.uBox, ...box); gl.uniform1f(u.uPx, box[2] / c.width); gl.uniform1f(u.uSoft, f.soft);
   gl.uniform4f(u.uBase, bx, by, k, f.t); gl.uniform3f(u.uShape, h, f.turb, f.tear); gl.uniform1fv(u['uSpine[0]'], f.spine);
   gl.uniform4f(u.uBlue, ...f.blue.slice(0, 4)); gl.uniform1f(u.uBlueA, f.blue[4]); gl.uniform1f(u.uAlpha, f.alpha);
   ['uHaloC', 'uOuterC', 'uMidC', 'uCoreC', 'uBlueC'].forEach((n, i) => gl.uniform3fv(u[n], rgb(f.cols[i])));
@@ -509,7 +517,7 @@ function drawBackground(v) {
   if (ghostWingN) drawGhosts([x, y, w, h]);
   ghostWingN = 0;
   if (v.farWall) drawFarWall(v.farWall, c.width, c.height, [x, y, w, h]);
-  if (v.fire) drawBareFlame(v, c.width, [x, y, w, h]);
+  if (v.fire) drawFlame(v); // none on a second display, which hides its canvas (index.html)
   // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up
   if (!gl.isContextLost()) window.lanternFrames = (window.lanternFrames || 0) + 1;
 }

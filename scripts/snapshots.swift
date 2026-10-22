@@ -14,6 +14,7 @@ let WIDE = NSSize(width: 720, height: 540)
 let SCENES = [("barrel", "style=barrel&hover", WIDE), ("chochin", "style=chochin", WIDE), ("moroccan", "style=moroccan", WIDE), ("ambient", "style=barrel&ambient", WIDE), ("candle", "style=candle", WIDE),
   ("chrome", "style=barrel&chrome", WIDE), ("chrome375", "style=barrel&chrome", NSSize(width: 375, height: 700)), ("panel", "style=barrel&chrome&panel", NSSize(width: 300, height: 420)),
   ("pinned", "style=barrel&pinned", NSSize(width: 1100, height: 700))]
+let FAR = NSScreen.screens.map(\.frame.maxX).max()! + 10000 // beyond every display, never on one (a negative origin once landed on the laptop screen)
 let TOLERANCE = 2
 let update = CommandLine.arguments.contains("--update")
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
@@ -57,11 +58,12 @@ func check(_ name: String, _ image: CGImage) {
 }
 
 final class Shooter: NSObject, WKNavigationDelegate {
-  let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: -30000, y: -30000), size: WIDE), styleMask: .borderless, backing: .buffered, defer: false)
+  let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: FAR, y: 0), size: WIDE), styleMask: .borderless, backing: .buffered, defer: false)
   var web: WKWebView!, queue = SCENES, scene = "", size = WIDE
   override init() {
     super.init()
     window.colorSpace = .sRGB
+    window.collectionBehavior = [.transient, .ignoresCycle]
     try? FileManager.default.removeItem(at: out)
     next()
   }

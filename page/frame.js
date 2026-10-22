@@ -135,7 +135,6 @@ function frame(t) {
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
   swingLantern(elapsed, s);
   const flame = stepFlame(dt, s, { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) });
-  if (style.paper) drawFlame(s, flame);
   // the outer tongue in the scene, for scorched moths to aim at: its middle, half its widest (0.72 of its 34, background.js
   // tongue) and its height
   tongue = style.scorches ? { cx: (flame.base[0] + flame.tip[0]) / 2, half: 0.72 * 34 * flame.size * style.flame[2], height: flame.base[1] - flame.tip[1] } : null;
@@ -211,7 +210,7 @@ function swingLantern(elapsed, s) {
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
-  $('lanternLayer').style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
+  for (const layer of [$('lanternBack'), $('lanternLayer')]) layer.style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
   twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * TWIST_GAIN / TWIST_MAX) - twist) * dt * TWIST_RATE;
   farSlide = style.farWall ? -twist * 0.2 : 0;
   put($('inside'), 'transform', `translate(${(farSlide / 2).toFixed(2)} 0)`);
@@ -239,13 +238,12 @@ function swingLantern(elapsed, s) {
 }
 
 // ---- the flame ---------------------------------------------------------------------------------------------------
-// A bare flame (the candle's and the Moroccan's) is drawn by the background's shader (background.js BARE_FLAME), so the
-// SVG doesn't repaint it every frame. A paper lantern's stays in the SVG (drawFlame): its paper and session text, drawn
-// behind the flame, would hide one drawn under the SVG.
-// The bare flame's spine is a chain of CHAIN links from its base up to its tip (its outer tongue's), each point a weight on
+// The flame is drawn by a shader (background.js FLAME) on its own canvas between the lantern's back paper and the rest
+// (index.html), so the SVG doesn't repaint it every frame. A paper lantern's is softened, as if seen through paper.
+// The flame's spine is a chain of CHAIN links from its base up to its tip (its outer tongue's), each point a weight on
 // a damped spring to the point below it, so a swing or a gust travels up it, base first and tip after: it can
 // bend into an S and whip, then settle. At rest the chain stands straight up, as tall as the flame burns, bent over by the
-// wind (style.flameWind) and stretched by it, and pushed aside by a moth flying close, each most at the tip. When the
+// wind (style.flameWind, or paperWind behind paper) and stretched by it, and pushed aside by a moth flying close, each most at the tip. When the
 // lantern swings, its base's acceleration throws the weights back (inertia), the higher the harder.
 // FEEL: the springs' stiffness at the base (a second squared), how many times floppier the tip's is (falloff), their
 // damping (a second), how hard the base's acceleration throws them (the lantern's swing is gentle, so 1, a plain weight,
@@ -267,7 +265,8 @@ const flameChain = { pts: /** @type {{ x: number, y: number, vx: number, vy: num
 // scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
 function stepFlame(dt, s, flame) {
   const [fx, fy, fk] = style.flame, k = flame.size * fk, [bx, by] = rot(fx + farSlide / 2, fy), ch = flameChain; // at the middle depth (farSlide)
-  const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * (style.flameWind || 0); // the wind's lean, in the flame's units
+  const flameWind = style.paper ? paperWind : style.flameWind || 0; // how far the wind leans it (lanterns.js)
+  const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * flameWind; // the wind's lean, in the flame's units
   // an ember guttering: as it dims below 0.6 its height jumps about, by up to a quarter at its dimmest
   const gutter = Math.max(0, Math.min(1, (0.6 - flame.size) / 0.3));
   const h = 96 * k * (1 + wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
@@ -307,7 +306,7 @@ function stepFlame(dt, s, flame) {
   for (const p of pts) { p.x = Math.max(-0.6 * most, Math.min(0.6 * most, p.x)); p.y = Math.max(-most, Math.min(0, p.y)); }
   tip.y = Math.min(-0.4 * 96 * k, tip.y);
   // a gust past 1.4 tears at the tip, fully by 2.6 (one on the candle; the Moroccan's walls keep the wind to a third)
-  const tear = Math.max(0, Math.min(1, (Math.abs(gust) * (style.flameWind || 0) / 6 - 1.4) / 1.2));
+  const tear = Math.max(0, Math.min(1, (Math.abs(gust) * flameWind / 6 - 1.4) / 1.2));
   // the blue at its root swells and brightens with the flicker, breathes, and leans with the chain's lowest link: its
   // middle, x and up from the base, and its radii, in the flame's units, and its opacity
   const breathe = 1 + 0.05 * Math.sin(s * 1.7), { flick } = flame;
@@ -316,29 +315,6 @@ function stepFlame(dt, s, flame) {
     turb: feel.turbulence * (1 + 1.5 * gutter + tear) + 2 * feel.moth * near,
     blue: [wobble(s, 5) * 1.2 + pts[0].x / k, 4, 10 * flick * breathe, 5 * flick * (2 - breathe), 0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick] };
 }
-// A paper lantern's flame, in the SVG: layered tongues that lean and stretch independently, ember-small when idle
-function drawFlame(s, { size, flick, pulse }) {
-  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
-  for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
-    const n = $(id);
-    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
-    put(n, 'fill', pal(id.slice(1).toLowerCase()));
-  }
-  // the blue at its root swells and brightens with the flicker, and breathes
-  const base = $('fBase'), breathe = 1 + 0.05 * Math.sin(s * 1.7);
-  put(base, 'fill', pal('base'));
-  put(base, 'cx', (340 + wobble(s, 5) * 1.2).toFixed(2));
-  put(base, 'rx', (10 * flick * breathe).toFixed(2)); put(base, 'ry', (5 * flick * (2 - breathe)).toFixed(2));
-  put(base, 'opacity', (0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick).toFixed(3));
-  const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
-  put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
-  // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
-  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-(wobble(s, 1) * 6) / (118 * hh)) * 180 / Math.PI;
-  put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
-  put($('fHalo'), 'color', pal('halo'));
-  put($('flame'), 'opacity', pulse.toFixed(3));
-}
-
 // sparks float off the tip, more of them the busier things get; not from a paper lantern, whose flame is hidden behind paper.
 // They're drawn in the flame's own units (#sparks), turned with the lantern and slid with #inside.
 function drawSparks(dt, s, { size, tip }) {
@@ -562,10 +538,10 @@ function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, bl
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
     flame: [...base, ...tip],
-    // a bare flame, drawn by the shader (background.js drawBareFlame): its scale, the time, and stepFlame's turbulence,
-    // tearing and blue root, its opacity, and its colours (halo, tongues out to in, the blue)
-    fire: !style.paper && !AMBIENT ? { scale: size * style.flame[2], t: s % 3600, // ponytail: the noise jumps once an hour as the time wraps
-      spine, turb, tear, blue, alpha: pulse,
+    // the flame, drawn by the shader (background.js drawFlame): its scale, the time, and stepFlame's turbulence,
+    // tearing and blue root, its opacity, how soft it is (a paper lantern's, seen through paper), and its colours (halo, tongues out to in, the blue)
+    fire: !AMBIENT ? { scale: size * style.flame[2], t: s % 3600, // ponytail: the noise jumps once an hour as the time wraps
+      spine, turb, tear, blue, alpha: pulse, soft: style.paper ? paperSoft : 0,
       cols: ['halo', 'outer', 'mid', 'core', 'base'].map(pal) } : null,
     rim: style.shadeFromHolder && !remote ? [style.flame[0], style.holder[1], style.holder[0]] : [0, 0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)
@@ -634,10 +610,12 @@ function scorchStep(m, flying, now = Date.now()) {
 }
 // ---- moths -------------------------------------------------------------------
 // A session moth's home eases toward the spot sync gave it, so when sessions come or go the others slide over to make
-// room rather than jump (about 95% there in two seconds).
+// room rather than jump (about 95% there in two seconds). It goes round the ring (ringHome), the short way, never
+// across it: homes stay in the order they sit round it, which keeps landed moths' lines from crossing (perchAt).
 function glideHome(m, dt) {
-  const k = 1 - Math.exp(-1.5 * dt);
-  m.home = [m.home[0] + (m.spot[0] - m.home[0]) * k, m.home[1] + (m.spot[1] - m.home[1]) * k];
+  const k = 1 - Math.exp(-1.5 * dt), [a, r] = ringPolar(m.home), [b, s] = ringPolar(m.spot);
+  const turn = (b - a + 3 * Math.PI) % (2 * Math.PI) - Math.PI; // the short way round
+  m.home = ringPoint(a + turn * k, r + (s - r) * k);
 }
 // A landed moth's fidgets, off the wall clock like the scorch schedule (scorchClock), so every window shows them at the
 // same moments: its time splits into `slot`-second slots, shifted by its own seeded phase, and each holds one fidget
@@ -676,9 +654,9 @@ function mothTarget(k, m, dt, s) {
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
   // (with ?scorch none lands, so there's always a moth in the air to scorch)
   const needsMe = !SCORCH_DEMO && !m.leaving && !m.parentId && (m.session?.state === 'waiting' || m.session?.state === 'idle');
-  // Where it lands, or would: its spot follows its home round as that glides, and as the lantern sways, so the line
-  // between them (its thread, and its fireflies' dotted line) stays on its own ray. A flying moth would land on the
-  // fresh landing's spot (alongFor).
+  // Where it lands, or would: its spot follows its home round as that glides. It's worked out on the lantern at rest, so
+  // it stays put on the paper as the lantern sways and a landed moth rides it without sliding. A flying moth would land
+  // on the fresh landing's spot (alongFor).
   if (!m.parentId && m.home) {
     if (!needsMe) m.along = alongFor(m.key);
     else {
@@ -689,7 +667,9 @@ function mothTarget(k, m, dt, s) {
       m.hopSlot = lastHop(m.key, m.session.waitingSince || 0, Date.now() / 1000);
       m.along = alongFor(m.key, m.hopSlot);
     }
-    m.perch = perchAt(rot(...stretch(m.home), -swayAngle), m.along);
+    // worked out afresh only when something it depends on changes, so a settled lantern pays nothing for it
+    const key = `${m.home}|${m.along}|${style.name}|${VIEW.kx}|${VIEW.ky}`;
+    if (m.perchKey !== key) { m.perch = perchAt(m.home, m.along); m.perchKey = key; }
   }
   if (m.leaving) {
     // it flies straight out from the lantern to past the window's far corner, and goes only once its wings are clear of every edge
@@ -770,7 +750,7 @@ function mothFireflies(m, dt, s) {
   const home = stretch(m.home);
   swarm(m.flies ??= new Map(), new Map([...want].slice(0, 10)), home, [34, 55], dt);
   // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
-  // middle of the swarm straight toward its perch, along the line that lies on (perchAt), so no two ever cross
+  // middle of the swarm straight toward its perch, along its line (perchAt), which crosses no other at rest
   m.flyLine ??= $('flies').insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), $('flies').firstChild);
   const tie = [...m.flies.values()].find(f => !f.leave && f.x !== undefined); // the oldest firefly: it eases in to the swarm's middle, where the line starts (f.near)
   const tied = m.wasLanded && !!tie;
@@ -937,12 +917,14 @@ function mothZs(m, s) {
   } else if (m.zz) { m.zz.forEach(t => t.remove()); m.zz = null; m.zStart = undefined; }
 }
 
-// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its fan
-// line to level with the moth's wing joint. Every thread and dotted line on a side lies on a ray from one point, so none
-// ever crosses another, flying or landed. A landed moth's has no length; a moth behind its spot (flying in from the
-// far side) has none until it comes round.
+// A session moth's thread: straight from the spot on the lantern it lands on, or would (perchAt), out along its line
+// toward home to level with the moth's wing joint. With the lantern at rest no thread or dotted line crosses another,
+// flying or landed. As it sways, its spots move with it and the homes don't, so two lines closer than the sway carries
+// a spot (homes gliding through each other, or a home on the ring further in just past a neighbour's line) can cross
+// for a moment. A landed moth's thread has no length; a moth behind its spot (flying in from the far side) has none
+// until it comes round.
 function threadEnds(m) {
-  const [px, py] = rot(m.perch[0], m.perch[1]), [rx, ry] = rot(340 + m.perch[3][0], VIEW.top + m.perch[3][1]), ux = rx - 340, uy = ry - VIEW.top;
+  const [px, py] = rot(m.perch[0], m.perch[1]), [hx, hy] = stretch(m.home), len = Math.hypot(hx - px, hy - py), ux = (hx - px) / len, uy = (hy - py) / len;
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }
