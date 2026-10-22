@@ -132,9 +132,9 @@ function frame(t) {
   const calling = fakeLamp === 'live' ? sessions.some(x => x.state === 'waiting' && !x.snoozed) : fakeLamp === 'violet'; // fakeLamp: lanterns.js
   level = fakeFlame ?? level + (Math.min(working, 5) / 5 - level) * dt * 1.5; // 5+ working is "fully lit"; fakeFlame: lanterns.js, ?flame=
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
-  // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
+  // the flame's size (ember-small when idle) and its slow violet pulse (its flicker comes from its own height, stepFlame) while someone needs me
   swingLantern(elapsed, s);
-  const flame = stepFlame(dt, s, { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) });
+  const flame = stepFlame(dt, s, { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) });
   // the outer tongue in the scene, for scorched moths to aim at: its middle, half its widest (0.72 of its 34, background.js
   // tongue) and its height
   tongue = style.scorches ? { cx: (flame.base[0] + flame.tip[0]) / 2, half: 0.72 * 34 * flame.size * style.flame[2], height: flame.base[1] - flame.tip[1] } : null;
@@ -261,15 +261,16 @@ const feelAt = size => {
 // and speed (scene units), and the style it was set for. bent(i): how much of the tip's lean point i takes at rest.
 const bent = i => (i / CHAIN) ** 1.6;
 const flameChain = { pts: /** @type {{ x: number, y: number, vx: number, vy: number }[]} */ ([]), bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
-// One frame of the flame, `dt` on, burning at `flame` (its size, flicker and pulse): that, with its base and tip in the
-// scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
+// One frame of the flame, `dt` on, burning at `flame` (its size and pulse): that, with its flicker (how much taller or shorter than at rest it stands,
+// which the light it gives follows), its base and tip in the scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
 function stepFlame(dt, s, flame) {
   const [fx, fy, fk] = style.flame, k = flame.size * fk, [bx, by] = rot(fx + farSlide / 2, fy), ch = flameChain; // at the middle depth (farSlide)
   const flameWind = style.paper ? paperWind : style.flameWind || 0; // how far the wind leans it (lanterns.js)
   const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * flameWind; // the wind's lean, in the flame's units
   // an ember guttering: as it dims below 0.6 its height jumps about, by up to a quarter at its dimmest
   const gutter = Math.max(0, Math.min(1, (0.6 - flame.size) / 0.3));
-  const h = 96 * k * (1 + wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
+  const bounce = style.paper ? paperBounce : 1; // paper lanterns bob less (lanterns.js): scales the height swings and the throw from the lantern's swing
+  const h = 96 * k * (1 + bounce * wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * bounce * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
   const last = ch.pts[CHAIN - 1];
   if (ch.style !== style || !(last?.x === last?.x && last?.y === last?.y) || Math.hypot(bx - ch.bx, by - ch.by) > 20) // a new lantern, a NaN, or the window resized
     Object.assign(ch, { pts: Array.from({ length: CHAIN }, (_, j) => ({ x: 0, y: -h * (j + 1) / CHAIN, vx: 0, vy: 0 })), bx, by, bvx: 0, bvy: 0, style });
@@ -295,8 +296,8 @@ function stepFlame(dt, s, flame) {
     for (let step = 0; step < n; step++) pts.forEach((p, j) => {
       const below = j ? pts[j - 1] : { x: 0, y: 0, vx: 0, vy: 0 }, stiff = feel.stiffness / feel.falloff ** (j / (CHAIN - 1));
       const share = bent(j + 1) - bent(j), keep = Math.exp(-feel.damping * h1);
-      p.vx += (stiff * (below.x + lean * share - p.x) - feel.inertia * share * ax) * h1;
-      p.vy += (stiff * (below.y - h / CHAIN - p.y) - feel.inertia * share * ay) * h1;
+      p.vx += (stiff * (below.x + lean * share - p.x) - bounce * feel.inertia * share * ax) * h1;
+      p.vy += (stiff * (below.y - h / CHAIN - p.y) - bounce * feel.inertia * share * ay) * h1;
       p.vx = below.vx + (p.vx - below.vx) * keep; p.vy = below.vy + (p.vy - below.vy) * keep; // damped against the point below
       p.x += p.vx * h1; p.y += p.vy * h1;
     });
@@ -309,9 +310,9 @@ function stepFlame(dt, s, flame) {
   const tear = Math.max(0, Math.min(1, (Math.abs(gust) * flameWind / 6 - 1.4) / 1.2));
   // the blue at its root swells and brightens with the flicker, breathes, and leans with the chain's lowest link: its
   // middle, x and up from the base, and its radii, in the flame's units, and its opacity
-  const breathe = 1 + 0.05 * Math.sin(s * 1.7), { flick } = flame;
+  const breathe = 1 + 0.05 * Math.sin(s * 1.7), flick = 1 + flickerFollow * (-tip.y / (96 * k) - 1);
   // spine: each point's offset across from the base, in the flame's units, the base's 0 first (background.js spineX)
-  return { ...flame, base: [bx, by], tip: [bx + tip.x, by + tip.y], spine: [0, ...pts.map(p => p.x / k)], tear,
+  return { ...flame, flick, base: [bx, by], tip: [bx + tip.x, by + tip.y], spine: [0, ...pts.map(p => p.x / k)], tear,
     turb: feel.turbulence * (1 + 1.5 * gutter + tear) + 2 * feel.moth * near,
     blue: [wobble(s, 5) * 1.2 + pts[0].x / k, 4, 10 * flick * breathe, 5 * flick * (2 - breathe), 0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick] };
 }
