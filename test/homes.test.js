@@ -332,3 +332,40 @@ test('a home glides the short way round, never across the lantern', () => {
     assert.ok(Math.hypot(end[0] - to[0], end[1] - to[1]) < 1, `from ${from} it reaches ${to}: ${end.map(Math.round)}`);
   }
 });
+
+// A restless landed moth now and then hops to a new spot along its own line (frame.js fidgetSlot, alongFor). Its spot
+// is worked out on the lantern at rest, so as the lantern sways it hops along that line on the paper and lands where it
+// aimed (58 hops in four minutes, 0.1 to 30.7 along, median 12.8; off the line by 5e-16 at worst, settling within 0.002).
+test('a restless landed moth hops to new spots along its own line as the lantern sways', () => {
+  const w = open(), t0 = 1.8e12;
+  w.show(HOP_IDS, [], { state: 'waiting', waitingSince: t0 - 20 * 60000 }); // waiting 20 minutes, so restless
+  w.run('for (const m of moths.values()) m.home = m.spot');
+  const look = () => w.run(`return Object.fromEntries([...moths].filter(([, m]) => m.wasLanded).map(([k, m]) => [k,
+    [m.hopSlot ?? null, m.perch.slice(0, 2), stretch(m.home), rot(m.x - 2 * m.size, m.y - 6 * m.size, -swayAngle)]]))`); // home and wing joint in the lantern's frame
+  const hops = [];
+  let before = {}, s = 0;
+  for (let i = 0; i < 240 * 60; i++, s += 1 / 60) { // four minutes
+    w.run(`Date.now = () => ${t0 + s * 1000}`);
+    step(w, s);
+    if (i % 6) continue;
+    const now = look();
+    for (const [k, [slot, spot, home]] of Object.entries(now)) {
+      const was = before[k];
+      if (was && was[0] !== slot) {
+        const [ax, ay] = [was[1][0] - home[0], was[1][1] - home[1]], [bx, by] = [spot[0] - home[0], spot[1] - home[1]];
+        hops.push({ k, at: s, spot, moved: Math.hypot(spot[0] - was[1][0], spot[1] - was[1][1]), off: Math.abs(ax * by - ay * bx) / Math.hypot(ax, ay) / Math.hypot(bx, by) });
+      }
+      for (const h of hops) if (h.k === k && h.landed === undefined && s - h.at > 3 && slot === now[k][0]) h.landed = Math.hypot(now[k][3][0] - h.spot[0], now[k][3][1] - h.spot[1]);
+    }
+    before = now;
+  }
+  const done = hops.filter(h => h.landed !== undefined);
+  assert.ok(hops.length >= 20 && done.length >= 15, `${hops.length} hops, ${done.length} of them settled`);
+  for (const h of hops) {
+    assert.ok(h.moved > 0.01, `${h.k} hopped to a new spot: ${h.moved.toFixed(2)} along`);
+    assert.ok(h.off < 1e-6, `${h.k} hopped along its own line: ${h.off}`);
+  }
+  for (const h of done) assert.ok(h.landed < 0.05, `${h.k} settled on its new spot: ${h.landed.toFixed(3)} off it`);
+  const moved = hops.map(h => h.moved).sort((a, b) => a - b);
+  assert.ok(moved[moved.length >> 1] > 5, `half the hops go further than ${moved[moved.length >> 1].toFixed(1)}`); // a new spot is a fresh roll along the line
+});
