@@ -331,15 +331,6 @@ test('the candle\'s wax under the rim takes the flame\'s colour', () => {
   assert.strictEqual((svg.match(/class="paperLit"/g) || []).length, 1, 'one patch lit by the flame');
 });
 
-test('on the candle the session text and ribbon controls grey out', () => {
-  $('ribbons').innerHTML = '<button></button>'.repeat(3); // the swatches, which wiring.ts adds
-  applyStyle('candle');
-  assert.strictEqual(/** @type {HTMLInputElement} */ ($('textToggle')).disabled, true);
-  assert.ok([...$('ribbons').children].every(b => /** @type {HTMLButtonElement} */ (b).disabled), 'every swatch');
-  applyStyle('barrel');
-  assert.strictEqual(/** @type {HTMLInputElement} */ ($('textToggle')).disabled, false, 'and come back on the barrel');
-});
-
 // flapWing became a view onto the one 3D wing model (wing3d); in flight it has to draw exactly what the old
 // closed-form version did.
 const oldFlap = (pts, lift, sweep, roll) => pts.map(([x, y]) => {

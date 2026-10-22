@@ -114,11 +114,19 @@
   // the chrome scenes: each panel opened over the barrel in turn, then closed (a function, as run() adds to LAST)
   const chrome = () => [
     () => { page.$('menu').showPopover(); page.$('help').open = true; }, snap('menu'),
-    () => { page.live.github = { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }; page.renderGitHub(); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
+    () => { emit('github', { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
     async () => { page.$('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { page.$('stats').hidePopover(); },
     async () => { await page.openRecap(6); }, snap('recap'), () => { page.$('recap').hidePopover(); },
     () => { page.enterZone(page.live.moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { page.hideCard(); },
     () => { page.toggleDevPanel(); }, snap('dev'),
+    // last, because it changes settings the scenes above rely on: the menu with other settings, accounts connected, the home-grown
+    // switches flipped and times of day with a single-digit hour (which the time inputs need padded)
+    () => {
+      emit('github', { accounts: [{ login: 'dace', error: '' }, { login: 'acme', error: 'bad credentials' }], signIn: null });
+      emit('settings', { style: Q.get('style') || 'barrel', ribbon: 'plum', lanternText: 'off', stale: false, github: true, quietUntil: 0, quietFrom: '22:30',
+        quietEnd: '7:15', quietEndOn: false, dayStart: '4:00', recapSeen: '9999-12-31' });
+      page.$('menu').showPopover();
+    }, snap('menu-alt'),
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): the PR toggle's is the rest of its header row (its top
   // and bottom right corners and just left of its icon), and each corner of the header's buttons, an agent row and a PR

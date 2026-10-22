@@ -102,6 +102,13 @@ export function parseSettings(x: unknown): Settings {
   };
 }
 
+/** A time of day as settings.json holds it, "H:MM" or "HH:MM". */
+export const isTime = (s: string | undefined): s is string => /^\d{1,2}:\d{2}$/.test(s || '');
+/** "8:00" as "08:00", which is what a time input takes. */
+export const hhmm = (s: string) => s.padStart(5, '0');
+/** "08:00" as "8am", "17:30" as "5:30pm". */
+export const timeLabel = (s: string) => { const [h = 0, m = 0] = s.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
+
 // ---- GET /stats (app/Stats.swift)
 /** A day in GET /stats. */
 export interface Day {

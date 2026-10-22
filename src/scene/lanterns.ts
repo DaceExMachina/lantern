@@ -783,11 +783,10 @@ export const RIBBONS = {
   cerulean: ['#4385B1', '#29567A', '#0D2A44'], madder: ['#A8433A', '#712A25', '#36110E'], ochre: ['#C08A2E', '#82601F', '#3B280A'],
   moss: ['#6E8B3F', '#4A5E29', '#1E2A0E'], plum: ['#7E4B8C', '#55325F', '#25132B'], ink: ['#46526E', '#2C344A', '#0F131D'],
 } satisfies Record<string, [front: string, back: string, edge: string]>;
-const isRibbon = (name: string): name is keyof typeof RIBBONS => Object.hasOwn(RIBBONS, name);
+export const isRibbon = (name: string): name is keyof typeof RIBBONS => Object.hasOwn(RIBBONS, name);
 export function paintRibbon(name: string | undefined) {
   const key = name !== undefined && isRibbon(name) ? name : 'cerulean', [front, back, edge] = RIBBONS[key], root = document.documentElement.style;
   root.setProperty('--ribbonFront', front); root.setProperty('--ribbonBack', back); root.setProperty('--ribbonEdge', edge);
-  for (const b of byId('ribbons', HTMLElement)?.children ?? []) if (b instanceof HTMLElement) b.setAttribute('aria-pressed', String(b.dataset['name'] === key));
 }
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
 export let style: Style = STYLES.barrel;
@@ -817,19 +816,7 @@ export function applyStyle(key: string) {
   $('lantern', SVGGElement).innerHTML = style.paper ? front : back + front;
   drawHang();
   bakeFarWall(); bakeCutouts();
-  // only a paper lantern has paper to print on and shows session text; elsewhere the toggle stays put but can't be used
-  const text = byId('textToggle', HTMLInputElement);
-  if (text) {
-    text.disabled = !style.surface;
-    text.parentElement?.classList.toggle('unavailable', !style.surface);
-  }
-  const ribbons = byId('ribbons', HTMLElement); // likewise the ribbon colours, on lanterns without one
-  if (ribbons) {
-    for (const b of ribbons.children) if (b instanceof HTMLButtonElement) b.disabled = !style.ribbon;
-    ribbons.parentElement?.classList.toggle('unavailable', !style.ribbon);
-  }
   for (const m of live.moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
-  $('style', HTMLSelectElement).value = key;
 }
 
 // Where a moth landed for the session whose home is at `home` (on the 600x600 square, as ringHome gives it) sits on the
