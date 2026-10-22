@@ -81,6 +81,10 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 
     // Save the real frame before full screen replaces it, so leaving full screen (or relaunching) lands back where the window was.
     func windowWillEnterFullScreen(_ note: Notification) { window.saveFrame(usingName: "Lantern") }
+    // Rectangle and other window managers move windows through Accessibility, which autosave can miss; record every move and resize.
+    func saveFrame() { if !window.styleMask.contains(.fullScreen) { window.saveFrame(usingName: "Lantern") } }
+    func windowDidMove(_ note: Notification) { saveFrame() }
+    func windowDidResize(_ note: Notification) { saveFrame() }
     func windowDidEnterFullScreen(_ note: Notification) { UserDefaults.standard.set(true, forKey: "fullScreen") }
     func windowDidExitFullScreen(_ note: Notification) { UserDefaults.standard.set(false, forKey: "fullScreen") }
 
