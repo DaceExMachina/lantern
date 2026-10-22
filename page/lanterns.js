@@ -38,6 +38,7 @@ let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], '
 // how far the wind leans it (in place of style.flameWind, frame.js stepFlame), the paper sheltering it from most of what leans the candle's (6)
 let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 9, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
 let paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { paperWind = v; });
+let paperBounce = devSlider('Flame', 'paperbounce', 'paper bounce (higher = bouncier)', 0, 1, 0.05, 0.6, 'How much a paper lantern\'s flame bobs in height and kicks when the lantern swings (the candle\'s and the Moroccan\'s are 1; the light follows it)', v => { paperBounce = v; });
 let flickerFollow = devSlider('Flame', 'flicker', 'flicker', 0, 1.5, 0.05, 0.8, 'How much the light brightens and dims as the flame stretches and shrinks (0: steady)', v => { flickerFollow = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the

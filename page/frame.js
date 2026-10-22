@@ -269,7 +269,8 @@ function stepFlame(dt, s, flame) {
   const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * flameWind; // the wind's lean, in the flame's units
   // an ember guttering: as it dims below 0.6 its height jumps about, by up to a quarter at its dimmest
   const gutter = Math.max(0, Math.min(1, (0.6 - flame.size) / 0.3));
-  const h = 96 * k * (1 + wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
+  const bounce = style.paper ? paperBounce : 1; // paper lanterns bob less (lanterns.js): scales the height swings and the throw from the lantern's swing
+  const h = 96 * k * (1 + bounce * wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * bounce * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
   const last = ch.pts[CHAIN - 1];
   if (ch.style !== style || !(last?.x === last?.x && last?.y === last?.y) || Math.hypot(bx - ch.bx, by - ch.by) > 20) // a new lantern, a NaN, or the window resized
     Object.assign(ch, { pts: Array.from({ length: CHAIN }, (_, j) => ({ x: 0, y: -h * (j + 1) / CHAIN, vx: 0, vy: 0 })), bx, by, bvx: 0, bvy: 0, style });
@@ -295,8 +296,8 @@ function stepFlame(dt, s, flame) {
     for (let step = 0; step < n; step++) pts.forEach((p, j) => {
       const below = j ? pts[j - 1] : { x: 0, y: 0, vx: 0, vy: 0 }, stiff = feel.stiffness / feel.falloff ** (j / (CHAIN - 1));
       const share = bent(j + 1) - bent(j), keep = Math.exp(-feel.damping * h1);
-      p.vx += (stiff * (below.x + lean * share - p.x) - feel.inertia * share * ax) * h1;
-      p.vy += (stiff * (below.y - h / CHAIN - p.y) - feel.inertia * share * ay) * h1;
+      p.vx += (stiff * (below.x + lean * share - p.x) - bounce * feel.inertia * share * ax) * h1;
+      p.vy += (stiff * (below.y - h / CHAIN - p.y) - bounce * feel.inertia * share * ay) * h1;
       p.vx = below.vx + (p.vx - below.vx) * keep; p.vy = below.vy + (p.vy - below.vy) * keep; // damped against the point below
       p.x += p.vx * h1; p.y += p.vy * h1;
     });
