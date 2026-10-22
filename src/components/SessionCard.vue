@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// The hover card, inside #card: a session's (SessionRows), a stale PR's or a ghost moth's. The scene says what it's for
-// (store.hovered, from src/scene/card.ts enterZone and hideCard), shows and hides #card, and places it every frame; this
+// The hover card, inside #card: a session's (SessionRows, compact until a click expands it), a stale PR's or a ghost
+// moth's. The scene says what it's for (store.hovered, from src/scene/card.ts enterZone and hideCard), shows and hides #card, and places it every frame; this
 // only fills it. Relative times count from store.now, which ticks every second. Once hidden, the card keeps showing what it
 // last showed while it fades out; each time it opens it starts afresh (its agents closed, scrolled to the top).
 import { computed, onBeforeUpdate, onUpdated, ref, shallowRef, watch } from 'vue';
@@ -11,9 +11,10 @@ import type { Hovered, Session } from '../types';
 import SessionRows from './SessionRows.vue';
 
 const store = useLanternStore();
-const shown = shallowRef<Hovered | null>(null), opened = ref(0);
-// sync, so a card hidden and opened again before Vue next patches still starts afresh
-watch(() => store.hovered, (h, was) => { if (h) shown.value = h; if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
+const shown = shallowRef<Hovered | null>(null), opened = ref(0), full = ref(false);
+// sync, so a card hidden and opened again before Vue next patches still starts afresh. A session's card is compact on hover
+// and full once a click expands it (store.expanded); fading out, it stays as it was.
+watch([() => store.hovered, () => store.expanded], ([h, x], [was]) => { if (h) { shown.value = h; full.value = x; } if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
 // a session's card finds its session in the store, or while its moth leaves, the one the moth last had
 const session = computed<Session | undefined>(() => { const h = shown.value; return h && 'key' in h ? store.sessions.find(o => o.id === h.key) ?? h.session : undefined; });
 const days = (ms: number) => Math.round(ms / 864e5);
@@ -42,6 +43,6 @@ onUpdated(() => {
       <div class="agents">{{ `PRs (${shown.ghost.prs.length})` }}</div>
       <div v-for="p in shown.ghost.prs" :key="p.url" class="pr"><i :style="{ background: flyColour(p.need) }"></i><a :href="p.url" target="_blank" rel="noopener">{{ p.label }}</a>{{ ` ${NEED[p.need] || p.need} · ` }}<span :title="p.title ?? ''">{{ p.title ?? '' }}</span></div>
     </template>
-    <SessionRows v-else-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" />
+    <SessionRows v-else-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" />
   </template>
 </template>

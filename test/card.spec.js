@@ -11,7 +11,7 @@ import SessionCard from '../src/components/SessionCard.vue';
 import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
-import { enterZone, hideCard, hoverZone } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 import { parseSettings } from '../src/types';
 
@@ -28,7 +28,7 @@ const mount = () => {
   app?.unmount();
   const pinia = createPinia();
   store = useLanternStore(pinia);
-  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.now = Date.now(); };
+  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.now = Date.now(); };
   app = createApp(SessionCard).use(pinia);
   app.mount($('card'));
 };
@@ -53,7 +53,7 @@ afterEach(() => { app?.unmount(); app = null; vi.useRealTimers(); vi.restoreAllM
 // the card for `s`, as the server sends it: its moth hovered, after Vue has patched
 const show = async s => {
   live.raw = [...live.raw.filter(o => o.id !== s.id), s]; sync();
-  enterZone(sessionMoth(s.id).zone);
+  if (!live.expanded || live.hovered !== sessionMoth(s.id)) expandCard(sessionMoth(s.id).zone);
   await nextTick();
   return $('card');
 };
@@ -311,4 +311,34 @@ test('a re-render between press and release keeps every control\'s element', asy
   assert.ok(controls().every((c, i) => c === before[i]) && controls().length === before.length, 'each control is the element it was');
   tog.click(); await nextTick();
   assert.strictEqual(find(card, 'pr2').length, 4, 'and the release toggles the list');
+});
+
+// hovered, not clicked: the compact card for `s`
+const hover = async s => { hideCard(); live.raw = [...live.raw.filter(o => o.id !== s.id), s]; sync(); enterZone(sessionMoth(s.id).zone); await nextTick(); return $('card'); };
+
+test('a hovered moth\'s card is compact: the header, one line of what it wants or is doing, and its work counted', async () => {
+  const agents = [{ id: 'a', description: 'One', started: now - 2e3, last: now }, { id: 'b', description: 'Two', started: now - 1e3, last: now }];
+  let card = await hover(session({ state: 'working', activity: 'Editing card.ts', subagents: agents, tasks: ['npm test'], github: [pr(1, 'ready'), pr(2, 'draft'), pr(3, 'waiting')] }));
+  assert.deepStrictEqual([find(card, 'name').map(text), find(card, 'chip').map(text)], [['proj'], ['working']], 'the same header');
+  assert.deepStrictEqual([find(card, 'gist').map(text), find(card, 'foot').map(text)], [['Editing card.ts'], ['2 agents · 1 shell · 3 PRs']]);
+  assert.deepStrictEqual([find(card, 'cardBody').length, find(card, 'agent').length, find(card, 'phead').length], [0, 0, 0], 'and nothing else');
+  card = await hover(session({ forYou: { questions: ['Merge it?'], you: ['Look at ', { label: '#1', url: pr(1).url }] }, github: [pr(1, 'ready')] }));
+  assert.deepStrictEqual([find(card, 'gist').map(text), find(card, 'foot').map(text)], [['Merge it?'], ['1 PR']], 'a waiting session\'s question');
+  card = await hover(session({ forYou: { you: ['Look at ', { label: '#1', url: pr(1).url }] } }));
+  assert.deepStrictEqual([find(card, 'gist').map(text), find(card, 'foot').map(text)], [['Look at #1'], []], 'or its "You:" message, and no count with no work');
+  expandCard(sessionMoth('s1').zone); await nextTick();
+  assert.deepStrictEqual([find(card, 'gist').length, find(card, 'cardBody').length], [0, 1], 'a click expands it in full');
+  hideCard(); await nextTick();
+  assert.deepStrictEqual([find(card, 'gist').length, find(card, 'cardBody').length], [0, 1], 'and fading out, it stays in full');
+});
+
+test('the expanded card lists five agents and "n more", which lists the rest', async () => {
+  const subagents = Array.from({ length: 7 }, (_, i) => ({ id: `a${i}`, description: `Agent ${i}`, started: now - (9 - i) * 1e3, last: now }));
+  const card = await show(session({ state: 'working', subagents }));
+  const more = find(card, 'more');
+  assert.deepStrictEqual([find(card, 'job').map(text), more.map(text), more[0]?.localName], [['Agent 0', 'Agent 1', 'Agent 2', 'Agent 3', 'Agent 4'], ['2 more'], 'button']);
+  more[0].click(); await nextTick();
+  assert.deepStrictEqual([find(card, 'job').length, find(card, 'more').length], [7, 0], 'all seven once it\'s clicked');
+  hideCard();
+  assert.strictEqual(find(await show(session({ state: 'working', subagents })), 'job').length, 5, 'and five again on a new card');
 });

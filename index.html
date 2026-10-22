@@ -278,11 +278,13 @@
     font-size: var(--text-sm); line-height: var(--leading); box-shadow: var(--shadow-lg); backdrop-filter: var(--blur-glass); }
   #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking a stale PR's or a ghost's card opens it, like clicking its moth */
   #card.show:has(h3 .open) { cursor: default; } /* a session's opens from its header */
+  #card.show.compact { pointer-events: none; } /* a session's hover card is a tooltip: the pointer passes through to the scene */
+  #card .gist { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: var(--ink-soft); }
   :is(#card, .starCard, #dock) h3 { margin: 0 0 var(--space-1); font-size: var(--text-md); color: var(--ink-strong); display: flex; gap: var(--space-2); align-items: flex-start; }
   /* Every control on the card is an outer button or link that fills its zone: the padding around it, out to the card's
      edges and up to its neighbours, so the hit areas touch with no dead space. Its .face inside is the visible part
      (the pill, the hover tint), the size it always was, lit while the pointer is anywhere in the zone. */
-  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .tog, .pr2, .ov, .pin), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
+  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .more, .tog, .pr2, .ov, .pin), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
   :is(#card, #dock) :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
   :is(#card, #dock) .face { display: block; border-radius: var(--radius-md); }
   /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill */
@@ -373,6 +375,9 @@
   :is(#card, #dock) .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; } /* like an agent's time */
   :is(#card, #dock) .pr2 .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
   :is(#card, #dock) .more { font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
+  #card button.more { display: block; width: 100%; } /* the agents' "n more": its zone is the band's width */
+  #card button.more .face { padding: var(--space-0-5) var(--space-1-5); }
+  #card button.more:hover .face { color: var(--ink-hover); background: color-mix(in srgb, var(--accent-violet) 8%, transparent); }
   /* an overflow link's zone takes the comma after it, so the links touch */
   :is(#card, #dock) a.ov { display: inline-block; color: var(--accent-violet); }
   :is(#card, #dock) a.ov:not(:last-of-type)::after { content: ', '; color: var(--ink-dim); }
