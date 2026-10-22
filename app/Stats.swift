@@ -9,7 +9,7 @@
 //          singed moth) or compact.
 //   gauges (time, alive, working, waiting, snoozed, fireflies, agents, strays, stale): counts every five minutes.
 //   achievements (id, day, time, data): badges, good and cheeky, at most one of each per day (day is yyyy-MM-dd).
-//          Their names and blurbs live in page/stats.js; this side only decides when one is earned.
+//          Their names and blurbs live in src/scene/stats.js; this side only decides when one is earned.
 // A day runs from one day rollover (settings.dayStart, midnight unless changed) to the next, and is named for the date it starts on,
 // so late-night work stays with the day it belongs to.
 // PRAGMA user_version is the schema version, for later migrations. Writes run on their own queue and give up quietly,

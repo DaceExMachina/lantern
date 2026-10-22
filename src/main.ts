@@ -1,3 +1,6 @@
+// The scene first: modules load in import order, and the dev panel lists its controls in the order they load.
+import './wiring.js';
+import './expose';
 import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import StatsPanel from './components/StatsPanel.vue';

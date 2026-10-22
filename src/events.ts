@@ -3,7 +3,7 @@ import { useLanternStore, type Stats } from './stores/lantern';
 const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 const isStats = (x: unknown): x is Stats => isRecord(x) && Array.isArray(x['days']) && Array.isArray(x['achievements']) && isRecord(x['tally']);
 
-// The chrome's line to the server. The scene's classic scripts still open their own EventSource (public/page/main.js),
+// The chrome's line to the server. The scene still opens its own EventSource (src/wiring.js),
 // so for now there are two connections.
 export function connect(store = useLanternStore()) {
   const es = new EventSource('/events');

@@ -1,23 +1,27 @@
 // The Vue stats panel (src/components/StatsPanel.vue): it loads /stats when its popover opens and draws the numbers,
-// the week and the badges. The scene's ribbons come through window.sceneBridge, stubbed here.
+// the week and the badges. The scene's ribbons, headline and badge tips (src/scene/stats.js) are stubbed here.
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import StatsPanel from '../src/components/StatsPanel.vue';
+import { live } from '../src/scene/live.js';
+import { openRecap } from '../src/scene/recap.js';
 
 const MIN = 60000, now = Date.now();
 const day = (i, o = {}) => ({ start: now - (7 - i) * 864e5, end: now, mothMs: i % 2, warmLantern: 80, warmMoths: 70, medianWait: 90 * 1000, slowWait: null, waits: 4, merged: 2, open: 5, stale: 12, staleChange: -1, ...o });
 const log = { days: [...Array(7).keys()].map(i => day(i)), spans: [], gauges: [], prs: [], tally: { revived: [2, '2026-10-17'] }, achievements: [['revived', '2026-10-17']], streak: 3, warmGoal: 70 };
-const bridge = {
+vi.mock('../src/scene/stats.js', async importOriginal => ({ ...await importOriginal(),
   slices: d => d.mothMs ? { from: d.start, to: d.end, slices: [], starts: [] } : null,
   ribbonBody: () => '<rect/>', headline: () => '<div class="headline"></div>', dayRibbon: () => '<div class="dayRibbon"><div class="ribbon"></div></div>',
-  followRibbon: vi.fn(), restoreBadge: vi.fn(), setTally: vi.fn(), clock: () => '9:00 AM', dayKey: () => 'today', pct: v => v == null ? '–' : `${v}%`,
-  ago: ms => `${Math.round(ms / MIN)} min`, ACHIEVEMENTS: { revived: ['Revived', 'Brought a stale PR back'], clear_night: ['Clear night', 'No stale PRs'] },
-};
+  followRibbon: vi.fn(), restoreBadge: vi.fn(), clock: () => '9:00 AM', dayKey: () => 'today', pct: v => v == null ? '–' : `${v}%`,
+  ACHIEVEMENTS: { revived: ['Revived', 'Brought a stale PR back'], clear_night: ['Clear night', 'No stale PRs'] },
+}));
+vi.mock('../src/scene/recap.js', async importOriginal => ({ ...await importOriginal(), openRecap: vi.fn() }));
+vi.mock('../src/scene/card.js', async importOriginal => ({ ...await importOriginal(), ago: ms => `${Math.round(ms / MIN)} min` }));
 let popover;
 beforeEach(() => {
   setActivePinia(createPinia());
-  window.sceneBridge = bridge;
+  live.tally = {};
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(log))));
   popover = document.body.appendChild(document.createElement('div'));
 });
@@ -54,7 +58,7 @@ test('badges: this week\'s with the day they came, and every badge on the shelf,
   const shelf = w.findAll('.shelf .badge');
   expect(shelf.map(b => [b.attributes('data-id'), b.classes('unearned')])).toEqual([['revived', false], ['clear_night', true]]);
   expect(shelf[0].text()).toBe('Revived ×2');
-  expect(bridge.setTally).toHaveBeenCalledWith(log.tally);
+  expect(live.tally).toEqual(log.tally); // handed to the scene for its badge tips
   w.unmount();
 });
 
@@ -74,4 +78,12 @@ test('a failed read says so, and closing the popover stops the refresh', async (
   expect(w.find('#statsBody').text()).toBe('Couldn’t read the stats. Is the Lantern app running?');
   w.unmount();
   vi.useRealTimers();
+});
+
+test('its recap button opens today\'s recap, and a day of the week opens that day\'s', async () => {
+  const w = await open();
+  await w.find('#todayRecap').trigger('click');
+  await w.findAll('.week button.day')[1].trigger('click');
+  expect(openRecap.mock.calls).toEqual([[7], [3]]); // the second day with a log is the fourth day back (index 3)
+  w.unmount();
 });

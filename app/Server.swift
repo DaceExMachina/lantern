@@ -31,7 +31,7 @@ let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 var CLAUDE_CONFIG_DIR = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
 var CLAUDE_DIR: String { CLAUDE_CONFIG_DIR ?? HOME + "/.claude" }
 var PROJECTS: String { CLAUDE_DIR + "/projects" }
-// The user's first name, for the candle's pencil (page/pencil.js): Claude Code's account name, else the Mac's. Claude
+// The user's first name, for the candle's pencil (src/scene/pencil.js): Claude Code's account name, else the Mac's. Claude
 // Code keeps its account in .claude.json, inside its config folder when that's set and in HOME when not. Only those two
 // fields are used, and the name goes nowhere but the page, once as each page connects. A global outside main.swift is
 // set on first use, which is a page connecting, so after the settings' claudeDir is in.

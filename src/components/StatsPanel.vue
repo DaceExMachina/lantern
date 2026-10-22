@@ -1,10 +1,13 @@
 <script setup lang="ts">
 // The stats panel, inside the native #stats popover: today's numbers from the event log, the day ribbon and the week
 // before. It reads the log when it opens and again every minute while it stays open. The ribbons, headline and badge tips
-// are the scene's, shared with the recap (scene-bridge.ts).
+// are the scene's, shared with the recap (src/scene/stats.js), and its recap buttons open the recap (src/scene/recap.js).
 import { computed, nextTick, onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { loadStats } from '../events';
-import { scene } from '../scene-bridge';
+import { ago } from '../scene/card.js';
+import { live } from '../scene/live.js';
+import { openRecap } from '../scene/recap.js';
+import { ACHIEVEMENTS, clock, dayKey, dayRibbon, followRibbon, headline, pct, restoreBadge, ribbonBody, slices } from '../scene/stats.js';
 import { useLanternStore } from '../stores/lantern';
 
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -15,7 +18,6 @@ const view = computed(() => {
   const j = store.stats;
   const today = j?.days.at(-1);
   if (!j || !today) return null;
-  const { slices, ribbonBody, headline, dayRibbon, clock, dayKey, pct, ago, ACHIEVEMENTS } = scene();
   const days = j.days, r = slices(today, j.spans, j.gauges, 160);
   const stale = today.stale == null ? '–' : today.stale + (today.staleChange ? ` (${today.staleChange > 0 ? '+' : ''}${today.staleChange})` : '');
   const badge = (id: string, extra = '', unearned = false) => {
@@ -47,14 +49,13 @@ const view = computed(() => {
   };
 });
 
-// After each draw: hand the scene the tally for its badge tips, bring back the pinned badge's tip, and wire a new ribbon
+// After each draw: hand the scene the tally for its badge tips (live.tally), bring back the pinned badge's tip, and wire a new ribbon
 // to the pointer (a redraw that left the ribbon's markup alone keeps its element, and its listeners).
 let wired: Element | null = null;
 watch(view, async v => {
   if (!v) return;
   await nextTick();
-  const { setTally, restoreBadge, followRibbon } = scene();
-  setTally(v.tally);
+  live.tally = v.tally;
   const box = ribbonBox.value?.firstElementChild ?? null;
   if (box && box !== wired && v.r) followRibbon(box, v.r, v.today);
   wired = box;
@@ -73,7 +74,7 @@ onBeforeUnmount(() => { clearInterval(timer); popover?.removeEventListener('togg
 </script>
 
 <template>
-  <h3 ref="anchor">Today <button id="todayRecap" class="link">recap</button></h3>
+  <h3 ref="anchor">Today <button id="todayRecap" class="link" @click="openRecap(7)">recap</button></h3>
   <div id="statsBody">
     <p v-if="store.statsFailed" class="dim">Couldn’t read the stats. Is the Lantern app running?</p>
     <p v-else-if="!view" class="dim">Reading the log…</p>
@@ -91,7 +92,7 @@ onBeforeUnmount(() => { clearInterval(timer); popover?.removeEventListener('togg
       <h4>The week before</h4>
       <div class="week">
         <template v-for="d in view.week" :key="d.i">
-          <button v-if="d.ribbon" class="day" :data-day="d.i" :title="d.title"><span>{{ d.name }}</span>
+          <button v-if="d.ribbon" class="day" :data-day="d.i" :title="d.title" @click="openRecap(d.i)"><span>{{ d.name }}</span>
             <svg viewBox="0 0 120 26" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true" v-html="d.ribbon"></svg><b>{{ d.pct }}</b></button>
           <div v-else class="day" title="nothing recorded"><span>{{ d.name }}</span><i class="none"></i><b>–</b></div>
         </template>

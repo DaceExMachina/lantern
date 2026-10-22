@@ -73,7 +73,7 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         failures = 0; retrying = false // a retry left waiting by stop() would block new ones
         load()
         // Every 10s, check the page is still drawing. This runs on its own timer, so it keeps going even if macOS stops
-        // calling animateOneFrame (the page then draws from its own timer, see page/main.js).
+        // calling animateOneFrame (the page then draws from its own timer, see src/wiring.js).
         let timer = Timer(timeInterval: 10, repeats: true) { [weak self] _ in self?.check() }
         RunLoop.main.add(timer, forMode: .common)
         health = timer
@@ -142,7 +142,7 @@ final class LanternView: ScreenSaverView, WKNavigationDelegate {
         }
     }
 
-    // The page counts the frames it really drew (page/background.js). If that count hasn't moved since the last check, or the
+    // The page counts the frames it really drew (src/scene/background.js). If that count hasn't moved since the last check, or the
     // page never answered (its web process is gone), the page is blank, an error page, hung, or lost its GPU for good: load it
     // again. Once a minute, log how it's doing.
     private func check() {
