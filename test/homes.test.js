@@ -164,6 +164,40 @@ test('no thread or dotted line crosses another at rest, flying or landed, as ses
   assert.ok(landed > 5000 && flying > 5000, `checked ${landed} dotted lines and ${flying} flying moths' threads; ${swayed} crossed while swaying`);
 });
 
+// The threads bow (frame.js bowed), slowly and on their own phases, less as moths multiply (crowd). A brief crossing is
+// fine; what mustn't happen is a pair staying crossed. At the default bow with 4, 8 and 12 flying moths, no pair stays
+// crossed longer than 2 seconds. A bow of 2 does, so the check is live.
+test('bowed threads never stay crossed for long at rest', () => {
+  const longest = bow => {
+    let max = 0;
+    for (const key of ['chochin', 'moroccan']) for (const count of [4, 8, 12]) {
+      const w = open(1);
+      w.run(`style = STYLES.${key}; threadBow = ${bow}`);
+      w.show(KEYS.slice(0, count));
+      for (let f = 0; f < 400; f++) w.run(`for (const m of moths.values()) if (m.spot) glideHome(m, 1 / 60);
+        for (const [k, m] of moths) { const aim = mothTarget(k, m, 1 / 60, ${f / 60}); if (aim) mothMove(m, aim, 1 / 60, ${f / 60}); }`);
+      const since = {};
+      for (let s = 7; s < 67; s += 0.25) {
+        const curves = w.run(`for (const [k, m] of moths) { const aim = mothTarget(k, m, 1 / 60, ${s}); if (aim) mothMove(m, aim, 1 / 60, ${s}); }
+          return [...moths].filter(([, m]) => m.perch).map(([k, m]) => { const [[ax, ay], [bx, by]] = threadEnds(m);
+          const [p, q] = bowed(ax, ay, bx, by, m, ${s}, threadBow).match(/Q(\\S+) (\\S+)/).slice(1).map(Number);
+          return [k, Array.from({ length: 21 }, (_, i) => { const t = i / 20; return [(1 - t) ** 2 * ax + 2 * t * (1 - t) * p + t * t * bx, (1 - t) ** 2 * ay + 2 * t * (1 - t) * q + t * t * by]; })]; })`);
+        const now = new Set();
+        for (let i = 0; i < curves.length; i++) for (let j = i + 1; j < curves.length; j++) {
+          const [, A] = curves[i], [, B] = curves[j];
+          if (!A.slice(1).some((p, a) => B.slice(1).some((q, b) => cross([A[a], p], [B[b], q])))) continue;
+          const id = curves[i][0] + curves[j][0];
+          now.add(id); since[id] = (since[id] ?? 0) + 0.25; max = Math.max(max, since[id]);
+        }
+        for (const id of Object.keys(since)) if (!now.has(id)) delete since[id];
+      }
+    }
+    return max;
+  };
+  assert.ok(longest(0.12) <= 2, 'a pair stayed crossed at the default bow');
+  assert.ok(longest(2) > 2, 'a bow of 2 should leave a pair crossed');
+});
+
 // a frame of every session moth's aim at wall-clock `t` (ms) and frame clock `s`: what each is doing, and where along its line it sits
 const fidgets = (w, t, s) => w.run(`Date.now = () => ${t}; for (const [k, m] of moths) if (!m.parentId && !m.satellite) m.wasLanded = mothTarget(k, m, 1 / 30, ${s})?.needsMe;
   return Object.fromEntries([...moths].map(([k, m]) => [k, [m.fidget, m.along]]))`);

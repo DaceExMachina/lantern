@@ -173,7 +173,7 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
 test('the Moroccan\'s flame, burner cup and light sit between its front and far wall as it twists', () => {
   run(`applyStyle('moroccan')`);
   assert.match(els.lantern.innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
-  run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, flick: 1, pulse: 1 }))`);
+  run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }))`);
   const twist = run('twist'), wall = page.background.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide
   assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
   assert.ok(Math.abs(twist) > 5 && Math.abs(wall) > 1, `a big twist: ${twist}, sliding the far wall ${wall}`);
@@ -199,7 +199,7 @@ const rimShadeFrom = ({ flame: [fx, fy, tx, ty], rim: [x, y, z] }) => {
 test('the candle\'s rim shades the room below from its corners: lit outside the flame\'s base line, dark inside its tip line', () => {
   for (const key of styles) {
     run(`applyStyle('${key}'); swingLantern(1 / 60, 0.5)`);
-    run(`drawLight(1 / 60, 0.5, stepFlame(1 / 60, 0.5, { size: 0.8, flick: 1, pulse: 1 }))`);
+    run(`drawLight(1 / 60, 0.5, stepFlame(1 / 60, 0.5, { size: 0.8, pulse: 1 }))`);
     if (key !== 'candle') { assert.deepStrictEqual([...page.background.rim], [0, 0, 0], `${key}: no rim shadow`); continue; }
     const v = page.background, [bx, by, tx, ty] = v.flame, [cx, half, rimY] = v.rim, shade = rimShadeFrom(v);
     assert.deepStrictEqual([cx, half, rimY], [...run('[STYLES.candle.pillar.cx, STYLES.candle.pillar.r, STYLES.candle.pillar.rim]')], 'the pillar\'s rim');
