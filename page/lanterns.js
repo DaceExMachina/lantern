@@ -35,9 +35,9 @@ const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // 
 let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
 let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
 // a paper lantern's flame, seen through its paper: how soft its tongues' edges are, in scene units (background.js FLAME), and
-// how far the wind leans it (style.flameWind), the paper sheltering it from most of what leans the candle's (6)
-let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 5, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
-const paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { STYLES.barrel.flameWind = STYLES.chochin.flameWind = v; });
+// how far the wind leans it (in place of style.flameWind, frame.js stepFlame), the paper sheltering it from most of what leans the candle's (6)
+let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 9, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
+let paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { paperWind = v; });
 let flickerFollow = devSlider('Flame', 'flicker', 'flicker', 0, 1.5, 0.05, 0.8, 'How much the light brightens and dims as the flame stretches and shrinks (0: steady)', v => { flickerFollow = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
@@ -801,29 +801,44 @@ function applyStyle(key) {
   $('style').value = key;
 }
 
-// Where a moth landed for the session whose home is at `home` (on screen) sits on the lantern: `along` (0 to 1) of the
-// way out the part of its line that's on the paper, from a quarter of the way to the end. Each side of the lantern has a
-// point a third of the way out from the middle, and every moth whose home is on that side lands on the line from that
-// point toward its home. So the dotted lines from homes to moths on one side all fan out from one point and never cross,
-// and the two sides never meet (no home sits above or below the middle third, ringHome). Spots stay within PERCH_SPREAD
-// of the middle height, and out of the middle third of the lantern, where closed wings would point nearly straight at
-// you and thin to a sliver. Returns [x, y, normal, dir]: where it sits, the surface's outward direction there, and the
-// direction its line runs out toward home.
-/** @returns {[number, number, number[], number[]]} */
+// Where a moth landed for the session whose home is at `home` (on the 600x600 square, as ringHome gives it) sits on the
+// lantern, hanging at rest: `along` (0 to 1) of the way out the part of its line that's on the paper, from a quarter of
+// the way to the end. Each side has a family of lines, one for each point u of the way round the ring (ringAt), from
+// the paper's inner edge (a third of the way out from the middle) to that point on the ring, starting that far up the
+// paper: the one to the bottom of the ring from near the bottom of the paper, the one to the top from near the top.
+// They never cross each other, and a home's line is the one it lies on, so the moths spread up and down the paper in
+// the order their homes go round, and with the lantern at rest no two dotted lines cross: not even a home on a ring
+// further in (past 16 sessions), whose line is part of the one through it. (Swaying, see threadEnds.) ponytail: an
+// inner-ring home's line can run within a unit of an outer neighbour's, so past 16 sessions two lines can overlap and
+// cross as the lantern sways; space the inner ring's homes if that starts to matter. Starts keep an eighth of the
+// paper's height in from its top and bottom (STARTS), so every line has room on the paper. The two sides never meet (no home sits above or below the
+// middle third, ringHome). Spots stay within PERCH_SPREAD of the middle height, and out of the middle third of the
+// lantern, where closed wings would point nearly straight at you and thin to a sliver. Returns [x, y, normal]: where
+// it sits in the lantern's own frame, and the surface's outward direction there. Worked out at rest, a spot stays put
+// on the paper as the lantern sways, and its moth rides it.
+const STARTS = 0.75;
+/** @returns {[number, number, number[]]} */
 function perchAt(home, along) {
-  const { top, bottom, half } = style.body, mid = (top + bottom) / 2, side = home[0] < 340 ? -1 : 1, spread = (bottom - top) * PERCH_SPREAD;
-  const ox = 340 + side * half(mid) / 3, len = Math.hypot(home[0] - ox, home[1] - mid), ux = (home[0] - ox) / len, uy = (home[1] - mid) / len;
-  const on = t => { const y = mid + uy * t, out = Math.abs(ox + ux * t - 340); return Math.abs(y - mid) <= spread && out >= half(y) / 3 && out <= half(y); };
+  const { top, bottom, half } = style.body, mid = (top + bottom) / 2, spread = (bottom - top) * PERCH_SPREAD, [hx, hy] = stretch(home);
+  const side = hx < 340 ? -1 : 1, start = u => { const y = mid + STARTS * spread * (1 - 2 * u); return [340 + side * half(y) / 3, y]; };
+  // which side of the family's line u the home is on (+ or -), and so which one it's on: halve in on where that flips
+  const across = u => { const [ax, ay] = start(u), [rx, ry] = stretch(ringAt(u, side)); return Math.sign((rx - ax) * (hy - ay) - (ry - ay) * (hx - ax)); };
+  let lo = 0, hi = 1;
+  const below = across(0);
+  if (across(1) === below) lo = hi = home[1] < RING.y ? 1 : 0; // past either end (gliding through a gap): that end's line
+  for (let i = 0; i < 20 && hi > lo; i++) { const u = (lo + hi) / 2; if (across(u) === below) lo = u; else hi = u; }
+  const [ox, oy] = start((lo + hi) / 2), len = Math.hypot(hx - ox, hy - oy), ux = (hx - ox) / len, uy = (hy - oy) / len;
+  const on = t => { const y = oy + uy * t, out = Math.abs(ox + ux * t - 340); return Math.abs(y - mid) <= spread && out >= half(y) / 3 && out <= half(y); };
   let end = 0;
   // Walk the line a unit at a time (a few hundred steps at most), then halve in on its exact end. The spot is redone every
-  // frame as the lantern sways, so an end rounded to a whole unit would make a landed moth jump as the swing tips it over.
+  // frame as its home glides, so an end rounded to a whole unit would make a landed moth jump as the line tips over it.
   while (on(end + 1)) end++;
   for (let step = 0.5; step > 1e-3; step /= 2) if (on(end + step)) end += step;
-  const t = end * (0.25 + 0.75 * along), x = ox + ux * t, y = mid + uy * t;
+  const t = end * (0.25 + 0.75 * along), x = ox + ux * t, y = oy + uy * t;
   // the surface's true outward normal in 3D (x right, y down, z toward the viewer): round the side by `sin`, tipped
   // up or down by how the lantern bulges at this height
   const sin = Math.min(1, Math.abs(x - 340) / half(y)), slope = (half(y + 1) - half(y - 1)) / 2;
-  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)]), [ux, uy]];
+  return [x, y, unit([side * sin, -slope, Math.sqrt(1 - sin * sin)])];
 }
 
 // warm = everyone busy, cool = someone needs me; everything crossfades between the two

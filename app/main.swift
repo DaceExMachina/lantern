@@ -20,6 +20,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     var window: NSWindow!
     var web: WKWebView!
     var server: LanternServer!
+    var term: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         // Settings live in Application Support, since an app can't write inside itself. The page comes from the app,
@@ -27,6 +28,13 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
         server = LanternServer(port: UInt16(port) ?? 7717, data: data, web: checkout ?? Bundle.main.resourcePath!)
         server.start()
+        server.buildChrome()
+        // SIGTERM (a relaunch, install.js) quits properly, which stops the vite watcher and closes the event log. If the main
+        // thread is wedged, it leaves anyway after 3 s.
+        signal(SIGTERM, SIG_IGN)
+        term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
+        term?.setEventHandler { DispatchQueue.main.async { NSApp.terminate(nil) }; DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) } }
+        term?.resume()
         // Hooks need the server even with no window open, so an installed copy opens at login. That's offered once;
         // turning it off in System Settings > General > Login Items sticks.
         if !UserDefaults.standard.bool(forKey: "loginItemOffered"), Bundle.main.bundlePath.contains("/Applications/") {
@@ -67,7 +75,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         web.load(URLRequest(url: home))
     }
 
-    func applicationWillTerminate(_ note: Notification) { server.stats.shutdown() } // close the event log's open spans
+    func applicationWillTerminate(_ note: Notification) { server.stopBuilding(); server.stats.shutdown() } // close the event log's open spans
 
     // The server lives as long as the app, so closing the window keeps both running. Clicking the Dock icon brings it back.
     func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows: Bool) -> Bool {

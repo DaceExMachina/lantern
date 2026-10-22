@@ -235,12 +235,12 @@
      them. Only as wide as the lanterns (scene.js fitView). It's two layers, turned together: a paper lantern's back paper
      (#lanternBack) and the rest (#lanternLayer), with the flame's canvas between them (background.js drawFlame), so the
      flame burns behind the front paper and over the back. The flame's canvas is as wide but never turned: its shader
-     turns the flame itself. */
+     draws the flame upright at its swung base. */
   .lanternLayer { right: auto; will-change: transform; }
   #flame { right: auto; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
   #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
-  .ambient #lantern, .ambient #lanternPaper { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
+  .ambient #lantern, .ambient #lanternPaper, .ambient #flame { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
   /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: var(--z-flash); }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }

@@ -462,11 +462,10 @@ void main() {
   gl_FragColor = c * uAlpha;
 }`, fgl);
 const flameQuad = fgl.createBuffer();
-// Clears the flame's canvas and draws `fire` (none: just clears it), the flame's base and tip in `flame`.
+// Clears the flame's canvas and draws `fire`, the flame's base and tip in `flame`.
 function drawFlame({ flame: [bx, by, tx, ty], fire: f }) {
   const c = $('flame'), box = VIEW.layer, gl = fgl;
   gl.viewport(0, 0, c.width, c.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-  if (!f) return;
   const k = f.scale, h = (by - ty) / k, u = FLAME.u;
   const x0 = bx + (Math.min(...f.spine) - 60) * k, x1 = bx + (Math.max(...f.spine) + 60) * k, y0 = by - h * 1.45 * k, y1 = by + 30 * k;
   gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // its colours come premultiplied
@@ -518,7 +517,7 @@ function drawBackground(v) {
   if (ghostWingN) drawGhosts([x, y, w, h]);
   ghostWingN = 0;
   if (v.farWall) drawFarWall(v.farWall, c.width, c.height, [x, y, w, h]);
-  drawFlame(v);
+  if (v.fire) drawFlame(v); // none on a second display, which hides its canvas (index.html)
   // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up
   if (!gl.isContextLost()) window.lanternFrames = (window.lanternFrames || 0) + 1;
 }

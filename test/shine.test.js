@@ -38,7 +38,7 @@ function context() {
   els.cdBronze.children = [...back.match(/id="cdBronze">(.*?)<\/linearGradient>/)[1].matchAll(/<stop\b/g)].map(() => node());
   // the flame as frame.js stepFlame gives it: its tip leaning `lean(s)` at its middle tongue (70 of the outer's 96 up)
   const [fx, fy] = run('STYLES.candle.flame'), lean = s => 8 * Math.sin(s);
-  const flame = { size: 1, flick: 1, pulse: 1, base: [fx, fy], tip: [fx, fy - 77], turb: 1, tear: 0, blue: [0, 4, 10, 5, 0.5] };
+  const flame = { size: 1, pulse: 1, base: [fx, fy], tip: [fx, fy - 77], turb: 1, tear: 0, blue: [0, 4, 10, 5, 0.5] };
   const shine = s => { flame.tip = [fx + lean(s) * 96 / 70, fy - 77]; run('drawShine')(s, flame); run('drawHeat')(s, flame); };
   return { els, run, flame, shine, lean };
 }
