@@ -763,8 +763,7 @@ function mothFireflies(m, dt, s) {
     const t = Math.max(0, Math.min(1, ((m.x - 2 * m.size - hx) * ax + (m.y - 6 * m.size - hy) * ay) / (ax * ax + ay * ay || 1)));
     const jx = hx + ax * t, jy = hy + ay * t;
     if (m.flyGrad) { put(m.flyGrad, 'x1', hx.toFixed(1)); put(m.flyGrad, 'y1', hy.toFixed(1)); put(m.flyGrad, 'x2', jx.toFixed(1)); put(m.flyGrad, 'y2', jy.toFixed(1)); }
-    // straight: a bow would carry a long line over a shorter neighbour's
-    put(m.flyLine, 'd', `M${hx.toFixed(1)} ${hy.toFixed(1)} L${jx.toFixed(1)} ${jy.toFixed(1)}`);
+    put(m.flyLine, 'd', bowed(hx, hy, jx, jy, m, s, threadBow));
   }
   put(m.flyLine, 'opacity', tied ? 0.2 : 0);
 }
@@ -929,13 +928,24 @@ function threadEnds(m) {
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }
+// The slow sway of a line's bow: it always bows to the same side (so neighbours lean together), from none to the full
+// `bow` share of its length, each moth on its own phase. Lines are a non-crossing fan, so only the share is dialed.
+let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.12, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
+// A busy lantern bows gentler: full up to 4 moths, easing down to half by 12 (m.bowK follows it, so a session joining doesn't jump)
+const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...moths.values()].filter(o => !o.satellite && !o.leaving).length - 4) / 8));
+const bowed = (ax, ay, bx, by, m, s, k) => {
+  k *= m.bowK ?? crowd();
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * (1 + Math.sin(s * 0.8 + m.phase)) / 2;
+  return `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${(ax + dx / 2 - dy / len * bow).toFixed(1)} ${(ay + dy / 2 + dx / len * bow).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;
+};
 // Each session moth's thread (threadEnds). Satellites fly untethered.
 function mothThread(m, dt, s) {
   const orbit = m.satellite && moths.get(m.satellite);
   if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : '';
   if (!m.thread || orbit && !orbit.leaving || !m.perch) return;
   const [[ax, ay], [bx, by]] = threadEnds(m);
-  put(m.thread, 'd', `M${ax.toFixed(1)} ${ay.toFixed(1)} L${bx.toFixed(1)} ${by.toFixed(1)}`);
+  m.bowK = (m.bowK ?? crowd()) + (crowd() - (m.bowK ?? crowd())) * Math.min(1, dt * 2);
+  put(m.thread, 'd', bowed(ax, ay, bx, by, m, s, threadBow));
   // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from
   // nowhere. A tool call sends light down it from the moth to the lantern: a bright band in the same gradient
   // travels along, lighting up the dashes as it passes. One pulse at a time, 2.2s each, with at most two waiting.
