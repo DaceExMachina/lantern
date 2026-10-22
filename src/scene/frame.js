@@ -12,7 +12,7 @@ import { hideCard, placeCard, zones } from './card.js';
 
 // ---- animation ---------------------------------------------------------------
 export let level = 0, cool = 0, sparkClock = 0, last = performance.now();
-const sparks = [];
+export const sparks = [];
 let pulseIds = 0; // numbers the threads' gradients
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
 export const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
@@ -341,7 +341,7 @@ function stepFlame(dt, s, flame) {
 }
 // sparks float off the tip, more of them the busier things get; not from a paper lantern, whose flame is hidden behind paper.
 // They're drawn in the flame's own units (#sparks), turned with the lantern and slid with #inside.
-function drawSparks(dt, s, { size, tip }) {
+export function drawSparks(dt, s, { size, tip }) {
   sparkClock += style.paper ? 0 : dt * (0.4 + 5 * level);
   const [fx, fy, fk] = style.flame, [tx, ty] = rot(...tip, -swayAngle);
   while (sparkClock > 1) {
@@ -398,7 +398,7 @@ function liftDust(p, x, y, dt) {
 const gustAside = (s, r, k) => GUST(s - 0.12 * r) * k / r;
 // How far the wind has carried smoke `age` seconds old aside since it was let go at s - age: as far as it's carried a
 // middling near speck of dust (radius 1.3, the near dust's 0.7 to 1.9) over that time, so the two drift together.
-const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 14);
+export const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 14);
 // Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and drift with the wind,
 // each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (scene.js,
 // with its size and opacity, the flame's lanes SMOKE and the let-go times). The flame lets one go from its tip now and
@@ -427,7 +427,7 @@ let flamePlume = null; // the flame's plume going: its key, when it was let go (
 // the flame's has its own shape, seeded from its lane and slot so every window draws the same one. trail: each point where
 // it was left, carried aside by the wind since (smokeDrift) and curled across its path, and its age in seconds, each trail's head
 // first, with an age of -1 parting one moth's trail from the next.
-function smoke(now, s, strength, tip) {
+export function smoke(now, s, strength, tip) {
   const plumes = [], trail = [];
   if (!tip) flamePlume = null;
   else {
@@ -602,7 +602,7 @@ export function scorchClock(key, now, plan = SCORCH) {
 }
 // Where an episode is at `t`: approach, recoil (a second after the hit), agitated, then settling over its last 6 seconds;
 // `a` the agitation and `char` the wings' tint toward SCORCH_CHAR.
-function scorchFlight(t, { hit, length } = SCORCH) {
+export function scorchFlight(t, { hit, length } = SCORCH) {
   const calm = length - 6, fade = t >= length ? 0 : t < calm ? 1 : (u => u * u * (3 - 2 * u))((length - t) / (length - calm));
   return { phase: t < hit ? 'approach' : t < hit + 1 ? 'recoil' : t < calm ? 'agitated' : 'settling',
     a: t < hit + 1 ? 0 : fade, char: t < hit || t >= length ? 0 : 0.2 * (length - t) / (length - hit) };
@@ -612,7 +612,7 @@ function scorchFlight(t, { hit, length } = SCORCH) {
 // off, another lantern) ends it with nothing to show; after the hit it runs out its length, steered and smoking only
 // while flying, unless the lantern changes. At the hit it throws 5 sparks into the flame's pool, less the scorch
 // sparks still alive, so scorches never hold more than 5 of its 12. Touches no DOM; m.scorch exists only during one.
-function scorchStep(m, flying, now = Date.now()) {
+export function scorchStep(m, flying, now = Date.now()) {
   const red = () => flying && tongue && style.scorches && (SCORCH_DEMO || m.session?.github?.some(p => p.need === 'failing'));
   if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
   const at = scorchClock(m.key, now), sc = m.scorch;
@@ -666,7 +666,7 @@ function lastHop(key, ws, now) {
 // Where a moth heads this frame, how briskly it eases there (settle's stiffness, see mothMove) and how fast it beats its
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
-function mothTarget(k, m, dt, s) {
+export function mothTarget(k, m, dt, s) {
   let tx, ty, ease = 2.4, flap = 22.4, flying = false; // flap in radians per second, about 3.6 wingbeats a second
   const orbit = m.satellite && live.moths.get(m.satellite);
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
@@ -751,7 +751,7 @@ function mothTarget(k, m, dt, s) {
   return { tx, ty, ease, flap, needsMe };
 }
 
-function dropMoth(k, m) {
+export function dropMoth(k, m) {
   m.g.remove(); m.thread?.remove(); zones.delete(m.zone); zones.delete(m.flyZone); m.grad?.remove(); m.flyGrad?.remove();
   m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
   live.moths.delete(k);
@@ -809,7 +809,7 @@ function mothZones(m, needsMe) {
 
 // Glide toward the target on the ghosts' spring (stale.js's settle), so a new target (taking off, landing, a hop,
 // leaving) means speeding up and slowing down smoothly, never a snap onto a new heading. Lean into the turn.
-function mothMove(m, { tx, ty, ease, needsMe }, dt, s) {
+export function mothMove(m, { tx, ty, ease, needsMe }, dt, s) {
   // a landed moth is carried with its spot as the lantern sways (easing alone would always trail it, so it'd seem to float);
   // the easing is only for getting there: landing, and the jump to a new spot after a hop
   if (needsMe && m.wasLanded && m.perchAim === m.lastAim) { m.x += tx - m.lastT[0]; m.y += ty - m.lastT[1]; }
