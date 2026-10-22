@@ -809,8 +809,10 @@ function applyStyle(key) {
 // paper: the one to the bottom of the ring from near the bottom of the paper, the one to the top from near the top.
 // They never cross each other, and a home's line is the one it lies on, so the moths spread up and down the paper in
 // the order their homes go round, and with the lantern at rest no two dotted lines cross: not even a home on a ring
-// further in (past 16 sessions), whose line is part of the one through it. (Swaying, see threadEnds.) Starts keep an eighth of the paper's height in from its top and
-// bottom (STARTS), so every line has room on the paper. The two sides never meet (no home sits above or below the
+// further in (past 16 sessions), whose line is part of the one through it. (Swaying, see threadEnds.) ponytail: an
+// inner-ring home's line can run within a unit of an outer neighbour's, so past 16 sessions two lines can overlap and
+// cross as the lantern sways; space the inner ring's homes if that starts to matter. Starts keep an eighth of the
+// paper's height in from its top and bottom (STARTS), so every line has room on the paper. The two sides never meet (no home sits above or below the
 // middle third, ringHome). Spots stay within PERCH_SPREAD of the middle height, and out of the middle third of the
 // lantern, where closed wings would point nearly straight at you and thin to a sliver. Returns [x, y, normal]: where
 // it sits in the lantern's own frame, and the surface's outward direction there. Worked out at rest, a spot stays put
@@ -825,7 +827,7 @@ function perchAt(home, along) {
   let lo = 0, hi = 1;
   const below = across(0);
   if (across(1) === below) lo = hi = home[1] < RING.y ? 1 : 0; // past either end (gliding through a gap): that end's line
-  for (let i = 0; i < 30 && hi > lo; i++) { const u = (lo + hi) / 2; if (across(u) === below) lo = u; else hi = u; }
+  for (let i = 0; i < 20 && hi > lo; i++) { const u = (lo + hi) / 2; if (across(u) === below) lo = u; else hi = u; }
   const [ox, oy] = start((lo + hi) / 2), len = Math.hypot(hx - ox, hy - oy), ux = (hx - ox) / len, uy = (hy - oy) / len;
   const on = t => { const y = oy + uy * t, out = Math.abs(ox + ux * t - 340); return Math.abs(y - mid) <= spread && out >= half(y) / 3 && out <= half(y); };
   let end = 0;

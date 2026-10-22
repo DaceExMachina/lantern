@@ -691,7 +691,9 @@ function mothTarget(k, m, dt, s) {
       m.hopSlot = lastHop(m.key, m.session.waitingSince || 0, Date.now() / 1000);
       m.along = alongFor(m.key, m.hopSlot);
     }
-    m.perch = perchAt(m.home, m.along);
+    // worked out afresh only when something it depends on changes, so a settled lantern pays nothing for it
+    const key = `${m.home}|${m.along}|${style.name}|${VIEW.kx}|${VIEW.ky}`;
+    if (m.perchKey !== key) { m.perch = perchAt(m.home, m.along); m.perchKey = key; }
   }
   if (m.leaving) {
     // it flies straight out from the lantern to past the window's far corner, and goes only once its wings are clear of every edge
@@ -941,7 +943,7 @@ function mothZs(m, s) {
 // for a moment. A landed moth's thread has no length; a moth behind its spot (flying in from the far side) has none
 // until it comes round.
 function threadEnds(m) {
-  const [px, py] = rot(m.perch[0], m.perch[1]), [hx, hy] = stretch(m.home), len = Math.hypot(hx - px, hy - py) || 1, ux = (hx - px) / len, uy = (hy - py) / len;
+  const [px, py] = rot(m.perch[0], m.perch[1]), [hx, hy] = stretch(m.home), len = Math.hypot(hx - px, hy - py), ux = (hx - px) / len, uy = (hy - py) / len;
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }

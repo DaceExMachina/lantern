@@ -88,8 +88,8 @@ const ringGaps = k => [Math.asin(Math.min(1, 150 / RING.rx / k)), Math.asin(60 /
 // The point on the ring `u` of the way round its side (`side` -1 the left, 1 the right), from the bottom gap (0) to the
 // top one (1).
 function ringAt(u, side) {
-  const [low, high] = ringGaps(1), down = low + u * (Math.PI - low - high); // from straight down
-  return [RING.x + side * RING.rx * Math.sin(down), RING.y + RING.ry * Math.cos(down)];
+  const [low, high] = ringGaps(1);
+  return ringPoint(Math.PI / 2 - side * (low + u * (Math.PI - low - high))); // from straight down, round toward `side`
 }
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
 
