@@ -8,7 +8,8 @@ State is decided in one place. Handlers and seeding record facts, `derive()` in 
 
 ## Setup
 
-- Vite builds the page into `dist/` (not committed), and Lantern.app serves `dist/` and keeps it built with `vite build --watch`. Node 20.19 or 22.12 and up. The page is ES modules: `src/main.ts` loads `src/wiring.ts`, which loads the scene in `src/scene/`. State more than one module writes lives in `src/scene/live.ts`.
+- The page is a Vite app in TypeScript. The scene (SVG, WebGL, `frame()`) is plain ES modules in `src/scene/`: `src/main.ts` loads `src/wiring.ts`, which loads them, and state more than one module writes lives in `src/scene/live.ts`. The chrome around it is Vue 3 single-file components in `src/components/` (`<script setup lang="ts">`), reading one Pinia store (`src/stores/lantern.ts`) that `src/events.ts` and the scene's `chrome.update` feed. The scene never imports Vue or Pinia.
+- Vite builds the page into `dist/` (not committed), and Lantern.app serves `dist/` and keeps it built with `vite build --watch`. Node 20.19 or 22.12 and up. Vitest runs the page's tests and `vue-tsc` checks the types.
 - Run `install` (Dace's wrapper around `npm ci`, or `npm i` when you changed dependencies) in a fresh worktree, and in the main checkout after pulling a change to `package-lock.json`. The app doesn't install dependencies itself, and a failed build keeps serving the last good `dist/`.
 - Before a PR, run `npm test`, `npm run check`, `npm run build`, `npm run snapshots` and `swiftc -typecheck app/*.swift`. A PR that changes the look refreshes the pictures with `npm run snapshots -- --update`.
 - `npm run preview` serves the branch through a Vite dev server (hot reload), in front of the preview's Swift server.

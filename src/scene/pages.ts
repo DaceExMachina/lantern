@@ -22,7 +22,7 @@ import type { Point, Surface } from '../types';
 /** A block of session text on the paper: when it came and how long it holds, how dark at its peak, whether it's printed
  * mirrored, its type size, width, where it sits (`from` round the paper, `row` down it), its lines, its slant, and when
  * it began leaving. */
-export interface Block {
+interface Block {
   born: number; hold: number; peak: number; mirror: boolean; size: number; width: number; from: number; row: number; lines: string[];
   alpha: number; drawnAlpha: number; slope: number; leaving?: number;
 }

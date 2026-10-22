@@ -13,7 +13,7 @@ import type { Box } from './scene';
 
 /** The flame for its shader (frame.ts drawLight from stepFlame): its scale, the time, spine, turbulence, tearing, blue root,
  * opacity, softness and colours. */
-export interface Fire {
+interface Fire {
   scale: number; t: number; spine: number[]; turb: number; tear: number; blue: [x: number, y: number, rx: number, ry: number, alpha: number];
   alpha: number; soft: number; cols: string[];
 }

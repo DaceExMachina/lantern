@@ -1284,7 +1284,7 @@ test('stats: Séance and Ghostbuster count each PR once', async t => {
   assert.deepStrictEqual(ghost, [{ id: 'ghostbuster', day: key }]);
 });
 
-// The page gets the first word of the name on the Claude Code account (for the candle's pencil, page/pencil.ts), the
+// The page gets the first word of the name on the Claude Code account (for the candle's pencil, src/scene/pencil.ts), the
 // display name if it has one, else the full name. With no CLAUDE_CONFIG_DIR, Claude Code keeps the account in ~/.claude.json.
 const account = oauthAccount => JSON.stringify({ oauthAccount });
 test('the page gets the first name off the Claude Code account', async t => {
@@ -1574,7 +1574,7 @@ test('page files always revalidate: Cache-Control no-cache, and a 304 when the E
 });
 
 // A Vite build in dist/ (dist/index.html and hashed files under dist/assets/) becomes the web root, and a change to anything
-// in it reloads open windows like a change to page/ does. Without dist/index.html the checkout serves itself, as before.
+// in it reloads open windows. Without dist/index.html the page is a 503 that retries.
 const webRoot = files => {
   const dir = fs.mkdtempSync(path.join(tmp, 'web-'));
   for (const [file, text] of Object.entries(files)) { fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); fs.writeFileSync(path.join(dir, file), text); }
@@ -1594,7 +1594,7 @@ const versionsOf = (t, base) => {
   return versions;
 };
 test('a Vite build in dist/ is the web root: its files get their content types, a vanished file is a 404, and a change reloads windows', async t => {
-  const web = webRoot({ 'index.html': 'CHECKOUT', 'icon.png': 'CHECKOUT ICON', 'page/main.js': 'CHECKOUT PAGE', 'dist/index.html': 'BUILT', 'dist/assets/app-1a.js': 'js', 'dist/assets/app-1a.css': 'css',
+  const web = webRoot({ 'index.html': 'CHECKOUT', 'icon.png': 'CHECKOUT ICON', 'dist/index.html': 'BUILT', 'dist/assets/app-1a.js': 'js', 'dist/assets/app-1a.css': 'css',
     'dist/favicon.svg': 'svg', 'dist/assets/font-2.woff2': 'font', 'dist/manifest.json': '{}', 'dist/assets/app-1a.js.map': '{}', 'dist/notes.txt': 'txt' });
   const base = await serve(t, {}, () => {}, { LANTERN_WEB: web });
   const get = async (url, headers) => fetch(base + url, { headers });
@@ -1609,8 +1609,8 @@ test('a Vite build in dist/ is the web root: its files get their content types, 
     assert.strictEqual((await get(url, { 'If-None-Match': res.headers.get('etag') })).status, 304, url);
   }
   // nothing else: the checkout's own files, unknown types, folders and ways out of dist/ are all 404
-  for (const url of ['/icon.png', '/page/main.js', '/notes.txt', '/assets', '/assets/', '/assets/nope.js', '/.hidden.js', '/assets/.x.js']) assert.strictEqual((await get(url)).status, 404, url);
-  for (const url of ['/assets/../../index.html', '/../index.html', '/assets/../../page/main.js', '/..%2findex.html']) { // fetch tidies these, so send them as they are
+  for (const url of ['/icon.png', '/notes.txt', '/assets', '/assets/', '/assets/nope.js', '/.hidden.js', '/assets/.x.js']) assert.strictEqual((await get(url)).status, 404, url);
+  for (const url of ['/assets/../../index.html', '/../index.html', '/assets/../../icon.png', '/..%2findex.html']) { // fetch tidies these, so send them as they are
     const res = await new Promise((done, fail) => http.get({ host: new URL(base).hostname, port: new URL(base).port, path: url }, r => { let b = ''; r.on('data', c => b += c); r.on('end', () => done({ status: r.statusCode, body: b })); }).on('error', fail));
     assert.ok(res.status === 404 && !/CHECKOUT/.test(res.body), `${url} gave ${res.status} ${res.body}`);
   }
@@ -1634,16 +1634,19 @@ test('a Vite build in dist/ is the web root: its files get their content types, 
     assert.ok(res.status === 503 && !/CHECKOUT/.test(body), `${url} gave ${res.status}`);
     assert.match(body, /http-equiv="refresh"/, `${url}: a page that lands in the gap tries again by itself`);
   }
-  assert.strictEqual((await get('/page/main.js')).status, 404, 'still dist mode');
   fs.writeFileSync(path.join(web, 'dist/index.html'), 'BUILT AGAIN');
   assert.strictEqual(await (await get('/')).text(), 'BUILT AGAIN');
 });
-test('without dist/index.html the checkout serves itself, and dist/ files are not served', async t => {
-  const web = webRoot({ 'index.html': 'CHECKOUT', 'page/main.js': 'PAGE', 'dist/assets/app-1a.js': 'js' });
+test('without dist/index.html the page waits (503) and the checkout is not served', async t => {
+  const web = webRoot({ 'index.html': 'CHECKOUT', 'icon.png': 'CHECKOUT ICON', 'dist/assets/app-1a.js': 'js' });
   const base = await serve(t, {}, () => {}, { LANTERN_WEB: web });
-  assert.strictEqual(await (await fetch(base + '/')).text(), 'CHECKOUT');
-  assert.strictEqual(await (await fetch(base + '/page/main.js')).text(), 'PAGE');
-  for (const url of ['/dist/assets/app-1a.js', '/assets/app-1a.js', '/dist/index.html']) assert.strictEqual((await fetch(base + url)).status, 404, url);
+  for (const url of ['/', '/index.html']) {
+    const res = await fetch(base + url);
+    assert.strictEqual(res.status, 503, url);
+    assert.doesNotMatch(await res.text(), /CHECKOUT/, url);
+  }
+  assert.strictEqual((await fetch(base + '/icon.png')).status, 404);
+  assert.strictEqual(await (await fetch(base + '/assets/app-1a.js')).text(), 'js');
 });
 
 test('a rebuild that empties dist/ for a moment neither reloads windows into the gap nor leaves one stuck there', async t => {

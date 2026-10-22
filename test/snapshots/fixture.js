@@ -17,6 +17,7 @@
   let T = 1000;
   const BASE = Date.parse('2026-10-18T15:00:00Z'), RealDate = Date, realSetTimeout = setTimeout;
   let wall = BASE; // the wall clock at T = 0. A scorching lantern's scene moves it (catchScorch); the stale PRs' dates stay on BASE
+  window.lanternExpose = true; // src/expose.ts then puts the page's modules on window.lanternModules
   performance.now = () => T;
   window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(wall + T); } static now() { return wall + T; } };
   window.requestAnimationFrame = () => 0;

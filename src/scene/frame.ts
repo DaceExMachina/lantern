@@ -16,7 +16,7 @@ import type { Wing } from './scene';
 // ---- animation ---------------------------------------------------------------
 export let level = 0, cool = 0, sparkClock = 0, last = performance.now();
 /** An ember off the flame, in the flame's own units: where, how fast, and how much of its life is left. */
-export interface Spark { x: number; y: number; vx: number; vy: number; life: number; scorch?: boolean }
+interface Spark { x: number; y: number; vx: number; vy: number; life: number; scorch?: boolean }
 export const sparks: Spark[] = [];
 let pulseIds = 0; // numbers the threads' gradients
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
@@ -289,7 +289,7 @@ export const feelAt = (size: number): Record<keyof typeof FEEL, number> => {
 const bent = (i: number) => (i / CHAIN) ** 1.6;
 export const flameChain: { pts: { x: number, y: number, vx: number, vy: number }[], bx: number, by: number, bvx: number, bvy: number, style: Style | null } = { pts: [], bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
 /** How the flame burns this frame (frame), and with stepFlame its flicker, base and tip in the scene, spine, turbulence, tearing and blue root. */
-export interface Burn { size: number; pulse: number }
+interface Burn { size: number; pulse: number }
 export interface Flame extends Burn {
   flick: number; base: Point; tip: Point; spine: number[]; tear: number; turb: number;
   blue: [x: number, y: number, rx: number, ry: number, alpha: number];
@@ -681,7 +681,7 @@ function lastHop(key: string, ws: number, now: number): number | undefined {
 // wings: flying off, circling its session's moth, landed on the lantern (fidgeting now and then), or drifting near
 // home. One that has flown far enough off is removed, and gets null.
 /** Where a moth heads this frame (mothTarget). */
-export interface Aim { tx: number; ty: number; ease: number; flap: number; needsMe: boolean }
+interface Aim { tx: number; ty: number; ease: number; flap: number; needsMe: boolean }
 export function mothTarget(k: string, m: Moth, dt: number, s: number): Aim | null {
   let tx: number, ty: number, ease = 2.4, flap = 22.4, flying = false; // flap in radians per second, about 3.6 wingbeats a second
   const own = m.parentId === undefined ? m : null; // a session's moth, not an agent's

@@ -63,7 +63,7 @@ export function openSession(id: string, shift: boolean) { const m = sessionMoth(
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.
-export const STATE_WORDS: Record<string, string | undefined> = { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' };
+const STATE_WORDS: Record<string, string | undefined> = { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' };
 export const pillWord = (s: Session) => { const waiting = s.state === 'waiting'; return s.reported ? 'reported back' : s.error && waiting ? 'error' : s.snoozed && waiting ? (s.forGood ? 'sleeping' : 'snoozed') : STATE_WORDS[s.state] || s.state; };
 export const pillClass = (s: Session) => { const waiting = s.state === 'waiting'; return s.error && waiting ? 'error' : s.snoozed && waiting ? 'idle' : s.state; };
 export const pillNext = (s: Session) => s.forGood ? 'Wake' : s.state === 'waiting' && !s.snoozed ? 'Snooze' : 'Sleep until you wake it';
