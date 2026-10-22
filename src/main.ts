@@ -5,9 +5,12 @@ import { createPinia } from 'pinia';
 import { createApp } from 'vue';
 import DevPanel from './components/DevPanel.vue';
 import RecapPanel from './components/RecapPanel.vue';
+import SessionCard from './components/SessionCard.vue';
 import SettingsMenu from './components/SettingsMenu.vue';
 import StatsPanel from './components/StatsPanel.vue';
 import { connect } from './events';
+import { chrome, live } from './scene/live';
+import { sessions } from './scene/state';
 import { useLanternStore } from './stores/lantern';
 
 const pinia = createPinia();
@@ -16,4 +19,8 @@ createApp(StatsPanel).use(pinia).mount('#stats');
 createApp(RecapPanel).use(pinia).mount('#recap');
 createApp(DevPanel).mount(document.body.appendChild(document.createElement('div'))); // the dev panel is fixed, so its wrapper takes no room
 createApp(SettingsMenu).use(pinia).mount('#menu');
-connect(useLanternStore(pinia));
+createApp(SessionCard).use(pinia).mount('#card'); // the scene shows, hides and places #card (src/scene/card.ts)
+const store = useLanternStore(pinia);
+// the scene's side of the store: copied over after a sync and when the card's target or the pins change, never per frame
+chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.pinned = live.pinned; store.now = Date.now(); };
+connect(store);

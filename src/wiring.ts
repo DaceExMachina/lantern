@@ -8,10 +8,10 @@ import { STYLES, applyStyle, isStyleKey, paintRibbon, style } from './scene/lant
 import { isReview, isSession, isStalePR, isRecord, isString, isTime, parseJson, parseSettings } from './types';
 import { showPencil } from './scene/pencil';
 import './scene/github'; // its dev toggle
-import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
+import { QUIET_FOREVER, quiet, quietEndLabel, sync, tickWarm } from './scene/state';
 import { fitView, frame } from './scene/frame';
 import { setLanternText } from './scene/pages';
-import { clickZone, enterZone, hideCard, renderCard, renderSidebar, tapZone, zoneAt, zones } from './scene/card';
+import { clickZone, enterZone, hideCard, renderSidebar, tapZone, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
 import { flashBadge } from './scene/flash';
@@ -49,7 +49,6 @@ listen('settings', t => {
   try { if (st.supervisorPattern) live.supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   live.recapSeen = [live.recapSeen || '', st.recapSeen || ''].sort().pop() ?? ''; maybeRecap(quietStarted); // the later of ours and the server's
   live.staleOn = st.stale !== false;
-  live.prList = st.prList || {}; // each session's card: its PRs listed or as chips
   live.pinned = st.pinned ?? []; // the sessions in the sidebar, in the order they were pinned, with their PR view
   sync(); renderSidebar();
 });
@@ -65,7 +64,8 @@ export function fitStatus() {
 }
 new MutationObserver(fitStatus).observe($('status'), { childList: true, subtree: true, characterData: true });
 addEventListener('resize', fitStatus);
-setInterval(sync, 60 * 1000); // notice when quiet hours end and tick the warm counter, even with nothing else happening
+setInterval(sync, 60 * 1000); // notice when quiet hours end, even with nothing else happening
+setInterval(tickWarm, 1000);
 es.onerror = () => {
   $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline';
   // WebKit can give up on the stream for good (e.g. while the app restarts); start over once the server is back
@@ -99,9 +99,9 @@ window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 10
 const SAVER = Q.has('screensaver');
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
-// Redraw the open card and the sidebar twice a second. They're patched in place (card.ts morph), so hover, focus, scroll
-// and a press mid-click all survive the redraw. The sidebar shows or goes as the window crosses PIN_MIN.
-setInterval(() => { if (live.hovered) renderCard(); renderSidebar(); }, 500);
+// Redraw the sidebar twice a second. It's patched in place (card.ts morph), so hover, focus, scroll and a press mid-click
+// all survive the redraw. It shows or goes as the window crosses PIN_MIN. (The card is Vue's: SessionCard.vue.)
+setInterval(() => renderSidebar(), 500);
 addEventListener('resize', renderSidebar);
 $('card').addEventListener('pointerenter', () => clearTimeout(live.hideTimer));
 // A session's card opens it from its header (card.ts), or from a click on its body where the card covers its own moth (a

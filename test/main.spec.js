@@ -82,9 +82,8 @@ test('a tap outside the moths and the card puts the card away; a mouse click or 
 // Hover areas are plain circles (card.ts), found from the scene's own pointer events (wiring.ts zoneFor), so a moth's card
 // and its click only work if those handlers reach them
 test('pointing at a moth shows its card, and clicking it brings its session to the front', async () => {
-  const { card, state, live, fetch } = await open();
+  const { state, live, fetch } = await open();
   flatScene();
-  vi.spyOn(card, 'renderCard').mockImplementation(() => {});
   const scene = document.getElementById('scene');
   const moth = { key: 'api', zone: null };
   moth.zone = state.hoverArea(() => moth, 'moth');
@@ -128,16 +127,23 @@ test('a click on a session\'s card body opens it only where the card covers its 
   assert.deepStrictEqual(opened(), [zone, 'wisp'], 'a stale PR\'s card');
 });
 
-test('the open card and the sidebar redraw on every tick, whatever is under the pointer or focused (card.ts morph keeps it)', async () => {
+test('the sidebar redraws on every tick, whatever is under the pointer or focused (card.ts morph keeps it)', async () => {
   stubCanvas2d(); // the text on the paper draws on its own timer
-  const { card, live } = await open();
+  const { card } = await open();
   window.lanternTick = () => {};
-  for (const id of ['card', 'dock']) vi.spyOn(document.getElementById(id), 'matches').mockReturnValue(true); // the pointer, focus and a press on both, whatever's asked
-  const cards = vi.spyOn(card, 'renderCard').mockImplementation(() => {}), sidebars = vi.spyOn(card, 'renderSidebar').mockImplementation(() => {});
-  const tick = () => timer(500);
-  tick();
-  assert.deepStrictEqual([cards.mock.calls.length, sidebars.mock.calls.length], [0, 1], 'no card open: only the sidebar');
-  live.hovered = {};
-  tick(); tick();
-  assert.deepStrictEqual([cards.mock.calls.length, sidebars.mock.calls.length], [2, 3]);
+  vi.spyOn(document.getElementById('dock'), 'matches').mockReturnValue(true); // the pointer, focus and a press, whatever's asked
+  const sidebars = vi.spyOn(card, 'renderSidebar').mockImplementation(() => {});
+  for (let i = 0; i < 3; i++) timer(500);
+  assert.strictEqual(sidebars.mock.calls.length, 3);
+});
+
+// The bug Dace shelved: the status's "warm for" went stale between the minute's syncs (up to a minute behind when the
+// lantern turned warm partway through one). It counts on every second, in place.
+test('"warm for" counts on every second, between the syncs', async () => {
+  const { state, live } = await open();
+  const waiting = { id: 's', state: 'waiting', subagents: [] };
+  timer(30e3); live.raw = [waiting]; state.sync(); // violet from 30 s in
+  timer(1e3); live.raw = [{ ...waiting, state: 'working' }]; state.sync(); // warm again
+  timer(148e3); // 179 s in: 149 s warm, and the minute's last sync was at 120 s, 90 s warm
+  assert.strictEqual(document.querySelector('#status .warm')?.textContent, 'warm for 2m');
 });

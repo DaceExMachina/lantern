@@ -13,7 +13,8 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | `src/wiring.ts` | The wiring: the event stream from the server, the controls, and the animation clock. |
 | `src/scene/*.ts` | One ES module per part of the scene (moths, lanterns, fireflies, the card, stats and so on), each importing what it uses. |
 | `src/types.ts` | The domain types (sessions, PRs, settings, `/stats`, moths and their hover areas), and the guards and parsers that check the server's JSON where it arrives (`wiring.ts`, `events.ts`), so nothing per frame checks it again. |
-| `src/scene/live.ts` | The state more than one module writes, in one plain object: what the server sends, the settings, the moths, the hovered moth. Whatever only one module writes stays in that module. |
+| `src/scene/live.ts` | The state more than one module writes, in one plain object: what the server sends, the settings, the moths, the hovered moth. Whatever only one module writes stays in that module. Its `chrome.update` copies the sessions, the hovered moth and the pins into the Pinia store after a sync and on hover, never per frame. |
+| `src/components/`, `src/stores/` | The Vue chrome (the hover card, the menu, stats and recap) and the Pinia store it reads. |
 | `src/dev.ts` | The dev panel's controls. |
 | `public/` | The icons, copied to `dist/` untouched. |
 | `vite.config.mts`, `tsconfig*.json` | The Vite and Vitest config, and the TypeScript projects: Node scripts (`tsconfig.json`) and `src/` (`tsconfig.app.json`, strict, with the page's globals in `src/globals.d.ts`). |
@@ -97,7 +98,7 @@ npm install && npm run check && npm test
 
 `test/saver.test.js` builds the screensaver and loads it in an off-screen window (`test/saver/main.swift`) to check it stops its page and quits when macOS ends the screensaver. That posts macOS's own "screensaver ended" notification to the whole Mac, so the test skips itself while a screensaver is running.
 
-`test/morph.test.js` builds the page, serves it over http and loads it the same way (`test/morph/main.swift`) to check that a redraw of the card keeps keyboard focus, scroll, the element under the pointer and a press mid-click, since only a real browser has those.
+`test/morph.test.js` builds the page, serves it over http and loads it the same way (`test/morph/main.swift`) to check that a re-render of the card, or a redraw of the sidebar, keeps keyboard focus, scroll, the element under the pointer and a press mid-click, since only a real browser has those.
 
 When you change what the server does on purpose, `UPDATE=1 npm test` rewrites the `expect` steps to match. Read the diff before you commit it. If the server needs a new Swift file, add it to the `swiftc` lists in `app/build.sh` and `test/server.test.js`.
 

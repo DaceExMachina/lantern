@@ -2,7 +2,7 @@
 
 import type { AgentMoth, CardAt, Moth, Session, SessionMoth, Zone } from '../types';
 import { timeLabel } from '../types';
-import { live } from './live';
+import { chrome, live } from './live';
 import { $, AMBIENT, CX, CY, EDGES, NS, SIZE, WING_SIDE, WING_UP, pathOf, post, ringHome, stretch } from './scene';
 import { hash, seeded } from './lanterns';
 import { hoverZone } from './card';
@@ -94,8 +94,8 @@ export function sync() {
     if (sleeping) st.append(' · ', cycler('sleeping', `${sleeping} sleeping`, 'Open the sleeping sessions one at a time'));
     if (waiting.length) violetAt = Date.now();
     else if (!quiet() && Date.now() - violetAt >= 60000) {
-      const m = Math.floor((Date.now() - violetAt) / 60000), warm = document.createElement('span');
-      warm.className = 'warm'; warm.textContent = `warm for ${m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`}`;
+      const warm = document.createElement('span');
+      warm.className = 'warm'; warm.textContent = warmFor();
       st.append(' · ', warm);
     }
     if (live.reviews.length) {
@@ -110,7 +110,13 @@ export function sync() {
 
   for (const s of waiting) if (!seenWaiting.has(s.id)) alertMe(s);
   seenWaiting = new Set(waiting.map(s => s.id));
+  chrome.update();
 }
+// how long since the lantern was last violet, as the status says it
+const warmFor = () => { const m = Math.floor((Date.now() - violetAt) / 60000); return `warm for ${m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`}`; };
+// Counts the status's "warm for" on, every second (wiring.ts), in place: a sync rebuilds the status, which would swap a
+// count's button out from under a press.
+export function tickWarm() { const w = $('status').querySelector('.warm'); if (w && w.textContent !== warmFor()) w.textContent = warmFor(); }
 
 export function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
   const n = document.createElementNS(NS, tag);

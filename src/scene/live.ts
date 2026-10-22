@@ -10,7 +10,7 @@ export interface Leaf { e: Element; x: number; y: number; k: number; low: number
 interface Live {
   raw: Session[]; reviews: Review[]; stalePRs: StalePR[]; recentProse: string[]; pagesData: boolean; firstName: string;
   quietUntil: number; quietEnd: string; quietEndOn: boolean; dayStart: string; supervisor: RegExp; staleOn: boolean;
-  prList: Record<string, boolean>; pinned: Pin[]; recapSeen: string | null;
+  pinned: Pin[]; recapSeen: string | null;
   moths: Map<string, Moth>; hovered: Hovered | null; hideTimer: ReturnType<typeof setTimeout> | undefined;
   tally: Stats['tally']; pinnedBadge: string | null; cdLeaves: Leaf[] | null; farWall: HTMLCanvasElement | null;
   flyLightN: number; ghostWingN: number;
@@ -29,7 +29,6 @@ export const live: Live = {
   quietUntil: 0, quietEnd: '08:00', quietEndOn: true, dayStart: '00:00',
   supervisor: /supervisor|orchestrat/i, // which agent types count as supervisors (medium moths)
   staleOn: true, // whether stale PRs show
-  prList: {}, // each session's card: its PRs listed or as chips (card.ts)
   pinned: [], // the pinned sessions, oldest first, each with whether its PRs show as chips
   recapSeen: null, // the last day (yyyy-MM-dd) a recap opened by itself, once settings say (recap.ts)
   // ---- the scene's own
@@ -43,3 +42,7 @@ export const live: Live = {
   // what this frame queued for the background's shaders: firefly lights and ghost moth wing corners (background.ts resets them)
   flyLightN: 0, ghostWingN: 0,
 };
+
+// The chrome's view of the scene: src/main.ts points `update` at the Pinia store, which it copies the sessions, the card's
+// target and the pins into. The scene calls it after a sync and when the card's target or the pins change, never per frame.
+export const chrome = { update: () => {} };
