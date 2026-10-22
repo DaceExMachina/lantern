@@ -96,14 +96,13 @@ test('pointing at a moth shows its compact card, and clicking it expands the car
   assert.deepStrictEqual(fetch.mock.calls.map(([url]) => url), ['/snooze'], 'shift-click still snoozes');
 });
 
-test('a hover card is a tooltip: the pointer passes through it, and it goes soon after the pointer leaves the moth', async () => {
+test('a hover card is a tooltip: the pointer passes through it, and it goes the moment the pointer leaves the moth', async () => {
   const { live, scene, cardEl, moth, fire } = await withMoth();
   fire(scene, 'pointermove', 110, 205);
   assert.strictEqual(getComputedStyle(cardEl).pointerEvents, 'none', 'a compact card takes no pointer events');
-  fire(scene, 'pointermove', 300, 300); timer(699);
-  assert.strictEqual(live.hovered, moth, 'still there for a moment');
-  timer(1);
-  assert.strictEqual(live.hovered, null, 'then gone');
+  assert.strictEqual(live.hovered, moth, 'shown while pointing at it');
+  fire(scene, 'pointermove', 300, 300); timer(0);
+  assert.strictEqual(live.hovered, null, 'gone at once, no grace period');
 });
 
 test('an expanded card stays until the pointer has been away from it and its moth for 2 seconds, or a click lands elsewhere', async () => {

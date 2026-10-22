@@ -104,11 +104,11 @@ const zoneFor = (e: MouseEvent) => e.target instanceof Element && e.target.close
 // A long press reaches snooze through the contextmenu event below.
 const isTouch = (e: Event) => 'pointerType' in e && e.pointerType === 'touch';
 // Leaving every area (or the scene, or the card) starts the card's grace period, once: an expanded card waits EXPANDED_GRACE
-// for the pointer to come back to it or its moth. While a card is expanded, other moths don't take it over on hover.
+// for the pointer to come back to it or its moth; a compact hover card, a tooltip, goes at once. While a card is expanded, other moths don't take it over on hover.
 const EXPANDED_GRACE = 2000;
 const hideSoon = (hoverMs: number) => { clearTimeout(live.hideTimer); live.hideTimer = setTimeout(hideCard, live.expanded ? EXPANDED_GRACE : hoverMs); };
 let inZone = false;
-const leaveZones = () => { if (inZone) { inZone = false; hideSoon(700); } };
+const leaveZones = () => { if (inZone) { inZone = false; hideSoon($('card').matches('.compact') ? 0 : 700); } };
 for (const type of ['pointerdown', 'pointermove'] as const) $('scene').addEventListener(type, e => {
   if (isTouch(e)) return;
   const z = zoneFor(e);
