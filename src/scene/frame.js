@@ -3,6 +3,7 @@
 // ---- animation ---------------------------------------------------------------
 let level = 0, cool = 0, sparkClock = 0, last = performance.now();
 const sparks = [];
+let pulseIds = 0; // numbers the threads' gradients
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
 const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
@@ -10,6 +11,34 @@ const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== 
 // Seeded by the session and the slot alone, so every window puts it in the same spot, and a flying moth's thread
 // already knows where it'll land.
 const alongFor = (key, slot) => seeded(hash(`${key}:${slot ?? 'land'}`))();
+
+// Fitting the view to the window (VIEW, scene.js).
+// frame() calls fitView each frame, so it follows the window and the pinned sidebar sliding in or out, and only does the work
+// when the size has changed. Each frame, before anything is drawn, so the sidebar's slide never shows a cleared canvas.
+let fitted = '';
+function fitView() {
+  const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect(), size = `${width} ${height} ${devicePixelRatio}`;
+  if (!width || !height || size === fitted) return;
+  fitted = size;
+  VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
+  const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
+  for (const s of document.querySelectorAll('#scene > svg:not(.lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+  VIEW.box = [x, y, w, h];
+  VIEW.px = width / w; // CSS pixels per unit
+  // the lantern's layer spans LANTERN_SPAN either side of its middle, the window's full height (a chain or column runs edge
+  // to edge), its left edge on a whole device pixel so the lantern lands on the same pixels it would in the scene, and it
+  // turns about where the lantern hangs from (frame.js swingLantern)
+  // turns about where the lantern hangs from (frame.js swingLantern); the flame's canvas covers the same strip, unturned
+  const dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
+  for (const layer of [$('lanternBack'), $('lanternLayer'), $('flame')]) Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
+  for (const layer of document.querySelectorAll('.lanternLayer')) layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
+  VIEW.layer = [x0, y, 2 * LANTERN_SPAN, h]; // the lantern's strip in scene units, which the flame's canvas covers
+  const k = dpr * bgScale; // background.js
+  for (const [canvas, cw] of [[$('bg'), width], [$('flame'), 2 * LANTERN_SPAN * VIEW.px]]) { canvas.width = Math.round(cw * k); canvas.height = Math.round(height * k); }
+  VIEW.top = y;
+  drawHang(); // the string or chain runs from the top of the window down to the lantern
+  bakeCutouts(); // the Moroccan's lace, at the new size (lanterns.js)
+}
 
 // A pierced lantern's solid bands (class band), measured once per lantern: their middle height, half-height and half-width
 /** @type {Element | undefined} */
@@ -28,22 +57,6 @@ function measureBands() {
 // and a light breeze, pinned at the top and held at fixed spacing, so it trails the sway and settles. It twists along its
 // length, showing its darker back and narrowing where it turns edge-on. Simulated in the scene, drawn in the lantern.
 const BOOKMARK = { n: 13, half: 4.6, gravity: 700, h: 1 / 240, maxSteps: 12, iterations: 4 }; // 4 holds the length within 0.3% even at maxSteps (measured)
-// One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
-// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds on
-// average (lanterns.js) a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
-// calmer spells, with a faster, fainter flutter on top. Pseudo-random from the clock alone, so every window and the
-// snapshots agree; scaled to the strength of the two steady sines it replaced (an RMS of about 1.17).
-const rnd = x => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
-const knot = i => { const u = 2 * rnd(i) - 1; return Math.sign(u) * Math.abs(u) ** 1.5; };
-// the knots sit at whole numbers nudged up to a quarter either way, so a gust lasts half to one and a half times the average
-const knotAt = i => i + (rnd(i + 0.17) - 0.5) * 0.5;
-const noise = x => {
-  let i = Math.floor(x);
-  if (x < knotAt(i)) i--; else if (x >= knotAt(i + 1)) i++;
-  const f = (x - knotAt(i)) / (knotAt(i + 1) - knotAt(i));
-  return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f);
-};
-const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 // One step of the bookmark's physics, apart from drawing so it can be tested: the chain in `r` trails its knot at (ax, ay),
 // heading for `length` long. It runs in fixed steps of BOOKMARK.h, carrying leftover time to the next frame: a step as
 // short as a frame can be (two timers firing together) turned the constraint fix-ups into huge speeds and flung it about.
@@ -143,8 +156,8 @@ function frame(t) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) swarm(lanternFlies, new Map(reviews.map(r => [r.url, { ...r, need: 'review' }])), lightAt(), [125, 170], dt);
-  for (const [k, m] of moths) {
+  if (!AMBIENT) swarm(lanternFlies, new Map(live.reviews.map(r => [r.url, { ...r, need: 'review' }])), lightAt(), [125, 170], dt);
+  for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
     if (!m.parentId) mothFireflies(m, dt, s);
@@ -279,7 +292,7 @@ function stepFlame(dt, s, flame) {
   // is still, and the Moroccan's brass keeps them off its flame)
   const mid = pts[CHAIN / 2 - 1];
   let near = 0, push = 0;
-  for (const m of style.scorches ? moths.values() : []) if (!m.wasLanded) {
+  for (const m of style.scorches ? live.moths.values() : []) if (!m.wasLanded) {
     const n = Math.max(0, 1 - Math.hypot(m.x - bx - mid.x, m.y - by - mid.y) / (50 * fk));
     if (n > 0) { near = Math.max(near, n); push += n * n * (m.x > bx + mid.x ? -1 : 1); }
   }
@@ -416,7 +429,7 @@ function smoke(now, s, strength, tip) {
       plumes.push([...flamePlume.at, (now - flamePlume.from) / 1000, 0.5 + 0.5 * strength, 97 * rand(), SMOKE_REL, 0.5 + rand(), 2 * rand() - 1, ...tip]);
     }
   }
-  for (const m of moths.values()) if (m.scorch?.hit) {
+  for (const m of live.moths.values()) if (m.scorch?.hit) {
     const sc = m.scorch, path = (sc.trail || []).filter(([, , at]) => sc.t - at < PLUME.life);
     plumes.push([...sc.aim, sc.t - SCORCH.hit, 1, hash(m.key) % 97, SINGE_REL, 1, 0, ...sc.aim]);
     if (!sc.trailDone) { // joined to the moth where it's drawn now, in place of a point it left this frame before it moved
@@ -477,12 +490,12 @@ function drawShine(s, { size, flick, pulse, base, tip }) {
 // top (0). Found and
 // read once after each redraw (drawHang clears cdLeaves), and only written when it turns by half a degree or grows.
 function drawLeaves(s) {
-  cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
+  live.cdLeaves ??= [...document.querySelectorAll('.cdLeaf')].map(e => {
     const [x, y] = (e.getAttribute('data-at') || '0 0').split(' ').map(Number), low = e.getAttribute('data-low');
     return { e, x, y, k: +(e.getAttribute('data-k') || 1), low: low === null ? -1 : +low, deg: +(e.getAttribute('data-deg') || 0), ph: (x * 0.37 + y * 0.11) % 6.283 };
   });
   const from = Math.sign(GUST(s)) || 1; // the wind's direction this frame: 1 blowing to the right
-  for (const { e, x, y, k, low, deg, ph } of cdLeaves) {
+  for (const { e, x, y, k, low, deg, ph } of live.cdLeaves) {
     const g = GUST(s - 0.15 - ph * 0.03 - from * (x - 340) * 0.004), down = g > 0 ? 90 : -90;
     let turn = ((down - deg) % 360 + 360) % 360; // how far round to downwind, -180 to 180, over the top when it points straight into the wind
     if (turn > 180 || (turn === 180 && down < 0)) turn -= 360;
@@ -525,7 +538,7 @@ function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, bl
   // throws a fan straight down, seen from the flame core's middle (18 up its 40), in the lantern's own units, so the fan
   // breathes with it
   const flameY = style.flame[1] - 18 * size * style.flame[2];
-  const casters = AMBIENT ? [] : [...moths.values()].map(m => m.shade).filter(Boolean);
+  const casters = AMBIENT ? [] : [...live.moths.values()].map(m => m.shade).filter(Boolean);
   drawBackground({
     ringC: style.stands ? [gx, gy] : rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
     ringCol: [0, 1, 2].map(i => mix(WARM.rings[i], COOL.rings[i], cool)),
@@ -594,7 +607,7 @@ function scorchStep(m, flying, now = Date.now()) {
   if (!m.scorch && !red()) return null; // nothing to do, and no seeded draws
   const at = scorchClock(m.key, now), sc = m.scorch;
   if (!sc) {
-    if (!at || at.t >= SCORCH.start || [...moths.values()].filter(o => o.scorch).length >= SMOKERS) return null; // too many smoking: next time
+    if (!at || at.t >= SCORCH.start || [...live.moths.values()].filter(o => o.scorch).length >= SMOKERS) return null; // too many smoking: next time
     const rand = seeded(hash(`${m.key}:scorch:${at.slot}:touch`));
     m.scorch = { slot: at.slot, t: at.t, hit: false, flying, rand, up: 0.25 + 0.25 * rand(), side: stretch(m.home)[0] < tongue.cx ? -1 : 1 };
   } else if (!at || at.slot !== sc.slot || !style.scorches || (!sc.hit && !red())) return m.scorch = null;
@@ -603,8 +616,8 @@ function scorchStep(m, flying, now = Date.now()) {
   if (!e.hit) e.aim = [tongue.cx + e.side * (tongue.half + 8 * m.size), style.flame[1] - e.up * tongue.height]; // a wing tip at the edge
   if (!e.hit && e.t >= SCORCH.hit) {
     e.hit = true;
-    const [fx, fy, k] = style.flame, live = sparks.filter(p => p.scorch && p.life > 0).length;
-    for (let i = live; i < 5; i++) sparks.push({ x: 340 + (e.aim[0] - fx) / k, y: FLAME_BASE + (e.aim[1] - fy) / k, scorch: true, life: 1,
+    const [fx, fy, k] = style.flame, lit = sparks.filter(p => p.scorch && p.life > 0).length;
+    for (let i = lit; i < 5; i++) sparks.push({ x: 340 + (e.aim[0] - fx) / k, y: FLAME_BASE + (e.aim[1] - fy) / k, scorch: true, life: 1,
       vx: e.side * (8 + 30 * e.rand()) / k, vy: -(15 + 40 * e.rand()) / k });
   }
   return e;
@@ -645,12 +658,12 @@ function lastHop(key, ws, now) {
 // home. One that has flown far enough off is removed, and gets null.
 function mothTarget(k, m, dt, s) {
   let tx, ty, ease = 2.4, flap = 22.4, flying = false; // flap in radians per second, about 3.6 wingbeats a second
-  const orbit = m.satellite && moths.get(m.satellite);
+  const orbit = m.satellite && live.moths.get(m.satellite);
   if (orbit?.home) { // a satellite's home circles its parent's, slowly
     const a = m.phase + s * 0.12;
     m.home = [orbit.home[0] + Math.cos(a) * 62, orbit.home[1] + Math.sin(a) * 44];
   } else if (m.spot) glideHome(m, dt);
-  const parent = m.parentId && moths.get(m.parentId);
+  const parent = m.parentId && live.moths.get(m.parentId);
   if (m.parentId && (!parent || parent.leaving)) m.leaving = true;
   // a session waiting on you lands; so does an idle one (nothing running, e.g. after /compact), resting without the violet
   // (with ?scorch none lands, so there's always a moth in the air to scorch)
@@ -731,8 +744,8 @@ function mothTarget(k, m, dt, s) {
 function dropMoth(k, m) {
   m.g.remove(); m.thread?.remove(); zones.delete(m.zone); zones.delete(m.flyZone); m.grad?.remove(); m.flyGrad?.remove();
   m.flyLine?.remove(); m.zz?.forEach(t => t.remove());
-  moths.delete(k);
-  if (hovered === m) hideCard();
+  live.moths.delete(k);
+  if (live.hovered === m) hideCard();
 }
 
 // Fireflies around a session moth's home, only for PRs the session owns (ones it created, or its branch's), never ones
@@ -859,10 +872,10 @@ function mothWings(m, { tx, ty, flap, needsMe }, dt, s) {
 // little, healing as its episode runs out.
 // Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
 function mothColour(m, needsMe, upPts, sidePts, dt) {
-  const host = m.parentId ? moths.get(m.parentId) : m, calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
+  const host = m.parentId ? live.moths.get(m.parentId) : m, calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
   m.cool += ((calling ? (host.session.snoozed ? 0.5 : 1) : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3; // idle and landed: a hint of violet (MOTH_RESTING)
   const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330);
-  m.tint ||= m.parentId ? moths.get(m.parentId)?.tint : tintFor(m.session); // subagents share their session's tint
+  m.tint ||= m.parentId ? live.moths.get(m.parentId)?.tint : tintFor(m.session); // subagents share their session's tint
   const singed = needsMe && m.session.error;
   // Landed, the flame is behind the moth: it turns to a darker silhouette against the glowing paper.
   const backlit = m.fold || 0;
@@ -932,7 +945,7 @@ function threadEnds(m) {
 // its own phase. Lines are a non-crossing fan, so only the share is dialed.
 let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.12, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
 // A busy lantern bows gentler: full up to 4 moths, easing down to half by 12 (m.bowK follows it, so a session joining doesn't jump)
-const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...moths.values()].filter(o => !o.satellite && !o.leaving).length - 4) / 8));
+const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...live.moths.values()].filter(o => !o.satellite && !o.leaving).length - 4) / 8));
 const bowed = (ax, ay, bx, by, m, s, k) => {
   k *= m.bowK ?? crowd();
   const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * Math.sin(s * 0.8 + m.phase);
@@ -940,7 +953,7 @@ const bowed = (ax, ay, bx, by, m, s, k) => {
 };
 // Each session moth's thread (threadEnds). Satellites fly untethered.
 function mothThread(m, dt, s) {
-  const orbit = m.satellite && moths.get(m.satellite);
+  const orbit = m.satellite && live.moths.get(m.satellite);
   if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : '';
   if (!m.thread || orbit && !orbit.leaving || !m.perch) return;
   const [[ax, ay], [bx, by]] = threadEnds(m);

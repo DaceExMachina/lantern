@@ -45,6 +45,22 @@ let flickerFollow = devSlider('Flame', 'flicker', 'flicker', 0, 1.5, 0.05, 0.8, 
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
 const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
+// One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
+// with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds on
+// average a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
+// calmer spells, with a faster, fainter flutter on top. Pseudo-random from the clock alone, so every window and the
+// snapshots agree; scaled to the strength of the two steady sines it replaced (an RMS of about 1.17).
+const rnd = x => { const v = Math.sin(x * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+const knot = i => { const u = 2 * rnd(i) - 1; return Math.sign(u) * Math.abs(u) ** 1.5; };
+// the knots sit at whole numbers nudged up to a quarter either way, so a gust lasts half to one and a half times the average
+const knotAt = i => i + (rnd(i + 0.17) - 0.5) * 0.5;
+const noise = x => {
+  let i = Math.floor(x);
+  if (x < knotAt(i)) i--; else if (x >= knotAt(i + 1)) i++;
+  const f = (x - knotAt(i)) / (knotAt(i + 1) - knotAt(i));
+  return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f);
+};
+const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);
@@ -137,14 +153,14 @@ const CUTOUTS = (id, k = 1) => `<mask id="${id}" maskUnits="userSpaceOnUse" x="2
 const FAR_WALL_SVG = (fill, k) => 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="250 140 180 360" width="720" height="1440">
   <defs>${LACE_TILE('lace', '#fff')}${LACE_CLIPS}${CUTOUTS('cutouts', k)}</defs><g fill="${fill}"${k ? ' mask="url(#cutouts)"' : ''}>${MOROCCAN_SHAPE}</g></svg>`);
 function bakeFarWall() {
-  if (!style.farWall || farWallTex) return;
+  if (!style.farWall || live.farWall) return;
   const c = document.createElement('canvas'), g = c.getContext('2d'), brass = new Image(), outline = new Image();
   c.width = 720; c.height = 1440;
   let n = 0;
   brass.onload = outline.onload = () => {
     if (++n < 2 || !g) return;
     g.drawImage(brass, 0, 0); g.globalCompositeOperation = 'lighter'; g.drawImage(outline, 0, 0);
-    setFarWall(c);
+    live.farWall = c; // background.js uploads it
   };
   brass.src = FAR_WALL_SVG('#f00', 0.92); outline.src = FAR_WALL_SVG('#0f0', 0);
 }
@@ -763,11 +779,10 @@ let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
 // its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
 // standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
-let cdLeaves = /** @type {{ e: Element, x: number, y: number, k: number, low: number, deg: number, ph: number }[] | null} */ (null); // the candle's fluttering leaves, found by frame.js drawLeaves
 function drawHang() {
   const h = $('hang');
   const column = style.stands && $('cdColumn');
-  cdLeaves = null; // drawLeaves finds them again
+  live.cdLeaves = null; // drawLeaves finds them again
   if (column) column.innerHTML = style.column(VIEW.box ? VIEW.box[1] + VIEW.box[3] : 620);
   if (!h) return;
   if (!style.chain) return h.setAttribute('d', `M340 ${VIEW.top - 2}V22`);
@@ -798,7 +813,7 @@ function applyStyle(key) {
     for (const b of ribbons.children) /** @type {HTMLButtonElement} */ (b).disabled = !style.ribbon;
     ribbons.parentElement.classList.toggle('unavailable', !style.ribbon);
   }
-  for (const m of moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
+  for (const m of live.moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
   $('style').value = key;
 }
 
@@ -847,7 +862,6 @@ const WARM = { halo: '#FF9F45', outer: '#F7913F', mid: '#FFC266', core: '#FFF4D6
   paper: '#FFB85C', thread: '#E8B48A', rings: ['#3A3050', '#4A3B58', '#6A4A58'] };
 const COOL = { halo: '#8C6CFF', outer: '#7A63F0', mid: '#9FB6FF', core: '#F0F2FF', base: '#D2B4FF', glow: '#9D7CF5',
   paper: '#A99BFF', thread: '#B6A6F5', rings: ['#2E2E58', '#3A3A6E', '#4E4A86'] };
-let pulseIds = 0;
 const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // singed: the turn ended in an API error
 // An idle session's moth resting on the lantern: a touch of the calling violet (frame.js eases it 0.15 of the way), then
 // backlit against the paper. Mostly grey: mix(mix(MOTH_IDLE, MOTH_CALL, 0.15), '#2B2440', 0.45).

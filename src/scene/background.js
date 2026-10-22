@@ -285,7 +285,7 @@ function drawFlies(w, h, box) {
   gl.enableVertexAttribArray(aa); gl.vertexAttribPointer(aa, 4, gl.FLOAT, false, 28, 0);
   gl.enableVertexAttribArray(ac); gl.vertexAttribPointer(ac, 3, gl.FLOAT, false, 28, 16);
   gl.uniform4f(FLIES.u.uBox, ...box); gl.uniform2f(FLIES.u.uRes, w, h);
-  gl.drawArrays(gl.POINTS, 0, flyLightN);
+  gl.drawArrays(gl.POINTS, 0, live.flyLightN);
   gl.disableVertexAttribArray(ac); gl.enableVertexAttribArray(0);
 }
 // The ghost moths (stale.js): their wings as triangles in one flat, pale colour at each moth's own faint opacity, over
@@ -302,7 +302,7 @@ function drawGhosts(box) {
   gl.bindBuffer(gl.ARRAY_BUFFER, ghostsBuf); gl.bufferData(gl.ARRAY_BUFFER, ghostWings, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
   gl.uniform4f(GHOSTS.u.uBox, ...box); gl.uniform3fv(GHOSTS.u.uCol, rgb(WISP_TINT));
-  gl.drawArrays(gl.TRIANGLES, 0, ghostWingN);
+  gl.drawArrays(gl.TRIANGLES, 0, live.ghostWingN);
 }
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
@@ -382,7 +382,8 @@ function setFarWall(/** @type {HTMLCanvasElement} */ canvas) {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 }
 function drawFarWall({ slide, col, heat }, w, h, box) {
-  if (!farWallTex) return;
+  if (!live.farWall) return; // not baked yet (lanterns.js bakeFarWall)
+  if (!farWallTex) setFarWall(live.farWall);
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(FAR_WALL.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, farWallQuad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -512,10 +513,10 @@ function drawBackground(v) {
   // fan can cover the whole screen, so gating would leave it nearly empty of dust
   gl.uniform1f(DUST.u.uNear, 1); gl.uniform1f(DUST.u.uCatch, AMBIENT ? 0 : CATCH); gl.drawArrays(gl.POINTS, 0, dust.length);
   gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
-  if (flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
-  flyLightN = 0;
-  if (ghostWingN) drawGhosts([x, y, w, h]);
-  ghostWingN = 0;
+  if (live.flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
+  live.flyLightN = 0;
+  if (live.ghostWingN) drawGhosts([x, y, w, h]);
+  live.ghostWingN = 0;
   if (v.farWall) drawFarWall(v.farWall, c.width, c.height, [x, y, w, h]);
   if (v.fire) drawFlame(v); // none on a second display, which hides its canvas (index.html)
   // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up

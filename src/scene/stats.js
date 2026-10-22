@@ -9,7 +9,7 @@ const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, 
 const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050' };
 
 // the day a time falls on (yyyy-MM-dd): a day starts at the day rollover (dayStart) and is named for the date it starts on
-const dayKey = t => { const d = new Date(t), [h, m] = dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const dayKey = t => { const d = new Date(t), [h, m] = live.dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 // The ribbon's slices for one day: from the first session that day to `end` (now, or the last session's end).
@@ -151,13 +151,13 @@ const badge = (id, extra = '', unearned = false) => {
 
 // What a badge is: a small card floating over it while the pointer is on it (or it has focus), like a moth's card,
 // out of the panel's layout so nothing moves; a click or tap keeps it until clicked again. One tip per panel, inside
-// it (the panel sits in the top layer). `tally` is every badge ever earned, as id -> [times, last day].
-let tally = {}, pinnedBadge = null, badgeTimer;
+// it (the panel sits in the top layer). `live.tally` is every badge ever earned, as id -> [times, last day].
+let badgeTimer;
 const longDay = day => new Date(day + 'T12:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
 function showBadge(el) {
   clearTimeout(badgeTimer);
   const root = el.closest('[popover]'), [name, how] = ACHIEVEMENTS[el.dataset.id] || [el.dataset.id, ''];
-  const [times, last] = tally[el.dataset.id] || [0, ''];
+  const [times, last] = live.tally[el.dataset.id] || [0, ''];
   let tip = root.querySelector('.badgeTip');
   if (!tip) { tip = document.createElement('div'); tip.className = 'badgeTip'; tip.setAttribute('role', 'tooltip'); root.append(tip); }
   tip.innerHTML = `<b>${name}</b><div>${how}.</div>
@@ -168,7 +168,7 @@ function showBadge(el) {
 }
 // back to the pinned badge's tip, or none
 function restoreBadge(root) {
-  const el = pinnedBadge && root.querySelector(`.badge[data-id="${pinnedBadge}"]`);
+  const el = live.pinnedBadge && root.querySelector(`.badge[data-id="${live.pinnedBadge}"]`);
   if (el) { const shelf = el.closest('details'); if (shelf) shelf.open = true; showBadge(el); } // only on the shelf: open it to show the badge
   else root.querySelector('.badgeTip')?.classList.remove('show');
 }
@@ -182,7 +182,7 @@ for (const root of [$('stats'), $('recap')]) {
   root.addEventListener('scroll', () => restoreBadge(root), true); // a tip stays over its badge, so it can't ride a scroll
   root.addEventListener('click', e => {
     const el = e.target.closest('.badge'); if (!el) return;
-    pinnedBadge = pinnedBadge === el.dataset.id ? null : el.dataset.id;
+    live.pinnedBadge = live.pinnedBadge === el.dataset.id ? null : el.dataset.id;
     restoreBadge(root);
   });
 }
@@ -210,7 +210,7 @@ function renderStats(j) {
     ${r ? dayRibbon(r, today.end >= Date.now() - MIN ? 'now' : clock(r.to)) : ''}
     <dl>${nums.map(([k, v, why]) => `<div title="${why}"><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
   if (r) followRibbon($('statsBody').querySelector('.dayRibbon'), r, today);
-  tally = j.tally;
+  live.tally = j.tally;
   const shelfOpen = $('statsWeek').querySelector('.shelf')?.open; // the panel redraws every minute; keep the shelf as it was
   $('statsWeek').innerHTML = `
     <h4>The week before</h4>
@@ -222,7 +222,7 @@ function renderStats(j) {
       : '<p class="dim">None yet this week. They come from the log as the days go by.</p>'}
     ${j.streak ? `<p class="dim">Warm streak: ${j.streak} day${j.streak === 1 ? '' : 's'} at or over ${j.warmGoal}% warm moths.</p>` : ''}
     <details class="shelf"><summary>All badges</summary><div class="badges">${Object.keys(ACHIEVEMENTS).map(id =>
-      badge(id, tally[id]?.[0] > 1 ? ` <small>×${tally[id][0]}</small>` : '', !tally[id])).join('')}</div></details>`;
+      badge(id, live.tally[id]?.[0] > 1 ? ` <small>×${live.tally[id][0]}</small>` : '', !live.tally[id])).join('')}</div></details>`;
   if (shelfOpen) $('statsWeek').querySelector('.shelf').open = true;
   restoreBadge($('statsWeek'));
 }

@@ -4,7 +4,6 @@
 // window), and from the stats panel for any day of the past week.
 
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
-let recapSeen = null; // the last day (yyyy-MM-dd) a recap opened by itself, once settings say
 
 // Each session alive that day, from the log: when it ran, how long it waited on me (snoozed waits too, as in warm
 // moths), how much of that was snoozed or sleeping, how many waits began that day and the longest, and what its PRs did.
@@ -119,7 +118,7 @@ document.addEventListener('keydown', e => {
 function renderRecap(j, i) {
   const d = j.days[i], key = dayKey(d.start), isToday = i === j.days.length - 1;
   const title = isToday ? 'Today’s recap' : i === j.days.length - 2 ? 'Yesterday’s recap' : new Date(d.start).toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-  tally = j.tally;
+  live.tally = j.tally;
   const r = slices(d, j.spans, j.gauges, 160), earned = j.achievements.filter(a => a[1] === key), stars = daySessions(d, j.spans, j.prs);
   const early = r ? stars.filter(s => s.began < r.from).length : 0, gutter = gutterFor(early);
   const axis = r && starAxis(stars.slice(early).map(s => s.from), r.from, r.to, gutter);
@@ -187,11 +186,11 @@ async function openRecap(i, auto = false) {
 // when quiet hours start. Only the full window does this (not the iTerm panel or a screensaver), and only once settings
 // have said what was seen.
 function maybeRecap(quietStarted = false) {
-  if (document.body.matches('.panel, .screensaver, .ambient') || document.hidden || recapSeen === null) return;
+  if (document.body.matches('.panel, .screensaver, .ambient') || document.hidden || live.recapSeen === null) return;
   const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  const today = dayKey(Date.now()), [i, day] = quietStarted && recapSeen < today ? [7, today] : [6, dayKey(yesterday.getTime())];
-  if (recapSeen >= day) return;
-  const was = recapSeen;
-  recapSeen = day; // before the fetch, so a second check meanwhile doesn't open it again
-  openRecap(i, true).then(shown => { if (!shown && i === 7) recapSeen = was; }, () => { recapSeen = was; });
+  const today = dayKey(Date.now()), [i, day] = quietStarted && live.recapSeen < today ? [7, today] : [6, dayKey(yesterday.getTime())];
+  if (live.recapSeen >= day) return;
+  const was = live.recapSeen;
+  live.recapSeen = day; // before the fetch, so a second check meanwhile doesn't open it again
+  openRecap(i, true).then(shown => { if (!shown && i === 7) live.recapSeen = was; }, () => { live.recapSeen = was; });
 }

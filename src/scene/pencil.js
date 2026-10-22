@@ -2,9 +2,8 @@
 // yellow pencil, its point snapped off beside it, lies on the pedestal under the vine. It goes into the candle's drawing
 // once, in the spot lanterns.js keeps for it (#cdPencil), hidden by index.html's CSS until showPencil says so; ?pencil
 // (the dev panel's Demo toggle) shows it for anyone.
-let firstName = '';
 let pencilForced = devToggle('Demo', 'pencil', 'Jerrett\'s pencil', false, 'The pencil Jerrett sees on the candle\'s pedestal', v => { pencilForced = v; showPencil(); });
-const pencilShows = () => pencilForced || firstName.toLowerCase() === 'jerrett';
+const pencilShows = () => pencilForced || live.firstName.toLowerCase() === 'jerrett';
 function showPencil() { $('lantern').classList.toggle('pencil', pencilShows()); }
 
 // Lying along x, centred on its spot: the eraser at the left, the broken point at the right, lit from above.

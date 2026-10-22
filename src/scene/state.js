@@ -1,19 +1,14 @@
 // Sessions from the server, turned into moths (session moths and their agents), with their hover areas.
 
 let sessions = [];
-const moths = new Map(); // key -> moth
 let seenWaiting = new Set(), nextUp = {}; // nextUp: where each status bar count's clicks have got to
-// ---- state from server -------------------------------------------------------
-let raw = [], quietUntil = 0, reviews = [];
-// from settings.json: when quiet hours end and the day rollover, when a stats day starts ("HH:MM"), and which agent
-// types count as supervisors (medium moths)
-let quietEnd = '08:00', quietEndOn = true, dayStart = '00:00', supervisor = /supervisor|orchestrat/i;
-const quietEndLabel = () => { const [h, m] = quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
+// what the server sends, and the settings, are in live.js
+const quietEndLabel = () => { const [h, m] = live.quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();
 // quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
-const quiet = () => quietUntil > Date.now();
+const quiet = () => live.quietUntil > Date.now();
 const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
 // Which of the status bar's counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
 // waits, snoozed (until it does something new, or for quiet hours) or needing me.
@@ -22,19 +17,19 @@ const restOf = s => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoo
 function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
   // orbiting (like agents do) and doesn't count as needing me.
-  const alive = new Set(raw.map(s => s.id));
-  const base = raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
+  const alive = new Set(live.raw.map(s => s.id));
+  const base = live.raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
   sessions = quiet() ? base.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : base;
   $('quiet').classList.toggle('on', quiet());
-  const live = new Set(), shown = AMBIENT ? [] : sessions; // the ambient view only needs the sessions for the glow's colour
+  const kept = new Set(), shown = AMBIENT ? [] : sessions; // the ambient view only needs the sessions for the glow's colour
   for (const s of shown) {
-    live.add(s.id);
-    if (!moths.has(s.id)) moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
+    kept.add(s.id);
+    if (!live.moths.has(s.id)) live.moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
     // whatever an earlier snapshot said, the server sends it now, so it isn't leaving: every window shows the latest snapshot
-    Object.assign(moths.get(s.id), { session: s, leaving: false });
+    Object.assign(live.moths.get(s.id), { session: s, leaving: false });
     // A session another session started (the Claude app's side sessions) is a satellite: it orbits its parent's moth,
     // smaller, with its thread to the parent; it still lands on the lantern on its own when it needs you.
-    const m = moths.get(s.id);
+    const m = live.moths.get(s.id);
     m.satellite = s.parent && alive.has(s.parent) ? s.parent : null;
     m.size = m.satellite ? SIZE.supervisor : SIZE.session; // like a supervisor agent
     // a fresh snooze (not quiet hours, not waking) puffs a "zz" off the moth; the first sync only records where it stands
@@ -43,26 +38,26 @@ function sync() {
     m.snooze = snooze;
     for (const a of s.subagents) {
       const k = s.id + '/' + a.id;
-      live.add(k);
-      if (!moths.has(k)) moths.set(k, Object.assign(makeSubMoth(k, s.id, supervisor.test(a.type) ? SIZE.supervisor : SIZE.subagent), { key: k }));
-      Object.assign(moths.get(k), { session: s, type: a.type, leaving: false });
+      kept.add(k);
+      if (!live.moths.has(k)) live.moths.set(k, Object.assign(makeSubMoth(k, s.id, live.supervisor.test(a.type) ? SIZE.supervisor : SIZE.subagent), { key: k }));
+      Object.assign(live.moths.get(k), { session: s, type: a.type, leaving: false });
     }
   }
-  for (const [k, m] of moths) if (!live.has(k)) m.leaving = true;
+  for (const [k, m] of live.moths) if (!kept.has(k)) m.leaving = true;
   // Homes depend only on the sessions the server sent, so every window agrees however they arrived. There are as many
   // spots as sessions on their own, 3 to 16, evenly round the lantern. Each session wants the one at its own seeded angle;
   // active ones choose first and resting ones (snoozed for good, or idle: both change rarely, unlike working and waiting)
   // after, so a resting moth takes a free spot rather than push an active one out. Past 16, they double up where it's
   // least crowded. A join or leave can move the others; frame.js glides them there.
   const want = id => seeded(hash(id))(), resting = s => s.forGood || s.state === 'idle';
-  const own = shown.filter(s => !moths.get(s.id).satellite)
+  const own = shown.filter(s => !live.moths.get(s.id).satellite)
     .sort((a, b) => resting(a) - resting(b) || want(a.id) - want(b.id) || (a.id < b.id ? -1 : 1));
   const n = Math.min(16, Math.max(3, own.length)), held = Array(n).fill(0), off = (i, id) => Math.abs(i + 0.5 - want(id) * n);
   for (const { id } of own) {
     const i = held.reduce((best, c, i) => c < held[best] || c === held[best] && off(i, id) < off(best, id) ? i : best, 0);
-    moths.get(id).spot = ringHome(i, n, held[i]++);
+    live.moths.get(id).spot = ringHome(i, n, held[i]++);
   }
-  for (const s of shown) { const m = moths.get(s.id); m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.js)
+  for (const s of shown) { const m = live.moths.get(s.id); m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.js)
 
   // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
   const working = sessions.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length;
@@ -82,7 +77,7 @@ function sync() {
   else {
     st.replaceChildren(`${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working`);
     if (waiting.length) st.append(' · ', cycler('need', `${waiting.length} need${waiting.length > 1 ? '' : 's'} you`, 'Open the session that has waited longest'));
-    const until = quiet() && quietUntil < QUIET_FOREVER ? ` until ${quietEndLabel()}` : '';
+    const until = quiet() && live.quietUntil < QUIET_FOREVER ? ` until ${quietEndLabel()}` : '';
     if (snoozed) st.append(' · ', cycler('snoozed', `${snoozed} snoozed`, 'Open the snoozed sessions one at a time'), until);
     else if (quiet()) st.append(` · snoozed${until}`);
     if (sleeping) st.append(' · ', cycler('sleeping', `${sleeping} sleeping`, 'Open the sleeping sessions one at a time'));
@@ -92,10 +87,10 @@ function sync() {
       warm.className = 'warm'; warm.textContent = `warm for ${m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`}`;
       st.append(' · ', warm);
     }
-    if (reviews.length) {
+    if (live.reviews.length) {
       const a = document.createElement('a');
       a.href = 'https://github.com/pulls/review-requested'; a.target = '_blank'; a.rel = 'noopener'; a.className = 'next';
-      a.textContent = `${reviews.length} review${reviews.length > 1 ? 's' : ''}`; a.title = reviews.map(r => `${r.label} ${r.title}`).join('\n');
+      a.textContent = `${live.reviews.length} review${live.reviews.length > 1 ? 's' : ''}`; a.title = live.reviews.map(r => `${r.label} ${r.title}`).join('\n');
       st.append(' · ', a);
     }
   }
@@ -122,8 +117,6 @@ function mothNode() {
   return { g, up, side };
 }
 
-// hovering a moth pins a card to it; a short grace period stops it flickering as the moth drifts
-let hovered = null, hideTimer;
 // A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.
 // A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
 function hoverArea(m, at) {
@@ -154,33 +147,9 @@ function makeSessionMoth(key) {
 }
 
 function makeSubMoth(key, parentId, size) {
-  const p = moths.get(parentId), rand = seeded(hash(key));
+  const p = live.moths.get(parentId), rand = seeded(hash(key));
   return ({ ...mothNode(), size, parentId, x: p?.x ?? CX, y: p?.y ?? CY, a: rand() * 6.28,
     r: (size === SIZE.supervisor ? 54 : 38) + rand() * 14,
     speed: (1.1 + rand()) * (rand() < 0.5 ? -1 : 1) / size ** 0.5,
     phase: rand() * 10, cool: 0, leaving: false });
 }
-
-// A scorched moth's smoke trail (frame.js smoke, background.js trailSmoke): the seconds it's left over, a point on its path
-// every `every` seconds or `apart` units flown, whichever comes first, `most` of them, and the Ss it curls into along its
-// length (their size and length, in scene units). Up to SMOKERS moths smoke at once (frame.js scorchStep), and
-// TRAIL_POINTS holds all their trails: each one's points, the last where the smoke stops following, one joined to the
-// moth, and one parting it from the next.
-const TRAIL = { secs: 1.5, every: 0.25, apart: 12, most: 12, s: 9, length: 70 }, SMOKERS = 6;
-const TRAIL_POINTS = SMOKERS * (TRAIL.most + 3);
-const PLUMES = 1 + SMOKERS; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
-// The smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense, and
-// its colour, a pale warm grey. The flame's lanes (frame.js smokeAt): one plume a `slot` seconds, let go somewhere in its
-// first `window`, once the flame burns at `from`. How many seconds a plume takes to let go: the flame's, and a singe's.
-const PLUME = { size: 1, life: 6, alpha: 0.5 }, SMOKE_COL = '#B4A8B4';
-const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
-const SMOKE_REL = 3, SINGE_REL = 0.8;
-
-// The column of hot air rising off a lantern (style.heat; frame.js heatAt, and heat() in background.js's shaders): its half-width at the
-// tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
-// fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
-const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
-// How many links the flame's spine has, from its base up to its tip (frame.js stepFlame, background.js spineX).
-const CHAIN = 6;
-// a number as a GLSL float, exactly (a whole number gets its .0; any other already has a point or an exponent)
-const glf = v => Number.isInteger(v) ? v.toFixed(1) : String(v);

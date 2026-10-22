@@ -6,7 +6,6 @@
 // carries onto other displays, so they drift instead of lying anywhere. Shown unless turned off in the settings
 // menu (quiet hours leave them be).
 
-let stalePRs = [], staleOn = true;
 const STALE_MAX = 30;
 const wisps = new Map(); // url -> wisp
 let staleSeeded = false; // the first list is simply there; later arrivals fade in
@@ -43,13 +42,12 @@ function makeGhost(o) {
 // shapes are star-shaped about. `at` takes a point on the moth to the scene.
 const WING_STEPS = 6, GHOST_TRIS = 2 * WING_STEPS - 1; // points along each curve, triangles per wing
 const ghostWings = new Float32Array(GHOSTS_MAX * 2 * GHOST_TRIS * 9);
-let ghostWingN = 0; // corners
 function addGhostWing(pts, at, alpha) {
   const q = (a, c, b, t) => at([0, 1].map(k => (1 - t) * (1 - t) * a[k] + 2 * (1 - t) * t * c[k] + t * t * b[k]));
   const rim = [];
   for (const [a, c, b] of [pts.slice(0, 3), pts.slice(2, 5)]) for (let i = 1; i <= WING_STEPS; i++) rim.push(q(a, c, b, i / WING_STEPS));
   const root = at(pts[0]);
-  for (let i = 0; i < GHOST_TRIS && ghostWingN < ghostWings.length / 3; i++, ghostWingN += 3) ghostWings.set([...root, alpha, ...rim[i], alpha, ...rim[i + 1], alpha], 3 * ghostWingN);
+  for (let i = 0; i < GHOST_TRIS && live.ghostWingN < ghostWings.length / 3; i++, live.ghostWingN += 3) ghostWings.set([...root, alpha, ...rim[i], alpha, ...rim[i + 1], alpha], 3 * live.ghostWingN);
 }
 
 // Where the ghosts go: all around the lantern, in the gaps between the living moths. Each living moth (with its
@@ -81,7 +79,7 @@ function planStale(s, loose) {
   if (s - stalePlannedAt < 0.5) return;
   stalePlannedAt = s;
   const taken = [];
-  for (const m of moths.values()) if (m.home && !m.parentId && !m.leaving) taken.push([Math.atan2(m.home[1] - 320, m.home[0] - 340), 0.42]);
+  for (const m of live.moths.values()) if (m.home && !m.parentId && !m.leaving) taken.push([Math.atan2(m.home[1] - 320, m.home[0] - 340), 0.42]);
   // pads: a ghost's drift, wings and the wisps circling it; a wisp's drift, the wind and its glow
   for (const m of ghosts.values()) { m.aim = nextAim(m.aim, m.pref, taken, a => behindStand(a, m.dist, 72)); taken.push([m.aim, 0.3]); }
   for (const d of loose) { d.aim = nextAim(d.aim, d.pref, taken, a => behindStand(a, d.dist, 36)); taken.push([d.aim, 0.1]); }
@@ -105,7 +103,7 @@ function driftTo(o, dt, s, sway) {
 }
 
 function drawStale(dt, s) {
-  const show = staleOn, list = stalePRs; // turning it off just hides them
+  const show = live.staleOn, list = live.stalePRs; // turning it off just hides them
   const now = Date.now() / 1000; // they move on the wall clock, so every window (app, panel, screensaver) has them in the same places
   const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 30 drift, the oldest cloud up
   const want = new Map(drifting.map((p, i) => [p.url, [p, i]]));

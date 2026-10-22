@@ -16,7 +16,6 @@
 // never per animation frame. In a window too small to read the words (the iTerm toolbelt), none of it runs.
 
 let lanternText = 'sessions';
-let recentProse = []; // from the server's `prose` event
 // The paper's geometry comes from the lantern (style.surface, see lanterns.js): its middle and width, the heights of its
 // wires, and how much each bows at the front. `lines` lines of type share each gap between wires, riding the bow.
 const INK = { warm: '#5A3420', cool: '#2E2350' };
@@ -35,7 +34,7 @@ const STRIPS = 90, TILES_DOWN = 24;
 let blocks = [], shownLately = [], nextBlockAt = 0;
 // The first render waits for the server's first snapshot (or a moment, if it's offline), then starts with a full set of
 // blocks part way through their lives, as if it had been running a while, so a reload doesn't wipe the paper.
-let pagesData = false, primed = false, waitFrom = performance.now(), pagesTimer = 0;
+let primed = false, waitFrom = performance.now(), pagesTimer = 0;
 // the whole set's ink comes up together (or goes out) over INTRO, on a quicker timer of its own, rather than at once
 const INTRO = 1200, PRIME_AGE = 2 * FADE + HOLD;
 let introAt = 0, introTimer = 0, inking = 1; // inking: 1 coming up, -1 going out
@@ -60,7 +59,7 @@ const wrapWords = (text, width, size) => text.split(' ').reduce((lines, w) => {
 // starting run it takes the ones after it until there are about 160 words, skipping starts shown lately. Nothing when
 // there are no words.
 function pickText() {
-  const sources = [...raw.map(s => s.prose || []), recentProse].filter(list => list.length);
+  const sources = [...live.raw.map(s => s.prose || []), live.recentProse].filter(list => list.length);
   const starts = sources.flatMap(list => list.map((run, i) => ({ list, i, run })));
   const fresh = starts.filter(st => !shownLately.includes(st.run)), pool = fresh.length ? fresh : starts;
   const start = pool[Math.floor(Math.random() * pool.length)];
@@ -94,10 +93,10 @@ const extent = b => {
 };
 // How much of each cell the showing blocks cover (leaving ones don't count, so their cells are refilled first), as the
 // share of the cell's squares (a fifth of a column wide, one row tall) that have any type on them.
-function cellCover(d, live) {
+function cellCover(d, showing) {
   const [first, rows] = fillRows(d), U = span(d), sub = 5, n = COLS * sub, step = 2 * U / n;
   const hit = Array.from({ length: rows }, () => new Array(n).fill(false));
-  for (const b of live) {
+  for (const b of showing) {
     const [l, r, r0, r1] = extent(b);
     for (let row = Math.max(first, r0); row < Math.min(rows, r1); row++)
       for (let c = 0; c < n; c++) if (-U + (c + 1) * step > l && -U + c * step < r) hit[row][c] = true;
@@ -112,8 +111,8 @@ function cellCover(d, live) {
 
 // A new block's middle goes in the least-covered cell (ties broken at random), nudged up to a third of a cell either way
 // so the blocks overlap loosely rather than sitting on a grid.
-function place(block, live, r = Math.random) {
-  const d = style.surface, [first, rows] = fillRows(d), U = span(d), cover = cellCover(d, live);
+function place(block, showing, r = Math.random) {
+  const d = style.surface, [first, rows] = fillRows(d), U = span(d), cover = cellCover(d, showing);
   let best = Infinity, band = 0, col = 0;
   cover.forEach((cells, b) => cells.forEach((v, c) => { if (v + r() * 0.05 < best) { best = v + r() * 0.05; band = b; col = c; } }));
   const mid = -U + (col + 0.5 + (r() - 0.5) * 0.66) * 2 * U / COLS;
@@ -280,7 +279,7 @@ function tickPages() {
   if (paper !== style.surface) { forget(); paper = style.surface; } // another lantern: a fresh set laid out for its paper
   const now = performance.now();
   if (lanternText !== 'off' && !primed) {
-    if (!pagesData && now - waitFrom < 1500) return; // nothing drawn yet
+    if (!live.pagesData && now - waitFrom < 1500) return; // nothing drawn yet
     primed = true;
     for (let i = 0; i < style.surface.shown; i++) addBlock(now, Math.random() * PRIME_AGE);
     fadeInk(1);

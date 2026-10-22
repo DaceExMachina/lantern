@@ -9,8 +9,7 @@ const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '
 // the stale wisps (stale.js) leave theirs in flyLights (x, y, radius, brightness, r, g, b apiece) for it to draw.
 const FIREFLY_BLOOM = 50; // the bloom's radius, in scene units, at a swell's midpoint
 const FLY_LIGHTS_MAX = 128, flyLights = new Float32Array(FLY_LIGHTS_MAX * 7);
-let flyLightN = 0;
-const addFlyLight = (x, y, r, glow, col) => { if (flyLightN < FLY_LIGHTS_MAX) flyLights.set([x, y, r, glow, ...hex(col).map(v => v / 255)], 7 * flyLightN++); };
+const addFlyLight = (x, y, r, glow, col) => { if (live.flyLightN < FLY_LIGHTS_MAX) flyLights.set([x, y, r, glow, ...hex(col).map(v => v / 255)], 7 * live.flyLightN++); };
 // Always lit, easing a bit brighter over a second or two and back, on each firefly's own slow, uneven rhythm (two waves
 // that never line up the same way twice); failing checks swell faster. 0 to 1, at `s` seconds.
 const fireflySwell = (s, ph, rate = 1.1) => Math.max(0, 0.6 * Math.sin(s * rate * 0.9 + ph) + 0.4 * Math.sin(s * rate * 0.37 + ph * 2.3)) ** 2;
@@ -121,7 +120,7 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
     // the one a landed moth's thread is tied to (f.near) eases in to a small orbit near the cluster's middle, still moving
     f.k = (f.k ?? 1) + ((f.near ? 0.2 : 1) - (f.k ?? 1)) * Math.min(1, dt * 1.5);
     const r = (f.r + (gone ? 70 * t : 0)) * f.k;
-    // the wind carries it about half as far as the dust, each a moment ahead of the next (frame.js's GUST)
+    // the wind carries it about half as far as the dust, each a moment ahead of the next (lanterns.js's GUST)
     let x = cx + Math.cos(a) * r + Math.sin(s * 0.9 + f.ph) * 6 + GUST(s - 0.03 * f.ph) * 7, y = cy + Math.sin(a) * r * 0.7 + Math.cos(s * 1.3 + f.ph) * 5;
     const swell = fireflySwell(s, f.ph, f.p.need === 'failing' ? 2.6 : 1.1); // and the bloom widens as it swells
     let size = FIREFLY_BLOOM * (0.75 + 0.45 * swell), glow = 0.6 + 0.4 * swell;
@@ -153,7 +152,7 @@ function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
 const flyTry = new Map();
 let tryUrl = '';
 devButton('Fireflies', 'play merge', 'A random firefly plays a merge: flare, shake, loop-de-loop, off the far side', () => {
-  const all = [...moths.values()].flatMap(m => m.flies ? [...m.flies].filter(([, f]) => !f.leave).map(([url, f]) => ({ flies: m.flies, url, need: f.p.need })) : []);
+  const all = [...live.moths.values()].flatMap(m => m.flies ? [...m.flies].filter(([, f]) => !f.leave).map(([url, f]) => ({ flies: m.flies, url, need: f.p.need })) : []);
   const pool = all.filter(c => c.url !== tryUrl), pick = (pool.length ? pool : all)[Math.floor(Math.random() * (pool.length || all.length))];
   if (!pick) return;
   flyTry.clear();

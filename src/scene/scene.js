@@ -102,29 +102,27 @@ const LANTERN_SPAN = 200;
 const VIEW = { kx: 1, ky: 1, top: 20 }; // top: where the lantern hangs from, the visible area's top edge
 /** @type {(p: number[]) => [number, number]} */
 const stretch = ([x, y]) => [340 + (x - 340) * VIEW.kx, 320 + (y - 320) * VIEW.ky];
-// frame() calls it each frame, so it follows the window and the pinned sidebar sliding in or out, and only does the work
-// when the size has changed. Each frame, before anything is drawn, so the sidebar's slide never shows a cleared canvas.
-let fitted = '';
-function fitView() {
-  const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect(), size = `${width} ${height} ${devicePixelRatio}`;
-  if (!width || !height || size === fitted) return;
-  fitted = size;
-  VIEW.kx = Math.max(1, width / height); VIEW.ky = Math.max(1, height / width);
-  const w = 600 * VIEW.kx, h = 600 * VIEW.ky, x = 340 - w / 2, y = 320 - h / 2;
-  for (const s of document.querySelectorAll('#scene > svg:not(.lanternLayer)')) s.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
-  VIEW.box = [x, y, w, h];
-  VIEW.px = width / w; // CSS pixels per unit
-  // the lantern's layer spans LANTERN_SPAN either side of its middle, the window's full height (a chain or column runs edge
-  // to edge), its left edge on a whole device pixel so the lantern lands on the same pixels it would in the scene, and it
-  // turns about where the lantern hangs from (frame.js swingLantern)
-  // turns about where the lantern hangs from (frame.js swingLantern); the flame's canvas covers the same strip, unturned
-  const dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
-  for (const layer of [$('lanternBack'), $('lanternLayer'), $('flame')]) Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
-  for (const layer of document.querySelectorAll('.lanternLayer')) layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
-  VIEW.layer = [x0, y, 2 * LANTERN_SPAN, h]; // the lantern's strip in scene units, which the flame's canvas covers
-  const k = dpr * bgScale; // background.js
-  for (const [canvas, cw] of [[$('bg'), width], [$('flame'), 2 * LANTERN_SPAN * VIEW.px]]) { canvas.width = Math.round(cw * k); canvas.height = Math.round(height * k); }
-  VIEW.top = y;
-  drawHang(); // the string or chain runs from the top of the window down to the lantern
-  bakeCutouts(); // the Moroccan's lace, at the new size (lanterns.js)
-}
+
+// A scorched moth's smoke trail (frame.js smoke, background.js trailSmoke): the seconds it's left over, a point on its path
+// every `every` seconds or `apart` units flown, whichever comes first, `most` of them, and the Ss it curls into along its
+// length (their size and length, in scene units). Up to SMOKERS moths smoke at once (frame.js scorchStep), and
+// TRAIL_POINTS holds all their trails: each one's points, the last where the smoke stops following, one joined to the
+// moth, and one parting it from the next.
+const TRAIL = { secs: 1.5, every: 0.25, apart: 12, most: 12, s: 9, length: 70 }, SMOKERS = 6;
+const TRAIL_POINTS = SMOKERS * (TRAIL.most + 3);
+const PLUMES = 1 + SMOKERS; // plumes of smoke drawn at once: the flame's, and each smoking moth's singe (frame.js smoke, background.js plume)
+// The smoke's plumes (frame.js smoke, background.js plume): how big, how many seconds each bit lasts, and how dense, and
+// its colour, a pale warm grey. The flame's lanes (frame.js smokeAt): one plume a `slot` seconds, let go somewhere in its
+// first `window`, once the flame burns at `from`. How many seconds a plume takes to let go: the flame's, and a singe's.
+const PLUME = { size: 1, life: 6, alpha: 0.5 }, SMOKE_COL = '#B4A8B4';
+const SMOKE = [{ slot: 90, window: 30, from: 0 }, { slot: 25, window: 10, from: 0.5 }, { slot: 12, window: 3, from: 0.8 }];
+const SMOKE_REL = 3, SINGE_REL = 0.8;
+
+// The column of hot air rising off a lantern (style.heat; frame.js heatAt, and heat() in background.js's shaders): its half-width at the
+// tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
+// fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
+const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
+// How many links the flame's spine has, from its base up to its tip (frame.js stepFlame, background.js spineX).
+const CHAIN = 6;
+// a number as a GLSL float, exactly (a whole number gets its .0; any other already has a point or an exponent)
+const glf = v => Number.isInteger(v) ? v.toFixed(1) : String(v);

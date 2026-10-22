@@ -235,7 +235,7 @@ function playFlash(id) {
   let t0 = performance.now(), shown = '';
   // a click opens the stats panel with this badge's card pinned (stats.js), and sends the swarm off now
   pill.onclick = () => {
-    pinnedBadge = id;
+    live.pinnedBadge = id;
     $('stats').showPopover();
     t0 = Math.min(t0, performance.now() - leaveAt);
   };

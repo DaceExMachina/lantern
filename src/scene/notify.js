@@ -3,6 +3,12 @@
 // ---- optional notification + chime --------------------------------------------
 const box = $('notify');
 let audio;
+// the menu's switch, remembered by this browser
+try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
+box.onchange = () => {
+  try { localStorage.setItem('lantern-notify', box.checked ? '1' : '0'); } catch {}
+  if (box.checked) { audio ??= new AudioContext(); if (Notification.permission === 'default') Notification.requestPermission(); }
+};
 function alertMe(s) {
   if (!box.checked) return;
   const name = s.title || s.cwd.split('/').filter(Boolean).pop() || 'a session';

@@ -83,19 +83,19 @@ function zoneAt(zones, x, y) {
   return best;
 }
 function enterZone(a) {
-  clearTimeout(hideTimer);
-  if (hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
-  hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
+  clearTimeout(live.hideTimer);
+  if (live.hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
+  live.hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
-function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(hideTimer); hideCard(); }
+function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (Tapping the card's header runs the action.)
-function tapZone(zone) { if (hovered === zone.target) hideCard(); else enterZone(zone); }
-function hideCard() { hovered = held = shown = null; openAgents.clear(); prOver.card = ''; $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
+function tapZone(zone) { if (live.hovered === zone.target) hideCard(); else enterZone(zone); }
+function hideCard() { live.hovered = held = shown = null; openAgents.clear(); prOver.card = ''; $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
 
 function renderCard() {
   dropTip();
-  const m = hovered, s = m?.session;
+  const m = live.hovered, s = m?.session;
   if (m?.stale) return renderStaleCard(m.stale);
   if (m?.ghost) return renderGhostCard(m.ghost);
   if (!s) return;
@@ -121,11 +121,11 @@ function sessionRows(s, full = false) {
   go.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg>';
   const open = make('button', 'open', make('span', 'face name', s.title || project(s), go));
   open.title = 'Open this session';
-  open.onclick = e => { const m = moths.get(s.id); if (m) clickZone(m.zone, e.shiftKey); };
+  open.onclick = e => { const m = live.moths.get(s.id); if (m) clickZone(m.zone, e.shiftKey); };
   // the pill does what a right-click on the moth does (its `menu`, state.js): snooze, then sleep, then wake
   const next = s.forGood ? 'Wake' : waiting && !s.snoozed ? 'Snooze' : 'Sleep until you wake it';
   chip.title = next; chip.setAttribute('aria-label', `${chip.textContent}: ${next.toLowerCase()}`);
-  chip.onclick = () => moths.get(s.id)?.zone?.menu?.();
+  chip.onclick = () => live.moths.get(s.id)?.zone?.menu?.();
   const rows = [make('h3', '', open, chip, ...(pinnable() ? [pinButton(s)] : []))];
   if (s.state === 'working' && s.activity) rows.push(make('div', 'state', s.activity));
   else if (s.state !== 'working' && s.note && !/^(Finished its turn|Waiting on|Asks:)/.test(s.note)) rows.push(make('div', 'state' + (s.error ? ' error' : ''), s.note));
@@ -187,8 +187,6 @@ function agentRow({ id, job, activity = '', started, last = 0, model }, now, ful
 const ORDER = ['failing', 'changes', 'ready', 'waiting', 'draft', 'merged', 'closed'];
 const SHORT = { ...NEED, ready: 'ready', failing: 'failing' };
 const PR_CAP = 4;
-/** @type {Record<string, boolean>} */
-let prList = {};
 const prOver = { card: '', dock: '' }; // the url of the PR chip under the pointer in each, whose title its header shows
 let tipFor = null; // the link #prTip was shown for
 // a redraw that took away the link the tip was showing for takes the tip too
@@ -201,16 +199,16 @@ function prSummary(prs) {
 }
 function prBlock(s, full = false) {
   // in the sidebar they're listed in full until that pin's own toggle (kept with the pin) turns them into chips
-  const pin = full && pinned.find(p => p.id === s.id), cap = full ? Infinity : PR_CAP;
-  const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = full ? !pin?.chips : prList[s.id] ?? prs.length <= 3;
+  const pin = full && live.pinned.find(p => p.id === s.id), cap = full ? Infinity : PR_CAP;
+  const prs = [...s.github].sort((a, b) => rank(a.need) - rank(b.need)), open = full ? !pin?.chips : live.prList[s.id] ?? prs.length <= 3;
   const where = full ? 'dock' : 'card', over = !open && prs.find(p => p.url === prOver[where]), redraw = full ? renderSidebar : renderCard;
   const ph = over ? make('span', 'ph title', over.title) : make('span', 'ph', make('span', 'sum', make('b', '', 'PRs'), ` · ${prSummary(prs)}`));
   const tog = make('button', 'tog'), label = open ? 'Show PRs as chips' : 'List PRs with their titles';
   tog.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg>';
   tog.setAttribute('aria-expanded', String(open)); tog.setAttribute('aria-label', label); tog.title = label;
   tog.onclick = () => {
-    if (full) return setPins(pinned.map(p => p.id === s.id ? { ...p, chips: open } : p));
-    prList[s.id] = !open;
+    if (full) return setPins(live.pinned.map(p => p.id === s.id ? { ...p, chips: open } : p));
+    live.prList[s.id] = !open;
     post('/settings', { prList: { [s.id]: !open } });
     renderCard();
   };
@@ -259,9 +257,7 @@ function prBlock(s, full = false) {
 // place, dimmed, as this window last saw it, until it's unpinned; a window that never saw it leaves it out. No pinning
 // where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
-/** @type {{ id: string, chips?: boolean }[]} the pinned sessions, oldest first, each with whether its PRs show as chips */
-let pinned = [];
-const isPinned = (/** @type {string} */ id) => pinned.some(p => p.id === id);
+const isPinned = (/** @type {string} */ id) => live.pinned.some(p => p.id === id);
 const pinnedLast = new Map(); // id → the session as this window last saw it
 const pinnable = () => innerWidth >= PIN_MIN && !document.body.matches('.panel, .screensaver, .ambient');
 function pinButton(s) {
@@ -269,28 +265,28 @@ function pinButton(s) {
   face.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg>';
   b.setAttribute('aria-label', on ? `Unpin ${name}` : `Pin ${name} to the sidebar`);
   b.title = on ? 'Unpin' : 'Pin to the sidebar';
-  b.onclick = () => setPins(on ? pinned.filter(p => p.id !== s.id) : [...pinned, { id: s.id }]);
+  b.onclick = () => setPins(on ? live.pinned.filter(p => p.id !== s.id) : [...live.pinned, { id: s.id }]);
   return b;
 }
 // Only the pins this window can show go to the server (the one just pinned is live), so one nobody can see any more
 // doesn't linger.
-function setPins(/** @type {typeof pinned} */ pins) {
-  pinned = pins.filter(p => pinnedLast.has(p.id) || sessions.some(o => o.id === p.id));
-  post('/settings', { pinned });
+function setPins(/** @type {typeof live.pinned} */ pins) {
+  live.pinned = pins.filter(p => pinnedLast.has(p.id) || sessions.some(o => o.id === p.id));
+  post('/settings', { pinned: live.pinned });
   renderSidebar();
-  if (hovered) renderCard(); // its pin shows the change
+  if (live.hovered) renderCard(); // its pin shows the change
 }
 function renderSidebar() {
   dropTip();
   for (const id of pinnedLast.keys()) if (!isPinned(id)) pinnedLast.delete(id);
   for (const o of sessions) if (isPinned(o.id)) pinnedLast.set(o.id, o);
-  const ids = pinnable() ? pinned.map(p => p.id).filter(id => pinnedLast.has(id)) : [];
+  const ids = pinnable() ? live.pinned.map(p => p.id).filter(id => pinnedLast.has(id)) : [];
   document.body.classList.toggle('pinned', ids.length > 0);
   $('dock').inert = !ids.length; // out of the tab order and the accessibility tree while closed
   if (!ids.length) return; // ponytail: what it showed stays, so it slides out whole
-  const live = new Set(sessions.map(o => o.id));
+  const running = new Set(sessions.map(o => o.id));
   // one section per session in the column's scroller (index.html)
-  morph($('dock').children[0], ids.map(id => keyed(id, make('section', live.has(id) ? '' : 'ended', ...sessionRows(pinnedLast.get(id), true)))));
+  morph($('dock').children[0], ids.map(id => keyed(id, make('section', running.has(id) ? '' : 'ended', ...sessionRows(pinnedLast.get(id), true)))));
 }
 // The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
 // anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.
@@ -302,9 +298,9 @@ function holdAnchor(zone, x, y) {
   return held;
 }
 function placeCard() {
-  if (!hovered) return;
+  if (!live.hovered) return;
   const pt = document.querySelector('svg').createSVGPoint();
-  const zone = hovered.cardAt === 'flies' && hovered.flyZone ? hovered.flyZone : hovered.zone; // beside whichever area was hovered
+  const zone = live.hovered.cardAt === 'flies' && live.hovered.flyZone ? live.hovered.flyZone : live.hovered.zone; // beside whichever area was hovered
   pt.x = zone.x; pt.y = zone.y;
   const ctm = document.querySelector('svg').getScreenCTM(), p = pt.matrixTransform(ctm), c = $('card');
   const gap = zone.r * ctm.a * 0.7; // clear of the hover area, which covers the moth

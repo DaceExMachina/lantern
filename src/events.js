@@ -1,40 +1,40 @@
 // Wiring, run last once everything is defined: the live connection to the server, controls, and the animation clock.
 
 const es = new EventSource('/events');
-es.addEventListener('reviews', e => { reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
-es.addEventListener('prose', e => { recentProse = JSON.parse(e.data); pagesData = true; }); // words from recent transcripts, for the barrel's pages
-es.addEventListener('stale', e => { stalePRs = JSON.parse(e.data); });
-es.addEventListener('name', e => { firstName = JSON.parse(e.data); showPencil(); }); // the user's first name, for Jerrett's pencil (pencil.js)
+es.addEventListener('reviews', e => { live.reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
+es.addEventListener('prose', e => { live.recentProse = JSON.parse(e.data); live.pagesData = true; }); // words from recent transcripts, for the barrel's pages
+es.addEventListener('stale', e => { live.stalePRs = JSON.parse(e.data); });
+es.addEventListener('name', e => { live.firstName = JSON.parse(e.data); showPencil(); }); // the user's first name, for Jerrett's pencil (pencil.js)
 // a badge just earned (sent once, never on reconnect): the fireflies' flash, except in quiet hours and on the screensavers
 es.addEventListener('badge', e => { if (!quiet() && !document.body.matches('.screensaver, .ambient')) flashBadge(JSON.parse(e.data).id); });
 const PINNED = Q.get('style'); // ?style= previews one lantern, whatever the settings say
 let version; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 es.addEventListener('version', e => { if (version && e.data !== version) location.reload(); version = e.data; });
-es.onmessage = e => { raw = JSON.parse(e.data); pagesData = true; sync(); };
+es.onmessage = e => { live.raw = JSON.parse(e.data); live.pagesData = true; sync(); };
 es.addEventListener('settings', e => {
   const st = JSON.parse(e.data);
   const key = PINNED || st.style;
   if (STYLES[key] && STYLES[key] !== style) applyStyle(key);
-  const quietStarted = recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
-  quietUntil = st.quietUntil || 0;
+  const quietStarted = live.recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
+  live.quietUntil = st.quietUntil || 0;
   const isTime = /^\d{1,2}:\d{2}$/, hhmm = s => s.padStart(5, '0');
-  if (isTime.test(st.quietEnd || '')) quietEnd = st.quietEnd;
-  if (isTime.test(st.dayStart || '')) dayStart = st.dayStart;
-  $('quietEnd').value = hhmm(quietEnd); $('dayStart').value = hhmm(dayStart);
+  if (isTime.test(st.quietEnd || '')) live.quietEnd = st.quietEnd;
+  if (isTime.test(st.dayStart || '')) live.dayStart = st.dayStart;
+  $('quietEnd').value = hhmm(live.quietEnd); $('dayStart').value = hhmm(live.dayStart);
   if (isTime.test(st.quietFrom || '')) $('quietFrom').value = hhmm(st.quietFrom);
   showSwitch($('quietFromRow'), isTime.test(st.quietFrom || ''));
-  quietEndOn = st.quietEndOn !== false; showSwitch($('quietEndRow'), quietEndOn);
+  live.quietEndOn = st.quietEndOn !== false; showSwitch($('quietEndRow'), live.quietEndOn);
   paintRibbon(st.ribbon);
-  const until = quietEndOn ? `until ${quietEndLabel()}` : 'until you press it again';
+  const until = live.quietEndOn ? `until ${quietEndLabel()}` : 'until you press it again';
   $('quiet').title = `Treat everything as snoozed ${until}`;
   $('quietUntil').textContent = until;
   setLanternText(st.lanternText === 'off' ? 'off' : 'sessions'); $('textToggle').checked = lanternText !== 'off';
-  try { if (st.supervisorPattern) supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
-  recapSeen = [recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
-  usingGh = !!st.github; renderGitHub();
-  staleOn = st.stale !== false; $('staleToggle').checked = staleOn;
-  prList = st.prList || {}; // each session's card: its PRs listed or as chips
-  pinned = Array.isArray(st.pinned) ? st.pinned : []; // the sessions in the sidebar, in the order they were pinned, with their PR view
+  try { if (st.supervisorPattern) live.supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
+  live.recapSeen = [live.recapSeen || '', st.recapSeen || ''].sort().pop(); maybeRecap(quietStarted); // the later of ours and the server's
+  live.usingGh = !!st.github; renderGitHub();
+  live.staleOn = st.stale !== false; $('staleToggle').checked = live.staleOn;
+  live.prList = st.prList || {}; // each session's card: its PRs listed or as chips
+  live.pinned = Array.isArray(st.pinned) ? st.pinned : []; // the sessions in the sidebar, in the order they were pinned, with their PR view
   sync(); renderSidebar();
 });
 // The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
@@ -64,12 +64,12 @@ addEventListener('keydown', devKey);
 if (Q.has('dev')) toggleDevPanel();
 
 $('quiet').onclick = () => {
-  const [h, m] = quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);
+  const [h, m] = live.quietEnd.split(':').map(Number), morning = new Date(); morning.setHours(h, m, 0, 0);
   if (morning <= new Date()) morning.setDate(morning.getDate() + 1);
-  post('/settings', { quietUntil: quiet() ? 0 : quietEndOn ? morning.getTime() : QUIET_FOREVER });
+  post('/settings', { quietUntil: quiet() ? 0 : live.quietEndOn ? morning.getTime() : QUIET_FOREVER });
 };
 
-es.addEventListener('github', e => { github = JSON.parse(e.data); renderGitHub(); });
+es.addEventListener('github', e => { live.github = JSON.parse(e.data); renderGitHub(); });
 
 $('textToggle').onchange = e => {
   setLanternText(e.target.checked ? 'sessions' : 'off');
@@ -94,8 +94,8 @@ for (const name of Object.keys(RIBBONS)) {
 }
 paintRibbon('cerulean'); // until the server says which
 $('staleToggle').onchange = e => {
-  staleOn = e.target.checked;
-  post('/settings', { stale: staleOn });
+  live.staleOn = e.target.checked;
+  post('/settings', { stale: live.staleOn });
 };
 
 // lantern picker
@@ -119,13 +119,13 @@ setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
 // Redraw the open card and the sidebar twice a second. They're patched in place (card.js morph), so hover, focus, scroll
 // and a press mid-click all survive the redraw. The sidebar shows or goes as the window crosses PIN_MIN.
-setInterval(() => { if (hovered) renderCard(); renderSidebar(); }, 500);
+setInterval(() => { if (live.hovered) renderCard(); renderSidebar(); }, 500);
 addEventListener('resize', renderSidebar);
-$('card').addEventListener('pointerenter', () => clearTimeout(hideTimer));
+$('card').addEventListener('pointerenter', () => clearTimeout(live.hideTimer));
 // A session's card opens it from its header (card.js), or from a click on its body where the card covers its own moth (a
 // tall card in the iTerm panel). The other cards (a stale PR, a ghost) open from anywhere on them.
 $('card').addEventListener('click', e => {
-  if (hovered && !e.target.closest('a, button') && (!hovered.session || zoneAtPoint(e) === hovered.zone)) clickZone(hovered.zone, e.shiftKey);
+  if (live.hovered && !e.target.closest('a, button') && (!live.hovered.session || zoneAtPoint(e) === live.hovered.zone)) clickZone(live.hovered.zone, e.shiftKey);
 });
 // every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt).
 // Only the scene's own pointer events count, never ones on the card, the footer or a menu over it.
@@ -140,7 +140,7 @@ const zoneFor = (/** @type {MouseEvent} */ e) => (/** @type {Element} */ (e.targ
 const isTouch = (/** @type {PointerEvent} */ e) => e.pointerType === 'touch';
 // Leaving every area (or the scene) starts the card's grace period, once.
 let inZone = false;
-const leaveZones = () => { if (inZone) { inZone = false; hideTimer = setTimeout(hideCard, 700); } };
+const leaveZones = () => { if (inZone) { inZone = false; live.hideTimer = setTimeout(hideCard, 700); } };
 for (const type of ['pointerdown', 'pointermove']) $('scene').addEventListener(type, e => {
   if (isTouch(e)) return;
   const z = zoneFor(e);
@@ -155,13 +155,7 @@ addEventListener('click', e => { if (isTouch(e) && !zoneFor(e) && !(/** @type {E
 $('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
-$('card').addEventListener('pointerleave', e => { if (!isTouch(e)) hideTimer = setTimeout(hideCard, 400); });
-
-try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
-box.onchange = () => {
-  try { localStorage.setItem('lantern-notify', box.checked ? '1' : '0'); } catch {}
-  if (box.checked) { audio ??= new AudioContext(); if (Notification.permission === 'default') Notification.requestPermission(); }
-};
+$('card').addEventListener('pointerleave', e => { if (!isTouch(e)) live.hideTimer = setTimeout(hideCard, 400); });
 
 // An option's tip (the .tip after its row) docks just above the settings menu at the menu's width, like the recap's session card
 // below its panel; with no room above (a short window) it sits at the window's top edge. A pointer over a row or keyboard focus
