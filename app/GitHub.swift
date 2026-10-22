@@ -22,14 +22,18 @@ func prQuery(_ fields: String) -> String {
     }
     """
 }
-// Feedback is waiting when someone but the author reviewed it (more than approving) after the newest commit. Without a
-// commit date (a token without checks access asks for none) there is no telling. ponytail: committedDate, so a rebase
-// of old commits looks older than the review it answers; pushedDate is gone from GraphQL.
+// Feedback is waiting when, after the newest commit, someone but the author (and not a bot, which comments on every push)
+// reviewed it and the newest such review isn't an approval. The author's own replies don't clear it: feedback given and no
+// commits since is still waiting. Without a commit date (a token without checks access asks for none) there is no telling.
+// ponytail: committedDate is the committer date, so "Update branch" or a merge from main adds a commit and clears feedback
+// nobody answered; GitHub's pushedDate is gone from GraphQL.
 func feedbackWaiting(_ p: JSON) -> Bool {
     let login = { (x: JSON?) in (x?["author"] as? JSON)?["login"] as? String }
     guard let committed = (((p["commits"] as? JSON)?["nodes"] as? [JSON])?.first?["commit"] as? JSON)?["committedDate"] as? String else { return false }
-    let reviews = (p["reviews"] as? JSON)?["nodes"] as? [JSON] ?? []
-    return reviews.contains { login($0) != login(p) && str($0["state"]) != "APPROVED" && ($0["submittedAt"] as? String ?? "") > committed } // an unsubmitted review has no date
+    let since = ((p["reviews"] as? JSON)?["nodes"] as? [JSON] ?? []).filter {
+        login($0) != login(p) && ($0["author"] as? JSON)?["__typename"] as? String != "Bot" && ($0["submittedAt"] as? String ?? "") > committed // an unsubmitted review has no date
+    }
+    return since.max { str($0["submittedAt"]) < str($1["submittedAt"]) }.map { str($0["state"]) != "APPROVED" } ?? false
 }
 // what a PR needs from me: merged/closed (gone), checks failing, changes requested, feedback waiting, ready to merge, or nothing yet
 func prNeed(_ p: JSON) -> String {

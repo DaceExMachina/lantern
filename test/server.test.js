@@ -1208,22 +1208,35 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
     changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
-// Feedback is waiting on a PR when someone but its author reviewed it, with more than an approval, after the newest commit.
-test('a PR with a review newer than its newest commit needs feedback; the author, an approval or an older review do not', async t => {
-  const hour = 3600000, commit = Date.now() - 2 * hour, after = iso(commit + hour), before = iso(commit - hour);
-  const node = (n, reviews) => ({ ...prNode(n, iso(Date.now())), isDraft: false, author: { login: 'me' }, reviews: { nodes: reviews.map(([who, state, at]) => ({ author: { login: who }, state, submittedAt: at })) },
+// Feedback is waiting on a PR when, after the newest commit, someone but its author (and not a bot) reviewed it and the newest
+// such review isn't an approval. It beats ready, and the author's own replies don't clear it.
+test('a review newer than the newest commit makes feedback; the author, a bot, an older review or a later approval do not', async t => {
+  const hour = 3600000, commit = Date.now() - 4 * hour, at = n => iso(commit + n * hour);
+  const node = (n, reviews, extra = {}) => ({ ...prNode(n, iso(Date.now())), isDraft: false, author: { login: 'me' }, ...extra,
+    reviews: { nodes: reviews.map(([who, state, when, type = 'User']) => ({ author: { __typename: type, login: who }, state, submittedAt: when })) },
     commits: { nodes: [{ commit: { committedDate: iso(commit), statusCheckRollup: null } }] } });
-  const { gh, repo } = ghRepo([node(1, [['you', 'COMMENTED', after]]), node(2, [['me', 'COMMENTED', after]]), node(3, [['you', 'APPROVED', after]]),
-    node(4, [['you', 'COMMENTED', before]]), node(5, [['you', 'PENDING', null]])]);
+  const cases = [
+    ['feedback', node(1, [['you', 'COMMENTED', at(1)]])],
+    ['feedback', node(2, [['you', 'COMMENTED', at(1)]], { reviewDecision: 'APPROVED' })], // beats ready
+    ['feedback', node(3, [['you', 'APPROVED', at(1)], ['you', 'COMMENTED', at(2)]])],
+    ['feedback', node(4, [['you', 'COMMENTED', at(1)], ['me', 'COMMENTED', at(2)]])], // the author's reply doesn't clear it
+    ['waiting', node(5, [['me', 'COMMENTED', at(1)]])],
+    ['waiting', node(6, [['coderabbitai', 'COMMENTED', at(1), 'Bot']])],
+    ['waiting', node(7, [['you', 'COMMENTED', at(-1)]])],
+    ['waiting', node(8, [['you', 'PENDING', null]])],
+    ['waiting', node(9, [['you', 'COMMENTED', at(1)], ['you', 'APPROVED', at(2)]])], // an approval clears it
+  ];
+  const { gh, repo } = ghRepo(cases.map(c => c[1]));
   const id = UUID(9), file = `.claude/projects/-work-9/${id}.jsonl`, made = n => [
     { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
     { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${n}`, content: prUrl(n) + '\n' }] } }];
   let home = '';
-  const base = await serve(t, { [file]: jsonl([user('Fix it'), ...[1, 2, 3, 4, 5].flatMap(made)]) }, h => home = h, { LANTERN_GH: gh });
+  const base = await serve(t, { [file]: jsonl([user('Fix it'), ...cases.flatMap((_, i) => made(i + 1))]) }, h => home = h, { LANTERN_GH: gh });
   await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
   await post(base, '/settings', { github: true });
-  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === 5), 'a refresh to find all five');
-  assert.deepStrictEqual(s.github.map(p => [p.url, p.need]).sort(), [1, 2, 3, 4, 5].map(n => [prUrl(n), n === 1 ? 'feedback' : 'waiting']));
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === cases.length), 'a refresh to find them all');
+  const need = Object.fromEntries(s.github.map(p => [p.url, p.need]));
+  assert.deepStrictEqual(cases.map((_, i) => need[prUrl(i + 1)]), cases.map(c => c[0]));
 });
 
 // GitHub sometimes answers the query with exit 0 and every list empty. That must not wipe the PRs: the last good answer holds
