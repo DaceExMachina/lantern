@@ -240,7 +240,7 @@ test('a hooked agent with no transcript stays while it was just heard from, then
 // before it decides. Either way, the session would rest for a while its agent works.
 test('an agent known only from its transcript keeps its session paused while it keeps writing, across a stalled server', async t => {
   let home;
-  const base = await serve(t, {}, h => home = h, { ...bg(1, 0.1), LANTERN_AGENT_CHECK_SECONDS: '0.5', LANTERN_READ_DELAY_SECONDS: '0.3' });
+  const base = await serve(t, {}, h => home = h, { ...bg(3, 0.1), LANTERN_AGENT_CHECK_SECONDS: '1.5', LANTERN_READ_DELAY_SECONDS: '0.3' });
   const dir = path.join(home, '.claude/projects/-w/s1/subagents'), file = path.join(dir, 'agent-a1.jsonl');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(file, jsonl([user('Audit it')]));
@@ -252,11 +252,18 @@ test('an agent known only from its transcript keeps its session paused while it 
   await write(400); // past one read, so reads are out all the time
   assert.strictEqual((await s1(base)).state, 'paused');
   t.server.kill('SIGSTOP');
-  await write(1500); // past the 1s freshness
+  await write(3500); // past the 3s freshness
   fs.appendFileSync(file, jsonl([user('more')]));
+  const wrote = fs.statSync(file).mtimeMs;
   t.server.kill('SIGCONT');
-  // the reads that were out land, then fresh ones; all well inside the freshness of that last write
-  for (const end = Date.now() + 700; Date.now() < end; await wait(20)) assert.strictEqual((await s1(base)).state, 'paused');
+  // the reads that were out land, then fresh ones; the session stays paused until the server has heard the last write
+  // (the agent's `last` reaches it), and the freshness is wide enough that a slow runner can't outwait it
+  for (const end = Date.now() + 20000; ; await wait(20)) {
+    const s = await s1(base);
+    assert.strictEqual(s.state, 'paused');
+    if (s.subagents[0].last >= wrote) break;
+    assert.ok(Date.now() < end, 'timed out waiting for the server to hear the last write');
+  }
 });
 
 // Claude Code fires no hook on a rename, so the sweep notices the new custom-title.json by itself, in a session that's
@@ -508,8 +515,11 @@ test('an ended process\'s leftover idle status doesn\'t land a session still run
   await hook(proc.pid, { hook_event_name: 'UserPromptSubmit', prompt: 'go' });
   await hook(process.pid, { hook_event_name: 'PreToolUse', tool_name: 'Read', tool_input: {} }); // the other process, no status file
   await wait(1500); // past the lag
-  setStatus(home, 'idle'); // its last word, then it ends
+  // Its last word, then it ends, all while the server is stopped: a sweep between the two would see a live process saying idle.
+  t.server.kill('SIGSTOP');
+  setStatus(home, 'idle');
   const gone = new Promise(r => proc.once('exit', r)); proc.kill(); await gone;
+  t.server.kill('SIGCONT');
   await until(async () => (await shown()).pids.join() === String(process.pid), 'the sweep to drop the ended process');
   assert.strictEqual((await shown()).state, 'working');
 });
