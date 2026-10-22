@@ -29,8 +29,25 @@ let HOME = ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory()
 // Claude Code's config folder: CLAUDE_CONFIG_DIR, or `claudeDir` in Lantern's settings.json (an app opened from the Dock
 // doesn't see your shell's env, so the installer writes it there), or ~/.claude. Settings can override it at startup.
 var CLAUDE_CONFIG_DIR = ProcessInfo.processInfo.environment["CLAUDE_CONFIG_DIR"]
-var CLAUDE_DIR: String { CLAUDE_CONFIG_DIR ?? HOME + "/.claude" }
-var PROJECTS: String { CLAUDE_DIR + "/projects" }
+// Lantern reads every config folder there is, so a work account's sessions show beside the personal ones: the one above (or
+// ~/.claude), ~/.claude-work when it exists, and any more in LANTERN_CLAUDE_DIRS (colon-separated) or `claudeDirs` in the
+// settings. Each folder's projects are resolved to their real path and listed once, so a work folder whose projects are a
+// symlink into the personal one isn't read twice.
+var EXTRA_CLAUDE_DIRS = (ProcessInfo.processInfo.environment["LANTERN_CLAUDE_DIRS"] ?? "").split(separator: ":").map(String.init)
+var CLAUDE_DIRS: [String] = claudeDirs()
+func claudeDirs() -> [String] {
+    let main = CLAUDE_CONFIG_DIR ?? HOME + "/.claude", more = [HOME + "/.claude", HOME + "/.claude-work"] + EXTRA_CLAUDE_DIRS // the rest only when they exist
+    var seen = Set<String>()
+    return ([main] + more.map { ($0 as NSString).expandingTildeInPath }.filter { FileManager.default.fileExists(atPath: $0) })
+        .filter { seen.insert((($0 + "/projects") as NSString).resolvingSymlinksInPath).inserted }
+}
+var PROJECT_ROOTS: [String] { CLAUDE_DIRS.map { $0 + "/projects" } }
+/// A session's folder (the transcript minus .jsonl) in the config folder holding its newest copy (after a migration the old
+/// folder keeps a stale one), the first folder when none has it yet.
+func sessionPath(_ project: String, _ id: String) -> String {
+    let all = PROJECT_ROOTS.map { "\($0)/\(project)/\(id)" }
+    return newestCopies(all.map { $0 + ".jsonl" }.filter { FileManager.default.fileExists(atPath: $0) }).first.map { String($0.dropLast(6)) } ?? all.first ?? ""
+}
 // The user's first name, for the candle's pencil (src/scene/pencil.js): Claude Code's account name, else the Mac's. Claude
 // Code keeps its account in .claude.json, inside its config folder when that's set and in HOME when not. Only those two
 // fields are used, and the name goes nowhere but the page, once as each page connects. A global outside main.swift is
@@ -210,6 +227,8 @@ final class LanternServer {
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
         if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_CONFIG_DIR = (dir as NSString).expandingTildeInPath }
+        EXTRA_CLAUDE_DIRS += (settings["claudeDirs"] as? [String]) ?? []
+        CLAUDE_DIRS = claudeDirs()
         stats = Stats(data + "/stats.sqlite")
         stats.dayStart = clockMinutes(settings["dayStart"]) ?? 0
         // a badge earned for the first time ever flashes on the open pages (repeats just land in the stats); only live, never in a new page's opening burst
