@@ -8,10 +8,10 @@ import { STYLES, applyStyle, isStyleKey, paintRibbon, style } from './scene/lant
 import { isReview, isSession, isStalePR, isRecord, isString, isTime, parseJson, parseSettings } from './types';
 import { showPencil } from './scene/pencil';
 import './scene/github'; // its dev toggle
-import { QUIET_FOREVER, quiet, quietEndLabel, sync, tickWarm } from './scene/state';
+import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
 import { fitView, frame } from './scene/frame';
 import { setLanternText } from './scene/pages';
-import { clickZone, enterZone, hideCard, renderSidebar, tapZone, zoneAt, zones } from './scene/card';
+import { clickZone, enterZone, hideCard, tapZone, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
 import { flashBadge } from './scene/flash';
@@ -49,25 +49,10 @@ listen('settings', t => {
   try { if (st.supervisorPattern) live.supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   live.recapSeen = [live.recapSeen || '', st.recapSeen || ''].sort().pop() ?? ''; maybeRecap(quietStarted); // the later of ours and the server's
   live.staleOn = st.stale !== false;
-  live.pinned = st.pinned ?? []; // the sessions in the sidebar, in the order they were pinned, with their PR view
-  sync(); renderSidebar();
+  sync();
 });
-// The status keeps to one line: once it has slid all the way left and still doesn't fit, it shrinks to fit, down to
-// 9px, and only wraps past that. Text scales with its font size, so one measurement gives the size that fits.
-export function fitStatus() {
-  const st = $('status'), cs = getComputedStyle(st), pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-  st.style.fontSize = st.style.whiteSpace = '';
-  const fit = (st.clientWidth - pad) / (st.scrollWidth - pad), size = Math.floor(10 * parseFloat(cs.fontSize) * fit) / 10;
-  if (fit >= 1) return;
-  st.style.fontSize = `${Math.max(9, size)}px`;
-  if (size < 9) st.style.whiteSpace = 'normal';
-}
-new MutationObserver(fitStatus).observe($('status'), { childList: true, subtree: true, characterData: true });
-addEventListener('resize', fitStatus);
 setInterval(sync, 60 * 1000); // notice when quiet hours end, even with nothing else happening
-setInterval(tickWarm, 1000);
 es.onerror = () => {
-  $('status').textContent = 'server offline, retrying…'; $('status').className = 'offline';
   // WebKit can give up on the stream for good (e.g. while the app restarts); start over once the server is back
   if (es.readyState === EventSource.CLOSED) setTimeout(() => location.reload(), 3000);
 };
@@ -99,10 +84,6 @@ window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 10
 const SAVER = Q.has('screensaver');
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
-// Redraw the sidebar twice a second. It's patched in place (card.ts morph), so hover, focus, scroll and a press mid-click
-// all survive the redraw. It shows or goes as the window crosses PIN_MIN. (The card is Vue's: SessionCard.vue.)
-setInterval(() => renderSidebar(), 500);
-addEventListener('resize', renderSidebar);
 $('card').addEventListener('pointerenter', () => clearTimeout(live.hideTimer));
 // A session's card opens it from its header (card.ts), or from a click on its body where the card covers its own moth (a
 // tall card in the iTerm panel). The other cards (a stale PR, a ghost) open from anywhere on them.

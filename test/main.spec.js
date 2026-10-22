@@ -1,4 +1,4 @@
-// The page's wiring (src/wiring.ts): the status line shrinking to fit, the fallback timer that stands in for rAF, pointing at
+// The page's wiring (src/wiring.ts): the fallback timer that stands in for rAF, pointing at
 // and clicking a moth, and a tap that puts the card away. Each test loads the whole page afresh (src/wiring.ts imports the
 // rest) on index.html's real markup, with fake timers, and stubs only what happy-dom lacks: the event stream, the
 // lantern picker's Option, and rAF, so no frame loop runs.
@@ -33,21 +33,6 @@ function flatScene() {
   vi.spyOn(document.querySelector('svg'), 'getScreenCTM').mockReturnValue(/** @type {any} */ ({ inverse: () => null }));
   vi.stubGlobal('DOMPoint', class { constructor(x, y) { this.x = x; this.y = y; } matrixTransform() { return this; } });
 }
-
-test('the status shrinks to fit on one line, down to 9px, and wraps only past that', async () => {
-  const { events } = await open();
-  vi.stubGlobal('getComputedStyle', () => ({ paddingLeft: '4px', paddingRight: '4px', fontSize: '16px' }));
-  const st = document.getElementById('status');
-  const fit = (clientWidth, scrollWidth) => {
-    Object.assign(st.style, { fontSize: '13px', whiteSpace: 'normal' });
-    Object.defineProperties(st, { clientWidth: { value: clientWidth, configurable: true }, scrollWidth: { value: scrollWidth, configurable: true } });
-    events.fitStatus();
-    return [st.style.fontSize, st.style.whiteSpace];
-  };
-  assert.deepStrictEqual(fit(208, 150), ['', ''], 'it fits: back to the stylesheet\'s size, on one line');
-  assert.deepStrictEqual(fit(108, 128), ['13.3px', ''], 'a little too long: 100 of 120 wide, so 16px becomes 13.3px');
-  assert.deepStrictEqual(fit(108, 404), ['9px', 'normal'], 'far too long: 9px, and it wraps');
-});
 
 test('the fallback timer ticks only while the page shows', async () => {
   await open();
@@ -125,25 +110,4 @@ test('a click on a session\'s card body opens it only where the card covers its 
   live.hovered = { stale: {}, zone: 'wisp' };
   clickCard(300, 300);
   assert.deepStrictEqual(opened(), [zone, 'wisp'], 'a stale PR\'s card');
-});
-
-test('the sidebar redraws on every tick, whatever is under the pointer or focused (card.ts morph keeps it)', async () => {
-  stubCanvas2d(); // the text on the paper draws on its own timer
-  const { card } = await open();
-  window.lanternTick = () => {};
-  vi.spyOn(document.getElementById('dock'), 'matches').mockReturnValue(true); // the pointer, focus and a press, whatever's asked
-  const sidebars = vi.spyOn(card, 'renderSidebar').mockImplementation(() => {});
-  for (let i = 0; i < 3; i++) timer(500);
-  assert.strictEqual(sidebars.mock.calls.length, 3);
-});
-
-// The bug Dace shelved: the status's "warm for" went stale between the minute's syncs (up to a minute behind when the
-// lantern turned warm partway through one). It counts on every second, in place.
-test('"warm for" counts on every second, between the syncs', async () => {
-  const { state, live } = await open();
-  const waiting = { id: 's', state: 'waiting', subagents: [] };
-  timer(30e3); live.raw = [waiting]; state.sync(); // violet from 30 s in
-  timer(1e3); live.raw = [{ ...waiting, state: 'working' }]; state.sync(); // warm again
-  timer(148e3); // 179 s in: 149 s warm, and the minute's last sync was at 120 s, 90 s warm
-  assert.strictEqual(document.querySelector('#status .warm')?.textContent, 'warm for 2m');
 });

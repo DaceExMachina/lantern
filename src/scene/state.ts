@@ -9,16 +9,13 @@ import { hoverZone } from './card';
 import { alertMe } from './notify';
 
 export let sessions: Session[] = [];
-let seenWaiting = new Set<string>(), nextUp: Record<string, number> = {}; // nextUp: where each status bar count's clicks have got to
+let seenWaiting = new Set<string>();
 // what the server sends, and the settings, are in live.ts
 export const quietEndLabel = () => timeLabel(live.quietEnd);
-// When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
-// server doesn't say yet; windows opened at different times can differ.
-let violetAt = Date.now();
 // quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
 export const quiet = () => live.quietUntil > Date.now();
 export const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
-// Which of the status bar's counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
+// Which of the status line's (StatusLine.vue) counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
 // waits, snoozed (until it does something new, or for quiet hours) or needing me.
 export const restOf = (s: Session) => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
 
@@ -70,41 +67,7 @@ export function sync() {
   }
   for (const s of shown) { const m = sessionMoth(s.id); if (m) m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.ts)
 
-  // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
-  const working = sessions.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length;
-  // each count's sessions, longest waiting first (sleeping ones that aren't waiting after, in a fixed order)
-  const of = (rest: string) => sessions.filter(s => restOf(s) === rest).sort((a, b) => (a.waitingSince || Infinity) - (b.waitingSince || Infinity) || (a.id < b.id ? -1 : 1));
-  const waiting = of('need'), snoozed = of('snoozed').length, sleeping = of('sleeping').length;
-  // a count that opens its sessions one at a time: each click moves on to the next one
-  const cycler = (rest: string, text: string, title: string) => {
-    const b = document.createElement('button');
-    b.className = 'next'; b.textContent = text; b.title = title;
-    b.onclick = () => { const q = of(rest), s = q[nextUp[rest] = ((nextUp[rest] ?? -1) + 1) % q.length]; if (s) post('/focus', { id: s.id }); };
-    return b;
-  };
-  const st = $('status');
-  st.className = waiting.length ? 'waiting' : '';
-  if (!sessions.length) st.textContent = 'quiet night, no sessions';
-  else {
-    st.replaceChildren(`${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working`);
-    if (waiting.length) st.append(' · ', cycler('need', `${waiting.length} need${waiting.length > 1 ? '' : 's'} you`, 'Open the session that has waited longest'));
-    const until = quiet() && live.quietUntil < QUIET_FOREVER ? ` until ${quietEndLabel()}` : '';
-    if (snoozed) st.append(' · ', cycler('snoozed', `${snoozed} snoozed`, 'Open the snoozed sessions one at a time'), until);
-    else if (quiet()) st.append(` · snoozed${until}`);
-    if (sleeping) st.append(' · ', cycler('sleeping', `${sleeping} sleeping`, 'Open the sleeping sessions one at a time'));
-    if (waiting.length) violetAt = Date.now();
-    else if (!quiet() && Date.now() - violetAt >= 60000) {
-      const warm = document.createElement('span');
-      warm.className = 'warm'; warm.textContent = warmFor();
-      st.append(' · ', warm);
-    }
-    if (live.reviews.length) {
-      const a = document.createElement('a');
-      a.href = 'https://github.com/pulls/review-requested'; a.target = '_blank'; a.rel = 'noopener'; a.className = 'next';
-      a.textContent = `${live.reviews.length} review${live.reviews.length > 1 ? 's' : ''}`; a.title = live.reviews.map(r => `${r.label} ${r.title}`).join('\n');
-      st.append(' · ', a);
-    }
-  }
+  const waiting = sessions.filter(s => restOf(s) === 'need').sort((a, b) => (a.waitingSince || Infinity) - (b.waitingSince || Infinity) || (a.id < b.id ? -1 : 1)); // longest waiting first
   // the Dock app's icon shows how many sessions need me (Safari may want notification permission for this)
   try { const p = waiting.length ? navigator.setAppBadge?.(waiting.length) : navigator.clearAppBadge?.(); p?.catch?.(() => {}); } catch {}
 
@@ -112,12 +75,6 @@ export function sync() {
   seenWaiting = new Set(waiting.map(s => s.id));
   chrome.update();
 }
-// how long since the lantern was last violet, as the status says it
-const warmFor = () => { const m = Math.floor((Date.now() - violetAt) / 60000); return `warm for ${m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}`}`; };
-// Counts the status's "warm for" on, every second (wiring.ts), in place: a sync rebuilds the status, which would swap a
-// count's button out from under a press.
-export function tickWarm() { const w = $('status').querySelector('.warm'); if (w && w.textContent !== warmFor()) w.textContent = warmFor(); }
-
 export function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
   const n = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
