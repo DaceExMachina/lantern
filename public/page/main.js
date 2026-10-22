@@ -186,12 +186,8 @@ menu.addEventListener('pointerleave', e => showTip(e, false));
 menu.addEventListener('focusout', e => showTip(e, false));
 menu.addEventListener('toggle', e => { if (/** @type {ToggleEvent} */ (e).newState === 'closed') showTip(e, false); });
 
-// the stats panel reads the log when it opens, and again every minute while it stays open
-let statsTimer;
-$('stats').addEventListener('toggle', e => {
-  clearInterval(statsTimer);
-  if (e.newState === 'open') { loadStats(); statsTimer = setInterval(loadStats, MIN); }
-});
+// what the Vue stats panel (src/scene-bridge.ts) takes from the scene
+window.sceneBridge = { slices, ribbonBody, headline, dayRibbon, followRibbon, restoreBadge, setTally: t => { tally = t; }, clock, dayKey, pct, ago, ACHIEVEMENTS };
 
 // the daily recap: checked when the window comes back into view, and every minute (a window left open overnight)
 addEventListener('visibilitychange', () => maybeRecap());
