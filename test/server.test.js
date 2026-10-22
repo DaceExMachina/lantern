@@ -1895,3 +1895,24 @@ test('a config folder whose projects and sessions are symlinks into the first is
   assert.deepStrictEqual(await ids(base), [id]);
   assert.match(t.output(), /of prose from 1 recent transcript\(s\)/);
 });
+test('with the same session in both folders (a frozen copy in ~/.claude, the live one in ~/.claude-work), the newest copy wins', async t => {
+  const id = UUID(1), rel = `projects/-work-1/${id}.jsonl`;
+  const base = await serve(t, {
+    ['.claude/' + rel]: jsonl([user('Stale copy')]),
+    ['.claude-work/' + rel]: jsonl([user('Live copy')]),
+  }, home => { const old = new Date(Date.now() - 600e3); fs.utimesSync(path.join(home, '.claude', rel), old, old); });
+  await until(async () => (await ids(base)).length === 1, 'the session to be seeded');
+  const [s] = (await snapshot(base)).sessions;
+  assert.ok(Date.now() - s.last < 60e3, `last ${s.last}`);
+});
+test('a hook whose transcript is under ~/.claude-work finds its project when that folder\'s projects link into ~/.claude', async t => {
+  let home;
+  const base = await serve(t, {}, h => {
+    home = h;
+    fs.mkdirSync(path.join(h, '.claude/projects'), { recursive: true });
+    fs.mkdirSync(path.join(h, '.claude-work'));
+    fs.symlinkSync(path.join(h, '.claude/projects'), path.join(h, '.claude-work/projects'));
+  });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go', transcript_path: path.join(home, '.claude-work/projects/-w/s1.jsonl') });
+  assert.deepStrictEqual((await snapshot(base)).sessions.map(x => [x.id, x.project]), [['s1', '-w']]);
+});

@@ -145,13 +145,18 @@ func cleanPrompt(_ p: String) -> String {
 // Session names and agent tasks live next to the transcript the hooks point at. Only ever read inside a config folder's projects.
 func sessionDir(_ transcript: Any?) -> String? {
     let p = URL(fileURLWithPath: truthy(transcript) ? str(transcript) : "").standardized.path
-    return PROJECT_ROOTS.contains { p.hasPrefix($0 + "/") } && p.hasSuffix(".jsonl") ? String(p.dropLast(6)) : nil
+    // symlinks resolved on both sides, since a folder whose projects link into another is listed only once
+    var head = p, tail: [String] = []  // the file needn't exist yet: resolve its nearest folder that does
+    while head != "/", !FileManager.default.fileExists(atPath: head) { tail.insert((head as NSString).lastPathComponent, at: 0); head = (head as NSString).deletingLastPathComponent }
+    let real = (([(head as NSString).resolvingSymlinksInPath] + tail) as [String]).joined(separator: "/")
+    let inside = PROJECT_ROOTS.contains { p.hasPrefix($0 + "/") || real.hasPrefix(($0 as NSString).resolvingSymlinksInPath + "/") }
+    return inside && p.hasSuffix(".jsonl") ? String(p.dropLast(6)) : nil
 }
 
 /// Every transcript directly in a project folder, across the config folders.
 func allTranscripts() -> [String] {
     var out: [String] = []
-    for root in PROJECT_ROOTS { for d in (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? [] { out += transcripts(root + "/" + d) } }
+    for root in PROJECT_ROOTS { for d in ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).sorted() { out += transcripts(root + "/" + d) } }
     return out
 }
 
@@ -232,6 +237,13 @@ func fileTimes(_ file: String) -> (birth: Double, mtime: Double)? {
 func byNewest(_ files: [String]) -> [String] {
     let dated: [(file: String, mtime: Double, at: Int)] = files.enumerated().map { ($0.element, fileTimes($0.element)?.mtime ?? 0, $0.offset) }
     return dated.sorted { $0.mtime != $1.mtime ? $0.mtime > $1.mtime : $0.at < $1.at }.map(\.file) // stable, like JS sort
+}
+
+/// The same session's transcript can sit in two config folders (a frozen copy and the live one): only the newest of each id stays, in the order given.
+func newestCopies(_ files: [String]) -> [String] {
+    var best: [String: String] = [:]
+    for f in byNewest(files) { let id = (f as NSString).lastPathComponent; if best[id] == nil { best[id] = f } }
+    return files.filter { best[($0 as NSString).lastPathComponent] == $0 }
 }
 
 // Which old session made each dead PR. Every transcript from the last 60 days is mapped into memory and searched
@@ -529,11 +541,8 @@ extension LanternServer {
             }
             if !mirroring {
                 for (f, pids, busy) in liveTranscripts() { take(f, true, pids, busy) }
-                for root in PROJECT_ROOTS {
-                    if let dirs = try? FileManager.default.contentsOfDirectory(atPath: root) {
-                        for d in dirs.sorted() { for f in transcripts(root + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, [], nil) } }
-                    } else { print("seeding failed: no \(root)") }
-                }
+                if !PROJECT_ROOTS.contains(where: { FileManager.default.fileExists(atPath: $0) }) { print("seeding failed: no \(PROJECT_ROOTS.joined(separator: ", "))") }
+                for f in newestCopies(allTranscripts()) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, [], nil) }
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {

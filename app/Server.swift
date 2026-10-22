@@ -42,10 +42,11 @@ func claudeDirs() -> [String] {
         .filter { seen.insert((($0 + "/projects") as NSString).resolvingSymlinksInPath).inserted }
 }
 var PROJECT_ROOTS: [String] { CLAUDE_DIRS.map { $0 + "/projects" } }
-/// A session's folder (the transcript minus .jsonl) in whichever config folder holds it, the first when none does yet.
+/// A session's folder (the transcript minus .jsonl) in the config folder holding its newest copy (after a migration the old
+/// folder keeps a stale one), the first folder when none has it yet.
 func sessionPath(_ project: String, _ id: String) -> String {
     let all = PROJECT_ROOTS.map { "\($0)/\(project)/\(id)" }
-    return all.first { FileManager.default.fileExists(atPath: $0 + ".jsonl") } ?? all.first ?? ""
+    return newestCopies(all.map { $0 + ".jsonl" }.filter { FileManager.default.fileExists(atPath: $0) }).first.map { String($0.dropLast(6)) } ?? all.first ?? ""
 }
 // The user's first name, for the candle's pencil (src/scene/pencil.js): Claude Code's account name, else the Mac's. Claude
 // Code keeps its account in .claude.json, inside its config folder when that's set and in HOME when not. Only those two
