@@ -1,4 +1,4 @@
-// A redraw patches the card in place (card.js morph), so what the browser holds on its elements survives it: keyboard
+// A redraw patches the card in place (card.ts morph), so what the browser holds on its elements survives it: keyboard
 // focus, scroll, hover, and a press on the PR toggle between mousedown and mouseup. Only a real browser has those, so
 // test/morph/main.swift drives the page in off-screen WebKit through the fixture's morph steps (test/snapshots/fixture.js).
 const test = require('node:test');

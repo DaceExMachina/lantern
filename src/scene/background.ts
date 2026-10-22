@@ -1,41 +1,68 @@
 // The background drawn on the GPU: rings, glow, the light in the air with moths' shadows in it, dust and the fireflies' light (WebGL), plus
 // the light carried across onto other displays.
 
-import { live } from './live.js';
-import { $, AMBIENT, CHAIN, HEAT_COLUMN, PLUME, PLUMES, Q, SMOKE_COL, TRAIL_POINTS, VIEW, glf } from './scene.js';
-import { hex, style } from './lanterns.js';
-import { flyLights } from './fireflies.js';
-import { WISP_TINT, ghostWings } from './stale.js';
-import { swayAngle } from './frame.js';
+import { live } from './live';
+import { $, AMBIENT, CHAIN, HEAT_COLUMN, PLUME, PLUMES, Q, SMOKE_COL, TRAIL_POINTS, VIEW, glf, nth } from './scene';
+import { hex, style } from './lanterns';
+import { flyLights } from './fireflies';
+import { WISP_TINT, ghostWings } from './stale';
+import { swayAngle } from './frame';
+import type { Heat } from './frame';
+import type { Point, Vec3 } from '../types';
+import type { Box } from './scene';
+
+/** The flame for its shader (frame.ts drawLight from stepFlame): its scale, the time, spine, turbulence, tearing, blue root,
+ * opacity, softness and colours. */
+export interface Fire {
+  scale: number; t: number; spine: number[]; turb: number; tear: number; blue: [x: number, y: number, rx: number, ry: number, alpha: number];
+  alpha: number; soft: number; cols: string[];
+}
+/** Everything one frame of the background draws (frame.ts drawLight). */
+export interface Light {
+  ringC: Point; ringR: Vec3; ringA: number; ringCol: string[]; glowC: Point; glowR: number; glowA: number; glowCol: string;
+  lightC: Point; lightScale: number; lightR: number; airA: number; dustCol: string; shadows: Vec3[]; sway: number; heat: Heat | null;
+  plumes: number[][]; trail: number[][]; drift: number[]; caps: Point; flame: [bx: number, by: number, tx: number, ty: number];
+  fire: Fire | null; rim: Vec3; bandO: Point; farWall: { slide: number, heat: Heat | null, col: string } | null; bands: Point[];
+}
 
 // ---- background on the GPU ------------------------------------------------------------------------------
 // The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust, the fireflies' light) is drawn by a WebGL shader on a canvas
 // behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
-const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
+// a canvas's WebGL, which the page can't draw without
+function webgl(canvas: HTMLCanvasElement, options: WebGLContextAttributes) {
+  const ctx = canvas.getContext('webgl', options);
+  if (!ctx) throw new Error(`no WebGL for #${canvas.id}`);
+  return ctx;
+}
+const gl = webgl($('bg', HTMLCanvasElement), { alpha: false, antialias: false });
 // Everything on it is soft (glow, smoke, dust, the shimmer), so it's drawn at this share of the screen's resolution and
 // the browser scales it up: at 0.6 that's about a third of the pixels and of the GPU time, and it looks the same, the
 // far wall's lace included (below 0.5 that starts to soften). fitView sizes it.
 export const bgScale = 0.6;
 // The flame has a canvas of its own, between the lantern's back paper and the rest (index.html), so a WebGL of its own.
-const fgl = $('flame').getContext('webgl', { antialias: false });
+const fgl = webgl($('flame', HTMLCanvasElement), { antialias: false });
 // A GPU reset (sleep, a display change, the GPU process restarting) loses a context and every shader and buffer on it.
 // Asking for it back (preventDefault) and reloading once it's restored rebuilds them all from scratch.
 for (const c of [$('bg'), $('flame')]) {
   c.addEventListener('webglcontextlost', e => e.preventDefault());
   c.addEventListener('webglcontextrestored', () => location.reload());
 }
-function program(vert, frag, ctx = gl) {
+// A shader program, and its uniforms' locations by name (u('uBox'); an array's by its first, u('uBand[0]')).
+function program(vert: string, frag: string, ctx = gl) {
   const p = ctx.createProgram();
-  for (const [type, src] of [[ctx.VERTEX_SHADER, vert], [ctx.FRAGMENT_SHADER, frag]]) {
-    const sh = ctx.createShader(type); ctx.shaderSource(sh, src); ctx.compileShader(sh);
-    if (!ctx.getShaderParameter(sh, ctx.COMPILE_STATUS)) throw new Error(ctx.getShaderInfoLog(sh));
+  for (const [type, src] of [[ctx.VERTEX_SHADER, vert], [ctx.FRAGMENT_SHADER, frag]] as const) {
+    const sh = ctx.createShader(type);
+    if (!sh) throw new Error('no shader');
+    ctx.shaderSource(sh, src); ctx.compileShader(sh);
+    if (!ctx.getShaderParameter(sh, ctx.COMPILE_STATUS)) throw new Error(ctx.getShaderInfoLog(sh) ?? 'the shader didn\'t compile');
     ctx.attachShader(p, sh);
   }
   ctx.linkProgram(p);
-  const u = {}; // uniform locations by name
-  for (let i = 0; i < ctx.getProgramParameter(p, ctx.ACTIVE_UNIFORMS); i++) { const n = ctx.getActiveUniform(p, i).name; u[n] = ctx.getUniformLocation(p, n); }
-  return { p, u };
+  const at = new Map<string, WebGLUniformLocation | null>();
+  for (let i = 0; i < ctx.getProgramParameter(p, ctx.ACTIVE_UNIFORMS); i++) { const n = ctx.getActiveUniform(p, i)?.name; if (n) at.set(n, ctx.getUniformLocation(p, n)); }
+  return { p, u: (name: string) => at.get(name) ?? null };
 }
+type Uniforms = ReturnType<typeof program>['u'];
 // Scene coordinates (the SVG viewBox, y down) for each pixel, then the same layers the SVG drew, back to front.
 const SHADOWS_MAX = 24; // moths that can cast a shadow at once (sessions and agents)
 // How much of the flame's light reaches a point (1 = all of it): moths' shadows, the caps' fans and a pierced lantern's bands. Shared by the
@@ -57,9 +84,9 @@ const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fa
 // the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
-uniform vec4 uHeat; // the hot air rising off the lantern (frame.js heat): where it leaves, how strong (0 for none), and the time
+uniform vec4 uHeat; // the hot air rising off the lantern (frame.ts heat): where it leaves, how strong (0 for none), and the time
 // How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
-// the column (scene.js HEAT_COLUMN) from where it leaves. frame.js heatAt weighs the same column, so change the two together.
+// the column (scene.ts HEAT_COLUMN) from where it leaves. frame.ts heatAt weighs the same column, so change the two together.
 // The half-width never drops under 1, so smoothstep's edges never meet or cross (undefined in GLSL ES 1.00).
 vec2 heat(vec2 p) {
   if (uHeat.z <= 0.0) return vec2(0.0);
@@ -144,7 +171,7 @@ uniform vec2 uRingC; uniform vec3 uRingR, uRing0, uRing1, uRing2; uniform float 
 uniform float uGlowA; uniform vec3 uGlowCol; uniform float uAirA;
 uniform vec4 uPlume[${PLUMES}], uPlumeB[${PLUMES}]; uniform vec2 uPlumeBase[${PLUMES}]; uniform int uPlumes; uniform vec3 uSmoke; uniform vec3 uSmokeCol;
 uniform vec3 uTrail[${TRAIL_POINTS}]; uniform int uTrailN;
-uniform float uDrift[13]; // how far the wind has carried smoke aside, at ages 0 to PLUME.life in twelfths (frame.js smokeDrift)
+uniform float uDrift[13]; // how far the wind has carried smoke aside, at ages 0 to PLUME.life in twelfths (frame.ts smokeDrift)
 ${LIGHT}
 const float RISE = 29.0; // how fast smoke rises, units a second
 // the smoke's Ss: how far they swing aside and how tall they are, in scene units; and how fast it spreads out, its width
@@ -160,7 +187,7 @@ float smokeBend(float age, float now, float curl) {
   return curl * S_SIZE * min(1.0, age / 1.2) * (sin(at * k - now * 1.3) + 0.4 * sin(at * k * 0.525 + now * 0.7));
 }
 // How far the wind has carried smoke age seconds old aside since it was let go, in scene units: as far as it's carried
-// the dust over that time (frame.js smokeDrift), between uDrift's samples
+// the dust over that time (frame.ts smokeDrift), between uDrift's samples
 float smokeDrift(float age) {
   float u = min(age / uSmoke.y, 1.0) * 12.0, d = 0.0;
   for (int i = 0; i < 13; i++) d += uDrift[i] * max(0.0, 1.0 - abs(u - float(i)));
@@ -169,7 +196,7 @@ float smokeDrift(float age) {
 // How much wider smoke age seconds old has spread than when it was let go, thinner to match (its strength over the
 // square root of this)
 float spread(float age) { return 1.0 + DISPERSE * age; }
-// How thick one plume of smoke (frame.js smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
+// How thick one plume of smoke (frame.ts smoke) is at p: a: where it started, seconds in, its strength; b: its seed, how
 // many seconds it was let go over, how much it curls and its drift to one side. uSmoke: size, each bit's life in seconds, and opacity. Every bit rises
 // steadily from where it started, so the bit at height h left h / RISE seconds ago: it's there only if it left while the
 // plume was being let go, and fades as it ages. The column widens as it rises, and bends and curls (smokeBend).
@@ -191,10 +218,10 @@ float plume(vec2 p, vec4 a, vec4 b, vec2 base) {
 // its head is on the moth (age 0), and once it has stopped following, narrowing to a point over the head's newest third
 // of a second. Scalars only, so the test can run it as JS.
 float trailTaper(float age, float head) { return 1.0 - 0.85 * smoothstep(0.0, 0.3, head) * (1.0 - smoothstep(head, head + 0.35, age)); }
-// How thick a scorched moth's smoke trail (frame.js smoke) is at p: one soft band along its points, each risen and
+// How thick a scorched moth's smoke trail (frame.ts smoke) is at p: one soft band along its points, each risen and
 // spread as a plume's smoke is (spread), fainter the older it is and gone at the end of its life;
 // width, strength and age eased between them, the thickest of the segments near p so their joins don't double up.
-// Each point is where it is (frame.js smoke bends and curls it) and its age, each trail's head (its newest) first; an age below 0
+// Each point is where it is (frame.ts smoke bends and curls it) and its age, each trail's head (its newest) first; an age below 0
 // parts one moth's trail from the next. Its head tapers once it leaves the moth (trailTaper) and its tail fades out as it
 // ages, so neither end looks cut off.
 float trailSmoke(vec2 p) {
@@ -261,9 +288,9 @@ void main() {
 precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
 // ?dustdebug: a speck the shadows hold back shows red at full strength instead of fading
 void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(mix(uCol, vec3(1.0, 0.15, 0.1), vD * (1.0 - vS)), vA * smoothstep(1.0, 0.6, d)); }`);
-// The fireflies and stale wisps (fireflies.js, stale.js): points of light added onto the scene, a white-hot core in a
+// The fireflies and stale wisps (fireflies.ts, stale.ts): points of light added onto the scene, a white-hot core in a
 // bloom of the PR's colour, fading into a wide, more saturated haze that lights the air around it. bloomSprite in
-// fireflies.js draws the same falloff for the badge flash, so change the two together.
+// fireflies.ts draws the same falloff for the badge flash, so change the two together.
 const FLIES = program(`
 attribute vec4 a; attribute vec3 c; uniform vec4 uBox; uniform vec2 uRes; varying float vA; varying vec3 vC;
 void main() {
@@ -284,18 +311,18 @@ void main() {
 const fliesBuf = gl.createBuffer();
 // the fireflies' light over the background and dust (a point bigger than the GPU allows, 511px on a Mac, is drawn at
 // that size, so on a canvas over about 2400px wide the widest swells stop growing)
-function drawFlies(w, h, box) {
+function drawFlies(w: number, h: number, box: Box) {
   gl.blendFunc(gl.ONE, gl.ONE); // light adds up
   gl.useProgram(FLIES.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, fliesBuf); gl.bufferData(gl.ARRAY_BUFFER, flyLights, gl.DYNAMIC_DRAW);
   const aa = gl.getAttribLocation(FLIES.p, 'a'), ac = gl.getAttribLocation(FLIES.p, 'c');
   gl.enableVertexAttribArray(aa); gl.vertexAttribPointer(aa, 4, gl.FLOAT, false, 28, 0);
   gl.enableVertexAttribArray(ac); gl.vertexAttribPointer(ac, 3, gl.FLOAT, false, 28, 16);
-  gl.uniform4f(FLIES.u.uBox, ...box); gl.uniform2f(FLIES.u.uRes, w, h);
+  gl.uniform4f(FLIES.u('uBox'), ...box); gl.uniform2f(FLIES.u('uRes'), w, h);
   gl.drawArrays(gl.POINTS, 0, live.flyLightN);
   gl.disableVertexAttribArray(ac); gl.enableVertexAttribArray(0);
 }
-// The ghost moths (stale.js): their wings as triangles in one flat, pale colour at each moth's own faint opacity, over
+// The ghost moths (stale.ts): their wings as triangles in one flat, pale colour at each moth's own faint opacity, over
 // the fireflies' light as they were over it in the SVG. Two wings crossing show darker, as two see-through wings would.
 const GHOSTS = program(`
 attribute vec3 a; uniform vec4 uBox; varying float vA;
@@ -303,22 +330,22 @@ void main() { gl_Position = vec4((a.x - uBox.x) / uBox.z * 2.0 - 1.0, 1.0 - (a.y
 precision mediump float; uniform vec3 uCol; varying float vA;
 void main() { gl_FragColor = vec4(uCol, vA); }`);
 const ghostsBuf = gl.createBuffer();
-function drawGhosts(box) {
+function drawGhosts(box: Box) {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(GHOSTS.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, ghostsBuf); gl.bufferData(gl.ARRAY_BUFFER, ghostWings, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
-  gl.uniform4f(GHOSTS.u.uBox, ...box); gl.uniform3fv(GHOSTS.u.uCol, rgb(WISP_TINT));
+  gl.uniform4f(GHOSTS.u('uBox'), ...box); gl.uniform3fv(GHOSTS.u('uCol'), rgb(WISP_TINT));
   gl.drawArrays(gl.TRIANGLES, 0, live.ghostWingN);
 }
 const quad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
 const dustBuf = gl.createBuffer();
-const rgb = c => hex(c).map(v => v / 255);
+const rgb = (c: string) => hex(c).map(v => v / 255);
 
 // the near specks start just outside the lantern's body, so none of them hide behind it; a second display has no
 // lantern, so there both rings fill in to the middle, spread evenly over the area (a square root keeps the centre from crowding)
-const ring = (from, to) => AMBIENT ? to * Math.sqrt(Math.random()) : from + Math.random() * (to - from);
+const ring = (from: number, to: number) => AMBIENT ? to * Math.sqrt(Math.random()) : from + Math.random() * (to - from);
 export const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: ring(125, 265), w: (Math.random() - 0.5) * 0.12,
   ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2, lift: 0 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
@@ -329,39 +356,40 @@ export const dustData = new Float32Array((dust.length + farDust.length) * 4);
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
 // screens' frames (global points, y up), so its light can carry on from where the lantern's light is, off this screen's edge.
 export const REMOTE = (() => {
-  const f = k => Q.get(k)?.split(',').map(Number);
+  const f = (k: string) => { const [x, y, w, h, ...more] = Q.get(k)?.split(',').map(Number) ?? []; return x !== undefined && y !== undefined && w !== undefined && h !== undefined && !more.length && ![x, y, w, h].some(isNaN) ? [x, y, w, h] satisfies Box : null; };
   const L = f('lantern'), S = f('self');
-  return L?.length === 4 && S?.length === 4 && ![...L, ...S].some(isNaN) ? { L, S } : null;
+  return L && S ? { L, S } : null;
 })();
 export function remoteLight() {
+  if (!REMOTE || !VIEW.box) return null;
   const { L: [lx, ly, lw, lh], S: [sx, sy, sw, sh] } = REMOTE;
   // the lantern display's view, worked out the same way fitView does it there
   const kx = Math.max(1, lw / lh), ky = Math.max(1, lh / lw), vw = 600 * kx, vh = 600 * ky, vx = 340 - vw / 2, vy = 320 - vh / 2;
   const gx = lx + (style.light[0] - vx) / vw * lw, gyUp = ly + lh - (style.light[1] - vy) / vh * lh; // the light, in global points
   const ax = gx - sx, ay = sy + sh - gyUp; // ...and in this screen's pixels (y down)
   const [bx, by, bw, bh] = VIEW.box;
-  return { c: [bx + ax / sw * bw, by + ay / sh * bh], scale: Math.max(kx, ky) * (bw / sw) / (vw / lw) };
+  return { c: [bx + ax / sw * bw, by + ay / sh * bh] satisfies Point, scale: Math.max(kx, ky) * (bw / sw) / (vw / lw) };
 }
 
 // the light term's inputs, set on each program that uses LIGHT
-function setLight(u, v) {
-  gl.uniform1f(u.uDebug, DUST_DEBUG); gl.uniform2f(u.uGlowC, ...v.glowC); gl.uniform1f(u.uGlowR, v.glowR);
+function setLight(u: Uniforms, v: Light) {
+  gl.uniform1f(u('uDebug'), DUST_DEBUG); gl.uniform2f(u('uGlowC'), ...v.glowC); gl.uniform1f(u('uGlowR'), v.glowR);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
-  gl.uniform2f(u.uLightC, ...v.lightC); gl.uniform1f(u.uLightScale, v.lightScale); gl.uniform1f(u.uLightR, v.lightR);
-  gl.uniform2f(u.uCaps, ...v.caps); gl.uniform4f(u.uFlame, ...v.flame); gl.uniform3f(u.uRim, ...v.rim); gl.uniform1f(u.uSway, v.sway); gl.uniform1i(u.uMoths, shadows.length);
-  gl.uniform2f(u.uBandO, ...v.bandO); gl.uniform1i(u.uBands, Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u['uBand[0]'], v.bands.slice(0, 8).flat());
-  if (shadows.length) gl.uniform3fv(u['uMoth[0]'], shadows.flat());
-  const h = v.heat; gl.uniform4f(u.uHeat, h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);
+  gl.uniform2f(u('uLightC'), ...v.lightC); gl.uniform1f(u('uLightScale'), v.lightScale); gl.uniform1f(u('uLightR'), v.lightR);
+  gl.uniform2f(u('uCaps'), ...v.caps); gl.uniform4f(u('uFlame'), ...v.flame); gl.uniform3f(u('uRim'), ...v.rim); gl.uniform1f(u('uSway'), v.sway); gl.uniform1i(u('uMoths'), shadows.length);
+  gl.uniform2f(u('uBandO'), ...v.bandO); gl.uniform1i(u('uBands'), Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u('uBand[0]'), v.bands.slice(0, 8).flat());
+  if (shadows.length) gl.uniform3fv(u('uMoth[0]'), shadows.flat());
+  const h = v.heat; gl.uniform4f(u('uHeat'), h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);
 }
 
 // ---- the Moroccan's far wall ------------------------------------------------------------------------------------------
 // The inside of the pierced lantern's far wall, seen through its front holes. It lives here, not in the SVG, because this
 // canvas is drawn under the SVG: the front lace's real holes reveal it for next to nothing, where the SVG drawing it cost
-// 10 to 20 fps at 2560x1440 in WebKit. lanterns.js bakes the wall once into a texture (red: its brass, green: the
+// 10 to 20 fps at 2560x1440 in WebKit. lanterns.ts bakes the wall once into a texture (red: its brass, green: the
 // lantern's outline, in the lantern's own units over x 250-430, y 140-500); each frame this draws that rectangle turned
 // with the sway about the lantern's pivot, its brass slid across by the twist (slide, in units) and lit by the flame (col,
 // brightest round the flame at 348), kept inside the outline. The flame sits at the lantern's middle depth, so it's slid
-// half as far (frame.js farSlide). The hot air filling the lantern (uHeat: how far it bends, and its time) ripples the
+// half as far (frame.ts farSlide). The hot air filling the lantern (uHeat: how far it bends, and its time) ripples the
 // brass seen through it, as heat() does the room above: most straight above the flame (base at 398), fading out below
 // it and toward the sides, gone 53 either side.
 const FAR_WALL = program(`attribute vec2 a; uniform vec4 uBox; uniform vec2 uRes, uPivot; uniform float uSway; varying vec2 vUv, vP;
@@ -372,7 +400,7 @@ void main() {
 }`, `precision mediump float; uniform sampler2D uTex; uniform float uSlide; uniform vec2 uHeat; uniform vec3 uCol, uDark; varying vec2 vUv, vP;
 ${RIPPLE}
 void main() {
-  float fx = 340.0 + 0.5 * uSlide; // the flame, at the lantern's middle depth (frame.js farSlide)
+  float fx = 340.0 + 0.5 * uSlide; // the flame, at the lantern's middle depth (frame.ts farSlide)
   vec2 warp = uHeat.x * smoothstep(420.0, 390.0, vP.y) * (1.0 - smoothstep(16.0, 53.0, abs(vP.x - fx))) * ripple(vP, uHeat.y);
   vec4 back = texture2D(uTex, vUv + (warp - vec2(uSlide, 0.0)) / vec2(180.0, 360.0));
   // where a big sway slides the far wall past the outline, the side wall fills the strip: solid brass a little darker,
@@ -382,32 +410,32 @@ void main() {
 }`);
 const farWallQuad = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, farWallQuad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
-let farWallTex = /** @type {WebGLTexture | null} */ (null);
-function setFarWall(/** @type {HTMLCanvasElement} */ canvas) {
+let farWallTex: WebGLTexture | null = null;
+function setFarWall(canvas: HTMLCanvasElement) {
   farWallTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, farWallTex);
-  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+  for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]] satisfies Point[]) gl.texParameteri(gl.TEXTURE_2D, k, v);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
 }
-function drawFarWall({ slide, col, heat }, w, h, box) {
-  if (!live.farWall) return; // not baked yet (lanterns.js bakeFarWall)
+function drawFarWall({ slide, col, heat }: NonNullable<Light['farWall']>, w: number, h: number, box: Box) {
+  if (!live.farWall) return; // not baked yet (lanterns.ts bakeFarWall)
   if (!farWallTex) setFarWall(live.farWall);
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(FAR_WALL.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, farWallQuad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, farWallTex);
   const u = FAR_WALL.u;
-  gl.uniform1i(u.uTex, 0); gl.uniform4f(u.uBox, ...box); gl.uniform2f(u.uRes, w, h); gl.uniform2f(u.uPivot, 340, VIEW.top);
-  gl.uniform1f(u.uSway, swayAngle * Math.PI / 180); gl.uniform1f(u.uSlide, slide);
-  gl.uniform2f(u.uHeat, (heat?.k ?? 0) * HEAT_COLUMN.bend * 1.1, heat?.t ?? 0); // a little stronger than the room above
-  gl.uniform3fv(u.uCol, rgb(col)); gl.uniform3fv(u.uDark, rgb('#24160A'));
+  gl.uniform1i(u('uTex'), 0); gl.uniform4f(u('uBox'), ...box); gl.uniform2f(u('uRes'), w, h); gl.uniform2f(u('uPivot'), 340, VIEW.top);
+  gl.uniform1f(u('uSway'), swayAngle * Math.PI / 180); gl.uniform1f(u('uSlide'), slide);
+  gl.uniform2f(u('uHeat'), (heat?.k ?? 0) * HEAT_COLUMN.bend * 1.1, heat?.t ?? 0); // a little stronger than the room above
+  gl.uniform3fv(u('uCol'), rgb(col)); gl.uniform3fv(u('uDark'), rgb('#24160A'));
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
 // ---- the flame ---------------------------------------------------------------------------------------------------------
-// Every lantern's flame (frame.js stepFlame moves it), drawn on its own canvas (fgl) on a quad round it. Layered tongues
+// Every lantern's flame (frame.ts stepFlame moves it), drawn on its own canvas (fgl) on a quad round it. Layered tongues
 // (outer, middle, core, 34, 24 and 13 wide) in a halo, the blue root over them, all in the flame's own units (a unit is
-// uBase.z in the scene, x across, y up from its base). Each tongue stands on one spine, frame.js's chain (uSpine: each
-// point's offset across, evenly up to the outer tongue's tip uShape.x up, the tip frame.js passes on to the smoke, heat and
+// uBase.z in the scene, x across, y up from its base). Each tongue stands on one spine, frame.ts's chain (uSpine: each
+// point's offset across, evenly up to the outer tongue's tip uShape.x up, the tip frame.ts passes on to the smoke, heat and
 // rim shadow). Noise rising up through it licks at its edges and bends its middle (uShape.y, the tip and base stay put),
 // and a strong gust (uShape.z) tears at its top half. Behind paper its tongues' edges soften over uSoft scene units.
 const FLAME = program(`attribute vec2 a; uniform vec4 uBox; varying vec2 vP;
@@ -421,7 +449,7 @@ float noise(vec2 p) { // smooth value noise, -1 to 1
   return 2.0 * mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y) - 1.0;
 }
 // A tongue's half-width t of the way up it (0 its base, 1 its tip) as a share of its widest, at 0.3: round below that,
-// dipping 0.04 under its base (lanterns.js keeps landed moths clear of it), its shoulders full, and
+// dipping 0.04 under its base (lanterns.ts keeps landed moths clear of it), its shoulders full, and
 // coming to a point at the tip.
 // Scalars only, so the test can run it as JS.
 float flameHalf(float t) {
@@ -471,8 +499,9 @@ void main() {
 }`, fgl);
 const flameQuad = fgl.createBuffer();
 // Clears the flame's canvas and draws `fire`, the flame's base and tip in `flame`.
-function drawFlame({ flame: [bx, by, tx, ty], fire: f }) {
-  const c = $('flame'), box = VIEW.layer, gl = fgl;
+function drawFlame([bx, by, , ty]: Light['flame'], f: Fire) {
+  const c = $('flame', HTMLCanvasElement), box = VIEW.layer, gl = fgl;
+  if (!box) return;
   gl.viewport(0, 0, c.width, c.height); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   const k = f.scale, h = (by - ty) / k, u = FLAME.u;
   const x0 = bx + (Math.min(...f.spine) - 60) * k, x1 = bx + (Math.max(...f.spine) + 60) * k, y0 = by - h * 1.45 * k, y1 = by + 30 * k;
@@ -480,52 +509,53 @@ function drawFlame({ flame: [bx, by, tx, ty], fire: f }) {
   gl.useProgram(FLAME.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, flameQuad); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([x0, y0, x1, y0, x0, y1, x1, y1]), gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  gl.uniform4f(u.uBox, ...box); gl.uniform1f(u.uPx, box[2] / c.width); gl.uniform1f(u.uSoft, f.soft);
-  gl.uniform4f(u.uBase, bx, by, k, f.t); gl.uniform3f(u.uShape, h, f.turb, f.tear); gl.uniform1fv(u['uSpine[0]'], f.spine);
-  gl.uniform4f(u.uBlue, ...f.blue.slice(0, 4)); gl.uniform1f(u.uBlueA, f.blue[4]); gl.uniform1f(u.uAlpha, f.alpha);
-  ['uHaloC', 'uOuterC', 'uMidC', 'uCoreC', 'uBlueC'].forEach((n, i) => gl.uniform3fv(u[n], rgb(f.cols[i])));
+  gl.uniform4f(u('uBox'), ...box); gl.uniform1f(u('uPx'), box[2] / c.width); gl.uniform1f(u('uSoft'), f.soft);
+  gl.uniform4f(u('uBase'), bx, by, k, f.t); gl.uniform3f(u('uShape'), h, f.turb, f.tear); gl.uniform1fv(u('uSpine[0]'), f.spine);
+  const [blueX, blueY, blueRx, blueRy, blueA] = f.blue;
+  gl.uniform4f(u('uBlue'), blueX, blueY, blueRx, blueRy); gl.uniform1f(u('uBlueA'), blueA); gl.uniform1f(u('uAlpha'), f.alpha);
+  ['uHaloC', 'uOuterC', 'uMidC', 'uCoreC', 'uBlueC'].forEach((n, i) => gl.uniform3fv(u(n), rgb(nth(f.cols, i))));
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
-export function drawBackground(v) {
+export function drawBackground(v: Light) {
   if (!VIEW.box) return; // not laid out yet
-  const c = $('bg'), [x, y, w, h] = VIEW.box;
+  const c = $('bg', HTMLCanvasElement), [x, y, w, h] = VIEW.box;
   gl.viewport(0, 0, c.width, c.height);
   gl.disable(gl.BLEND);
   gl.useProgram(BG.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, quad); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   const u = BG.u;
-  gl.uniform2f(u.uRes, c.width, c.height); gl.uniform4f(u.uBox, x, y, w, h); gl.uniform3fv(u.uBg, rgb('#2B2440'));
-  gl.uniform1f(u.uAmbient, AMBIENT ? 1 : 0);
-  gl.uniform2f(u.uRingC, ...v.ringC); gl.uniform3f(u.uRingR, ...v.ringR); gl.uniform1f(u.uRingA, v.ringA);
-  v.ringCol.forEach((col, i) => gl.uniform3fv(u[`uRing${i}`], rgb(col)));
-  gl.uniform1f(u.uGlowA, v.glowA); gl.uniform3fv(u.uGlowCol, rgb(v.glowCol));
-  gl.uniform1f(u.uAirA, v.airA); setLight(u, v);
-  gl.uniform1i(u.uPlumes, v.plumes.length); gl.uniform3f(u.uSmoke, PLUME.size, PLUME.life, PLUME.alpha); gl.uniform3fv(u.uSmokeCol, rgb(SMOKE_COL)); gl.uniform1fv(u['uDrift[0]'], v.drift);
+  gl.uniform2f(u('uRes'), c.width, c.height); gl.uniform4f(u('uBox'), x, y, w, h); gl.uniform3fv(u('uBg'), rgb('#2B2440'));
+  gl.uniform1f(u('uAmbient'), AMBIENT ? 1 : 0);
+  gl.uniform2f(u('uRingC'), ...v.ringC); gl.uniform3f(u('uRingR'), ...v.ringR); gl.uniform1f(u('uRingA'), v.ringA);
+  v.ringCol.forEach((col, i) => gl.uniform3fv(u(`uRing${i}`), rgb(col)));
+  gl.uniform1f(u('uGlowA'), v.glowA); gl.uniform3fv(u('uGlowCol'), rgb(v.glowCol));
+  gl.uniform1f(u('uAirA'), v.airA); setLight(u, v);
+  gl.uniform1i(u('uPlumes'), v.plumes.length); gl.uniform3f(u('uSmoke'), PLUME.size, PLUME.life, PLUME.alpha); gl.uniform3fv(u('uSmokeCol'), rgb(SMOKE_COL)); gl.uniform1fv(u('uDrift[0]'), v.drift);
   if (v.plumes.length) {
-    gl.uniform4fv(u['uPlume[0]'], v.plumes.flatMap(q => q.slice(0, 4)));
-    gl.uniform4fv(u['uPlumeB[0]'], v.plumes.flatMap(q => q.slice(4, 8)));
-    gl.uniform2fv(u['uPlumeBase[0]'], v.plumes.flatMap(q => q.slice(8, 10)));
+    gl.uniform4fv(u('uPlume[0]'), v.plumes.flatMap(q => q.slice(0, 4)));
+    gl.uniform4fv(u('uPlumeB[0]'), v.plumes.flatMap(q => q.slice(4, 8)));
+    gl.uniform2fv(u('uPlumeBase[0]'), v.plumes.flatMap(q => q.slice(8, 10)));
   }
-  gl.uniform1i(u.uTrailN, v.trail.length); if (v.trail.length) gl.uniform3fv(u['uTrail[0]'], v.trail.flat());
+  gl.uniform1i(u('uTrailN'), v.trail.length); if (v.trail.length) gl.uniform3fv(u('uTrail[0]'), v.trail.flat());
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   // dust over it
   gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   gl.useProgram(DUST.p);
   gl.bindBuffer(gl.ARRAY_BUFFER, dustBuf); gl.bufferData(gl.ARRAY_BUFFER, dustData, gl.DYNAMIC_DRAW);
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 0, 0);
-  gl.uniform4f(DUST.u.uBox, x, y, w, h); gl.uniform2f(DUST.u.uRes, c.width, c.height); gl.uniform1f(DUST.u.uDpr, (devicePixelRatio || 1) * bgScale); gl.uniform3fv(DUST.u.uCol, rgb(v.dustCol));
+  gl.uniform4f(DUST.u('uBox'), x, y, w, h); gl.uniform2f(DUST.u('uRes'), c.width, c.height); gl.uniform1f(DUST.u('uDpr'), (devicePixelRatio || 1) * bgScale); gl.uniform3fv(DUST.u('uCol'), rgb(v.dustCol));
   setLight(DUST.u, v);
   // the near specks catch the light, except on a second display: there no moths cast shadows, and a lantern's cap
   // fan can cover the whole screen, so gating would leave it nearly empty of dust
-  gl.uniform1f(DUST.u.uNear, 1); gl.uniform1f(DUST.u.uCatch, AMBIENT ? 0 : CATCH); gl.drawArrays(gl.POINTS, 0, dust.length);
-  gl.uniform1f(DUST.u.uNear, 0); gl.uniform1f(DUST.u.uCatch, 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
+  gl.uniform1f(DUST.u('uNear'), 1); gl.uniform1f(DUST.u('uCatch'), AMBIENT ? 0 : CATCH); gl.drawArrays(gl.POINTS, 0, dust.length);
+  gl.uniform1f(DUST.u('uNear'), 0); gl.uniform1f(DUST.u('uCatch'), 0); gl.drawArrays(gl.POINTS, dust.length, farDust.length);
   if (live.flyLightN) drawFlies(c.width, c.height, [x, y, w, h]);
   live.flyLightN = 0;
   if (live.ghostWingN) drawGhosts([x, y, w, h]);
   live.ghostWingN = 0;
   if (v.farWall) drawFarWall(v.farWall, c.width, c.height, [x, y, w, h]);
-  if (v.fire) drawFlame(v); // none on a second display, which hides its canvas (index.html)
+  if (v.fire) drawFlame(v.flame, v.fire); // none on a second display, which hides its canvas (index.html)
   // the screensaver reads this to tell the page is really drawing, and reloads it when the count stops going up
   if (!gl.isContextLost()) window.lanternFrames = (window.lanternFrames || 0) + 1;
 }

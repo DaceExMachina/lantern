@@ -10,7 +10,7 @@ import WebKit
 
 // each scene's name, page query and window size. The chrome scenes snap the menu, stats, recap, a card and the dev panel
 // over the barrel: full width, a phone's width, and the iTerm2 panel's. The pinned scene docks two sessions in the sidebar in a
-// window wide enough for it (card.js PIN_MIN), and checks the scene refitted to the room left.
+// window wide enough for it (card.ts PIN_MIN), and checks the scene refitted to the room left.
 let WIDE = NSSize(width: 720, height: 540)
 let SCENES = [("barrel", "style=barrel&hover", WIDE), ("chochin", "style=chochin", WIDE), ("moroccan", "style=moroccan", WIDE), ("ambient", "style=barrel&ambient", WIDE), ("candle", "style=candle", WIDE),
   ("chrome", "style=barrel&chrome", WIDE), ("chrome375", "style=barrel&chrome", NSSize(width: 375, height: 700)), ("panel", "style=barrel&chrome&panel", NSSize(width: 300, height: 420)),

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // The stats panel, inside the native #stats popover: today's numbers from the event log, the day ribbon and the week
 // before. It reads the log when it opens and again every minute while it stays open. The ribbons, headline and badge tips
-// are the scene's, shared with the recap (src/scene/stats.js), and its recap buttons open the recap (src/scene/recap.js).
+// are the scene's, shared with the recap (src/scene/stats.ts), and its recap buttons open the recap (src/scene/recap.ts).
 import { computed, nextTick, onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue';
 import { loadStats } from '../events';
-import { ago } from '../scene/card.js';
-import { live } from '../scene/live.js';
-import { openRecap } from '../scene/recap.js';
-import { ACHIEVEMENTS, clock, dayKey, dayRibbon, followRibbon, headline, pct, restoreBadge, ribbonBody, slices } from '../scene/stats.js';
+import { ago } from '../scene/card';
+import { live } from '../scene/live';
+import { openRecap } from '../scene/recap';
+import { ACHIEVEMENTS, clock, dayKey, dayRibbon, followRibbon, headline, pct, restoreBadge, ribbonBody, slices } from '../scene/stats';
 import { useLanternStore } from '../stores/lantern';
 
 const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

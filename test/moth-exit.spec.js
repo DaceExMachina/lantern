@@ -1,4 +1,4 @@
-// A moth whose session ended flies off (src/scene/frame.js mothTarget) and must stay drawn until every bit of it, wings
+// A moth whose session ended flies off (src/scene/frame.ts mothTarget) and must stay drawn until every bit of it, wings
 // included, is outside the window, whatever shape the window is.
 import assert from 'node:assert';
 import { test, vi } from 'vitest';
@@ -8,7 +8,7 @@ import { layOut } from './page.js';
 async function window(kx, ky) {
   layOut();
   vi.resetModules();
-  const [frame, scene, lanterns, { live }] = await Promise.all(['frame', 'scene', 'lanterns', 'live'].map(f => import(`../src/scene/${f}.js`)));
+  const [frame, scene, lanterns, { live }] = await Promise.all(['frame', 'scene', 'lanterns', 'live'].map(f => import(`../src/scene/${f}.ts`)));
   Object.assign(scene.VIEW, { kx, ky, box: [340 - 300 * kx, 320 - 300 * ky, 600 * kx, 600 * ky] });
   lanterns.applyStyle('candle');
   return { box: scene.VIEW.box, reach: scene.WING_REACH, moths: live.moths, mothTarget: frame.mothTarget, mothMove: frame.mothMove };

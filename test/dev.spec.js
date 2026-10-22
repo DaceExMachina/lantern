@@ -1,10 +1,10 @@
-// The dev panel (src/dev.js): a control's value comes from the URL and goes back into it, and the backtick opens and
+// The dev panel (src/dev.ts): a control's value comes from the URL and goes back into it, and the backtick opens and
 // closes the panel unless you're typing. Each test loads the page afresh at its own URL.
 import assert from 'node:assert';
 import { test, vi } from 'vitest';
 import { layOut } from './page.js';
 
-const load = async search => { layOut(search); vi.resetModules(); return import('../src/dev.js'); };
+const load = async search => { layOut(search); vi.resetModules(); return import('../src/dev'); };
 
 test('a control reads its value from the URL, writes changes back, and drops it at the default', async () => {
   const dev = await load('?speed=2.5&dev');

@@ -16,7 +16,7 @@
     "build": "vite build",
     "prepack": "vite build",
     "preview": "node scripts/preview.js",
-    "check": "vue-tsc -p tsconfig.json && vue-tsc -p tsconfig.app.json && vue-tsc -p tsconfig.page.json",
+    "check": "vue-tsc -p tsconfig.json && vue-tsc -p tsconfig.app.json",
     "test": "vite build && node --test test/*.test.js && vitest run",
     "snapshots": "node scripts/snapshots.js"
   },

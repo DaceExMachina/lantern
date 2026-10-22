@@ -1,4 +1,4 @@
-// The flame (src/scene/frame.js stepFlame, src/scene/background.js FLAME): every lantern's is drawn by a shader on its own
+// The flame (src/scene/frame.ts stepFlame, src/scene/background.ts FLAME): every lantern's is drawn by a shader on its own
 // canvas and moved by a spring, a paper lantern's softened behind its paper. The page is the real modules over the real
 // markup in happy-dom (test/page.js), and a stand-in WebGL that records the uniforms each draw sets (gl.uniforms). Each
 // test loads the page afresh, so no test inherits another's lantern, spring or wind.
@@ -9,7 +9,7 @@ import { test, vi } from 'vitest';
 import { gl, layOut } from './page.js';
 
 // drawBackground still runs; the spy keeps what drawLight gives it
-vi.mock('../src/scene/background.js', async importOriginal => {
+vi.mock('../src/scene/background', async importOriginal => {
   const real = await importOriginal();
   return { ...real, drawBackground: vi.fn(real.drawBackground) };
 });
@@ -17,8 +17,8 @@ vi.mock('../src/scene/background.js', async importOriginal => {
 async function context(search = '') {
   layOut(search);
   vi.resetModules();
-  const frame = await import('../src/scene/frame.js'), lanterns = await import('../src/scene/lanterns.js'), scene = await import('../src/scene/scene.js');
-  const { live } = await import('../src/scene/live.js'), { drawBackground } = await import('../src/scene/background.js');
+  const frame = await import('../src/scene/frame'), lanterns = await import('../src/scene/lanterns'), scene = await import('../src/scene/scene');
+  const { live } = await import('../src/scene/live'), { drawBackground } = await import('../src/scene/background');
   Object.assign(scene.VIEW, { box: [40, 20, 600, 600], layer: [140, 20, 400, 600] });
   Object.assign(live, { flyLightN: 0, ghostWingN: 0, farWall: {} }); // the Moroccan's far wall counts as baked already
   vi.mocked(drawBackground).mockClear();
@@ -59,7 +59,7 @@ test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between 
 });
 
 test('the tip the smoke, the hot air and the rim\'s shadow leave from is the shader flame\'s tip', async () => {
-  const ctx = await context(), { frame, lanterns } = ctx, src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.js'), 'utf8');
+  const ctx = await context(), { frame, lanterns } = ctx, src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.ts'), 'utf8');
   // the shader's outer tongue ends at its height (flameHalf is 0 from t = 1), its spine bent over to the full lean there,
   // and its noise gone at the tip
   const half = new Function(src.match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/)[0].replace('float flameHalf(float t)', 'return t =>')

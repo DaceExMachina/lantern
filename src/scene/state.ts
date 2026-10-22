@@ -1,15 +1,16 @@
 // Sessions from the server, turned into moths (session moths and their agents), with their hover areas.
 
-import { live } from './live.js';
-import { $, AMBIENT, CX, CY, EDGES, NS, SIZE, WING_SIDE, WING_UP, pathOf, post, ringHome, stretch } from './scene.js';
-import { hash, seeded } from './lanterns.js';
-import { hoverZone } from './card.js';
-import { alertMe } from './notify.js';
+import type { AgentMoth, CardAt, Moth, Session, SessionMoth, Zone } from '../types';
+import { live } from './live';
+import { $, AMBIENT, CX, CY, EDGES, NS, SIZE, WING_SIDE, WING_UP, pathOf, post, ringHome, stretch } from './scene';
+import { hash, seeded } from './lanterns';
+import { hoverZone } from './card';
+import { alertMe } from './notify';
 
-export let sessions = [];
-let seenWaiting = new Set(), nextUp = {}; // nextUp: where each status bar count's clicks have got to
-// what the server sends, and the settings, are in live.js
-export const quietEndLabel = () => { const [h, m] = live.quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
+export let sessions: Session[] = [];
+let seenWaiting = new Set<string>(), nextUp: Record<string, number> = {}; // nextUp: where each status bar count's clicks have got to
+// what the server sends, and the settings, are in live.ts
+export const quietEndLabel = () => { const [h = 0, m = 0] = live.quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();
@@ -18,7 +19,7 @@ export const quiet = () => live.quietUntil > Date.now();
 export const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
 // Which of the status bar's counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
 // waits, snoozed (until it does something new, or for quiet hours) or needing me.
-export const restOf = s => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
+export const restOf = (s: Session) => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
 
 export function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
@@ -30,12 +31,12 @@ export function sync() {
   const kept = new Set(), shown = AMBIENT ? [] : sessions; // the ambient view only needs the sessions for the glow's colour
   for (const s of shown) {
     kept.add(s.id);
-    if (!live.moths.has(s.id)) live.moths.set(s.id, Object.assign(makeSessionMoth(s.id), { key: s.id }));
+    let m = sessionMoth(s.id);
+    if (!m) live.moths.set(s.id, m = makeSessionMoth(s.id));
     // whatever an earlier snapshot said, the server sends it now, so it isn't leaving: every window shows the latest snapshot
-    Object.assign(live.moths.get(s.id), { session: s, leaving: false });
+    m.session = s; m.leaving = false;
     // A session another session started (the Claude app's side sessions) is a satellite: it orbits its parent's moth,
     // smaller, with its thread to the parent; it still lands on the lantern on its own when it needs you.
-    const m = live.moths.get(s.id);
     m.satellite = s.parent && alive.has(s.parent) ? s.parent : null;
     m.size = m.satellite ? SIZE.supervisor : SIZE.session; // like a supervisor agent
     // a fresh snooze (not quiet hours, not waking) puffs a "zz" off the moth; the first sync only records where it stands
@@ -45,8 +46,9 @@ export function sync() {
     for (const a of s.subagents) {
       const k = s.id + '/' + a.id;
       kept.add(k);
-      if (!live.moths.has(k)) live.moths.set(k, Object.assign(makeSubMoth(k, s.id, live.supervisor.test(a.type) ? SIZE.supervisor : SIZE.subagent), { key: k }));
-      Object.assign(live.moths.get(k), { session: s, type: a.type, leaving: false });
+      let am = live.moths.get(k);
+      if (!am) live.moths.set(k, am = makeSubMoth(k, s.id, live.supervisor.test(a.type ?? '') ? SIZE.supervisor : SIZE.subagent));
+      am.session = s; am.leaving = false;
     }
   }
   for (const [k, m] of live.moths) if (!kept.has(k)) m.leaving = true;
@@ -54,24 +56,26 @@ export function sync() {
   // spots as sessions on their own, 3 to 16, evenly round the lantern. Each session wants the one at its own seeded angle;
   // active ones choose first and resting ones (snoozed for good, or idle: both change rarely, unlike working and waiting)
   // after, so a resting moth takes a free spot rather than push an active one out. Past 16, they double up where it's
-  // least crowded. A join or leave can move the others; frame.js glides them there.
-  const want = id => seeded(hash(id))(), resting = s => s.forGood || s.state === 'idle';
-  const own = shown.filter(s => !live.moths.get(s.id).satellite)
+  // least crowded. A join or leave can move the others; frame.ts glides them there.
+  const want = (id: string): number => seeded(hash(id))(), resting = (s: Session) => Number(s.forGood || s.state === 'idle');
+  const own = shown.filter(s => !sessionMoth(s.id)?.satellite)
     .sort((a, b) => resting(a) - resting(b) || want(a.id) - want(b.id) || (a.id < b.id ? -1 : 1));
-  const n = Math.min(16, Math.max(3, own.length)), held = Array(n).fill(0), off = (i, id) => Math.abs(i + 0.5 - want(id) * n);
+  const n = Math.min(16, Math.max(3, own.length)), held = new Array<number>(n).fill(0), off = (i: number, id: string) => Math.abs(i + 0.5 - want(id) * n);
   for (const { id } of own) {
-    const i = held.reduce((best, c, i) => c < held[best] || c === held[best] && off(i, id) < off(best, id) ? i : best, 0);
-    live.moths.get(id).spot = ringHome(i, n, held[i]++);
+    const i = held.reduce((best, c, i) => c < (held[best] ?? 0) || c === held[best] && off(i, id) < off(best, id) ? i : best, 0);
+    const m = sessionMoth(id), layer = held[i] ?? 0;
+    held[i] = layer + 1;
+    if (m) m.spot = ringHome(i, n, layer);
   }
-  for (const s of shown) { const m = live.moths.get(s.id); m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.js)
+  for (const s of shown) { const m = sessionMoth(s.id); if (m) m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.ts)
 
   // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
   const working = sessions.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length;
   // each count's sessions, longest waiting first (sleeping ones that aren't waiting after, in a fixed order)
-  const of = rest => sessions.filter(s => restOf(s) === rest).sort((a, b) => (a.waitingSince || Infinity) - (b.waitingSince || Infinity) || (a.id < b.id ? -1 : 1));
+  const of = (rest: string) => sessions.filter(s => restOf(s) === rest).sort((a, b) => (a.waitingSince || Infinity) - (b.waitingSince || Infinity) || (a.id < b.id ? -1 : 1));
   const waiting = of('need'), snoozed = of('snoozed').length, sleeping = of('sleeping').length;
   // a count that opens its sessions one at a time: each click moves on to the next one
-  const cycler = (rest, text, title) => {
+  const cycler = (rest: string, text: string, title: string) => {
     const b = document.createElement('button');
     b.className = 'next'; b.textContent = text; b.title = title;
     b.onclick = () => { const q = of(rest), s = q[nextUp[rest] = ((nextUp[rest] ?? -1) + 1) % q.length]; if (s) post('/focus', { id: s.id }); };
@@ -107,10 +111,15 @@ export function sync() {
   seenWaiting = new Set(waiting.map(s => s.id));
 }
 
-export function el(tag, attrs = {}) {
+export function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number> = {}): SVGElementTagNameMap[K] {
   const n = document.createElementNS(NS, tag);
-  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, String(v));
   return n;
+}
+// the session moth with this id, if it has one (agents' moths share the map, keyed session/agent)
+export function sessionMoth(id: string): SessionMoth | undefined {
+  const m = live.moths.get(id);
+  return m?.parentId === undefined ? m : undefined;
 }
 
 function mothNode() {
@@ -119,42 +128,40 @@ function mothNode() {
   const wings = el('g', { transform: 'translate(-2 -6)' }); // same offset as the original artwork, so it pivots the same way
   wings.append(side, up);
   g.append(wings);
-  $('moths').append(g);
+  $('moths', SVGGElement).append(g);
   return { g, up, side };
 }
 
 // A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.
 // A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
-export function hoverArea(m, at) {
-  // clicking brings the session's terminal tab (or Claude app session) to the front (a subagent focuses its parent session)
-  const zone = hoverZone(m, () => post('/focus', { id: m.key }), 48, at);
+// `moth` hands back the moth, which can be the one still being made.
+export function hoverArea(moth: () => SessionMoth, at: CardAt): Zone {
+  // clicking brings the session's terminal tab (or Claude app session) to the front
+  const zone = hoverZone(moth, () => post('/focus', { id: moth().key }), 48, at);
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
   // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight
   // to for good. A snoozed moth rests on the lantern without turning it violet.
   zone.menu = () => {
-    const s = m.session;
+    const s = moth().session;
     if (!s) return;
     const next = s.forGood ? false : s.state === 'waiting' && !s.snoozed ? true : 'always';
     post('/snooze', { id: s.id, snoozed: next });
   };
   return zone;
 }
-function hoverable(m) {
-  m.zone = hoverArea(m, 'moth');
+
+function makeSessionMoth(key: string): SessionMoth {
+  const [x, y] = stretch(EDGES[Math.floor(Math.random() * EDGES.length)] ?? [CX, CY]);
+  const thread = el('path');
+  $('threads', SVGGElement).append(thread);
+  const m: SessionMoth = { ...mothNode(), key, size: SIZE.session, thread, zone: hoverArea(() => m, 'moth'),
+    x, y, phase: seeded(hash(key))() * 10, cool: 0, leaving: false };
   return m;
 }
 
-function makeSessionMoth(key) {
-  const [x, y] = stretch(EDGES[Math.floor(Math.random() * EDGES.length)]);
-  const thread = el('path');
-  $('threads').append(thread);
-  return hoverable({ ...mothNode(), size: SIZE.session, thread,
-    x, y, phase: seeded(hash(key))() * 10, cool: 0, leaving: false });
-}
-
-function makeSubMoth(key, parentId, size) {
-  const p = live.moths.get(parentId), rand = seeded(hash(key));
-  return ({ ...mothNode(), size, parentId, x: p?.x ?? CX, y: p?.y ?? CY, a: rand() * 6.28,
+function makeSubMoth(key: string, parentId: string, size: number): AgentMoth {
+  const p: Moth | undefined = live.moths.get(parentId), rand = seeded(hash(key));
+  return ({ ...mothNode(), key, size, parentId, x: p?.x ?? CX, y: p?.y ?? CY, a: rand() * 6.28,
     r: (size === SIZE.supervisor ? 54 : 38) + rand() * 14,
     speed: (1.1 + rand()) * (rand() < 0.5 ? -1 : 1) / size ** 0.5,
     phase: rand() * 10, cool: 0, leaving: false });

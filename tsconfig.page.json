@@ -1,5 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": { "module": "esnext", "moduleResolution": "bundler", "lib": ["es2022", "dom", "dom.iterable"], "types": [], "strictNullChecks": false },
-  "include": ["src/**/*.js", "page-globals.d.ts"]
-}

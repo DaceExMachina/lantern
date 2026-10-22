@@ -1,9 +1,9 @@
-// How a moth flies toward a new target (src/scene/frame.js's mothMove): it speeds up and slows down smoothly, the way the
+// How a moth flies toward a new target (src/scene/frame.ts's mothMove): it speeds up and slows down smoothly, the way the
 // ghost moths and wisps glide, instead of snapping onto a new heading at full speed.
 import assert from 'node:assert';
 import { test } from 'vitest';
-import { mothMove } from '../src/scene/frame.js';
-import { GUST } from '../src/scene/lanterns.js';
+import { mothMove } from '../src/scene/frame';
+import { GUST } from '../src/scene/lanterns';
 
 // a moment the wind is still: the first time it changes sign, halved in on; and the first moment it blows about 1.6 to the right
 let calm = 0, hi = 0.05, windy = 0;

@@ -1,5 +1,5 @@
 // The page's pure geometry and the lantern styles: landing spots on the lantern and what each style draws and does
-// (src/scene/lanterns.js), whether it sways (src/scene/frame.js), and the flapping wing (src/scene/scene.js). The page's
+// (src/scene/lanterns.ts), whether it sways (src/scene/frame.ts), and the flapping wing (src/scene/scene.ts). The page's
 // modules run here on test/setup.js's real markup, with the background's drawing replaced by a recorder (drawBackground)
 // so drawLight's output can be read.
 import assert from 'node:assert';
@@ -7,14 +7,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { layOut } from './page.js';
-import { live } from '../src/scene/live.js';
-import { $, AN, AU, EYE, FLAME_STRETCH, SIZE, WING_SIDE, WING_UP, cross, dot, facesFlame, flapWing, lerp3, ringHome, unit, wing3d } from '../src/scene/scene.js';
-import { HOP, STYLES, applyStyle, makeCandle, perchAt, style } from '../src/scene/lanterns.js';
-import { FIDGET, TWIST_MAX, drawLight, fidgetSlot, mothTarget, rot, stepFlame, swayAngle, swing, swingLantern, twist } from '../src/scene/frame.js';
-import { pencilShows } from '../src/scene/pencil.js';
-import { drawBackground } from '../src/scene/background.js';
+import { live } from '../src/scene/live';
+import { $, AN, AU, EYE, FLAME_STRETCH, SIZE, WING_SIDE, WING_UP, cross, dot, facesFlame, flapWing, lerp3, ringHome, unit, wing3d } from '../src/scene/scene';
+import { HOP, STYLES, applyStyle, makeCandle, perchAt, style } from '../src/scene/lanterns';
+import { FIDGET, TWIST_MAX, drawLight, fidgetSlot, mothTarget, rot, stepFlame, swayAngle, swing, swingLantern, twist } from '../src/scene/frame';
+import { pencilShows } from '../src/scene/pencil';
+import { drawBackground } from '../src/scene/background';
 
-vi.mock('../src/scene/background.js', async importOriginal => ({ ...await importOriginal(), drawBackground: vi.fn() }));
+vi.mock('../src/scene/background', async importOriginal => ({ ...await importOriginal(), drawBackground: vi.fn() }));
 
 afterEach(() => { vi.restoreAllMocks(); });
 const srcOf = file => fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', file), 'utf8');
@@ -43,7 +43,7 @@ test('landing spots stay out of the middle third of the lantern, and on it', () 
   }
 });
 
-// frame.js works a landed moth's spot out afresh every frame as its home glides round, so the spot has to move smoothly
+// frame.ts works a landed moth's spot out afresh every frame as its home glides round, so the spot has to move smoothly
 // as the home does, or a landed moth jitters. A home turned a little about where the lantern hangs stands in for one gliding.
 test('a landing spot slides smoothly as its home moves, never jumping', () => {
   // the homes in windows as wide as tall or wider (in the half-width one the top home's line runs nearly straight up
@@ -79,14 +79,14 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     applyStyle(key);
     // each frame's sway, and the turn it gives the lantern's layer
     const frames = Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, start + i / 60),
-      [swayAngle, $('lanternLayer').style.transform, $('lanternBack').style.transform]));
+      [swayAngle, $('lanternLayer', SVGSVGElement).style.transform, $('lanternBack', SVGSVGElement).style.transform]));
     const sway = frames.map(f => f[0]);
-    assert.strictEqual($('lantern').getAttribute('transform'), null, `${key}: the drawing itself is never turned, only its layer`);
+    assert.strictEqual($('lantern', SVGGElement).getAttribute('transform'), null, `${key}: the drawing itself is never turned, only its layer`);
     start += 30;
-    const hang = /id="hang"/.test($('lantern').innerHTML + $('lanternPaper').innerHTML);
+    const hang = /id="hang"/.test($('lantern', SVGGElement).innerHTML + $('lanternPaper', SVGGElement).innerHTML);
     if (STYLES[key].stands) {
       assert.ok(sway.every(a => a === 0), `${key} stands still`);
-      assert.strictEqual($('lanternLayer').style.transform, 'rotate(0.000deg)', `${key} is drawn unturned`);
+      assert.strictEqual($('lanternLayer', SVGSVGElement).style.transform, 'rotate(0.000deg)', `${key} is drawn unturned`);
       assert.deepStrictEqual(rot(300, 400), [300, 400], `${key}: nothing attached to it turns`);
       assert.ok(!hang, `${key} has nothing to hang from`);
     } else {
@@ -111,15 +111,15 @@ test('moths land on the candle\'s wax: below its rim, above its dish and within 
   }
 });
 
-// src/scene/background.js's flameHalf (a tongue's half-width up it), run as JS: it's written in scalars, so it reads as JS once typed
+// src/scene/background.ts's flameHalf (a tongue's half-width up it), run as JS: it's written in scalars, so it reads as JS once typed
 const flameHalf = (() => {
-  const src = srcOf('background.js').match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/);
-  assert.ok(src, 'background.js has flameHalf');
+  const src = srcOf('background.ts').match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/);
+  assert.ok(src, 'background.ts has flameHalf');
   return new Function(src[0].replace('float flameHalf(float t)', 'return t =>').replace(/\bfloat /g, 'let ').replace(/\b(sqrt|pow)\(/g, 'Math.$1('))();
 })();
 test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', () => {
   const [fx, fy, k] = STYLES.candle.flame, clear = 10, tallest = 96 * FLAME_STRETCH;
-  // the outer tongue's outline at full size, as background.js FLAME draws it: at its tallest, leaning as far as
+  // the outer tongue's outline at full size, as background.ts FLAME draws it: at its tallest, leaning as far as
   // stepFlame lets it either way, its middle bent and swollen by the most turbulence a gust and a moth give at full size
   const turb = 4, flame = new Map();
   for (const lean of [-0.6 * tallest, 0, 0.6 * tallest]) for (let t = -0.5; t <= 1; t += 0.005) {
@@ -173,13 +173,13 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
 
 test('the Moroccan\'s flame, burner cup and light sit between its front and far wall as it twists', () => {
   applyStyle('moroccan');
-  assert.match($('lantern').innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
+  assert.match($('lantern', SVGGElement).innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
   for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60);
   drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
   const v = background(), wall = v.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide
-  assert.match(srcOf('background.js'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
+  assert.match(srcOf('background.ts'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
   assert.ok(Math.abs(twist) > 5 && Math.abs(wall) > 1, `a big twist: ${twist}, sliding the far wall ${wall}`);
-  const inside = +$('inside').getAttribute('transform').match(/^translate\((\S+) 0\)$/)[1];
+  const inside = +$('inside', SVGGElement).getAttribute('transform').match(/^translate\((\S+) 0\)$/)[1];
   // the light and the shader's flame (its base), turned back into the lantern's own frame, slid along with the cup
   const light = rot(...v.lightC, -swayAngle)[0] - style.light[0], flame = rot(...v.flame.slice(0, 2), -swayAngle)[0] - style.flame[0];
   for (const [what, x] of [['the cup and sparks', inside], ['flame', flame], ['light', light]]) {
@@ -187,13 +187,13 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
     assert.ok(Math.abs(x - wall / 2) < 0.01, `${what} sits half way: ${x} of ${wall}`);
   }
   applyStyle('barrel'); swingLantern(1 / 60, 50);
-  assert.strictEqual($('inside').getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
+  assert.strictEqual($('inside', SVGGElement).getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
 });
 
-// background.js's rimShade, run as JS on drawLight's uniforms: it's written in scalars, so it reads as JS once typed
+// background.ts's rimShade, run as JS on drawLight's uniforms: it's written in scalars, so it reads as JS once typed
 const rimShadeFrom = ({ flame: [fx, fy, tx, ty], rim: [x, y, z] }) => {
-  const src = srcOf('background.js').match(/float rimShade\(float px, float py\) \{[\s\S]*?\n\}/);
-  assert.ok(src, 'background.js has rimShade');
+  const src = srcOf('background.ts').match(/float rimShade\(float px, float py\) \{[\s\S]*?\n\}/);
+  assert.ok(src, 'background.ts has rimShade');
   const js = src[0].replace('float rimShade(float px, float py)', 'return (px, py) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|max|abs)\(/g, 'Math.$1(');
   const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   return new Function('uFlame', 'uRim', 'smoothstep', js)({ x: fx, y: fy, z: tx, w: ty }, { x, y, z }, smoothstep);
@@ -276,7 +276,7 @@ test('the candlestick\'s parts stack from the pan down to the slab as drawn, its
   for (const [at, dims] of [['as it is', {}], ['rim 263.5, stem 47.3', { rim: 263.5, stem: 47.3 }], ['the drawing\'s neck at 461.5', { neck: 461.5 }]]) {
     const { back: svg, pillar: { dish, rim }, pedestal: P, drawn: D, stem: STEM } = makeCandle(dims);
     for (const [k, v] of Object.entries(dims)) assert.strictEqual({ rim, stem: STEM, neck: D.neck }[k], v, `${at}: drawn at ${k} ${v}`);
-    // each turned part's profile ends, top to bottom (lanterns.js turned): its top and bottom, and its half-width at each
+    // each turned part's profile ends, top to bottom (lanterns.ts turned): its top and bottom, and its half-width at each
     const parts = ['cdBowl', 'cdNeck', 'cdStemRing', 'cdBaluster', 'cdCollar', 'cdFoot', 'cdBase'].map(id => {
       const pts = [...svg.match(new RegExp(`<path id="${id}" d="M([^Q]+)Q`))[1].matchAll(/([\d.]+) ([\d.]+)/g)].map(m => [340 - +m[1], +m[2]]);
       return { id, top: pts[0][1], topHalf: pts[0][0], bottom: pts[pts.length - 1][1], bottomHalf: pts[pts.length - 1][0] };
@@ -332,7 +332,7 @@ test('the candle\'s wax under the rim takes the flame\'s colour', () => {
 });
 
 test('on the candle the session text and ribbon controls grey out', () => {
-  $('ribbons').innerHTML = '<button></button>'.repeat(3); // the swatches, which wiring.js adds
+  $('ribbons').innerHTML = '<button></button>'.repeat(3); // the swatches, which wiring.ts adds
   applyStyle('candle');
   assert.strictEqual(/** @type {HTMLInputElement} */ ($('textToggle')).disabled, true);
   assert.ok([...$('ribbons').children].every(b => /** @type {HTMLButtonElement} */ (b).disabled), 'every swatch');
@@ -376,7 +376,7 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   const bottoms = [anchor + 20, anchor + 400, anchor + 1200], svgs = bottoms.map(at);
   assert.strictEqual(at(bottoms[1]), svgs[1], 'drawn twice at one height, the same');
   layOut(); vi.resetModules(); // another load of the page
-  const again = await import('../src/scene/lanterns.js');
+  const again = await import('../src/scene/lanterns');
   assert.notStrictEqual(again.STYLES, STYLES, 'a fresh set of modules');
   assert.strictEqual(again.STYLES.candle.column(bottoms[1]), svgs[1], 'another load draws the same vine');
   assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
@@ -400,10 +400,10 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
 
 test('every bunch of grapes hangs from a stalk on one of the vine\'s limbs, the bunch below it', () => {
   const P = STYLES.candle.pedestal, svg = STYLES.candle.back + STYLES.candle.column(P.anchor + 900);
-  // the limbs: their filled outlines (lanterns.js limb), as polygons
+  // the limbs: their filled outlines (lanterns.ts limb), as polygons
   const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => m[1].split('L').map(p => p.split(' ').map(Number)));
   const inside = ([x, y], poly) => poly.reduce((c, [x1, y1], i) => { const [x2, y2] = poly[(i + 1) % poly.length]; return (y1 > y) !== (y2 > y) && x < x1 + (y - y1) * (x2 - x1) / (y2 - y1) ? !c : c; }, false);
-  // each bunch (lanterns.js cluster): its stalk, from where it grows, then its grapes
+  // each bunch (lanterns.ts cluster): its stalk, from where it grows, then its grapes
   const bunches = [...svg.matchAll(/<path d="M(-?[\d.]+) (-?[\d.]+)Q[^"]*" fill="none" stroke="#1F1A0C" stroke-width="2.2"[^>]*\/><path[^>]*\/>((?:<use href="#cdGrape\d"[^>]*\/>)+)/g)]
     .map(m => ({ at: [+m[1], +m[2]], grapes: [...m[3].matchAll(/x="(-?[\d.]+)" y="(-?[\d.]+)"/g)].map(g => [+g[1], +g[2]]) }));
   const hanging = bunches.filter(b => !(b.at[0] === 400 && b.at[1] === P.top - 8)); // but the one lying on the slab by the foot, as asked
@@ -441,7 +441,7 @@ test('every limb of the vine drawn, branch, trunk or climber, has leaves all alo
   const svg = STYLES.candle.back.replace(/<g id="cdColumn">[\s\S]*?<\/g>(?=\s*<clipPath id="cdSlab")/, `<g id="cdColumn">${STYLES.candle.column(P.anchor + 600)}</g>`).replace(/<\/g><\/g>([\s\S]*?)<!-- the vine's back turns/, '')
     .replace(/(<clipPath id="cdColClip">[\s\S]*?<\/clipPath>)[\s\S]*?<!-- the vine's turns behind the column -->/g, '$1');
   const leaves = [...svg.matchAll(/class="cdLeaf" data-at="(-?[\d.]+) (-?[\d.]+)"[^>]*data-low/g)].map(m => [+m[1], +m[2]]);
-  // each limb's middle line, from its outline: one side out, the other back (lanterns.js limb)
+  // each limb's middle line, from its outline: one side out, the other back (lanterns.ts limb)
   const limbs = [...svg.matchAll(/<path d="M([^"]+)Z" fill="#5B5129"\/>/g)].map(m => {
     const o = m[1].split('L').map(q => q.split(' ').map(Number)), n = o.length / 2;
     return o.slice(0, n).map((q, i) => [(q[0] + o[o.length - 1 - i][0]) / 2, (q[1] + o[o.length - 1 - i][1]) / 2]);

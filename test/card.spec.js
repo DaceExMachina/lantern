@@ -1,4 +1,4 @@
-// The moth's hover card (src/scene/card.js): the PR header that sums the PRs up and names a hovered chip, the list capped at
+// The moth's hover card (src/scene/card.ts): the PR header that sums the PRs up and names a hovered chip, the list capped at
 // the worst few, the per-session toggle from the server's settings, and the agent rows (job, time, model, a tag chip
 // only for a tagged step). It runs against index.html's real card and dock, with the real morph patching them in happy-dom;
 // test/morph.test.js checks the same patching in WebKit.
@@ -6,10 +6,10 @@ import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, test, vi } from 'vitest';
-import { $ } from '../src/scene/scene.js';
-import { live } from '../src/scene/live.js';
-import { sync } from '../src/scene/state.js';
-import { HANDLERS, hideCard, hoverZone, openAgents, renderCard, renderSidebar } from '../src/scene/card.js';
+import { $ } from '../src/scene/scene';
+import { live } from '../src/scene/live';
+import { sync } from '../src/scene/state';
+import { HANDLERS, hideCard, hoverZone, openAgents, renderCard, renderSidebar } from '../src/scene/card';
 
 const text = n => n.textContent;
 const find = (n, cls) => [...n.querySelectorAll('.' + cls)];
@@ -87,10 +87,10 @@ test('the toggle flips the session\'s view, tells the server, and the server\'s 
   assert.strictEqual(tog.getAttribute('aria-label'), 'List PRs with their titles');
   assert.strictEqual(tog.title, 'List PRs with their titles', 'a tooltip too');
   assert.strictEqual(text(tog), '', 'an icon, no text');
-  tog.click(); // a button, which the card's own click handler leaves alone (wiring.js)
+  tog.click(); // a button, which the card's own click handler leaves alone (wiring.ts)
   assert.strictEqual(JSON.stringify(posts), JSON.stringify([['/settings', { prList: { s1: true } }]]));
   assert.strictEqual(find(show(session({ github: TEN })), 'pr2').length, 4, 'now listed');
-  // another window gets the setting from the server (wiring.js: live.prList = st.prList)
+  // another window gets the setting from the server (wiring.ts: live.prList = st.prList)
   reset();
   live.prList = { s1: true, s2: false };
   assert.strictEqual(find(show(session({ github: TEN })), 'pr2').length, 4);
@@ -99,13 +99,13 @@ test('the toggle flips the session\'s view, tells the server, and the server\'s 
 
 test('an agent is three lines: dot, tag chip only when its step has one, model and time; its job; its step', () => {
   const agent = o => ({ id: 'a', type: 'opus-implement', description: 'Build the card', model: 'Opus 5.5', started: now - 8 * 60e3, last: now - 2e3, ...o });
-  const card = show(session({ state: 'working', subagents: [agent({ activity: '[card-e] Run the tests' }), agent({ id: 'b', started: now - 7 * 60e3, activity: 'Read card.js', last: now - 30e3, model: 'Haiku 4.5', type: 'Explore' })] }));
+  const card = show(session({ state: 'working', subagents: [agent({ activity: '[card-e] Run the tests' }), agent({ id: 'b', started: now - 7 * 60e3, activity: 'Read card.ts', last: now - 30e3, model: 'Haiku 4.5', type: 'Explore' })] }));
   const agents = find(card, 'agent');
   assert.deepStrictEqual(agents.map(r => [r.localName, ...[...r.children[0].children].map(c => c.className)]), [['button', 'arow', 'job', 'astep'], ['button', 'arow', 'job', 'astep']], 'a native button, so the keyboard opens it too');
   assert.deepStrictEqual(find(card, 'arow').map(r => [...r.children].map(c => c.className)), [['live', 'tag', 'model', 't'], ['live quiet', 'model', 't']], 'a tag chip only for a tagged step; dim after 10 s quiet');
   assert.deepStrictEqual(find(card, 'arow').map(text), ['card-eOpus 5.58m', 'Haiku 4.57m'], 'no type');
   assert.deepStrictEqual(find(card, 'job').map(text), ['Build the card', 'Build the card']);
-  assert.deepStrictEqual(find(card, 'astep').map(text), ['Run the tests', 'Read card.js'], 'the tag comes off the step');
+  assert.deepStrictEqual(find(card, 'astep').map(text), ['Run the tests', 'Read card.ts'], 'the tag comes off the step');
 });
 
 test('a click opens an agent in full and another closes it; it stays open through redraws until the card closes', () => {
@@ -127,7 +127,7 @@ test('a click opens an agent in full and another closes it; it stays open throug
 
 test('a session\'s header opens the session, and shift-click on it snoozes', () => {
   const calls = [], m = {};
-  m.zone = hoverZone(m, () => calls.push('open'), 48);
+  m.zone = hoverZone(() => m, () => calls.push('open'), 48);
   m.zone.menu = () => calls.push('snooze');
   live.moths = new Map([['s1', m]]);
   const h = () => show(session({})).children[0].children[0];
@@ -190,8 +190,8 @@ test('a listed PR shows how long it has been open, at the end of its second line
 
 test('the status pill does what a right-click on the moth does (snooze, sleep, wake), and doesn\'t open the session', () => {
   const calls = [], m = {}, snoozes = [];
-  m.zone = hoverZone(m, () => calls.push('open'), 48);
-  m.zone.menu = () => snoozes.push('/snooze'); // state.js's menu posts the next snooze
+  m.zone = hoverZone(() => m, () => calls.push('open'), 48);
+  m.zone.menu = () => snoozes.push('/snooze'); // state.ts's menu posts the next snooze
   live.moths = new Map([['s1', m]]);
   const pill = o => find(show(session(o)), 'chip')[0];
   const p = pill({});
@@ -288,7 +288,7 @@ test('the card\'s pin toggles its session in the list, newest at the bottom, and
   pinOf(sections()[0]).click();
   assert.deepStrictEqual(docked(), []);
   assert.strictEqual(list(), JSON.stringify([['s1'], ['s1', 's3'], ['s1', 's3', 's2'], ['s1', 's2'], ['s2'], []]), 'the whole list to the server each time');
-  // another window docks what the server says (wiring.js: live.pinned = st.pinned, then renderSidebar)
+  // another window docks what the server says (wiring.ts: live.pinned = st.pinned, then renderSidebar)
   reset();
   setSessions(a, b);
   live.pinned = [{ id: 's2' }, { id: 's1' }]; renderSidebar();
@@ -396,7 +396,7 @@ test('in the sidebar an agent is a plain row, shown in full, that leaves the car
 });
 
 test('every handler property the card and its stale cards set is one morph copies onto the live element', () => {
-  const src = ['card', 'stale'].map(f => fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', f + '.js'), 'utf8')).join('\n');
+  const src = ['card', 'stale'].map(f => fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', f + '.ts'), 'utf8')).join('\n');
   const set = [...new Set([...src.matchAll(/\.(on[a-z]+) =/g)].map(m => m[1]))];
   assert.ok(set.includes('onclick') && set.includes('onfocus'), `found ${set}`);
   assert.deepStrictEqual(set.filter(h => !HANDLERS.includes(h)), [], 'set but not copied, so a redraw would keep the old handler');

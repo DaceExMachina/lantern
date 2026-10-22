@@ -1,9 +1,9 @@
-// The barrel's ribbon bookmark (stepRibbon in src/scene/frame.js) under the things that used to fling it about: uneven and
+// The barrel's ribbon bookmark (stepRibbon in src/scene/frame.ts) under the things that used to fling it about: uneven and
 // long frames, the window resizing (its length changing, its knot jumping) and bad state. Its fastest point moves at about
 // 35 a second in ordinary wind; the resize glitch reached 3600, and a near-zero frame blew it up to 1e306 long.
 import assert from 'node:assert';
 import { test } from 'vitest';
-import { stepRibbon } from '../src/scene/frame.js';
+import { stepRibbon } from '../src/scene/frame';
 
 const KNOT = [340, 470], DT = 1 / 60;
 const settled = () => { const r = {}; for (let k = 0; k < 120; k++) stepRibbon(r, ...KNOT, 128, DT, k * DT); return r; };
