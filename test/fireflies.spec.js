@@ -1,14 +1,14 @@
-// How a PR's firefly leaves (src/scene/fireflies.js swarm): merged, closed and just gone each take their own way out, one
+// How a PR's firefly leaves (src/scene/fireflies.ts swarm): merged, closed and just gone each take their own way out, one
 // flying off goes only once it and its bloom are wholly outside the window, and the path is the same in every window,
 // timed from when the server saw the change, in the same spot.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
-import { toggleDevPanel } from '../src/dev.js';
-import { BLEND, FLY, exitAt, flyLights, leaveStep, loopStart, swarm } from '../src/scene/fireflies.js';
-import { mothFireflies } from '../src/scene/frame.js';
-import { hex } from '../src/scene/lanterns.js';
-import { live } from '../src/scene/live.js';
-import { VIEW } from '../src/scene/scene.js';
+import { toggleDevPanel } from '../src/dev';
+import { BLEND, FLY, exitAt, flyLights, leaveStep, loopStart, swarm } from '../src/scene/fireflies';
+import { mothFireflies } from '../src/scene/frame';
+import { hex } from '../src/scene/lanterns';
+import { live } from '../src/scene/live';
+import { VIEW } from '../src/scene/scene';
 
 afterEach(() => vi.unstubAllGlobals());
 

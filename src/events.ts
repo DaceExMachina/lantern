@@ -1,9 +1,7 @@
-import { useLanternStore, type Stats } from './stores/lantern';
+import { useLanternStore } from './stores/lantern';
+import { fetchStats, isRecord } from './types';
 
-const isRecord = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
-const isStats = (x: unknown): x is Stats => isRecord(x) && Array.isArray(x['days']) && Array.isArray(x['achievements']) && isRecord(x['tally']);
-
-// The chrome's line to the server. The scene still opens its own EventSource (src/wiring.js),
+// The chrome's line to the server. The scene still opens its own EventSource (src/wiring.ts),
 // so for now there are two connections.
 export function connect(store = useLanternStore()) {
   const es = new EventSource('/events');
@@ -19,9 +17,7 @@ export function connect(store = useLanternStore()) {
 
 export async function loadStats(store = useLanternStore()) {
   try {
-    const stats: unknown = await (await fetch('/stats')).json();
-    if (!isStats(stats)) throw new Error('not the stats');
-    store.stats = stats;
+    store.stats = await fetchStats();
     store.statsFailed = false;
   } catch { store.statsFailed = true; }
 }

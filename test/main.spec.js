@@ -1,5 +1,5 @@
-// The page's wiring (src/wiring.js): the status line shrinking to fit, the fallback timer that stands in for rAF, pointing at
-// and clicking a moth, and a tap that puts the card away. Each test loads the whole page afresh (src/wiring.js imports the
+// The page's wiring (src/wiring.ts): the status line shrinking to fit, the fallback timer that stands in for rAF, pointing at
+// and clicking a moth, and a tap that puts the card away. Each test loads the whole page afresh (src/wiring.ts imports the
 // rest) on index.html's real markup, with fake timers, and stubs only what happy-dom lacks: the event stream, the
 // lantern picker's Option, and rAF, so no frame loop runs.
 import assert from 'node:assert';
@@ -22,7 +22,7 @@ async function open(search = '') {
   const add = addEventListener;
   vi.spyOn(window, 'addEventListener').mockImplementation((...args) => { added.push(args); return add.apply(window, args); });
   vi.resetModules();
-  const [events, card, state, { live }] = await Promise.all([import('../src/wiring.js'), import('../src/scene/card.js'), import('../src/scene/state.js'), import('../src/scene/live.js')]);
+  const [events, card, state, { live }] = await Promise.all([import('../src/wiring'), import('../src/scene/card'), import('../src/scene/state'), import('../src/scene/live')]);
   vi.mocked(window.addEventListener).mockRestore(); // only the page's own listeners were to be collected
   return { events, card, state, live, fetch: /** @type {import('vitest').Mock} */ (fetch) };
 }
@@ -79,7 +79,7 @@ test('a tap outside the moths and the card puts the card away; a mouse click or 
   assert.strictEqual(hide.mock.calls.length, 1);
 });
 
-// Hover areas are plain circles (card.js), found from the scene's own pointer events (wiring.js zoneFor), so a moth's card
+// Hover areas are plain circles (card.ts), found from the scene's own pointer events (wiring.ts zoneFor), so a moth's card
 // and its click only work if those handlers reach them
 test('pointing at a moth shows its card, and clicking it brings its session to the front', async () => {
   const { card, state, live, fetch } = await open();
@@ -87,7 +87,7 @@ test('pointing at a moth shows its card, and clicking it brings its session to t
   vi.spyOn(card, 'renderCard').mockImplementation(() => {});
   const scene = document.getElementById('scene');
   const moth = { key: 'api', zone: null };
-  moth.zone = state.hoverArea(moth, 'moth');
+  moth.zone = state.hoverArea(() => moth, 'moth');
   Object.assign(moth.zone, { x: 100, y: 200 });
   const fire = (type, x, y) => scene.dispatchEvent(Object.assign(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }), { pointerType: 'mouse' }));
   fire('pointermove', 300, 300);
@@ -103,7 +103,7 @@ test('pointing at a moth shows its card, and clicking it brings its session to t
 async function withCard() {
   const o = await open();
   flatScene();
-  const zone = Object.assign(o.card.hoverZone({}, () => {}, 40), { x: 100, y: 100 });
+  const zone = Object.assign(o.card.hoverZone(() => ({}), () => {}, 40), { x: 100, y: 100 });
   const clickCard = (x, y, tag = '') => {
     const target = tag ? document.getElementById('card').appendChild(document.createElement(tag)) : document.getElementById('card');
     target.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: x, clientY: y }));
@@ -128,7 +128,7 @@ test('a click on a session\'s card body opens it only where the card covers its 
   assert.deepStrictEqual(opened(), [zone, 'wisp'], 'a stale PR\'s card');
 });
 
-test('the open card and the sidebar redraw on every tick, whatever is under the pointer or focused (card.js morph keeps it)', async () => {
+test('the open card and the sidebar redraw on every tick, whatever is under the pointer or focused (card.ts morph keeps it)', async () => {
   stubCanvas2d(); // the text on the paper draws on its own timer
   const { card, live } = await open();
   window.lanternTick = () => {};

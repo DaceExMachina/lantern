@@ -58,7 +58,7 @@
       s('sess-delta', { state: 'working', parent: 'sess-alpha', activity: 'Side work' }), // a satellite
       s('sess-golf', { state: 'waiting', parent: 'sess-bravo', waitingSince: now - 2 * MIN }), // a satellite waiting: paused
       ...(phase ? [] : [s('sess-echo', { state: 'idle', created: [pr(8).url], forYou: { you: [{ label: 'app#8', url: pr(8).url }] } })]),
-      s('sess-foxtrot', { state: 'waiting', error: 'API Error', waitingSince: now - MIN }),
+      s('sess-foxtrot', { state: 'waiting', error: true, waitingSince: now - MIN }),
     ];
   };
   // stale PRs: every colour, some made by old sessions (ghost moths), the rest loose wisps
@@ -156,7 +156,7 @@
         if (document.elementFromPoint(x, y)?.closest('.pin') !== pin) errs.push(`the pin's hit area misses its header's ${where}`);
     }
   };
-  // A big card (6 agents, 10 PRs) redrawn the way the 500ms tick does (wiring.js), checked to keep what the browser holds.
+  // A big card (6 agents, 10 PRs) redrawn the way the 500ms tick does (wiring.ts), checked to keep what the browser holds.
   const morph = () => {
     const now = Date.now(), q = sel => page.$('card').querySelector(sel), fail = msg => errs.push(msg); // $ isn't defined yet
     const big = { id: 'sess-big', cwd: '/Users/x/projects/big', title: 'sess-big', state: 'working', activity: 'Editing', started: now - 50 * MIN, last: now,
@@ -251,7 +251,7 @@
     return [() => { was = page.fitted; page.swing.a = 6; page.swing.v = 0; }, run(1 / 60),
       async () => {
         await new Promise(r => realSetTimeout(r, 100)); // WebKit adds a scrollbar once it next lays out, between frames
-        const layer = page.$('lanternLayer').getBoundingClientRect(), doc = document.documentElement;
+        const layer = page.$('lanternLayer', SVGSVGElement).getBoundingClientRect(), doc = document.documentElement;
         if (layer.bottom <= innerHeight) return errs.push(`the swung lantern's layer ends at ${layer.bottom}, inside the ${innerHeight} px window, so the check would prove nothing`);
         if (doc.scrollHeight > doc.clientHeight) errs.push(`the swung lantern scrolls the page: ${doc.scrollHeight} px in a ${doc.clientHeight} px window`);
       },

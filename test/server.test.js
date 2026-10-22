@@ -1285,7 +1285,7 @@ test('stats: Séance and Ghostbuster count each PR once', async t => {
   assert.deepStrictEqual(ghost, [{ id: 'ghostbuster', day: key }]);
 });
 
-// The page gets the first word of the name on the Claude Code account (for the candle's pencil, page/pencil.js), the
+// The page gets the first word of the name on the Claude Code account (for the candle's pencil, page/pencil.ts), the
 // display name if it has one, else the full name. With no CLAUDE_CONFIG_DIR, Claude Code keeps the account in ~/.claude.json.
 const account = oauthAccount => JSON.stringify({ oauthAccount });
 test('the page gets the first name off the Claude Code account', async t => {

@@ -1,15 +1,15 @@
-// Jerrett made the candle, so when he's the one at it (his first name, from the server's `name` event, wiring.js) a worn
+// Jerrett made the candle, so when he's the one at it (his first name, from the server's `name` event, wiring.ts) a worn
 // yellow pencil, its point snapped off beside it, lies on the pedestal under the vine. It goes into the candle's drawing
-// once, in the spot lanterns.js keeps for it (#cdPencil), hidden by index.html's CSS until showPencil says so; ?pencil
+// once, in the spot lanterns.ts keeps for it (#cdPencil), hidden by index.html's CSS until showPencil says so; ?pencil
 // (the dev panel's Demo toggle) shows it for anyone.
-import { live } from './live.js';
-import { $ } from './scene.js';
-import { devToggle } from '../dev.js';
-import { STYLES } from './lanterns.js';
+import { live } from './live';
+import { $ } from './scene';
+import { devToggle } from '../dev';
+import { STYLES } from './lanterns';
 
 let pencilForced = devToggle('Demo', 'pencil', 'Jerrett\'s pencil', false, 'The pencil Jerrett sees on the candle\'s pedestal', v => { pencilForced = v; showPencil(); });
 export const pencilShows = () => pencilForced || live.firstName.toLowerCase() === 'jerrett';
-export function showPencil() { $('lantern').classList.toggle('pencil', pencilShows()); }
+export function showPencil() { $('lantern', SVGGElement).classList.toggle('pencil', pencilShows()); }
 
 // Lying along x, centred on its spot: the eraser at the left, the broken point at the right, lit from above.
 const PENCIL = `<ellipse cx="1" cy="4" rx="45" ry="3.4" fill="#2B2238" opacity=".16"/><ellipse cx="0" cy="3.4" rx="41" ry="2" fill="#2B2238" opacity=".22"/><!-- its shadow on the stone -->

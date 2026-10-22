@@ -1,11 +1,11 @@
-// How ghost moths and wisps move (src/scene/stale.js): they keep a clear spot rather than flicker between two, and they
+// How ghost moths and wisps move (src/scene/stale.ts): they keep a clear spot rather than flicker between two, and they
 // glide to a new one slowly, easing in and out.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
 import { layOut } from './page.js';
-import { angleGap, nextAim, planStale, settle } from '../src/scene/stale.js';
-import { VIEW } from '../src/scene/scene.js';
-import * as lanterns from '../src/scene/lanterns.js';
+import { angleGap, nextAim, planStale, settle } from '../src/scene/stale';
+import { VIEW } from '../src/scene/scene';
+import * as lanterns from '../src/scene/lanterns';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -63,7 +63,7 @@ test("with a standing lantern, no loose wisp's spot lands in the band its pedest
 });
 
 // The wisps and ghost moths are light and shapes in the background shader (flyLights and ghostWings, drawn by
-// background.js), hovered through plain circles (card.js zones), so nothing in the scene's SVG moves for them.
+// background.ts), hovered through plain circles (card.ts zones), so nothing in the scene's SVG moves for them.
 const BASE = Date.UTC(2026, 9, 20, 12);
 const NEEDS = ['ready', 'failing', 'draft', 'review', 'changes', 'quiet'];
 const stale = NEEDS.map((need, i) => ({ url: `https://github.com/o/r/pull/${i}`, label: `#${i}`, title: `PR ${i}`, need, updatedAt: new Date(BASE - (8 + i) * 864e5).toISOString(),
@@ -73,7 +73,7 @@ const stale = NEEDS.map((need, i) => ({ url: `https://github.com/o/r/pull/${i}`,
 async function screen(clock) {
   layOut(); vi.resetModules();
   vi.spyOn(Date, 'now').mockImplementation(() => clock.t);
-  const [{ live }, st, card, fireflies, lanterns] = await Promise.all(['live', 'stale', 'card', 'fireflies', 'lanterns'].map(f => import(`../src/scene/${f}.js`)));
+  const [{ live }, st, card, fireflies, lanterns] = await Promise.all(['live', 'stale', 'card', 'fireflies', 'lanterns'].map(f => import(`../src/scene/${f}.ts`)));
   live.stalePRs = JSON.parse(JSON.stringify(stale));
   // one frame, then what the shader would be handed: each light's x, y, radius, brightness, r, g, b, and the ghosts' wing corners
   const frame = (dt, s) => {

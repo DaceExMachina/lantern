@@ -1,12 +1,12 @@
 // Moths' hover areas can overlap (a flying moth's area sits on its home, 48 wide). Where they do, a point belongs to the
-// nearest moth whose area it's in (src/scene/card.js's zoneAt), so neighbours split the overlap down the middle instead of
+// nearest moth whose area it's in (src/scene/card.ts's zoneAt), so neighbours split the overlap down the middle instead of
 // whichever is drawn on top covering the other.
 import assert from 'node:assert';
 import { test } from 'vitest';
-import { $, WING_SIDE, WING_UP, caster, wing3d } from '../src/scene/scene.js';
-import { clickZone, holdAnchor, hoverZone, tapZone, zoneAt } from '../src/scene/card.js';
-import { mothZones } from '../src/scene/frame.js';
-import { live } from '../src/scene/live.js';
+import { $, WING_SIDE, WING_UP, caster, wing3d } from '../src/scene/scene';
+import { clickZone, holdAnchor, hoverZone, tapZone, zoneAt } from '../src/scene/card';
+import { mothZones } from '../src/scene/frame';
+import { live } from '../src/scene/live';
 
 const circle = (x, y, r) => ({ x, y, r, off: false });
 
@@ -29,7 +29,7 @@ test('a landed moth keeps its own body next to a flying moth\'s wider area', () 
 
 test('shift+click runs an area\'s snooze menu, a plain click runs its click action', () => {
   const calls = [];
-  const zone = hoverZone({}, () => calls.push('click'));
+  const zone = hoverZone(() => ({}), () => calls.push('click'));
   zone.menu = () => calls.push('snooze');
   clickZone(zone, false);
   assert.deepStrictEqual(calls, ['click']);
@@ -41,7 +41,7 @@ test('a tap shows a moth\'s card without running its click, and tapping the same
   const calls = [], card = $('card');
   live.hovered = null;
   const moth = {}, other = {};
-  const zone = hoverZone(moth, () => calls.push('click')), zone2 = hoverZone(other, () => calls.push('click'));
+  const zone = hoverZone(() => moth, () => calls.push('click')), zone2 = hoverZone(() => other, () => calls.push('click'));
   card.classList.add('show');
   tapZone(zone);
   assert.strictEqual(live.hovered, moth, 'first tap shows its card');

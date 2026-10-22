@@ -1,4 +1,4 @@
-// The candle's shine (src/scene/frame.js drawShine): what its bare flame lights round it, following the flame's live lean and
+// The candle's shine (src/scene/frame.ts drawShine): what its bare flame lights round it, following the flame's live lean and
 // flicker, the hot air rising over it, and the plumes of smoke it lets go on a schedule every window
 // shares. The page is the real modules over the real markup in happy-dom (test/page.js), with the candle on, the wall clock
 // held, and the background's drawBackground a spy that draws nothing. Each test loads the page afresh.
@@ -8,7 +8,7 @@ import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
 import { layOut } from './page.js';
 
-vi.mock('../src/scene/background.js', async importOriginal => ({ ...await importOriginal(), drawBackground: vi.fn() }));
+vi.mock('../src/scene/background', async importOriginal => ({ ...await importOriginal(), drawBackground: vi.fn() }));
 
 const BASE = Date.parse('2026-10-18T15:00:00Z');
 afterEach(() => { vi.restoreAllMocks(); });
@@ -18,8 +18,8 @@ async function context() {
   layOut();
   vi.resetModules();
   vi.spyOn(Date, 'now').mockReturnValue(BASE);
-  const frame = await import('../src/scene/frame.js'), lanterns = await import('../src/scene/lanterns.js'), scene = await import('../src/scene/scene.js');
-  const { live } = await import('../src/scene/live.js'), bg = await import('../src/scene/background.js');
+  const frame = await import('../src/scene/frame'), lanterns = await import('../src/scene/lanterns'), scene = await import('../src/scene/scene');
+  const { live } = await import('../src/scene/live'), bg = await import('../src/scene/background');
   Object.assign(live, { flyLightN: 0, ghostWingN: 0, farWall: {} }); // the Moroccan's far wall counts as baked already
   // drawLight's dust is the specks the test places, and the background draws nothing
   bg.dust.length = bg.farDust.length = 0;
@@ -28,7 +28,7 @@ async function context() {
   const drawn = () => { const calls = vi.mocked(bg.drawBackground).mock.calls; assert.ok(calls.length, 'drawLight reached drawBackground'); return calls.at(-1)[0]; };
   lanterns.applyStyle('candle');
   const swayTo = deg => { frame.swing.a = deg; frame.swingLantern(0, 5); };
-  // the flame as frame.js stepFlame gives it: its tip leaning `lean(s)` at its middle tongue (70 of the outer's 96 up)
+  // the flame as frame.ts stepFlame gives it: its tip leaning `lean(s)` at its middle tongue (70 of the outer's 96 up)
   const [fx, fy] = lanterns.STYLES.candle.flame, lean = s => 8 * Math.sin(s);
   const flame = { size: 1, pulse: 1, base: [fx, fy], tip: [fx, fy - 77], turb: 1, tear: 0, blue: [0, 4, 10, 5, 0.5] };
   const shine = s => { flame.tip = [fx + lean(s) * 96 / 70, fy - 77]; frame.drawShine(s, flame); frame.drawHeat(s, flame); };
@@ -210,10 +210,10 @@ test('the dust drawn over the candle rises where the hot air carries it, in the 
 });
 
 test('the shader\'s column is HEAT_COLUMN, each number in its place', async () => {
-  const ctx = await context(), src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.js'), 'utf8');
+  const ctx = await context(), src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.ts'), 'utf8');
   const body = src.match(/vec2 heat\(vec2 p\) \{[\s\S]*?\n\}/)[0], { glf, HEAT_COLUMN } = ctx.scene;
   for (const v of [18, 0.12, 0.1234, 0.0004, 1.25, 1e-7]) assert.strictEqual(Number(glf(v)), v, `${v} as a GLSL float`), assert.match(glf(v), /[.e]/);
-  // the shader as background.js writes it, with HEAT_COLUMN's values and with others in their place
+  // the shader as background.ts writes it, with HEAT_COLUMN's values and with others in their place
   for (const C of [{ ...HEAT_COLUMN }, { half: 17.5, widen: 0.125, start: 11, fade: [121.5, 219], bend: 1.3 }]) {
     Object.assign(HEAT_COLUMN, C);
     const text = glsl(body, { HEAT_COLUMN, glf }), f = glf;
@@ -233,7 +233,7 @@ test('the bronze\'s highlight follows the flame: brighter as it burns and flicke
 });
 
 test('a gust turns each vine leaf toward downwind by how far it points from it', async () => {
-  const ctx = await context(), { GUST } = ctx.lanterns, { live } = await import('../src/scene/live.js');
+  const ctx = await context(), { GUST } = ctx.lanterns, { live } = await import('../src/scene/live');
   const leaf = deg => ({ e: document.createElement('div'), x: 340, y: 600, k: 1, low: -1, deg, ph: 0 }), angle = l => +l.e.getAttribute('transform').match(/rotate\((-?[\d.]+)/)[1];
   for (const sign of [1, -1]) {
     const s = Array.from({ length: 4000 }, (_, i) => i * 0.05).find(t => sign * GUST(t - 0.15) > 1.5 && sign * GUST(t) > 0);

@@ -1,9 +1,9 @@
-// Snoozed vs sleeping (snoozed for good): which status bar count a session lands in (restOf, src/scene/state.js), and how
-// the stats ribbon splits a day's waiting between waiting and snoozed, sleeping counted as snoozed (slices and states, src/scene/stats.js).
+// Snoozed vs sleeping (snoozed for good): which status bar count a session lands in (restOf, src/scene/state.ts), and how
+// the stats ribbon splits a day's waiting between waiting and snoozed, sleeping counted as snoozed (slices and states, src/scene/stats.ts).
 import assert from 'node:assert';
 import { test } from 'vitest';
-import { restOf } from '../src/scene/state.js';
-import { slices, states } from '../src/scene/stats.js';
+import { restOf } from '../src/scene/state';
+import { slices, states } from '../src/scene/stats';
 
 test('snoozed for good counts as sleeping whatever the session is doing; a plain snooze only while it waits', () => {
   const cases = [

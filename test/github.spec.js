@@ -1,9 +1,9 @@
-// The GitHub section of the menu while an account is connecting (src/scene/github.js): the link, then a copy and a cancel
+// The GitHub section of the menu while an account is connecting (src/scene/github.ts): the link, then a copy and a cancel
 // icon button to its right, in that order.
 import assert from 'node:assert';
 import { test, vi } from 'vitest';
-import { live } from '../src/scene/live.js';
-import { renderGitHub } from '../src/scene/github.js';
+import { live } from '../src/scene/live';
+import { renderGitHub } from '../src/scene/github';
 
 test('connecting shows copy then cancel as icon buttons to the right of the link; copy copies, cancel cancels', async () => {
   const posts = [], copied = [];

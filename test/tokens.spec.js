@@ -7,15 +7,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
 import tokensDebt from './tokens-debt.json';
-import { FLY } from '../src/scene/fireflies.js';
-import { WARM } from '../src/scene/lanterns.js';
-import { MOTHS, RIBBON } from '../src/scene/stats.js';
+import { FLY } from '../src/scene/fireflies';
+import { WARM } from '../src/scene/lanterns';
+import { MOTHS, RIBBON } from '../src/scene/stats';
 
 const ROOT = path.join(import.meta.dirname, '..'), SRC = path.join(ROOT, 'src'), SCENE_DIR = path.join(SRC, 'scene'), COMPONENTS = path.join(SRC, 'components');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
-const UI = ['dev.js', 'wiring.js', 'scene/card.js', 'scene/github.js', 'scene/notify.js', 'scene/recap.js', 'scene/stats.js'];
-const SCENE = ['scene/background.js', 'scene/fireflies.js', 'scene/flash.js', 'scene/frame.js', 'scene/lanterns.js', 'scene/live.js', 'scene/pages.js', 'scene/pencil.js', 'scene/scene.js', 'scene/stale.js', 'scene/state.js'];
+const UI = ['dev.ts', 'events.ts', 'expose.ts', 'main.ts', 'types.ts', 'wiring.ts', 'scene/card.ts', 'scene/github.ts', 'scene/notify.ts', 'scene/recap.ts', 'scene/stats.ts'];
+const SCENE = ['scene/background.ts', 'scene/fireflies.ts', 'scene/flash.ts', 'scene/frame.ts', 'scene/lanterns.ts', 'scene/live.ts', 'scene/pages.ts', 'scene/pencil.ts', 'scene/scene.ts', 'scene/stale.ts', 'scene/state.ts'];
 
 const RAW_COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\(/i;
 const SIZED = /^(?:padding|margin|gap|row-gap|column-gap|inset|top|right|bottom|left|border-radius|font-size|font|box-shadow|backdrop-filter)(?:-[a-z-]+)?$/;
@@ -59,7 +59,8 @@ test('UI chrome uses the design tokens, not raw colours or sizes', () => {
 });
 
 test('every page script is either UI chrome or scene art', () => {
-  const files = [...fs.readdirSync(SRC).filter(f => f.endsWith('.js')), ...fs.readdirSync(SCENE_DIR).filter(f => f.endsWith('.js')).map(f => `scene/${f}`)].sort();
+  const script = f => f.endsWith('.ts') && !f.endsWith('.d.ts');
+  const files = [...fs.readdirSync(SRC).filter(script), ...fs.readdirSync(SCENE_DIR).filter(script).map(f => `scene/${f}`)].sort();
   assert.deepStrictEqual([...UI, ...SCENE].sort(), files, 'add the new script to UI or SCENE in test/tokens.spec.js');
 });
 

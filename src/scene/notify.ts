@@ -1,19 +1,20 @@
 // The optional notification and chime when a session needs you.
 
-import { $ } from './scene.js';
+import { $ } from './scene';
+import type { Session } from '../types';
 
 // ---- optional notification + chime --------------------------------------------
-export const box = $('notify');
-let audio;
+export const box = $('notify', HTMLInputElement);
+let audio: AudioContext | undefined;
 // the menu's switch, remembered by this browser
 try { box.checked = localStorage.getItem('lantern-notify') === '1'; } catch {}
 box.onchange = () => {
   try { localStorage.setItem('lantern-notify', box.checked ? '1' : '0'); } catch {}
   if (box.checked) { audio ??= new AudioContext(); if (Notification.permission === 'default') Notification.requestPermission(); }
 };
-export function alertMe(s) {
+export function alertMe(s: Session) {
   if (!box.checked) return;
-  const name = s.title || s.cwd.split('/').filter(Boolean).pop() || 'a session';
+  const name = s.title || (s.cwd ?? '').split('/').filter(Boolean).pop() || 'a session';
   if (Notification.permission === 'granted') new Notification('Lantern', { body: `${name} needs you`, silent: true });
   audio ??= new AudioContext();
   const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;

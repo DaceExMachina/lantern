@@ -1,4 +1,4 @@
-// The Moroccan's baked lace (bakeCutouts, src/scene/lanterns.js) while the window resizes: many resize steps make one re-bake, and the
+// The Moroccan's baked lace (bakeCutouts, src/scene/lanterns.ts) while the window resizes: many resize steps make one re-bake, and the
 // picture on show stays until the new one has decoded. Timers and images are faked so the test steers them by hand.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
@@ -18,9 +18,9 @@ async function setup() {
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(/** @type {any} */ ({ drawImage() {} }));
   vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockImplementation(() => 'data:baked' + built.length);
   layOut(); vi.resetModules();
-  const { live } = await import('../src/scene/live.js');
-  const { VIEW } = await import('../src/scene/scene.js');
-  const { applyStyle, bakeCutouts } = await import('../src/scene/lanterns.js');
+  const { live } = await import('../src/scene/live');
+  const { VIEW } = await import('../src/scene/scene');
+  const { applyStyle, bakeCutouts } = await import('../src/scene/lanterns');
   live.farWall = /** @type {any} */ ({}); // the far wall counts as baked already
   applyStyle('moroccan'); // draws the lace's mask, #cutouts
   const mask = /** @type {Element} */ (document.getElementById('cutouts'));

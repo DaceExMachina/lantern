@@ -1,4 +1,4 @@
-// The session text (src/scene/pages.js): where a new block goes, and how the flat page is warped onto the paper.
+// The session text (src/scene/pages.ts): where a new block goes, and how the flat page is warped onto the paper.
 // Each test loads the module afresh, on fake timers, so the text's timers are the only ones it counts.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
@@ -15,7 +15,7 @@ async function load(screen) {
   document.querySelector('svg').append(pages);
   const scale = { screen };
   vi.resetModules();
-  const [text, { live }, { STYLES, style }] = await Promise.all([import('../src/scene/pages.js'), import('../src/scene/live.js'), import('../src/scene/lanterns.js')]);
+  const [text, { live }, { STYLES, style }] = await Promise.all([import('../src/scene/pages'), import('../src/scene/live'), import('../src/scene/lanterns')]);
   return { ...text, live, STYLES, style, scale };
 }
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });

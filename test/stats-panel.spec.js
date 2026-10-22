@@ -1,23 +1,23 @@
 // The Vue stats panel (src/components/StatsPanel.vue): it loads /stats when its popover opens and draws the numbers,
-// the week and the badges. The scene's ribbons, headline and badge tips (src/scene/stats.js) are stubbed here.
+// the week and the badges. The scene's ribbons, headline and badge tips (src/scene/stats.ts) are stubbed here.
 import { mount, flushPromises } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import StatsPanel from '../src/components/StatsPanel.vue';
-import { live } from '../src/scene/live.js';
-import { openRecap } from '../src/scene/recap.js';
+import { live } from '../src/scene/live';
+import { openRecap } from '../src/scene/recap';
 
 const MIN = 60000, now = Date.now();
 const day = (i, o = {}) => ({ start: now - (7 - i) * 864e5, end: now, mothMs: i % 2, warmLantern: 80, warmMoths: 70, medianWait: 90 * 1000, slowWait: null, waits: 4, merged: 2, open: 5, stale: 12, staleChange: -1, ...o });
 const log = { days: [...Array(7).keys()].map(i => day(i)), spans: [], gauges: [], prs: [], tally: { revived: [2, '2026-10-17'] }, achievements: [['revived', '2026-10-17']], streak: 3, warmGoal: 70 };
-vi.mock('../src/scene/stats.js', async importOriginal => ({ ...await importOriginal(),
+vi.mock('../src/scene/stats', async importOriginal => ({ ...await importOriginal(),
   slices: d => d.mothMs ? { from: d.start, to: d.end, slices: [], starts: [] } : null,
   ribbonBody: () => '<rect/>', headline: () => '<div class="headline"></div>', dayRibbon: () => '<div class="dayRibbon"><div class="ribbon"></div></div>',
   followRibbon: vi.fn(), restoreBadge: vi.fn(), clock: () => '9:00 AM', dayKey: () => 'today', pct: v => v == null ? '–' : `${v}%`,
   ACHIEVEMENTS: { revived: ['Revived', 'Brought a stale PR back'], clear_night: ['Clear night', 'No stale PRs'] },
 }));
-vi.mock('../src/scene/recap.js', async importOriginal => ({ ...await importOriginal(), openRecap: vi.fn() }));
-vi.mock('../src/scene/card.js', async importOriginal => ({ ...await importOriginal(), ago: ms => `${Math.round(ms / MIN)} min` }));
+vi.mock('../src/scene/recap', async importOriginal => ({ ...await importOriginal(), openRecap: vi.fn() }));
+vi.mock('../src/scene/card', async importOriginal => ({ ...await importOriginal(), ago: ms => `${Math.round(ms / MIN)} min` }));
 let popover;
 beforeEach(() => {
   setActivePinia(createPinia());

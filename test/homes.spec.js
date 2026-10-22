@@ -1,5 +1,5 @@
-// Where session moths live (src/scene/state.js sync, src/scene/scene.js ringHome): spread evenly round the lantern, worked out from
-// the server's session list alone so every window agrees, and gliding (src/scene/frame.js glideHome) when sessions come or go.
+// Where session moths live (src/scene/state.ts sync, src/scene/scene.ts ringHome): spread evenly round the lantern, worked out from
+// the server's session list alone so every window agrees, and gliding (src/scene/frame.ts glideHome) when sessions come or go.
 // sync() runs for real, on the page's own markup.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
@@ -10,7 +10,7 @@ afterEach(() => vi.restoreAllMocks());
 // a window on the lantern, `kx` times as wide as it is tall, with the page's modules afresh (so its sessions are its own)
 async function open(kx = 1) {
   layOut(); vi.resetModules();
-  const [{ live }, scene, state, frame, lanterns] = await Promise.all(['live', 'scene', 'state', 'frame', 'lanterns'].map(f => import(`../src/scene/${f}.js`)));
+  const [{ live }, scene, state, frame, lanterns] = await Promise.all(['live', 'scene', 'state', 'frame', 'lanterns'].map(f => import(`../src/scene/${f}.ts`)));
   scene.VIEW.kx = kx;
   const { moths } = live;
   const sync = raw => { live.raw = raw; state.sync(); }; // the server sends these sessions
@@ -25,7 +25,7 @@ async function open(kx = 1) {
     glide: dt => { for (const m of moths.values()) if (m.spot && !m.satellite) frame.glideHome(m, dt); },
     /** settled at home */
     settled: () => { for (const m of moths.values()) m.home = m.spot; },
-    /** the lantern swung out to `deg` (frame.js swingLantern, which a standing lantern holds at 0) */
+    /** the lantern swung out to `deg` (frame.ts swingLantern, which a standing lantern holds at 0) */
     sway: (deg, s) => { frame.swing.a = deg; frame.swingLantern(0, s); },
     /** a frame of every session moth's aim at frame clock `s` */
     fly: s => { for (const [k, m] of moths) if (!m.parentId && !m.satellite) { const aim = frame.mothTarget(k, m, 1 / 60, s); if (aim) frame.mothMove(m, aim, 1 / 60, s); } },
@@ -107,7 +107,7 @@ test('when a session joins, the others glide to their new homes', async () => {
   for (const k of moved) assert.ok(Math.hypot(end[k][0] - spots[k][0], end[k][1] - spots[k][1]) < 1, `${k} is there within four seconds`);
 });
 
-// Lines turn with the lantern as it sways, out to about 6 degrees (src/scene/frame.js swingLantern: 0.7 half the time, 3.7 at the
+// Lines turn with the lantern as it sways, out to about 6 degrees (src/scene/frame.ts swingLantern: 0.7 half the time, 3.7 at the
 // 99th percentile, 5.9 at the most in an hour), around where it hangs.
 const SWAY = 6;
 // A frame of every session moth, the lantern swaying with the clock, SWAY degrees at most
@@ -141,7 +141,7 @@ test('no thread or dotted line crosses another at rest, flying or landed, as ses
     let s = 0;
     for (const ids of steps) {
       w.show(ids, resting);
-      for (const [k, m] of w.moths) if (m.leaving) w.moths.delete(k); // the ones that left fly off (frame.js drops them)
+      for (const [k, m] of w.moths) if (m.leaving) w.moths.delete(k); // the ones that left fly off (frame.ts drops them)
       for (let f = 0; f < 180; f++, s += 1 / 60) { // three seconds: the others glide to their new homes, the new ones fly in
         step(w, s);
         if (f % 15) continue;
@@ -170,7 +170,7 @@ test('no thread or dotted line crosses another at rest, flying or landed, as ses
   assert.ok(landed > 5000 && flying > 5000, `checked ${landed} dotted lines and ${flying} flying moths' threads; ${swayed} crossed while swaying`);
 });
 
-// The threads bow (frame.js bowed), slowly and on their own phases, less as moths multiply (crowd). A brief crossing is
+// The threads bow (frame.ts bowed), slowly and on their own phases, less as moths multiply (crowd). A brief crossing is
 // fine; what mustn't happen is a pair staying crossed. At the default bow with 4, 8 and 12 flying moths, no pair stays
 // crossed longer than 2 seconds. A bow of 2 does, so the check is live.
 test('bowed threads never stay crossed for long at rest', async () => {
@@ -253,7 +253,7 @@ test('two windows opened at different times show the same sessions and agents', 
   const snap = (docs, ...agents) => JSON.stringify([{ id: 'api', state: 'paused', subagents: agents.map(id => ({ id, type: 'sonnet-implement' })) },
     ...docs ? [{ id: 'docs', state: 'waiting', subagents: [] }] : []]);
   const shows = w => [...w.moths].filter(([, m]) => !m.leaving).map(([k]) => k).sort();
-  // a frame's hover areas follow each snapshot (frame.js mothZones), and a leaving moth's turns off
+  // a frame's hover areas follow each snapshot (frame.ts mothZones), and a leaving moth's turns off
   const zones = w => { for (const m of w.moths.values()) if (m.zone) w.frame.mothZones(m, false); };
   const early = await open();
   for (const s of [snap(true, 'a1', 'a2'), snap(false, 'a1'), snap(true, 'a1', 'a2')]) { early.sync(JSON.parse(s)); zones(early); } // docs and a2 gone for one
@@ -261,7 +261,7 @@ test('two windows opened at different times show the same sessions and agents', 
   late.sync(JSON.parse(snap(true, 'a1', 'a2')));
   assert.deepStrictEqual(shows(late), ['api', 'api/a1', 'api/a2', 'docs']);
   assert.deepStrictEqual(shows(early), shows(late));
-  // and the ones that came back can be hovered and clicked again (card.js zoneAt skips areas that are off)
+  // and the ones that came back can be hovered and clicked again (card.ts zoneAt skips areas that are off)
   assert.deepStrictEqual([...early.moths].filter(([, m]) => m.zone?.off).map(([k]) => k), []);
 });
 
@@ -382,7 +382,7 @@ test('a home glides the short way round, never across the lantern', async () => 
   }
 });
 
-// A restless landed moth now and then hops to a new spot along its own line (frame.js fidgetSlot, alongFor). Its spot
+// A restless landed moth now and then hops to a new spot along its own line (frame.ts fidgetSlot, alongFor). Its spot
 // is worked out on the lantern at rest, so as the lantern sways it hops along that line on the paper and lands where it
 // aimed (58 hops in four minutes, 0.1 to 30.7 along, median 12.8; off the line by 5e-16 at worst, settling within 0.002).
 test('a restless landed moth hops to new spots along its own line as the lantern sways', async () => {

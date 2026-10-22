@@ -9,13 +9,14 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | Where | What |
 |---|---|
 | `index.html` | The page's markup and styles, and Vite's entry. It loads `src/main.ts`. |
-| `src/main.ts` | The entry: it loads `wiring.js` (the scene), then `expose.ts`, which puts the modules on `window.lanternModules` for the snapshot fixture and the console, then mounts the Vue chrome. |
-| `src/wiring.js` | The wiring: the event stream from the server, the controls, and the animation clock. |
-| `src/scene/*.js` | One ES module per part of the scene (moths, lanterns, fireflies, the card, stats and so on), each importing what it uses. |
-| `src/scene/live.js` | The state more than one module writes, in one plain object: what the server sends, the settings, the moths, the hovered moth. Whatever only one module writes stays in that module. |
-| `src/dev.js` | The dev panel's controls. |
+| `src/main.ts` | The entry: it loads `wiring.ts` (the scene), then `expose.ts`, which puts the modules on `window.lanternModules` for the snapshot fixture and the console, then mounts the Vue chrome. |
+| `src/wiring.ts` | The wiring: the event stream from the server, the controls, and the animation clock. |
+| `src/scene/*.ts` | One ES module per part of the scene (moths, lanterns, fireflies, the card, stats and so on), each importing what it uses. |
+| `src/types.ts` | The domain types (sessions, PRs, settings, `/stats`, moths and their hover areas), and the guards and parsers that check the server's JSON where it arrives (`wiring.ts`, `events.ts`), so nothing per frame checks it again. |
+| `src/scene/live.ts` | The state more than one module writes, in one plain object: what the server sends, the settings, the moths, the hovered moth. Whatever only one module writes stays in that module. |
+| `src/dev.ts` | The dev panel's controls. |
 | `public/` | The icons, copied to `dist/` untouched. |
-| `vite.config.mts`, `tsconfig*.json` | The Vite and Vitest config, and the TypeScript projects: Node scripts (`tsconfig.json`), `src/` (`tsconfig.app.json`), and the page's JavaScript modules (`tsconfig.page.json`, with `page-globals.d.ts`). |
+| `vite.config.mts`, `tsconfig*.json` | The Vite and Vitest config, and the TypeScript projects: Node scripts (`tsconfig.json`) and `src/` (`tsconfig.app.json`, strict, with the page's globals in `src/globals.d.ts`). |
 | `app/Server.swift` | The server: state, hook events, the HTTP and SSE plumbing. |
 | `app/Transcripts.swift` | Reading hook payloads and transcripts, and rebuilding sessions from them. |
 | `app/Terminals.swift` | Finding a session's terminal tab and bringing it to the front. |
@@ -90,7 +91,7 @@ macOS treats every rebuild of an app signed on your own Mac as a new app, so it 
 npm install && npm run check && npm test
 ```
 
-`npm run check` runs `vue-tsc` over three projects: the Node scripts, the TypeScript in `src/` and the page's JavaScript modules.
+`npm run check` runs `vue-tsc` over two projects: the Node scripts and the TypeScript in `src/`.
 
 `npm test` runs Node's built-in test runner over `test/*.test.js`, then Vitest over `test/*.spec.js` (with happy-dom). The page's tests are Vitest ones: they import what they test from `src/`, over index.html's markup, which `test/setup.js` lays out before each file (`test/page.js` also stands in for WebGL). A test that needs a page of its own calls `layOut()` and `vi.resetModules()`, then imports `src/` again. New tests go in `.spec.js` files. It needs macOS, because it builds the Swift server with `swiftc`. `test/server.test.js` runs the server without its window on a spare port, with a temporary home folder of its own, and replays the hook events in `test/replay/`. Each replay file is a list of requests to send, plus `expect` steps holding the sessions the page should have by that point.
 
@@ -134,7 +135,7 @@ CI ([`.github/workflows/check.yml`](.github/workflows/check.yml)) runs the build
 
 The page has two kinds of look. The **UI chrome** (the footer, settings menu, cards, stats panel, recap, tips, dev panel and the badge's flash pill) is one design, and takes every colour, space, radius, type size, shadow and layer from the custom properties in index.html's `:root`. The **scene art** (the lantern drawings, moths, fireflies, wisps, smoke and the shaders) keeps its own palettes in the scene modules, because each tone is tuned against its neighbours in the drawing.
 
-In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F7FA6`. If nothing fits, add a token here and in `:root` rather than a one-off value. `test/tokens.spec.js` fails on a raw colour, a px value in spacing, radius, type or shadow, or a bare weight or z-index in UI CSS, in index.html's style attributes outside the scene's SVG, and in the UI modules (`src/dev.js`, `src/wiring.js`, and `card`, `github`, `notify`, `recap` and `stats` in `src/scene/`). Rules that predate the tokens are listed in `test/tokens-debt.json`. That list only shrinks: migrate a rule and the test tells you to delete its entry, and a new raw value anywhere fails. A new page module has to be named as UI or scene in the test.
+In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F7FA6`. If nothing fits, add a token here and in `:root` rather than a one-off value. `test/tokens.spec.js` fails on a raw colour, a px value in spacing, radius, type or shadow, or a bare weight or z-index in UI CSS, in index.html's style attributes outside the scene's SVG, and in the UI modules (`src/dev.ts`, `src/wiring.ts`, and `card`, `github`, `notify`, `recap` and `stats` in `src/scene/`). Rules that predate the tokens are listed in `test/tokens-debt.json`. That list only shrinks: migrate a rule and the test tells you to delete its entry, and a new raw value anywhere fails. A new page module has to be named as UI or scene in the test.
 
 | Group | Tokens |
 |---|---|
@@ -152,7 +153,7 @@ In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F
 
 **Button bars:** the bar's padding belongs to its buttons. Each control is an outer button or link that fills its zone, out to the bar's edges and up to its neighbours, so the hit areas touch with no dead space. Where it has a visible part bigger than its content (a pill, a hover tint), that's a `.face` inside it, the size it would be anyway, lit with `button:hover .face` or `a:hover .face` wherever the pointer is in the zone. A control that's only an icon or text (the PR toggle) just takes the hover colour. The hover card's header, rows, chips and toggle work this way.
 
-The session-state and PR colours are drawn by the scene too, so they live in two places: `:root`, and `MOTHS`, `RIBBON` and `WARM` (stats.js and lanterns.js) and `FLY` (fireflies.js), where the scene blends them. The test fails if the two disagree, so change both together.
+The session-state and PR colours are drawn by the scene too, so they live in two places: `:root`, and `MOTHS`, `RIBBON` and `WARM` (stats.ts and lanterns.ts) and `FLY` (fireflies.ts), where the scene blends them. The test fails if the two disagree, so change both together.
 
 ## Adding a terminal
 

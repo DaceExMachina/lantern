@@ -1,4 +1,4 @@
-// Scorched moths on the candle (src/scene/frame.js). A session moth whose PR checks are failing flies too close to the flame
+// Scorched moths on the candle (src/scene/frame.ts). A session moth whose PR checks are failing flies too close to the flame
 // once a minute, on a schedule every window shares (the wall clock, the moth's key), and darts about smoking until it
 // settles. Each "window" here is the page loaded afresh (its own modules). The wall clock (Date.now) is the test's own
 // `clock`, shared by every window; each window keeps its own frame clock, as a real one does.
@@ -18,14 +18,14 @@ afterEach(() => { vi.restoreAllMocks(); });
 async function context(origin = 1000, search = '') {
   layOut(search);
   vi.resetModules();
-  const [f, scene, lanterns, { live }] = await Promise.all(['frame', 'scene', 'lanterns', 'live'].map(m => import(`../src/scene/${m}.js`)));
+  const [f, scene, lanterns, { live }] = await Promise.all(['frame', 'scene', 'lanterns', 'live'].map(m => import(`../src/scene/${m}.ts`)));
   lanterns.applyStyle('candle');
   f.frame(performance.now());
   f.sparks.length = 0;
   return { perf: { t: origin }, f, scene, lanterns, live, moths: live.moths, sparks: f.sparks, SCORCH: f.SCORCH };
 }
 // a moth's group in the real #moths layer
-const mothGroup = ctx => ctx.scene.$('moths').appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
+const mothGroup = ctx => ctx.scene.$('moths', SVGGElement).appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'g'));
 
 const pr = (n, need) => ({ url: `https://github.com/acme/app/pull/${n}`, need, label: `app#${n}`, title: `PR ${n}` });
 const OTHER_NEEDS = ['ready', 'changes', 'waiting', 'draft', 'merged', 'closed'];
@@ -228,7 +228,7 @@ test('a hit throws at most 5 sparks from scorches, from the contact point, count
 
 test('nothing grows: 50 scorches on one moth add no elements, keep the spark pool, and smoke only from the hit on', async () => {
   const ctx = await context(1000, '?flame=1'), { length, hit } = ctx.SCORCH; // ?flame=1: the flame at full brightness, its own sparks filling the pool
-  const { drawSparks, dropMoth, smoke } = ctx.f, mothsLayer = ctx.scene.$('moths'), plumes = now => smoke(now, now / 1000, 0, null).plumes;
+  const { drawSparks, dropMoth, smoke } = ctx.f, mothsLayer = ctx.scene.$('moths', SVGGElement), plumes = now => smoke(now, now / 1000, 0, null).plumes;
   const make = key => { const m = sessionMoth(key, { g: mothGroup(ctx) }); ctx.moths.set(key, m); return m; };
   const live = () => ctx.sparks.filter(p => p.scorch && p.life > 0).length;
   const step = (m, dt = 0.05) => {
@@ -263,10 +263,10 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
   assert.ok(!n.scorch && plumes(clock.wall).length === 0, 'switching to the barrel ends it on the next frame');
 });
 
-// background.js's smokeBend, run as JS: it's written in scalars, so it reads as JS once typed
+// background.ts's smokeBend, run as JS: it's written in scalars, so it reads as JS once typed
 const smokeBendAt = () => {
-  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.js'), 'utf8').match(/float smokeBend\(float age, float now, float curl\) \{[\s\S]*?\n\}/);
-  assert.ok(src, 'background.js has smokeBend');
+  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.ts'), 'utf8').match(/float smokeBend\(float age, float now, float curl\) \{[\s\S]*?\n\}/);
+  assert.ok(src, 'background.ts has smokeBend');
   const js = src[0].replace('float smokeBend(float age, float now, float curl)', 'return (age, now, curl) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|sin)\(/g, 'Math.$1(');
   return new Function('S_SIZE', 'S_LENGTH', 'RISE', js)(21, 160, 29);
 };
@@ -280,8 +280,8 @@ test('smoke curls into Ss that swell from nothing as it ages', async () => {
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
 });
 test('a trail is full width while its head is on the moth, and tapers to a point there once it has stopped following', async () => {
-  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.js'), 'utf8').match(/float trailTaper\(float age, float head\) \{.*\}/);
-  assert.ok(src, 'background.js has trailTaper');
+  const src = fs.readFileSync(path.join(import.meta.dirname, '..', 'src', 'scene', 'background.ts'), 'utf8').match(/float trailTaper\(float age, float head\) \{.*\}/);
+  assert.ok(src, 'background.ts has trailTaper');
   const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   const taper = new Function('smoothstep', src[0].replace('float trailTaper(float age, float head) {', 'return (age, head) => {'))(smoothstep);
   for (const age of [0, 0.1, 0.3, 1]) assert.strictEqual(taper(age, 0), 1, `following, ${age}s along: full width`);
