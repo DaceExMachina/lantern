@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const ROOT = path.join(__dirname, '..'), PAGE = path.join(ROOT, 'public', 'page');
+const ROOT = path.join(__dirname, '..'), PAGE = path.join(ROOT, 'public', 'page'), COMPONENTS = path.join(ROOT, 'src', 'components');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
 const UI = ['card.js', 'dev.js', 'github.js', 'main.js', 'notify.js', 'recap.js', 'stats.js'];
@@ -37,6 +37,13 @@ function offenders() {
     const src = fs.readFileSync(path.join(PAGE, file), 'utf8').replace(/^\s*\/\/.*$|\s\/\/\s.*$/gm, '');
     for (const [c] of src.matchAll(/#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\([^)]*\)/gi)) found.add(`${file} ${c}`);
     for (const [d, p, v] of src.matchAll(/\b([a-z-]+)\s*:\s*([^;'"`{}]*px[^;'"`{}]*)/g)) if (raw(p, v.trim())) found.add(`${file} ${d.trim()}`);
+  }
+  // the Vue components: their <style> rules and style attributes, and colours anywhere in the file
+  for (const file of fs.readdirSync(COMPONENTS).filter(f => f.endsWith('.vue'))) {
+    const src = fs.readFileSync(path.join(COMPONENTS, file), 'utf8'), css = [...src.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map(m => m[1]).join('').replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const [, sel, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) if (declarations(body).some(([p, v]) => raw(p, v))) found.add(`${file} ${sel.trim().replace(/\s+/g, ' ')}`);
+    for (const [, attr] of src.matchAll(/style="([^"]*)"/g)) if (declarations(attr).some(([p, v]) => raw(p, v))) found.add(`${file} style="${attr}"`);
+    for (const [c] of src.replace(/^\s*\/\/.*$|\s\/\/\s.*$/gm, '').matchAll(/#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\([^)]*\)/gi)) found.add(`${file} ${c}`);
   }
   return found;
 }

@@ -27,9 +27,9 @@
   // the WebGL background keeps its last frame, so a snapshot sees what frame() drew
   const getContext = HTMLCanvasElement.prototype.getContext;
   HTMLCanvasElement.prototype.getContext = function (type, opts) { return getContext.call(this, type, type === 'webgl' ? { ...opts, preserveDrawingBuffer: true } : opts); };
-  let es;
-  window.EventSource = class { constructor() { es = this; this.l = {}; } addEventListener(t, f) { (this.l[t] ||= []).push(f); } };
-  const emit = (type, data) => { const e = { data: JSON.stringify(data) }; if (type === 'message') es.onmessage(e); else (es.l[type] || []).forEach(f => f(e)); };
+  const sources = []; // the scene's EventSource and the chrome's
+  window.EventSource = class { constructor() { sources.push(this); this.l = {}; } addEventListener(t, f) { (this.l[t] ||= []).push(f); } };
+  const emit = (type, data) => { const e = { data: JSON.stringify(data) }; for (const es of sources) if (type === 'message') es.onmessage?.(e); else (es.l[type] || []).forEach(f => f(e)); };
   window.fetch = url => Promise.resolve(new Response(String(url).endsWith('/stats') ? JSON.stringify(statsLog()) : '{}'));
   addEventListener('DOMContentLoaded', () => {
     const st = document.createElement('style');
@@ -113,7 +113,7 @@
   const chrome = () => [
     () => { $('menu').showPopover(); $('help').open = true; }, snap('menu'),
     () => { github = { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }; renderGitHub(); }, snap('menu-github'), () => { $('menu').hidePopover(); },
-    async () => { $('stats').showPopover(); await loadStats(); }, snap('stats'), () => { $('stats').hidePopover(); },
+    async () => { $('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { $('stats').hidePopover(); },
     async () => { await openRecap(6); }, snap('recap'), () => { $('recap').hidePopover(); },
     () => { enterZone(moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { hideCard(); },
     () => { toggleDevPanel(); }, snap('dev'),
