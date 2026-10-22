@@ -37,7 +37,7 @@ const loose = ctx => ctx.run('Object.assign(FEEL, { stiffness: [70, 70], falloff
 // a frame of the flame at page time s, `dt` on, burning at full size
 const step = (ctx, s, dt = 1 / 60) => ctx.run(`stepFlame(${dt}, ${s}, { size: 1, flick: 1, pulse: 1 })`);
 
-test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between its back paper and the rest, softened, and sheltered from the wind', () => {
+test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between its back paper and the rest, softened, and leaning in the wind by paperWind', () => {
   const ctx = context();
   for (const key of ['barrel', 'chochin', 'moroccan', 'candle']) {
     const paper = key === 'barrel' || key === 'chochin';
@@ -50,9 +50,12 @@ test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between 
     ctx.run(`drawLight(1 / 60, 3, stepFlame(1 / 60, 3, { size: 1, flick: 1, pulse: 1 }))`);
     assert.ok(ctx.run('drawn').fire, `${key}: the shader's flame`);
     assert.strictEqual(ctx.uniforms.uSoft[0] > 0, paper, `${key}: softened behind paper (${ctx.uniforms.uSoft[0]})`);
-    // the paper shelters its flame: the wind leans it, but far less than the bare flames'
-    const wind = ctx.run('style.flameWind');
-    if (paper) assert.ok(wind > 0 && wind <= ctx.run('STYLES.moroccan.flameWind') / 2, `${key}: the wind leans it ${wind}, under half the Moroccan's`);
+    // a paper lantern's flame leans in the wind by paperWind (the dev panel's), however its style's is set
+    if (paper) {
+      const lean = w => { const c = context(); c.run(`paperWind = ${w}; STYLES.${key}.flameWind = 6; applyStyle('${key}')`); return c.run('let f; for (let i = 0; i < 120; i++) f = stepFlame(1 / 60, 7 + i / 60, { size: 1, flick: 1, pulse: 1 }); f').spine.at(-1); }; // two seconds of wind
+      const [none, some] = [lean(0), lean(3)];
+      assert.ok(Math.abs(some - none) > 0.5, `${key}: paperWind leans its flame (${none} at 0, ${some} at 3)`);
+    }
   }
 });
 

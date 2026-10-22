@@ -243,7 +243,7 @@ function swingLantern(elapsed, s) {
 // The flame's spine is a chain of CHAIN links from its base up to its tip (its outer tongue's), each point a weight on
 // a damped spring to the point below it, so a swing or a gust travels up it, base first and tip after: it can
 // bend into an S and whip, then settle. At rest the chain stands straight up, as tall as the flame burns, bent over by the
-// wind (style.flameWind) and stretched by it, and pushed aside by a moth flying close, each most at the tip. When the
+// wind (style.flameWind, or paperWind behind paper) and stretched by it, and pushed aside by a moth flying close, each most at the tip. When the
 // lantern swings, its base's acceleration throws the weights back (inertia), the higher the harder.
 // FEEL: the springs' stiffness at the base (a second squared), how many times floppier the tip's is (falloff), their
 // damping (a second), how hard the base's acceleration throws them (the lantern's swing is gentle, so 1, a plain weight,
@@ -265,7 +265,8 @@ const flameChain = { pts: /** @type {{ x: number, y: number, vx: number, vy: num
 // scene, and for the shader its turbulence, the gust tearing at it (0 to 1), and its blue root.
 function stepFlame(dt, s, flame) {
   const [fx, fy, fk] = style.flame, k = flame.size * fk, [bx, by] = rot(fx + farSlide / 2, fy), ch = flameChain; // at the middle depth (farSlide)
-  const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * (style.flameWind || 0); // the wind's lean, in the flame's units
+  const flameWind = style.paper ? paperWind : style.flameWind || 0; // how far the wind leans it (lanterns.js)
+  const feel = feelAt(flame.size), gust = GUST(s) * feel.wind, wind = gust * flameWind; // the wind's lean, in the flame's units
   // an ember guttering: as it dims below 0.6 its height jumps about, by up to a quarter at its dimmest
   const gutter = Math.max(0, Math.min(1, (0.6 - flame.size) / 0.3));
   const h = 96 * k * (1 + wobble(s * 1.3, 2) * 0.08 + Math.min(0.07, Math.abs(wind) * 0.004)) * (1 - 0.25 * gutter * (0.5 + 0.5 * wobble(s * 4.1, 11)));
@@ -305,7 +306,7 @@ function stepFlame(dt, s, flame) {
   for (const p of pts) { p.x = Math.max(-0.6 * most, Math.min(0.6 * most, p.x)); p.y = Math.max(-most, Math.min(0, p.y)); }
   tip.y = Math.min(-0.4 * 96 * k, tip.y);
   // a gust past 1.4 tears at the tip, fully by 2.6 (one on the candle; the Moroccan's walls keep the wind to a third)
-  const tear = Math.max(0, Math.min(1, (Math.abs(gust) * (style.flameWind || 0) / 6 - 1.4) / 1.2));
+  const tear = Math.max(0, Math.min(1, (Math.abs(gust) * flameWind / 6 - 1.4) / 1.2));
   // the blue at its root swells and brightens with the flicker, breathes, and leans with the chain's lowest link: its
   // middle, x and up from the base, and its radii, in the flame's units, and its opacity
   const breathe = 1 + 0.05 * Math.sin(s * 1.7), { flick } = flame;

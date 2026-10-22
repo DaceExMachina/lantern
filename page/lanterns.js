@@ -35,9 +35,9 @@ const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // 
 let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
 let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
 // a paper lantern's flame, seen through its paper: how soft its tongues' edges are, in scene units (background.js FLAME), and
-// how far the wind leans it (style.flameWind), the paper sheltering it from most of what leans the candle's (6)
+// how far the wind leans it (in place of style.flameWind, frame.js stepFlame), the paper sheltering it from most of what leans the candle's (6)
 let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 9, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
-const paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { STYLES.barrel.flameWind = STYLES.chochin.flameWind = v; });
+let paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { paperWind = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
@@ -662,7 +662,7 @@ const MOROCCAN_PATINA = `<g fill="none" stroke="#4A3B18" stroke-opacity=".6"><pa
   ${[312.5, 367.5, 280.5, 305.5, 374.5, 399.5].flatMap(x => [293.5, 404.5].map(y => `<circle cx="${x}" cy="${y}" r="1.9" fill="#4A3B18" opacity=".5"/><circle cx="${x}" cy="${y}" r="1" fill="${BRASS.lit}"/>`)).join('')}`;
 const STYLES = {
   barrel: {
-    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, flameWind: paperWind, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
+    name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
     surface: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: BARREL.half }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
@@ -681,7 +681,7 @@ const STYLES = {
     ${DRUM(LACQUER.barrel, 466, 50, 7)}${DRUM(LACQUER.barrel, 443, BARREL.cap, 24, -1)}`,
   },
   chochin: {
-    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, flameWind: paperWind, tassel: [95, 178.5], knot: [95.4, 56.5], caps: [221, 441, 46], // pivot in the drawing's own units
+    name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, tassel: [95, 178.5], knot: [95.4, 56.5], caps: [221, 441, 46], // pivot in the drawing's own units
     surface: BALL,
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
     // the caps' faces that turn toward the paper catch the flame (class paperLit, coloured each frame), drawn behind it
