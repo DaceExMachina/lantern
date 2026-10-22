@@ -123,6 +123,13 @@ extension LanternServer {
                 } }
             var results = [JSON?](repeating: nil, count: queries.count)
             DispatchQueue.concurrentPerform(iterations: queries.count) { i in let r = queries[i](); DispatchQueue.main.sync { results[i] = r } }
+            // GitHub sometimes answers a good query with nothing at all: no errors, but every list empty. An answer with all of
+            // reviews, mine and closed empty, from a query whose last answer had something, is a blip too. A really empty account
+            // shows empty once what it had ages out (GH_KEEP_MS).
+            for i in results.indices {
+                let empty = { (d: JSON?) in ["reviews", "mine", "closed"].allSatisfy { ((d?[$0] as? JSON)?["nodes"] as? [JSON])?.isEmpty != false } }
+                if results[i] != nil, empty(results[i]), let last = previous[keys[i]], !empty(last.data) { results[i] = nil }
+            }
             // a query that failed (a blip) keeps what it found in the last 10 minutes (GH_KEEP_MS), so its PRs neither vanish and fly back in,
             // nor hold up every other query's. An expired token isn't a blip: its PRs go, and the account row says to reconnect.
             let t0 = now(), answers = results.enumerated().map { i, r -> JSON? in

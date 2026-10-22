@@ -1208,6 +1208,36 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
     changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
+// GitHub sometimes answers the query with exit 0 and every list empty. That must not wipe the PRs: the last good answer holds
+// until it ages out (LANTERN_GH_KEEP_SECONDS), and then a really empty account shows empty.
+test('an empty GitHub answer after a good one keeps the PRs until the kept answer ages out', async t => {
+  const dir = fs.mkdtempSync(path.join(tmp, 'gh-')), gh = path.join(dir, 'gh');
+  const answer = (mine, closed) => fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ data: { reviews: { nodes: [] }, mine: { nodes: mine }, closed: { nodes: closed } } }));
+  answer([prNode(31, iso(Date.now()))], [{ url: prUrl(90), state: 'MERGED' }]);
+  fs.writeFileSync(gh, `#!/bin/sh\nexec /bin/cat '${dir}/a.json'\n`, { mode: 0o755 });
+  const id = UUID(9);
+  const files = { [`.claude/projects/-projects/${id}.jsonl`]: jsonl([user('Fix it'),
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(31) + '\n' }] } }]) };
+  let home = '';
+  const base = await serve(t, files, h => { home = h; fs.mkdirSync(path.join(h, 'projects/repo'), { recursive: true }); execFileSync('git', ['-C', path.join(h, 'projects/repo'), 'init', '-q', '-b', 'feat']); },
+    { LANTERN_GH: gh, LANTERN_GH_KEEP_SECONDS: '2' });
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: path.join(home, 'projects/repo'), transcript_path: path.join(home, `.claude/projects/-projects/${id}.jsonl`), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const prs = async () => (await snapshot(base)).sessions.find(x => x.id === id)?.github;
+  await until(async () => (await prs())?.length === 1, 'the PR to show');
+  answer([], []); // the blip
+  await post(base, '/settings', { github: true });
+  await wait(800);
+  assert.strictEqual((await prs())?.length, 1, 'an empty answer does not wipe the PR');
+  await wait(1500); // the kept answer is now older than 2s: the account really is empty
+  await post(base, '/settings', { github: true });
+  await until(async () => (await prs())?.length === 0, 'a really empty account to show empty');
+  answer([prNode(31, iso(Date.now()))], []); // open PRs but no closed ones is a real answer, not a blip
+  await post(base, '/settings', { github: true });
+  await until(async () => (await prs())?.length === 1, 'open PRs without closed ones to show');
+});
+
 // One GitHub query failing (an expired token, a blip) must not freeze the others or make its own PRs vanish and fly back in:
 // it keeps what it found last time while everything else refreshes. Two top folders under home are two queries.
 test('a failing GitHub query keeps its own PRs while another folder\'s change still lands', async t => {
