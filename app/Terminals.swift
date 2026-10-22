@@ -10,9 +10,9 @@ func claudePids() -> [String] {
 /// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet, and
 /// whether it says that session is mid-turn: its own `status`, "busy" or "idle" (nil for anything else, or none).
 func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
-    guard let d = FileManager.default.contents(atPath: "\(CLAUDE_DIR)/sessions/\(pid).json"), let j = parse(d) as? JSON,
+    guard let d = CLAUDE_DIRS.lazy.compactMap({ FileManager.default.contents(atPath: "\($0)/sessions/\(pid).json") }).first, let j = parse(d) as? JSON,
           let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String else { return nil }
-    let f = "\(PROJECTS)/\(cwd.projectName)/\(id).jsonl"
+    let f = sessionPath(cwd.projectName, id) + ".jsonl"
     return FileManager.default.fileExists(atPath: f) ? (f, ["busy": true, "idle": false][str(j["status"])]) : nil
 }
 
@@ -43,7 +43,7 @@ func liveTranscripts() -> [(file: String, pids: [Int], busy: Bool?)] {
         count[d] = (count[d] ?? 0) + 1
     }
     let named = Set(live.map(\.file))
-    return bySession(live) + count.items.flatMap { d, n in byNewest(transcripts(PROJECTS + "/" + d)).filter { !named.contains($0) }.prefix(n).map { ($0, [], nil) } }
+    return bySession(live) + count.items.flatMap { d, n in byNewest(PROJECT_ROOTS.flatMap { transcripts($0 + "/" + d) }).filter { !named.contains($0) }.prefix(n).map { ($0, [], nil) } }
 }
 
 // The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session

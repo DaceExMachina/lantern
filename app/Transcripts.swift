@@ -142,10 +142,17 @@ func cleanPrompt(_ p: String) -> String {
     return (label + text).cut(200)
 }
 
-// Session names and agent tasks live next to the transcript the hooks point at. Only ever read inside ~/.claude/projects.
+// Session names and agent tasks live next to the transcript the hooks point at. Only ever read inside a config folder's projects.
 func sessionDir(_ transcript: Any?) -> String? {
     let p = URL(fileURLWithPath: truthy(transcript) ? str(transcript) : "").standardized.path
-    return p.hasPrefix(PROJECTS + "/") && p.hasSuffix(".jsonl") ? String(p.dropLast(6)) : nil
+    return PROJECT_ROOTS.contains { p.hasPrefix($0 + "/") } && p.hasSuffix(".jsonl") ? String(p.dropLast(6)) : nil
+}
+
+/// Every transcript directly in a project folder, across the config folders.
+func allTranscripts() -> [String] {
+    var out: [String] = []
+    for root in PROJECT_ROOTS { for d in (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? [] { out += transcripts(root + "/" + d) } }
+    return out
 }
 
 func readTail(_ file: String, _ bytes: Int) -> String? {
@@ -235,8 +242,8 @@ func findOwners(_ urls: [String]) -> [String: Any] {
     var found: [String: Any] = Dictionary(uniqueKeysWithValues: urls.map { ($0, NSNull()) })
     let needles = urls.map { Array($0.utf8) }, since = Date().addingTimeInterval(-60 * 24 * 3600)
     var checked = Set<String>()
-    let walk = FileManager.default.enumerator(at: URL(fileURLWithPath: PROJECTS), includingPropertiesForKeys: [.contentModificationDateKey])
-    while let file = walk?.nextObject() as? URL {
+    let walks = PROJECT_ROOTS.compactMap { FileManager.default.enumerator(at: URL(fileURLWithPath: $0), includingPropertiesForKeys: [.contentModificationDateKey]) }
+    for walk in walks { while let file = walk.nextObject() as? URL {
         guard file.pathExtension == "jsonl", let at = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, at > since,
               let data = try? Data(contentsOf: file, options: .alwaysMapped) else { continue }
         let mentions = data.withUnsafeBytes { raw in needles.contains { n in n.withUnsafeBytes { memmem(raw.baseAddress, raw.count, $0.baseAddress, $0.count) != nil } } }
@@ -248,7 +255,7 @@ func findOwners(_ urls: [String]) -> [String: Any] {
             found[url] = ["id": (dir as NSString).lastPathComponent, "title": readTitle(dir, nil) ?? NSNull(),
                           "cwd": lastTurn(tail(sessionFile)).cwd ?? NSNull(), "last": fileTimes(sessionFile)?.mtime ?? 0] as JSON
         }
-    }
+    } }
     return found
 }
 
@@ -417,7 +424,7 @@ extension LanternServer {
         struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
-            return Look(id: id, dir: "\(PROJECTS)/\(project)/\(id)", had: Set(agents[id]?.keys ?? []),
+            return Look(id: id, dir: sessionPath(project, id), had: Set(agents[id]?.keys ?? []),
                         modelled: Set(agents[id]?.items.filter { truthy($0.1["model"]) }.map(\.0) ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
         }
         guard !looks.isEmpty else { return then() }
@@ -494,7 +501,7 @@ extension LanternServer {
         let most = 120
         DispatchQueue.global().async {
             let started = now()
-            let newest = ((try? FileManager.default.contentsOfDirectory(atPath: PROJECTS)) ?? []).flatMap { transcripts(PROJECTS + "/" + $0) }
+            let newest = allTranscripts()
                 .map { ($0, fileTimes($0)?.mtime ?? 0) }.sorted { $0.1 > $1.1 }.prefix(60).map(\.0)
             var pool: [String] = [], read = 0
             for f in newest where pool.count < most { read += 1; pool += transcriptProse(tail(f)).suffix(15).filter { !pool.contains($0) } }
@@ -522,9 +529,11 @@ extension LanternServer {
             }
             if !mirroring {
                 for (f, pids, busy) in liveTranscripts() { take(f, true, pids, busy) }
-                if let dirs = try? FileManager.default.contentsOfDirectory(atPath: PROJECTS) {
-                    for d in dirs.sorted() { for f in transcripts(PROJECTS + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, [], nil) } }
-                } else { print("seeding failed: no \(PROJECTS)") }
+                for root in PROJECT_ROOTS {
+                    if let dirs = try? FileManager.default.contentsOfDirectory(atPath: root) {
+                        for d in dirs.sorted() { for f in transcripts(root + "/" + d) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, [], nil) } }
+                    } else { print("seeding failed: no \(root)") }
+                }
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
@@ -564,7 +573,7 @@ extension LanternServer {
             derive(&s, id)
             sessions[id] = s
             self.seeded.insert(id)
-            loadTitle(id, String(PROJECTS + "/" + str(s["project"]) + "/" + id))
+            loadTitle(id, sessionPath(str(s["project"]), id))
         }
     }
 

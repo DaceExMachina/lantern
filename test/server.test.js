@@ -1861,3 +1861,37 @@ test('the test server does not connect to the default lantern-pr stream', async 
   assert.deepStrictEqual(lines(t, /lantern-pr/), []);
   if (!ours) t.diagnostic('8788 was taken (the real lantern-pr?), so only the log was checked');
 });
+
+// Two Claude config folders (a personal ~/.claude and a work ~/.claude-work) show in one lantern. Where the work one's
+// projects are a symlink into the personal one, a session is still counted once.
+const ids = async base => (await snapshot(base)).sessions.map(s => s.id).sort();
+test('sessions from a second config folder, ~/.claude-work, show beside the first', async t => {
+  const work = transcript(UUID(2), [user('Work thing')]);
+  const base = await serve(t, {
+    ...transcript(UUID(1), [user('Personal thing')]),
+    ...Object.fromEntries(Object.entries(work).map(([f, text]) => [f.replace('.claude/', '.claude-work/'), text])),
+  });
+  await until(async () => (await ids(base)).length === 2, 'both folders to be seeded');
+  assert.deepStrictEqual(await ids(base), [UUID(1), UUID(2)]);
+});
+test('LANTERN_CLAUDE_DIRS adds more config folders, and one that is not there is skipped', async t => {
+  const extra = path.join(fs.mkdtempSync(path.join(tmp, 'extra-')), 'cfg');
+  fs.mkdirSync(path.join(extra, 'projects/-work-2'), { recursive: true });
+  fs.writeFileSync(path.join(extra, 'projects/-work-2', UUID(2) + '.jsonl'), jsonl([user('Elsewhere')]));
+  const base = await serve(t, transcript(UUID(1), [user('Personal thing')]), () => {}, { LANTERN_CLAUDE_DIRS: path.join(tmp, 'nowhere') + ':' + extra });
+  await until(async () => (await ids(base)).length === 2, 'both folders to be seeded');
+  assert.deepStrictEqual(await ids(base), [UUID(1), UUID(2)]);
+});
+test('a config folder whose projects and sessions are symlinks into the first is read once', async t => {
+  const id = UUID(1);
+  const base = await serve(t, transcript(id, [user('Personal thing')]), home => {
+    fs.mkdirSync(path.join(home, '.claude-work'));
+    for (const d of ['projects', 'sessions']) {
+      fs.mkdirSync(path.join(home, '.claude', d), { recursive: true });
+      fs.symlinkSync(path.join(home, '.claude', d), path.join(home, '.claude-work', d));
+    }
+  }, {});
+  await until(async () => (await ids(base)).length === 1, 'the session to be seeded');
+  assert.deepStrictEqual(await ids(base), [id]);
+  assert.match(t.output(), /of prose from 1 recent transcript\(s\)/);
+});
