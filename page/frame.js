@@ -882,7 +882,7 @@ function mothColour(m, needsMe, upPts, sidePts, dt) {
 
 // Each z has a faint grey shadow, one unit down and right: a second copy of the glyph drawn behind it (free per frame,
 // unlike a blur filter), so the pale z reads on the paper. Its strength is dialled with ?zshadow.
-let zShadow = devSlider('Moths', 'zshadow', 'z shadow', 0, 1, 0.05, 0.35, 'Opacity of the grey shadow behind the sleeping z\'s', v => { zShadow = v; });
+let zShadow = devSlider('Moths', 'zshadow', 'z shadow', 0, 1, 0.05, 0.4, 'Opacity of the grey shadow behind the sleeping z\'s', v => { zShadow = v; });
 
 // A sleeping moth (landed and snoozed) breathes out z's: one at a time, each fading in as it floats up, growing a
 // little, and fading out, 0.6s apart, so three or four show at once. They come in spells, about half the time, on
