@@ -880,6 +880,10 @@ function mothColour(m, needsMe, upPts, sidePts, dt) {
   st.setProperty('--wing', wing);
 }
 
+// Each z has a faint grey shadow, one unit down and right: a second copy of the glyph drawn behind it (free per frame,
+// unlike a blur filter), so the pale z reads on the paper. Its strength is dialled with ?zshadow.
+let zShadow = devSlider('Moths', 'zshadow', 'z shadow', 0, 1, 0.05, 0.4, 'Opacity of the grey shadow behind the sleeping z\'s', v => { zShadow = v; });
+
 // A sleeping moth (landed and snoozed) breathes out z's: one at a time, each fading in as it floats up, growing a
 // little, and fading out, 0.6s apart, so three or four show at once. They come in spells, about half the time, on
 // the moth's own rhythm. A fresh snooze starts a spell right away, with a brief settling dim; for good, a longer one.
@@ -890,18 +894,19 @@ function mothZs(m, s) {
     if (pf && m.zStart !== pf.at) { m.zStart = pf.at; m.zOff = 0; } // a fresh snooze: a spell starts now
     if (m.zStart === undefined) { m.zStart = s; m.zOff = seeded(hash(m.key))() * cycle; } // already asleep: its own rhythm
     const since = s - m.zStart, spell = pf?.kind === 'always' ? 0.6 : 0.5; // share of each cycle spent breathing z's
-    m.zz ??= Array.from({ length: 4 }, () => {
-      const t = $('moths').appendChild(el('text', { 'font-style': 'italic', 'text-anchor': 'middle', fill: '#C9BDF5', 'pointer-events': 'none' }));
-      t.textContent = 'z';
-      return t;
+    m.zz ??= Array.from({ length: 4 }, () => { // each is a group at the z's spot: the shadow copy, then the z
+      const g = $('moths').appendChild(el('g', { 'font-style': 'italic', 'text-anchor': 'middle', 'pointer-events': 'none' }));
+      g.append(el('text', { x: 1, y: 1, fill: '#8A8A99' }), el('text', { fill: '#C9BDF5' }));
+      for (const t of g.children) t.textContent = 'z';
+      return g;
     });
     m.zz.forEach((t, i) => {
       const n = i + 4 * Math.floor((since / gap - i) / 4); // the latest z this node carries
       const born = n * gap, u = (since - born) / life;
       const on = n >= 0 && u <= 1 && (born + m.zOff) % cycle < cycle * spell && (asleep || born < 2);
       if (!on) { put(t, 'opacity', 0); return; }
-      put(t, 'x', (m.x + (12 + (n % 3) * 4) * m.size + Math.sin(u * 4 + n) * 3).toFixed(1));
-      put(t, 'y', (m.y - 8 * m.size - 32 * u).toFixed(1));
+      put(t, 'transform', `translate(${(m.x + (12 + (n % 3) * 4) * m.size + Math.sin(u * 4 + n) * 3).toFixed(1)} ${(m.y - 8 * m.size - 32 * u).toFixed(1)})`);
+      put(t.firstChild, 'fill-opacity', zShadow);
       put(t, 'font-size', (9 + 5 * u + (n % 3) * 1.5).toFixed(1));
       put(t, 'opacity', (0.85 * Math.sin(Math.PI * u) ** 0.8).toFixed(2));
     });
