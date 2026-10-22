@@ -6,10 +6,10 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import StatsPanel from '../src/components/StatsPanel.vue';
 
 const MIN = 60000, now = Date.now();
-const day = (i, o = {}) => ({ start: now - (7 - i) * 864e5, end: now, mothMs: 1, warmLantern: 80, warmMoths: 70, medianWait: 90 * 1000, slowWait: null, waits: 4, merged: 2, open: 5, stale: 12, staleChange: -1, ...o });
+const day = (i, o = {}) => ({ start: now - (7 - i) * 864e5, end: now, mothMs: i % 2, warmLantern: 80, warmMoths: 70, medianWait: 90 * 1000, slowWait: null, waits: 4, merged: 2, open: 5, stale: 12, staleChange: -1, ...o });
 const log = { days: [...Array(7).keys()].map(i => day(i)), spans: [], gauges: [], prs: [], tally: { revived: [2, '2026-10-17'] }, achievements: [['revived', '2026-10-17']], streak: 3, warmGoal: 70 };
 const bridge = {
-  slices: (d) => d.start % 2 ? { from: d.start, to: d.end, slices: [], starts: [] } : null,
+  slices: d => d.mothMs ? { from: d.start, to: d.end, slices: [], starts: [] } : null,
   ribbonBody: () => '<rect/>', headline: () => '<div class="headline"></div>', dayRibbon: () => '<div class="dayRibbon"><div class="ribbon"></div></div>',
   followRibbon: vi.fn(), restoreBadge: vi.fn(), setTally: vi.fn(), clock: () => '9:00 AM', dayKey: () => 'today', pct: v => v == null ? '–' : `${v}%`,
   ago: ms => `${Math.round(ms / MIN)} min`, ACHIEVEMENTS: { revived: ['Revived', 'Brought a stale PR back'], clear_night: ['Clear night', 'No stale PRs'] },
@@ -42,7 +42,7 @@ test('it waits for the popover to open, then reads the log and draws today and t
   const nums = Object.fromEntries(w.findAll('dl > div').map(d => [d.find('dt').text(), d.find('dd').text()]));
   expect(nums).toMatchObject({ 'answer time': '2 min', waits: '4', merged: '2', 'in flight': '5', 'stale PRs': '12 (-1)', 'slowest answers': '–' });
   expect(w.findAll('.week .day')).toHaveLength(6);
-  expect(w.findAll('.week button.day').length).toBeGreaterThan(0); // days the log has a ribbon for open the recap
+  expect(w.findAll('.week button.day')).toHaveLength(3); // the days with a log (odd mothMs) open the recap; the rest say nothing recorded
   w.unmount();
 });
 
