@@ -900,6 +900,10 @@ function mothColour(m, needsMe, upPts, sidePts, dt) {
   st.setProperty('--wing', wing);
 }
 
+// The z's halo: a dark violet outline painted behind each glyph (paint-order: stroke), centred with no offset, so the
+// pale z reads on the paper. Free per frame, unlike a blur filter. The width is dialled with ?zhalo.
+let zHalo = devSlider('Moths', 'zhalo', 'z halo', 0, 4, 0.1, 1.5, 'Width of the dark outline behind the sleeping z\'s', v => { zHalo = v; });
+
 // A sleeping moth (landed and snoozed) breathes out z's: one at a time, each fading in as it floats up, growing a
 // little, and fading out, 0.6s apart, so three or four show at once. They come in spells, about half the time, on
 // the moth's own rhythm. A fresh snooze starts a spell right away, with a brief settling dim; for good, a longer one.
@@ -911,7 +915,7 @@ function mothZs(m, s) {
     if (m.zStart === undefined) { m.zStart = s; m.zOff = seeded(hash(m.key))() * cycle; } // already asleep: its own rhythm
     const since = s - m.zStart, spell = pf?.kind === 'always' ? 0.6 : 0.5; // share of each cycle spent breathing z's
     m.zz ??= Array.from({ length: 4 }, () => {
-      const t = $('moths').appendChild(el('text', { 'font-style': 'italic', 'text-anchor': 'middle', fill: '#C9BDF5', 'pointer-events': 'none' }));
+      const t = $('moths').appendChild(el('text', { 'font-style': 'italic', 'text-anchor': 'middle', fill: '#C9BDF5', stroke: '#2B2050', 'stroke-opacity': 0.55, 'stroke-linejoin': 'round', 'paint-order': 'stroke', 'pointer-events': 'none' }));
       t.textContent = 'z';
       return t;
     });
@@ -922,6 +926,7 @@ function mothZs(m, s) {
       if (!on) { put(t, 'opacity', 0); return; }
       put(t, 'x', (m.x + (12 + (n % 3) * 4) * m.size + Math.sin(u * 4 + n) * 3).toFixed(1));
       put(t, 'y', (m.y - 8 * m.size - 32 * u).toFixed(1));
+      put(t, 'stroke-width', zHalo);
       put(t, 'font-size', (9 + 5 * u + (n % 3) * 1.5).toFixed(1));
       put(t, 'opacity', (0.85 * Math.sin(Math.PI * u) ** 0.8).toFixed(2));
     });
