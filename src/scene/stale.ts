@@ -11,7 +11,7 @@ import { $, VIEW, WING_SIDE, WING_UP, flapWing, nth, post, stretch } from './sce
 import { GUST, hash, mix, seeded, style } from './lanterns';
 import { addFlyLight, flyColour } from './fireflies';
 import { put } from './frame';
-import { NEED, hoverZone, line, make, morph, prRows, zones } from './card';
+import { hoverZone, zones } from './card';
 import type { Drifter, Ghost, GhostTarget, Owner, Point, StalePR, StaleTarget, Wisp } from '../types';
 
 const STALE_MAX = 30;
@@ -170,21 +170,4 @@ export function drawStale(dt: number, s: number) {
     put($('staleCloud', SVGGElement), 'transform', `translate(${(x0 + w - 50).toFixed(1)} ${(floor - 10).toFixed(1)})`);
     $('staleCloudCount', SVGTextElement).textContent = `+${clouded}`;
   }
-}
-
-// a ghost moth's card: the old session, when it was last active, and the stale PRs it made
-export function renderGhostCard(m: Ghost) {
-  const h = make('h3', '', m.o.title || m.o.id.slice(0, 8), make('span', 'chip idle', make('span', 'face', 'gone quiet'))); // the pill is its face, as on a session's card
-  const days = Math.round((Date.now() - m.o.last) / 864e5), where = String(m.o.cwd || '').split('/').filter(Boolean).pop() || '';
-  morph($('card'), [h, line(`${where ? where + ' · ' : ''}last active ${days ? `${days} days ago` : 'today'}`, 'dim'), ...prRows(m.prs)]);
-  $('card').classList.add('show');
-}
-
-// a stale PR's card: what it is, how long since anyone touched it, and what it needs
-export function renderStaleCard(p: StalePR) {
-  const h = make('h3', '', p.label, make('span', 'chip idle', make('span', 'face', 'stale')));
-  const days = Math.max(7, Math.round((Date.now() - Date.parse(p.updatedAt)) / 864e5));
-  const made = p.owner ? [line(`Made by ${p.owner.title || 'an old session'}`, 'dim')] : [];
-  morph($('card'), [h, line(p.title || ''), line(`${NEED[p.need] || p.need} · untouched for ${days} days`, 'dim'), ...made]);
-  $('card').classList.add('show');
 }

@@ -1,0 +1,57 @@
+<script setup lang="ts">
+// A session on the hover card. The header opens the session (a click on its moth does the same; shift-click snoozes), its
+// pill cycles the snooze as a right-click on the moth does, and its pin pins it to the sidebar; the header stays put and the
+// body below scrolls when the card would be taller than the window. The top of the body is what it wants from me (a state
+// line only where it says more than the pill, its questions, its "You:" message as a quote), then the work in its tray:
+// agents, side sessions, PRs.
+// Every control is an outer button or link that fills its zone (the padding around it, up to its neighbours and the card's
+// edges) and an inner .face that's the visible pill or hover, the size it always was (index.html). Each keeps its element
+// through a re-render (stable keys, no swapping a control out), since WebKit drops a click whose pressed button is replaced.
+import { computed, reactive } from 'vue';
+import { cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, pinnable, project, running, sideRow, stateLine, togglePin } from '../scene/card';
+import { post } from '../scene/scene';
+import { useLanternStore } from '../stores/lantern';
+import type { Session } from '../types';
+import AgentRow from './AgentRow.vue';
+import PrBlock from './PrBlock.vue';
+
+const props = defineProps<{ s: Session; now: number }>();
+const store = useLanternStore();
+const waiting = computed(() => props.s.state === 'waiting');
+const name = computed(() => props.s.title || project(props.s));
+const next = computed(() => pillNext(props.s));
+const pinned = computed(() => store.pinned.some(p => p.id === props.s.id));
+const run = computed(() => running(props.s));
+const side = computed(() => store.sessions.filter(o => o.parent === props.s.id));
+const prompt = computed(() => { const p = props.s.prompt ?? ''; return `“${p.length > 110 ? p.slice(0, 110) + '…' : p}”`; });
+// a click opens an agent to show its job and step in full, and it stays open, by id, until the card closes
+const openAgents = reactive(new Set<string>());
+const toggleAgent = (id: string) => { if (!openAgents.delete(id)) openAgents.add(id); };
+// The PRs are listed or chips, per session, kept in the server's settings (prList) so every window agrees; until it's used,
+// three PRs or fewer are listed. A toggle shows at once, then the settings event confirms it.
+const listed = computed(() => store.settings.prList?.[props.s.id] ?? (props.s.github?.length ?? 0) <= 3);
+function toggleList() {
+  const prList = { ...store.settings.prList, [props.s.id]: !listed.value };
+  store.settings = { ...store.settings, prList };
+  post('/settings', { prList: { [props.s.id]: prList[props.s.id] } });
+}
+</script>
+
+<template>
+  <h3><button class="open" title="Open this session" @click="openSession(s.id, $event.shiftKey)"><span class="face name">{{ name }}<span class="go"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg></span></span></button><button :class="['chip', pillClass(s)]" :title="next" :aria-label="`${pillWord(s)}: ${next.toLowerCase()}`" @click="cycleSnooze(s.id)"><span class="face">{{ pillWord(s) }}</span></button><button v-if="pinnable()" :class="['pin', { on: pinned }]" :aria-label="pinned ? `Unpin ${name}` : `Pin ${name} to the sidebar`" :title="pinned ? 'Unpin' : 'Pin to the sidebar'" @click="togglePin(s.id)"><span class="face"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg></span></button></h3>
+  <div class="cardBody">
+    <div v-if="stateLine(s)" :class="['state', { error: s.state !== 'working' && s.error }]">{{ stateLine(s) }}</div>
+    <template v-if="waiting">
+      <div v-for="(q, i) in s.forYou?.questions ?? []" :key="i" class="ask">{{ q }}</div>
+      <div v-if="s.forYou?.you?.length" class="msg"><template v-for="(piece, i) in s.forYou.you" :key="i"><template v-if="typeof piece === 'string'">{{ piece }}</template><a v-else :href="piece.url" target="_blank" rel="noopener">{{ piece.label }}</a></template></div>
+    </template>
+    <div v-else-if="s.prompt" class="prompt">{{ prompt }}</div>
+    <div v-if="run.rows.length || side.length || s.github?.length" class="tray">
+      <div v-if="run.rows.length" class="agentZone"><div class="head">Running<span class="r">{{ run.count }}</span></div><AgentRow v-for="r in run.rows" :key="r.id" :row="r" :now :open="openAgents.has(r.id)" @toggle="toggleAgent(r.id)" /></div>
+      <template v-if="side.length"><div class="head">Side sessions<span class="r">{{ side.length }}</span></div><AgentRow v-for="o in side" :key="o.id" :row="sideRow(o)" :now :open="openAgents.has(o.id)" @toggle="toggleAgent(o.id)" /></template>
+      <PrBlock v-if="s.github?.length" :prs="s.github" :listed :now @toggle="toggleList" />
+      <div class="foot">{{ footLine(s, now) }}</div>
+    </div>
+    <div v-else class="foot">{{ footLine(s, now) }}</div>
+  </div>
+</template>
