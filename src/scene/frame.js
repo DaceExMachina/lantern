@@ -636,7 +636,7 @@ export function scorchStep(m, flying, now = Date.now()) {
 // A session moth's home eases toward the spot sync gave it, so when sessions come or go the others slide over to make
 // room rather than jump (about 95% there in two seconds). It goes round the ring (ringHome), the short way, never
 // across it: homes stay in the order they sit round it, which keeps landed moths' lines from crossing (perchAt).
-function glideHome(m, dt) {
+export function glideHome(m, dt) {
   const k = 1 - Math.exp(-1.5 * dt), [a, r] = ringPolar(m.home), [b, s] = ringPolar(m.spot);
   const turn = (b - a + 3 * Math.PI) % (2 * Math.PI) - Math.PI; // the short way round
   m.home = ringPoint(a + turn * k, r + (s - r) * k);
@@ -946,17 +946,17 @@ function mothZs(m, s) {
 // a spot (homes gliding through each other, or a home on the ring further in just past a neighbour's line) can cross
 // for a moment. A landed moth's thread has no length; a moth behind its spot (flying in from the far side) has none
 // until it comes round.
-function threadEnds(m) {
+export function threadEnds(m) {
   const [px, py] = rot(m.perch[0], m.perch[1]), [hx, hy] = stretch(m.home), len = Math.hypot(hx - px, hy - py), ux = (hx - px) / len, uy = (hy - py) / len;
   const t = Math.max(0, (m.x - 2 * m.size - px) * ux + (m.y - 6 * m.size - py) * uy);
   return [[px, py], [px + ux * t, py + uy * t]];
 }
 // The slow sway of a line's bow: it swings to both sides of straight, out to the `bow` share of its length, each moth on
 // its own phase. Lines are a non-crossing fan, so only the share is dialed.
-let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.12, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
+export let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.12, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
 // A busy lantern bows gentler: full up to 4 moths, easing down to half by 12 (m.bowK follows it, so a session joining doesn't jump)
 const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...live.moths.values()].filter(o => !o.satellite && !o.leaving).length - 4) / 8));
-const bowed = (ax, ay, bx, by, m, s, k) => {
+export const bowed = (ax, ay, bx, by, m, s, k) => {
   k *= m.bowK ?? crowd();
   const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * Math.sin(s * 0.8 + m.phase);
   return `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${(ax + dx / 2 - dy / len * bow).toFixed(1)} ${(ay + dy / 2 + dx / len * bow).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;

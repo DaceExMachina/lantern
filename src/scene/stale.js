@@ -47,7 +47,7 @@ function makeGhost(o) {
 // Each frame the ghosts leave their wings in ghostWings for the shader, as triangles (x, y, opacity per corner): each
 // wing's outline (pathOf's two curves from the root out and back) sampled into a fan from the root, which the wing
 // shapes are star-shaped about. `at` takes a point on the moth to the scene.
-const WING_STEPS = 6, GHOST_TRIS = 2 * WING_STEPS - 1; // points along each curve, triangles per wing
+export const WING_STEPS = 6, GHOST_TRIS = 2 * WING_STEPS - 1; // points along each curve, triangles per wing
 export const ghostWings = new Float32Array(GHOSTS_MAX * 2 * GHOST_TRIS * 9);
 function addGhostWing(pts, at, alpha) {
   const q = (a, c, b, t) => at([0, 1].map(k => (1 - t) * (1 - t) * a[k] + 2 * (1 - t) * t * c[k] + t * t * b[k]));
@@ -63,8 +63,8 @@ function addGhostWing(pts, at, alpha) {
 // flicker as the moths shift; only when a moth's slice takes it over does it move, to the nearest direction with room
 // to spare. Planned twice a second, not every frame.
 // A standing lantern's stand (style.stands) blocks the directions that would put one behind it.
-const angleGap = (a, b) => Math.abs(((a - b) % 6.283 + 9.425) % 6.283 - 3.1416);
-function nextAim(aim, pref, taken, blocked = a => false) {
+export const angleGap = (a, b) => Math.abs(((a - b) % 6.283 + 9.425) % 6.283 - 3.1416);
+export function nextAim(aim, pref, taken, blocked = a => false) {
   const clear = (a, pad) => taken.every(([t, w]) => angleGap(a, t) > w + pad) && !blocked(a);
   if (aim !== undefined && clear(aim, 0)) return aim;
   const from = aim ?? pref;
@@ -82,7 +82,7 @@ function behindStand(a, dist, pad) {
   return !!st && Math.abs(Math.cos(a) * dist) < st.half + pad && 320 + Math.sin(a) * dist * 0.95 * VIEW.ky > st.top - pad;
 }
 let stalePlannedAt = -1;
-function planStale(s, loose) {
+export function planStale(s, loose) {
   if (s - stalePlannedAt < 0.5) return;
   stalePlannedAt = s;
   const taken = [];

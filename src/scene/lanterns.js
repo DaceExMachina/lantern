@@ -277,7 +277,7 @@ export const seeded = seed => () => {
 // drawing's neck `neck`.
 export const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
 // Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (perchAt).
-const PERCH_SPREAD = 0.44;
+export const PERCH_SPREAD = 0.44;
 export function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) {
   // The pillar's numbers place the flame, the light, the shade and the wax moths land on: its middle, half-width, crown
   // (the rim, at its mean height), bottom (hidden in the pan, 200 below the rim), the pan's rim, the eye (the flame's

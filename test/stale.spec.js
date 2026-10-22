@@ -1,14 +1,13 @@
-// How ghost moths and wisps move (page/stale.js): they keep a clear spot rather than flicker between two, and they glide
-// to a new one slowly, easing in and out.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+// How ghost moths and wisps move (src/scene/stale.js): they keep a clear spot rather than flicker between two, and they
+// glide to a new one slowly, easing in and out.
+import assert from 'node:assert';
+import { afterEach, test, vi } from 'vitest';
+import { layOut } from './page.js';
+import { angleGap, nextAim, planStale, settle } from '../src/scene/stale.js';
+import { VIEW } from '../src/scene/scene.js';
+import * as lanterns from '../src/scene/lanterns.js';
 
-const page = vm.createContext({});
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'stale.js'), 'utf8'), page, { filename: 'stale.js' });
-const { nextAim, settle, angleGap } = vm.runInContext('({ nextAim, settle, angleGap })', page);
+afterEach(() => vi.restoreAllMocks());
 
 test('a ghost keeps its spot until a moth crowds it, then moves clear and stays there', () => {
   const aim = 1;
@@ -42,23 +41,24 @@ test('a long frame lands the glide exactly where many short ones would', () => {
 });
 
 test("with a standing lantern, no loose wisp's spot lands in the band its pedestal fills", () => {
-  const stands = { half: 112, top: 461 }; // the candle's (lanterns.js): the slab's half-width, from the pan down
-  Object.assign(page, { style: { stands }, VIEW: { ky: 1 }, moths: new Map() });
+  lanterns.applyStyle('candle'); // the standing lantern
+  const stands = lanterns.style.stands; // the slab's half-width and the pan it starts from
+  assert.ok(stands, 'the candle stands on a pedestal');
+  let s = 0; // planStale plans twice a second at most, so each plan is a second on
   for (const ky of [1, 1.6]) { // a square window and a tall one
-    page.VIEW.ky = ky;
+    VIEW.ky = ky;
     // crowded past the room there is (living moths and ghosts take slices too), so some fall back to any clear spot
     const loose = Array.from({ length: 60 }, (_, i) => ({ pref: i * 6.283 / 60, dist: 180 + (i * 37) % 100 }));
     const at = d => [340 + Math.cos(d.aim) * d.dist, 320 + Math.sin(d.aim) * d.dist * 0.95 * ky]; // as driftTo places it, stretched down
     const inBand = ([x, y]) => Math.abs(x - 340) < stands.half && y > stands.top;
     assert.ok(loose.some(d => inBand(at({ ...d, aim: d.pref }))), 'some would start behind the pedestal');
-    vm.runInContext('stalePlannedAt = -1', page);
-    page.planStale(0, loose);
+    planStale(s += 1, loose);
     for (const d of loose) assert.ok(!inBand(at(d)), `a wisp preferring ${d.pref.toFixed(2)} lands clear at ky ${ky}: ${at(d).map(v => v.toFixed(0))}`);
   }
-  page.style = { stands: undefined }; // a hanging lantern leaves its spot be
+  lanterns.applyStyle('barrel'); // a hanging lantern leaves its spot be
+  assert.strictEqual(lanterns.style.stands, undefined);
   const d = { pref: Math.PI / 2, dist: 200 };
-  vm.runInContext('stalePlannedAt = -1', page);
-  page.planStale(0, [d]);
+  planStale(s += 1, [d]);
   assert.strictEqual(d.aim, d.pref);
 });
 
@@ -69,21 +69,23 @@ const NEEDS = ['ready', 'failing', 'draft', 'review', 'changes', 'quiet'];
 const stale = NEEDS.map((need, i) => ({ url: `https://github.com/o/r/pull/${i}`, label: `#${i}`, title: `PR ${i}`, need, updatedAt: new Date(BASE - (8 + i) * 864e5).toISOString(),
   owner: i < 2 ? { id: 'old-session', title: 'Old session', last: BASE - 9 * 864e5 } : undefined })); // the first two made by one old session
 
-function screen(clock) {
-  const el = { style: {}, getAttribute() {}, setAttribute() {} };
-  const w = vm.createContext({ URLSearchParams, location: { search: '' }, performance, wall: () => clock.t, document: { getElementById: () => el } });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'fireflies', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), w, { filename: f + '.js' });
-  vm.runInContext('Date.now = () => wall()', w);
+// a window on the page afresh, its wall clock `clock.t` (Date.now is shared, so every screen in a test keeps the one clock)
+async function screen(clock) {
+  layOut(); vi.resetModules();
+  vi.spyOn(Date, 'now').mockImplementation(() => clock.t);
+  const [{ live }, st, card, fireflies, lanterns] = await Promise.all(['live', 'stale', 'card', 'fireflies', 'lanterns'].map(f => import(`../src/scene/${f}.js`)));
+  live.stalePRs = JSON.parse(JSON.stringify(stale));
   // one frame, then what the shader would be handed: each light's x, y, radius, brightness, r, g, b, and the ghosts' wing corners
-  const frame = (dt, s) => vm.runInContext(`drawStale(${dt}, ${s}); (() => { const out = { lights: [...flyLights.slice(0, 7 * flyLightN)], wings: [...ghostWings.slice(0, 3 * ghostWingN)] };
-    flyLightN = 0; ghostWingN = 0; return out; })()`, w);
-  const run = code => vm.runInContext(code, w);
-  run(`stalePRs = ${JSON.stringify(stale)}`);
-  // the page's own names (top-level let and const aren't properties of the context)
-  return { frame, run, w: run('({ hex, mix, FLY, WISP_TINT, GHOST_TRIS, zones, zoneAt, wisps, ghosts, off: () => { staleOn = false; } })') };
+  const frame = (dt, s) => {
+    st.drawStale(dt, s);
+    const out = { lights: [...fireflies.flyLights.slice(0, 7 * live.flyLightN)], wings: [...st.ghostWings.slice(0, 3 * live.ghostWingN)] };
+    live.flyLightN = 0; live.ghostWingN = 0;
+    return out;
+  };
+  return { frame, w: { hex: lanterns.hex, mix: lanterns.mix, FLY: fireflies.FLY, WISP_TINT: st.WISP_TINT, GHOST_TRIS: st.GHOST_TRIS, zones: card.zones, zoneAt: card.zoneAt, wisps: st.wisps, ghosts: st.ghosts, off: () => { live.staleOn = false; } } };
 }
-test('every stale PR leaves a pale light for the shader, its old session a ghost moth, and turning them off leaves neither', () => {
-  const clock = { t: BASE }, { w, frame } = screen(clock);
+test('every stale PR leaves a pale light for the shader, its old session a ghost moth, and turning them off leaves neither', async () => {
+  const clock = { t: BASE }, { w, frame } = await screen(clock);
   let out;
   for (let i = 0; i < 3; i++) { clock.t += 16; out = frame(0.016, i * 0.016); }
   assert.strictEqual(out.lights.length / 7, stale.length, 'one light per stale PR');
@@ -101,8 +103,8 @@ test('every stale PR leaves a pale light for the shader, its old session a ghost
   assert.ok([...w.zones].every(z => z.off), 'and none can be hovered');
 });
 
-test('hovering a wisp or a ghost moth finds it where it is drawn now, after it has moved', () => {
-  const clock = { t: BASE }, { w, frame } = screen(clock);
+test('hovering a wisp or a ghost moth finds it where it is drawn now, after it has moved', async () => {
+  const clock = { t: BASE }, { w, frame } = await screen(clock);
   const at = () => { clock.t += 16; return frame(0.016, (clock.t - BASE) / 1000).lights; };
   const hits = lights => [...w.wisps.values()].map((d, i) => w.zoneAt(w.zones, lights[7 * i], lights[7 * i + 1])?.target);
   const before = at();
@@ -120,8 +122,8 @@ test('hovering a wisp or a ghost moth finds it where it is drawn now, after it h
   assert.strictEqual(w.zoneAt(w.zones, ghost.x, ghost.y)?.target.ghost, ghost, 'the ghost moth hovers as itself');
 });
 
-test('every screen draws the wisps and ghosts in the same places, whatever its frame rate and whenever it opened', () => {
-  const clock = { t: BASE }, a = screen(clock), b = screen(clock);
+test('every screen draws the wisps and ghosts in the same places, whatever its frame rate and whenever it opened', async () => {
+  const clock = { t: BASE }, a = await screen(clock), b = await screen(clock);
   let outA, outB;
   for (let t = 0; t <= 30; t += 1 / 60) { // the app at 60 fps since BASE; the panel at 20, opened 10s later with its own page clock
     clock.t = BASE + t * 1000;
