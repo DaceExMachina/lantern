@@ -76,15 +76,20 @@ function ringHome(i, n, layer = 0) {
   const k = 1 - 0.18 * layer, [low, high] = ringGaps(k), side = Math.PI - low - high; // the arc each side
   let a = (i + 0.5 + layer / 2) * 2 * side / n; // a second layer sits between two spots, so no two share a direction
   if (a > side) a += 2 * high; // over the top
-  return [340 + 225 * k * Math.cos(Math.PI / 2 + low + a), 320 + 235 * k * Math.sin(Math.PI / 2 + low + a)];
+  return ringPoint(Math.PI / 2 + low + a, k);
 }
+// The oval homes sit on (on the 600x600 square): the point at angle `a` on a ring k of the way out, and a point's
+// [angle, how far out] (1 on the ring itself).
+const RING = { x: 340, y: 320, rx: 225, ry: 235 };
+const ringPoint = (a, k = 1) => [RING.x + RING.rx * k * Math.cos(a), RING.y + RING.ry * k * Math.sin(a)];
+const ringPolar = ([x, y]) => { const p = (x - RING.x) / RING.rx, q = (y - RING.y) / RING.ry; return [Math.atan2(q, p), Math.hypot(p, q)]; };
 // The gaps at the bottom and top of a ring k of the way out, as angles from straight down and straight up.
-const ringGaps = k => [Math.asin(Math.min(1, 150 / 225 / k)), Math.asin(60 / 225 / k)];
-// How far round its side of the ring a point is (on the 600x600 square), 0 at the bottom gap to 1 at the top one. Spots
-// on a ring further in (layer 1) fall between their neighbours.
-function ringRound([x, y]) {
-  const [low, high] = ringGaps(1), a = Math.atan2(Math.abs(x - 340) / 225, (y - 320) / 235); // from straight down
-  return Math.max(0, Math.min(1, (a - low) / (Math.PI - low - high)));
+const ringGaps = k => [Math.asin(Math.min(1, 150 / RING.rx / k)), Math.asin(60 / RING.rx / k)];
+// The point on the ring `u` of the way round its side (`side` -1 the left, 1 the right), from the bottom gap (0) to the
+// top one (1).
+function ringAt(u, side) {
+  const [low, high] = ringGaps(1), down = low + u * (Math.PI - low - high); // from straight down
+  return [RING.x + side * RING.rx * Math.sin(down), RING.y + RING.ry * Math.cos(down)];
 }
 const EDGES = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
 
