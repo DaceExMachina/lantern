@@ -1877,6 +1877,15 @@ test('sessions from a second config folder, ~/.claude-work, show beside the firs
   await until(async () => (await ids(base)).length === 2, 'both folders to be seeded');
   assert.deepStrictEqual(await ids(base), [UUID(1), UUID(2)]);
 });
+test('sessions from ~/.claude-personal show beside the first', async t => {
+  const personal = transcript(UUID(2), [user('Personal thing')]);
+  const base = await serve(t, {
+    ...transcript(UUID(1), [user('Work thing')]),
+    ...Object.fromEntries(Object.entries(personal).map(([f, text]) => [f.replace('.claude/', '.claude-personal/'), text])),
+  });
+  await until(async () => (await ids(base)).length === 2, 'both folders to be seeded');
+  assert.deepStrictEqual(await ids(base), [UUID(1), UUID(2)]);
+});
 test('LANTERN_CLAUDE_DIRS adds more config folders, and one that is not there is skipped', async t => {
   const extra = path.join(fs.mkdtempSync(path.join(tmp, 'extra-')), 'cfg');
   fs.mkdirSync(path.join(extra, 'projects/-work-2'), { recursive: true });
