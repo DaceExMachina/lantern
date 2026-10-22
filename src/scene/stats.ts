@@ -9,7 +9,7 @@ import type { Day, Gauge, Span } from '../types';
 
 /** A slice of a day's ribbon: its span (ms), and the share of it the app ran, was violet or quiet, and moths were
  * alive, waiting, snoozed or sleeping; the share of moth time flying, and the working gauge (null where unknown). */
-export interface Slice {
+interface Slice {
   a: number; b: number; ran: number; violet: number; quiet: number; alive: number; waiting: number; snoozed: number; sleeping: number;
   flying: number | null; working: number | null;
 }

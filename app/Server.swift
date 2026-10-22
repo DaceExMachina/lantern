@@ -166,7 +166,7 @@ func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 
 
 final class LanternServer {
     let port: UInt16
-    let web: String // index.html and the icons
+    let web: String // the checkout, or the app's Resources: the page is its dist/
     let settingsFile: String, githubCache: String
     var settings: JSON = ["style": "barrel"]
     var sessions = Ordered<JSON>() // session_id -> what the hover card shows, as JSON
@@ -417,30 +417,20 @@ final class LanternServer {
         let text = String(decoding: (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
         DispatchQueue.global().async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
     }
-    // What changes when the page does, so open windows reload: the newest of index.html and its scripts in page/, or, for a Vite
-    // build, the newest file in dist/. A rebuild empties dist/ for a moment (and touches its folders), so the version holds
-    // where it was until index.html is back, and folders don't count: a window must not reload into the gap.
+    // What changes when the page does, so open windows reload: the newest file in dist/. A rebuild empties dist/ for a moment
+    // (and touches its folders), so the version holds where it was until index.html is back, and folders don't count: a
+    // window must not reload into the gap.
     var builtVersion = 0.0
     func pageVersion() -> Double {
         let fm = FileManager.default
-        if root != web {
-            let files = (fm.enumerator(atPath: web + "/dist")?.allObjects as? [String] ?? []).map { web + "/dist/" + $0 }
-            let newest = files.compactMap { f -> Double? in var dir: ObjCBool = false; return fm.fileExists(atPath: f, isDirectory: &dir) && !dir.boolValue ? fileTimes(f)?.mtime : nil }.max()
-            if fm.fileExists(atPath: web + "/dist/index.html"), let newest { builtVersion = newest }
-            return builtVersion
-        }
-        let scripts = ((try? fm.contentsOfDirectory(atPath: web + "/page")) ?? []).map { "/page/" + $0 }
-        return (["/index.html"] + scripts).compactMap { fileTimes(web + $0)?.mtime }.max() ?? 0
+        let files = (fm.enumerator(atPath: root)?.allObjects as? [String] ?? []).map { root + "/" + $0 }
+        let newest = files.compactMap { f -> Double? in var dir: ObjCBool = false; return fm.fileExists(atPath: f, isDirectory: &dir) && !dir.boolValue ? fileTimes(f)?.mtime : nil }.max()
+        if fm.fileExists(atPath: root + "/index.html"), let newest { builtVersion = newest }
+        return builtVersion
     }
-    // Where the static page is served from: a Vite build in dist/ when there is one, else the checkout itself. Once it has
-    // been there, a rebuild that empties dist/ for a moment doesn't send the page back to the checkout's index.html (which
-    // after Vite takes over can't run unbuilt): the page is a 503 until the new build lands. It never goes back, so a dist/
-    // removed for good keeps answering 503 until the app restarts.
-    var built = false
-    var root: String {
-        if FileManager.default.fileExists(atPath: web + "/dist/index.html") { built = true }
-        return built ? web + "/dist" : web
-    }
+    // Where the static page is served from: the Vite build in dist/. While a rebuild has emptied it (or before the first
+    // build lands) the page is a 503 that retries by itself.
+    var root: String { web + "/dist" }
     // MARK: hook events
 
     let prep = DispatchQueue(label: "lantern.events")
@@ -875,7 +865,7 @@ final class LanternServer {
     func serveFile(_ c: NWConnection, _ req: Request, _ path: String, _ type: String) {
         let file = root + path
         guard let data = FileManager.default.contents(atPath: file), let mtime = fileTimes(file)?.mtime else {
-            if built && path == "/index.html" { // mid-rebuild: a page that lands here tries again by itself
+            if path == "/index.html" { // mid-rebuild: a page that lands here tries again by itself
                 return respond(c, 503, "text/html; charset=utf-8", Data("<!doctype html><meta http-equiv=\"refresh\" content=\"1\"><title>Lantern</title><p>Rebuilding...".utf8), headers: "Retry-After: 1\r\n")
             }
             return respond(c, 404)
@@ -1089,16 +1079,14 @@ final class LanternServer {
         }
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
         if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
-        if root != web { // a Vite build: any file in dist/ with a known extension, in plain folders (no dot-names, so no ..)
-            let types = ["js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
-                         "woff2": "font/woff2", "json": "application/json", "map": "application/json"]
-            if page.range(of: #"^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$"#, options: .regularExpression) != nil, let type = types[(page as NSString).pathExtension] {
-                return serveFile(c, req, page, type)
-            }
+        // any file in dist/ with a known extension, in plain folders (no dot-names, so no ..)
+        let types = ["js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
+                     "woff2": "font/woff2", "json": "application/json", "map": "application/json"]
+        if page.range(of: #"^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$"#, options: .regularExpression) != nil, let type = types[(page as NSString).pathExtension] {
+            return serveFile(c, req, page, type)
         }
         let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = files[page] { return serveFile(c, req, page, type) }
-        if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil { return serveFile(c, req, page, "text/javascript; charset=utf-8") }
         respond(c, 404)
     }
 }

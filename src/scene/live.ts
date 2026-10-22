@@ -5,7 +5,7 @@
 import type { Hovered, Moth, Review, Session, StalePR, Stats } from '../types';
 
 /** One of the candle's fluttering leaves (frame.ts drawLeaves). */
-export interface Leaf { e: Element; x: number; y: number; k: number; low: number; deg: number; ph: number }
+interface Leaf { e: Element; x: number; y: number; k: number; low: number; deg: number; ph: number }
 
 interface Live {
   raw: Session[]; reviews: Review[]; stalePRs: StalePR[]; recentProse: string[]; pagesData: boolean; firstName: string;

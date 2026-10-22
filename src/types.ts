@@ -25,9 +25,9 @@ export type Opt<T> = T | null | undefined;
 
 // ---- sessions (the event stream's default message)
 /** A link in a session's "You:" message. */
-export interface Link { label: string; url: string }
+interface Link { label: string; url: string }
 /** What a waiting session wants from me: its questions, and its "You:" message as text and links. */
-export interface ForYou { questions?: Opt<string[]>; you?: Opt<(string | Link)[]> }
+interface ForYou { questions?: Opt<string[]>; you?: Opt<(string | Link)[]> }
 /** What a firefly shows of a PR: what it needs, when the server first saw it (ms), and since when it's needed that, and
  * what it needed before. */
 export interface FlyState { need: string; seen?: Opt<number>; since?: Opt<number>; was?: Opt<string> }
@@ -137,7 +137,7 @@ const isGauge = (x: unknown): x is Gauge => Array.isArray(x) && x.length === 5 &
 const isPrEvent = (x: unknown): x is PrEvent => Array.isArray(x) && x.length === 6 && isNumber(x[0]) && x.slice(1).every(isStringOrNull);
 const isTally = (x: unknown): x is Stats['tally'] => isRecord(x) && Object.values(x).every(v => Array.isArray(v) && isNumber(v[0]) && isString(v[1]));
 const isAchievement = (x: unknown): x is Stats['achievements'][number] => Array.isArray(x) && isString(x[0]) && isString(x[1]); // and when, which the page doesn't read
-export const isStats = (x: unknown): x is Stats => isRecord(x) && arrayOf(isDay)(x['days']) && arrayOf(isSpan)(x['spans'])
+const isStats = (x: unknown): x is Stats => isRecord(x) && arrayOf(isDay)(x['days']) && arrayOf(isSpan)(x['spans'])
   && arrayOf(isGauge)(x['gauges']) && arrayOf(isPrEvent)(x['prs']) && isTally(x['tally']) && arrayOf(isAchievement)(x['achievements'])
   && isNumber(x['streak']) && isNumber(x['warmGoal']);
 /** GET /stats, checked. */
@@ -149,7 +149,7 @@ export async function fetchStats(): Promise<Stats> {
 
 // ---- the lanterns (lanterns.ts STYLES)
 /** The surface moths land on: its top and bottom, and its half-width at a height. */
-export interface Body { top: number; bottom: number; half: (y: number) => number }
+interface Body { top: number; bottom: number; half: (y: number) => number }
 /** A paper lantern's paper, which session text is printed on (pages.ts); see lanterns.ts BARREL. */
 export interface Surface {
   cx: number; r: number; top: number; bottom: number; ribs: number[]; gap: number; lines: number; shown: number;
@@ -166,7 +166,7 @@ export interface Style {
 }
 
 /** How a firefly leaves: merged, closed or just gone, from when (ms), heading `d`, its merge's loop starting at `start` s. */
-export interface Leave { kind: string; at: number; d: Point; start: number }
+interface Leave { kind: string; at: number; d: Point; start: number }
 /** A PR's firefly (fireflies.ts swarm): its seeded orbit, the PR, how it's leaving, and where it was drawn this frame. */
 export interface Firefly {
   a: number; r: number; w: number; ph: number; bend: number; tilt: number; side: number; p: FlyState; leave: Leave | null;
@@ -175,7 +175,7 @@ export interface Firefly {
 
 // ---- the scene's moths and hover areas
 /** A "zz" off a moth that just got snoozed: when, and whether until it does something new or for good. */
-export interface Puff { at: number; kind: 'once' | 'always' }
+interface Puff { at: number; kind: 'once' | 'always' }
 /** A scorch in progress (frame.ts scorchStep): its slot and seconds in, whether the flame has touched it yet, where it
  * aims and from which side, and the smoke trail it leaves as it flies off ([x, y, seconds, how far along]). */
 export interface Scorch {

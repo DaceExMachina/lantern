@@ -41,7 +41,7 @@ Claude Code in iTerm2, Terminal, the Claude desktop app, VS Code and its forks, 
 
 ## Contributing
 
-Pull requests are welcome, especially for terminals Lantern doesn't know yet. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the code fits together and how to test a change.
+Pull requests are welcome, especially for terminals Lantern doesn't know yet. [CONTRIBUTING.md](CONTRIBUTING.md) explains how the code fits together (a Swift server, and a page built with Vite, Vue 3 and TypeScript) and how to test a change.
 
 ## License
 
