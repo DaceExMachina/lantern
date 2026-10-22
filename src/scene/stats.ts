@@ -164,10 +164,6 @@ export const ACHIEVEMENTS: Record<string, [name: string, how: string] | undefine
   ghosted: ['Ghosted', 'A moth waited 3 hours or more'],
   snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day'],
 };
-export const badge = (id: string, extra = '', unearned = false) => {
-  const [name, how] = ACHIEVEMENTS[id] || [id, ''];
-  return `<button class="badge${unearned ? ' unearned' : ''}" data-id="${id}" aria-label="${name}: ${how}">${name}${extra}</button>`;
-};
 
 // What a badge is: a small card floating over it while the pointer is on it (or it has focus), like a moth's card,
 // out of the panel's layout so nothing moves; a click or tap keeps it until clicked again. One tip per panel, inside
