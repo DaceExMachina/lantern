@@ -1561,7 +1561,8 @@ test('an agent that switches models shows the one it\'s on now, through a huge t
 
 test('page files always revalidate: Cache-Control no-cache, and a 304 when the ETag still matches', async t => {
   const base = await serve(t);
-  for (const url of ['/', '/index.html', '/page/pencil.js', '/icon.png']) {
+  const script = '/assets/' + fs.readdirSync(path.join(ROOT, 'dist', 'assets')).find(f => f.endsWith('.js')); // npm test builds first
+  for (const url of ['/', '/index.html', script, '/icon.png']) {
     const res = await fetch(base + url);
     assert.strictEqual(res.status, 200, url);
     assert.strictEqual(res.headers.get('cache-control'), 'no-cache', url);
@@ -1570,7 +1571,7 @@ test('page files always revalidate: Cache-Control no-cache, and a 304 when the E
     assert.strictEqual(again.headers.get('cache-control'), 'no-cache', url);
     assert.strictEqual((await fetch(base + url, { headers: { 'If-None-Match': '"other"' } })).status, 200, url);
   }
-  assert.strictEqual((await fetch(base + '/page/nope.js')).status, 404);
+  assert.strictEqual((await fetch(base + '/assets/nope.js')).status, 404);
 });
 
 // A Vite build in dist/ (dist/index.html and hashed files under dist/assets/) becomes the web root, and a change to anything
