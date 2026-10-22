@@ -87,7 +87,7 @@ func forYou(_ message: Any?) -> JSON {
             "questions": questions.prefix(5).map { $0.cut(160) }]
 }
 
-// Runs of plain sentences in a message, for the barrel's paper (page/pages.js) to show in passing: each run is the
+// Runs of plain sentences in a message, for the barrel's paper (src/scene/pages.js) to show in passing: each run is the
 // consecutive sentences that pass, joined into a paragraph of at most about 70 words, and anything that doesn't pass ends
 // the run. A sentence passes when it's whole, 6 to 20 words, starting with a capital and ending in a full stop. Anyone walking past can read the screensaver, so a sentence
 // goes whole if it holds anything that could identify work: code, a link or path, any digit (ids, hashes, ports), a

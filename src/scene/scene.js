@@ -1,4 +1,6 @@
-// The scene's fixed geometry: element lookup, the moth wing shapes and their 3D flapping, home spots, and fitting the view to the window.
+// The scene's fixed geometry and sizes: element lookup, the moth wing shapes and their 3D flapping, home spots, the view's
+// stretch, and the smoke, heat and flame spine's sizes (background.js builds its shaders from those as it loads). It
+// imports nothing, so any module can read it while loading.
 
 export const NS = 'http://www.w3.org/2000/svg';
 /** @type {(id: string) => any} */ // elements are looked up by id; checking each as HTMLElement would just be casts

@@ -1,4 +1,5 @@
-// Wiring, run last once everything is defined: the live connection to the server, controls, and the animation clock.
+// Wiring: the live connection to the server, controls, and the animation clock. src/main.ts loads it, and it loads the
+// rest of the page.
 
 import { live } from './scene/live.js';
 import { $, Q, post } from './scene/scene.js';
@@ -143,7 +144,7 @@ $('card').addEventListener('click', e => {
 });
 // every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.js's zoneAt).
 // Only the scene's own pointer events count, never ones on the card, the footer or a menu over it.
-const zoneAtPoint = (/** @type {MouseEvent} */ e) => {
+export const zoneAtPoint = (/** @type {MouseEvent} */ e) => {
   const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(document.querySelector('svg').getScreenCTM().inverse());
   return zoneAt(zones, p.x, p.y);
 };

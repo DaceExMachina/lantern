@@ -59,7 +59,7 @@ const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 uniform vec4 uHeat; // the hot air rising off the lantern (frame.js heat): where it leaves, how strong (0 for none), and the time
 // How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
-// the column (state.js HEAT_COLUMN) from where it leaves. frame.js heatAt weighs the same column, so change the two together.
+// the column (scene.js HEAT_COLUMN) from where it leaves. frame.js heatAt weighs the same column, so change the two together.
 // The half-width never drops under 1, so smoothstep's edges never meet or cross (undefined in GLSL ES 1.00).
 vec2 heat(vec2 p) {
   if (uHeat.z <= 0.0) return vec2(0.0);

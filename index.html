@@ -10,7 +10,7 @@
   /* spacing scale on a 4px base; the stats panel and recap use it, the rest of the app moves over in a design-system pass */
   /* The design tokens: UI chrome (footer, menus, cards, stats, recap, tips, dev panel, the flash pill) takes every colour,
      space, radius, type size, shadow and layer from here. Add a token rather than a one-off value; scene art keeps its
-     palettes in page/*.js. test/tokens.test.js enforces this, and that the state and PR colours match the scene's.
+     palettes in src/scene/*.js. test/tokens.test.js enforces this, and that the state and PR colours match the scene's.
      "Design tokens" in CONTRIBUTING.md lists them. */
   :root {
     /* night and surfaces */
@@ -58,7 +58,7 @@
   #scene { position: relative; min-height: 0; overflow: clip; -webkit-user-select: none; user-select: none; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
-     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, main.js) */
+     so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (fitStatus, src/events.js) */
   footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
   #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 var(--space-3); } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
@@ -83,7 +83,7 @@
   /* the settings: each row's click area runs its full width and meets the next row's, so there's no dead spot between them */
   #menu { padding-top: 7px; }
   #menu:popover-open { gap: 0; }
-  /* each option's tip is a docked card like the recap's, above the menu at its width (main.js docks it). It shows after a
+  /* each option's tip is a docked card like the recap's, above the menu at its width (src/events.js docks it). It shows after a
      short hover on the row, or when a control in it has keyboard focus. */
   #menu .tip { max-width: none; box-sizing: border-box; z-index: var(--z-tip); transition-delay: .5s; }
   #menu .tip.show { opacity: 1; }
@@ -242,9 +242,9 @@
   .lanternLayer { right: auto; will-change: transform; }
   #flame { right: auto; }
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
-  #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (page/pencil.js) */
+  #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (src/scene/pencil.js) */
   .ambient #lantern, .ambient #lanternPaper, .ambient #flame { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
-  /* a badge just earned (page/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
+  /* a badge just earned (src/scene/flash.js): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: var(--z-flash); }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
@@ -472,22 +472,5 @@
   <div id="recap" class="flyup" popover aria-label="Recap"></div>
 </footer>
 <script type="module" src="/src/main.ts"></script>
-<script defer src="/page/scene.js"></script>
-<script defer src="/page/dev.js"></script>
-<script defer src="/page/lanterns.js"></script>
-<script defer src="/page/pencil.js"></script>
-<script defer src="/page/state.js"></script>
-<script defer src="/page/background.js"></script>
-<script defer src="/page/github.js"></script>
-<script defer src="/page/fireflies.js"></script>
-<script defer src="/page/stale.js"></script>
-<script defer src="/page/frame.js"></script>
-<script defer src="/page/pages.js"></script>
-<script defer src="/page/card.js"></script>
-<script defer src="/page/notify.js"></script>
-<script defer src="/page/stats.js"></script>
-<script defer src="/page/recap.js"></script>
-<script defer src="/page/flash.js"></script>
-<script defer src="/page/main.js"></script>
 </body>
 </html>

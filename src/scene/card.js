@@ -67,7 +67,7 @@ export function prRows(prs) {
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a
 // click run `onClick` (or on a right-click, `menu`) and hide it. `target` is what `hovered` becomes; `cardAt` says which of
 // its areas the card sits beside. They're plain circles in scene units (x, y, r; `off` while they can't be hovered), hit-tested
-// in JS by one set of pointer handlers on the scene (main.js), never SVG elements: moving one of those every frame makes
+// in JS by one set of pointer handlers on the scene (events.js), never SVG elements: moving one of those every frame makes
 // WebKit repaint the scene under it.
 /** @typedef {{ x: number, y: number, r: number, off: boolean, target: any, onClick: () => void, cardAt?: string, menu?: () => void }} Zone */
 /** @type {Set<Zone>} */

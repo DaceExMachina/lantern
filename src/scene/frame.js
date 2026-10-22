@@ -25,7 +25,7 @@ const alongFor = (key, slot) => seeded(hash(`${key}:${slot ?? 'land'}`))();
 // Fitting the view to the window (VIEW, scene.js).
 // frame() calls fitView each frame, so it follows the window and the pinned sidebar sliding in or out, and only does the work
 // when the size has changed. Each frame, before anything is drawn, so the sidebar's slide never shows a cleared canvas.
-let fitted = '';
+export let fitted = '';
 export function fitView() {
   const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect(), size = `${width} ${height} ${devicePixelRatio}`;
   if (!width || !height || size === fitted) return;
@@ -148,7 +148,7 @@ function drawRibbon(dt, s) {
 // One frame: the lantern burns brighter the more sessions work and turns violet while one needs me, then each part
 // draws itself in turn: the lantern and its flame, the moths one by one, the stale wisps, and the light behind it all.
 export function frame(t) {
-  fitView(); // the scene's size, should it have changed (scene.js)
+  fitView(); // the scene's size, should it have changed (above)
   const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
@@ -225,7 +225,7 @@ function rot(px, py, by = swayAngle) { // `by` -swayAngle turns a point in the s
 // window, with the push scaled so the lantern moves sideways as much as it would hung at y=20. A standing lantern
 // (style.stands) holds still at 0, so rot() leaves everything where it's drawn; the pendulum keeps going under it, so a
 // hanging lantern picked afterwards picks up the swing where the wind has it.
-const swing = { a: NaN, v: 0, wind: 0 };
+export const swing = { a: NaN, v: 0, wind: 0 };
 function swingLantern(elapsed, s) {
   const w = 2 * Math.PI / sway.period, dt = Math.min(0.05, elapsed), top = VIEW.top, sl = s - LAG;
   if (!(swing.a === swing.a)) { swing.a = swing.v = 0; swing.wind = GUST(s); } // first frame (or a NaN): start hanging still
@@ -380,7 +380,7 @@ function lightPaper({ size, flick, pulse }) {
 // on it pushed away from the lean. All of it follows this frame's flame.
 // The hot air rising off the lantern, set by drawHeat (null without any): where it leaves, how strong, and the time.
 let heat = /** @type {{ x: number, y: number, k: number, t: number } | null} */ (null);
-// How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (state.js HEAT_COLUMN)
+// How much the hot air moves things at scene point (x, y), 0 to the heat's strength: the column (scene.js HEAT_COLUMN)
 // rising from where it leaves. LIGHT's heat() in background.js bends the same column, so change the two together.
 function heatAt(x, y) {
   if (!heat) return 0;
@@ -400,19 +400,19 @@ const gustAside = (s, r, k) => GUST(s - 0.12 * r) * k / r;
 // middling near speck of dust (radius 1.3, the near dust's 0.7 to 1.9) over that time, so the two drift together.
 const smokeDrift = (s, age) => gustAside(s, 1.3, 14) - gustAside(s - age, 1.3, 14);
 // Smoke, drawn by the background shader (background.js plume and trailSmoke). Plumes rise, widen, curl and drift with the wind,
-// each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (state.js,
+// each let go from where it starts over its first `rel` seconds, every bit fading as it ages to PLUME.life (scene.js,
 // with its size and opacity, the flame's lanes SMOKE and the let-go times). The flame lets one go from its tip now and
 // then, on lanes keyed to the wall clock alone (scorch's kind, scorchClock) so every window lets it go at once: one
 // every minute or two however it burns, and more lanes opening as it burns harder (`from`, the strength each opens at),
 // so it smokes more often the busier things get.
 // It lets go one at a time: one that comes up while another is going is let pass, and the one going carries on. A
 // scorched moth's singe lets one go from where its wing touched, and as it flies off it leaves a trail: the points it
-// passed over TRAIL.secs after the hit (state.js TRAIL), joined to the moth while it's still smoking. At most SMOKERS
+// passed over TRAIL.secs after the hit (scene.js TRAIL), joined to the moth while it's still smoking. At most SMOKERS
 // moths smoke at once (scorchStep starts no more), so their smoke always fits the shader's PLUMES and TRAIL_POINTS and
 // none of it is ever dropped.
 // The flame's plume the lanes let go at `now` (wall ms) burning at `strength`, the earliest begun if two are: its key
 // (lane:slot) and seconds in, or null.
-function smokeAt(now, strength) {
+export function smokeAt(now, strength) {
   let out = null;
   SMOKE.forEach((lane, i) => {
     const e = strength >= lane.from && scorchClock(`candle:smoke:${i}`, now, { ...lane, length: SMOKE_REL + PLUME.life });
@@ -589,13 +589,13 @@ function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, bl
 // ?scorch is a demo: no moth lands, every one is eligible, failing checks or not, and each scorches every 15 seconds,
 // as long as its smoke lasts.
 const SCORCH_DEMO = devToggle('Demo', 'scorch', 'scorch demo', false, 'Every moth flies into the candle\'s flame every 15 seconds, failing checks or not (reloads the page)', () => location.reload());
-const SCORCH = SCORCH_DEMO ? { slot: 15, window: 1, length: 13, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
+export const SCORCH = SCORCH_DEMO ? { slot: 15, window: 1, length: 13, start: 0.5, hit: 3 } : { slot: 60, window: 30, length: 20, start: 0.5, hit: 3 };
 const SCORCH_CHAR = '#5B4636'; // the wings' char, a warm brown
 // The live outer tongue in the scene, set by frame() on a scorching lantern (null otherwise): centre x, half-width, height.
 let tongue = null;
 // The episode in progress for `key` at wall-clock `now` (ms): its slot and the seconds since it started, or null.
 /** @param {string} key @param {number} now @param {{ slot: number, window: number, length: number }} [plan] */
-function scorchClock(key, now, plan = SCORCH) {
+export function scorchClock(key, now, plan = SCORCH) {
   const { slot, window: span, length } = plan, at = now / 1000 - seeded(hash(key + ':scorch'))() * slot, n = Math.floor(at / slot);
   const t = at - n * slot - seeded(hash(key + ':scorch:' + n))() * span;
   return t >= 0 && t < length ? { slot: n, t } : null;

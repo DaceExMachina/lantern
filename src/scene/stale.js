@@ -14,7 +14,7 @@ import { put } from './frame.js';
 import { NEED, hoverZone, line, make, morph, prRows, zones } from './card.js';
 
 const STALE_MAX = 30;
-const wisps = new Map(); // url -> wisp
+export const wisps = new Map(); // url -> wisp
 let staleSeeded = false; // the first list is simply there; later arrivals fade in
 export const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
 
@@ -35,7 +35,7 @@ function makeWisp(p) {
 // in the SVG makes WebKit repaint the scene under it every frame, the Moroccan's masked brass and lace included. Their
 // hover areas are plain circles (card.js), not SVG ones, for the same reason.
 const GHOSTS_MAX = 8;
-const ghosts = new Map(); // session id -> ghost moth
+export const ghosts = new Map(); // session id -> ghost moth
 function makeGhost(o) {
   const rand = seeded(hash(o.id));
   const m = { o, zone: null, prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0,

@@ -45,7 +45,7 @@ const INTRO = 1200, PRIME_AGE = 2 * FADE + HOLD;
 let introAt = 0, introTimer = 0, inking = 1; // inking: 1 coming up, -1 going out
 // the unrolled page, the warped one, and what it was last drawn with; `showing` is the picture on the paper, and `busy`
 // while a new one is being encoded and decoded
-let flat, warped, drawn = { scale: 0, cool: -1 }, showing = '', busy = false, dirty = false;
+export let flat, warped, drawn = { scale: 0, cool: -1 }, showing = '', busy = false, dirty = false;
 let paper; // the surface the blocks were laid out for
 
 let measure;
@@ -277,7 +277,7 @@ function drawPages(root) {
   drawn = { scale: 0, cool: -1 };
 }
 
-function tickPages() {
+export function tickPages() {
   const root = $('pages');
   if (!root) return; // not a paper lantern
   if (!legible()) return sleepPages(); // a lantern picked in a window too small to read it
@@ -338,7 +338,7 @@ function sleepPages() { stopPages(); forget(); waitFrom = performance.now(); }
 addEventListener('resize', () => legible() ? wakePages() : pagesTimer && sleepPages());
 
 // Turning words off takes the ink out quickly (then the timer stops); turning them on brings a full page in the way the
-// first appearance does, from the words already here. Called by main.js with the shared setting.
+// first appearance does, from the words already here. Called by events.js with the shared setting.
 export function setLanternText(value) {
   if (value === lanternText) return;
   lanternText = value;
