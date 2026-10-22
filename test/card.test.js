@@ -32,7 +32,7 @@ function load() {
   body.matches = sel => sel.split(', ').some(c => body.className.split(' ').includes(c.slice(1))); // the .panel, .screensaver and .ambient modes
   const page = vm.createContext({ document: { createElement: node, body }, innerWidth: 1440, $: id => ({ dock, prTip: tip })[id] ?? card, clearTimeout() {}, hideTimer: 0, hovered: null, moths: new Map(), sessions: [], FLY: { ready: 'g', failing: 'r', changes: 'o', draft: 'y', quiet: 'b' },
     post: (url, body) => posts.push([url, body]) });
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
   vm.runInContext('morph = (el, kids) => el.replaceChildren(...kids)', page);
   const show = s => { page.hovered = { session: s }; vm.runInContext('renderCard()', page); return card; };
   return { page, card, dock, body, tip, posts, show, run: code => vm.runInContext(code, page) };
@@ -412,7 +412,7 @@ test('in the sidebar an agent is a plain row, shown in full, that leaves the car
 
 test('every handler property the card and its stale cards set is one morph copies onto the live element', () => {
   const { run } = load(), copied = run('HANDLERS');
-  const src = ['card', 'stale'].map(f => fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8')).join('\n');
+  const src = ['card', 'stale'].map(f => fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8')).join('\n');
   const set = [...new Set([...src.matchAll(/\.(on[a-z]+) =/g)].map(m => m[1]))];
   assert.ok(set.includes('onclick') && set.includes('onfocus'), `found ${set}`);
   assert.deepStrictEqual(set.filter(h => !copied.includes(h)), [], 'set but not copied, so a redraw would keep the old handler');

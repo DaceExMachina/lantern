@@ -25,7 +25,7 @@ function context() {
   const els = { bg: canvas, flame: canvas, lantern: { ...node(), innerHTML: '' }, lanternPaper: { innerHTML: '' }, lanternLayer: { style: {} }, lanternBack: { style: {} }, style: { value: '' } }; // the layers the sway turns (frame.js swingLantern)
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, devicePixelRatio: 2, window: {},
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] } });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'background', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'background', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('VIEW.box = [40, 20, 600, 600]; VIEW.layer = [140, 20, 400, 600]; flyLightN = 0; ghostWingN = 0; farWallTex = {}'); // the Moroccan's far wall counts as baked already
   run('realDraw = drawBackground; drawBackground = v => { drawn = v; realDraw(v); }'); // keeping what drawLight gives it
@@ -60,7 +60,7 @@ test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between 
 });
 
 test('the tip the smoke, the hot air and the rim\'s shadow leave from is the shader flame\'s tip', () => {
-  const ctx = context(), src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8');
+  const ctx = context(), src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8');
   // the shader's outer tongue ends at its height (flameHalf is 0 from t = 1), its spine bent over to the full lean there,
   // and its noise gone at the tip
   const half = new Function(src.match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/)[0].replace('float flameHalf(float t)', 'return t =>')

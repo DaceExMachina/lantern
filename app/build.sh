@@ -5,13 +5,14 @@ set -e
 cd "$(dirname "$0")"
 DEST=${1:-"$HOME/Applications"}
 OUT=build/Lantern.app
+[ -f ../dist/index.html ] || { echo "Build the page first: npm install && npm run build" >&2; exit 1; }
 rm -rf build && mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources" build/Lantern.iconset
 cp Info.plist "$OUT/Contents/"
-# the page rides along inside the app
-cp -R ../index.html ../page ../icon.svg ../icon.png ../icon-indigo.svg ../icon-indigo.png "$OUT/Contents/Resources/"
+# the built page rides along inside the app
+cp -R ../dist "$OUT/Contents/Resources/"
 for s in 16 32 128 256 512; do
-  sips -z $s $s ../icon.png --out build/Lantern.iconset/icon_${s}x${s}.png >/dev/null
-  [ $s = 512 ] || sips -z $((s * 2)) $((s * 2)) ../icon.png --out build/Lantern.iconset/icon_${s}x${s}@2x.png >/dev/null
+  sips -z $s $s ../dist/icon.png --out build/Lantern.iconset/icon_${s}x${s}.png >/dev/null
+  [ $s = 512 ] || sips -z $((s * 2)) $((s * 2)) ../dist/icon.png --out build/Lantern.iconset/icon_${s}x${s}@2x.png >/dev/null
 done
 iconutil -c icns -o "$OUT/Contents/Resources/Lantern.icns" build/Lantern.iconset
 swiftc -O -target "$(uname -m)-apple-macos13" -framework AppKit -framework WebKit -o "$OUT/Contents/MacOS/Lantern" *.swift

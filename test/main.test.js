@@ -18,7 +18,7 @@ function open(search = '', els = {}) {
     EventSource: made, MutationObserver: made, Image: made, DOMPoint: made, Option: made, localStorage: stub, fetch: () => Promise.resolve(stub) });
   page.window = page;
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  for (const [, f] of html.matchAll(/src="(page\/[a-z]+\.js)"/g)) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), page, { filename: f });
+  for (const [, f] of html.matchAll(/src="\/(page\/[a-z]+\.js)"/g)) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', f), 'utf8'), page, { filename: f });
   return { page, els, listeners, every: ms => intervals.filter(([, t]) => t === ms).map(([f]) => f) };
 }
 

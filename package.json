@@ -4,7 +4,7 @@
   "description": "A paper lantern that glows with your Claude Code sessions",
   "bin": { "claude-lantern": "install.js" },
   "files": [
-    "install.js", "index.html", "page/", "fake.js", "icon.svg", "icon.png", "icon-indigo.svg", "icon-indigo.png",
+    "install.js", "dist/", "fake.js",
     "iterm/lantern.py", "app/build.sh", "app/Info.plist", "app/*.swift",
     "screensaver/build.sh", "screensaver/Info.plist", "screensaver/LanternView.swift"
   ],
@@ -12,6 +12,24 @@
   "engines": { "node": ">=18" },
   "repository": "github:DaceExMachina/lantern",
   "license": "MIT",
-  "scripts": { "preview": "node scripts/preview.js", "check": "tsc -p tsconfig.json && tsc -p tsconfig.page.json", "test": "node --test test/*.test.js", "snapshots": "swift scripts/snapshots.swift" },
-  "devDependencies": { "@types/node": "^20.0.0", "typescript": "^5.6.0" }
+  "scripts": {
+    "build": "vite build",
+    "prepack": "vite build",
+    "preview": "node scripts/preview.js",
+    "check": "vue-tsc -p tsconfig.json && vue-tsc -p tsconfig.app.json && vue-tsc -p tsconfig.page.json",
+    "test": "node --test test/*.test.js && vitest run",
+    "snapshots": "node scripts/snapshots.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "@vue/test-utils": "^2.5.1",
+    "happy-dom": "^21.0.1",
+    "pinia": "^4.1.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.4",
+    "vue": "^3.5.44",
+    "vue-tsc": "^3.3.13"
+  }
 }
