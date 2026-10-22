@@ -260,7 +260,15 @@
       run(14), snap('t20'), // T = LAST
     ]),
   ];
+  // The harness may call __drive before the page's deferred scripts have run (they load over http), so wait for main.js, the
+  // last of them, to have set lanternTick; a script that failed to load is reported by name instead of as a missing variable.
+  addEventListener('error', e => { if (e.target?.src) errs.push(`${e.target.src} failed to load`); }, true);
+  const ready = (async () => {
+    for (let i = 0; i < 500 && typeof window.lanternTick !== 'function' && !errs.length; i++) await new Promise(r => realSetTimeout(r, 20));
+    if (typeof window.lanternTick !== 'function' && !errs.length) errs.push('the page scripts never finished running');
+  })();
   window.__drive = async () => {
+    await ready;
     while (steps.length && !errs.length) { const r = await steps.shift()(); if (r && !errs.length) return r; }
     return errs.length ? 'error: ' + errs.join(' | ') : 'done';
   };

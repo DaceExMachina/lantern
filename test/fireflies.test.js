@@ -11,7 +11,7 @@ const T0 = 1.8e12, FRAME = 1000 / 60, URL = 'https://github.com/o/r/pull/7';
 // a window `kx` times as wide and `ky` times as tall as the 600-unit square, laid out as fitView does
 function window(kx = 1, ky = 1) {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'fireflies', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'fireflies', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run(`Object.assign(VIEW, { kx: ${kx}, ky: ${ky}, box: [${340 - 300 * kx}, ${320 - 300 * ky}, ${600 * kx}, ${600 * ky}] })`);
   // one frame at wall clock `now`: the firefly's light [x, y, radius, brightness], or null once it's gone

@@ -9,7 +9,7 @@ const vm = require('vm');
 // a window `kx` times as wide and `ky` times as tall as the 600-unit square, laid out as fitView does
 function window(kx, ky) {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run(`Object.assign(VIEW, { kx: ${kx}, ky: ${ky}, box: [${340 - 300 * kx}, ${320 - 300 * ky}, ${600 * kx}, ${600 * ky}] }); style = STYLES.candle`);
   return { box: run('VIEW.box'), reach: run('WING_REACH'), moths: run('moths'), mothTarget: run('mothTarget'), mothMove: run('mothMove') };

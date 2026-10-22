@@ -8,7 +8,7 @@ Unofficial, not affiliated with Anthropic.
 
 ## Install
 
-You'll need macOS 13 or later, Claude Code, Node 18 or later, and Xcode's command line tools (`xcode-select --install`).
+You'll need macOS 13 or later, Claude Code, Node 20.19 or 22.12 or later, and Xcode's command line tools (`xcode-select --install`).
 
 ```bash
 git clone https://github.com/DaceExMachina/lantern && node lantern/install.js

@@ -15,7 +15,7 @@ const load = search => {
   const page = vm.createContext({ URLSearchParams, location, Option: function (t) { this.text = this.value = t; },
     history: { replaceState: (_, __, url) => { location.search = url.slice(1); } },
     document: { createElement: node, body: node('body') } });
-  for (const f of ['scene', 'dev']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   return { page, location, run: code => vm.runInContext(code, page) };
 };
 // every node under n, depth first

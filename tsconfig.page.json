@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "compilerOptions": { "lib": ["es2022", "dom", "dom.iterable"], "types": [], "strictNullChecks": false },
-  "include": ["page/*.js", "page-globals.d.ts"]
+  "compilerOptions": { "module": "commonjs", "lib": ["es2022", "dom", "dom.iterable"], "types": [], "strictNullChecks": false },
+  "include": ["public/page/*.js", "page-globals.d.ts"]
 }

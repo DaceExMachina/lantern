@@ -10,7 +10,7 @@ const el = tag => ({ tag, children: [], className: '', textContent: '', innerHTM
 const panel = el('section'), posts = [], copied = [];
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, document: { createElement: el, getElementById: () => panel, querySelectorAll: () => [] },
   fetch: (url, o) => posts.push([url, JSON.parse(o.body)]), navigator: { clipboard: { writeText: t => { copied.push(t); return Promise.resolve(); } } } });
-for (const f of ['scene', 'dev', 'github']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'github']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const find = (n, pred, out = []) => { if (pred(n)) out.push(n); n.children.forEach(c => find(c, pred, out)); return out; };
 
 test('connecting shows copy then cancel as icon buttons to the right of the link; copy copies, cancel cancels', async () => {

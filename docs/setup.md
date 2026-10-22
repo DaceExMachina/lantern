@@ -23,7 +23,7 @@ Then it builds the app and the screensaver from source with Xcode's command line
 
 If you have iTerm2, it also copies the panel script into iTerm2's AutoLaunch folder. [The iTerm2 toolbelt](#the-iterm2-toolbelt) covers switching it on.
 
-The app serves the page (`index.html` and `page/`) straight from the folder you cloned, so keep that folder. A `git pull` brings in new looks without a rebuild.
+It also builds the page with `npm install` and `npm run build`, which needs Node 20.19 or 22.12 and up. The app serves that build (`dist/`) straight from the folder you cloned, so keep that folder, and it rebuilds the page itself when files change. A `git pull` brings in new looks within a second or two. After a pull that changes `package-lock.json`, run `npm install` in that folder.
 
 Running the installer again is safe, since it replaces whatever it installed last time. To undo all of it (your Claude Code settings get backed up first):
 

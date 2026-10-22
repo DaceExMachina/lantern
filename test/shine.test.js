@@ -20,7 +20,7 @@ function context() {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, wall: () => clock.wall,
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] },
     dust: [], farDust: [], dustData: new Float32Array(4), drawBackground: v => { page.drawn = v; }, DUST_DEBUG: 0 });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle;');
   for (const id of ['cdPoolGlint', 'cdWarmG', 'cdWarm', 'cdFootShadow']) els[id] = node();
@@ -217,7 +217,7 @@ test('the dust drawn over the candle rises where the hot air carries it, in the 
 });
 
 test('the shader\'s column is HEAT_COLUMN, each number in its place', () => {
-  const ctx = context(), src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8');
+  const ctx = context(), src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8');
   const body = src.match(/vec2 heat\(vec2 p\) \{[\s\S]*?\n\}/)[0], glf = ctx.run('glf');
   for (const v of [18, 0.12, 0.1234, 0.0004, 1.25, 1e-7]) assert.strictEqual(Number(glf(v)), v, `${v} as a GLSL float`), assert.match(glf(v), /[.e]/);
   // the shader as background.js writes it, with HEAT_COLUMN's values and with others in their place

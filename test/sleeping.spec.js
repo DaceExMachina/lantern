@@ -1,14 +1,14 @@
 // Snoozed vs sleeping (snoozed for good): which status bar count a session lands in (restOf, page/state.js), and how
 // the stats ribbon splits a day's waiting between waiting and snoozed, sleeping counted as snoozed (slices and states, page/stats.js).
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import { test } from 'vitest';
 
 const stub = () => ({ addEventListener() {}, classList: { toggle() {} } });
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document: { getElementById: stub, querySelectorAll: () => [] } });
-for (const f of ['scene', 'dev', 'lanterns', 'state', 'stats']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'state', 'stats']) vm.runInContext(fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 test('snoozed for good counts as sleeping whatever the session is doing; a plain snooze only while it waits', () => {

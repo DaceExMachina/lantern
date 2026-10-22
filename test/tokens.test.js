@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const ROOT = path.join(__dirname, '..'), PAGE = path.join(ROOT, 'page');
+const ROOT = path.join(__dirname, '..'), PAGE = path.join(ROOT, 'public', 'page');
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
 const UI = ['card.js', 'dev.js', 'github.js', 'main.js', 'notify.js', 'recap.js', 'stats.js'];

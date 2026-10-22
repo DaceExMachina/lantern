@@ -8,7 +8,7 @@ const path = require('path');
 const vm = require('vm');
 
 const page = vm.createContext({});
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'card.js'), 'utf8'), page, { filename: 'card.js' });
 const zoneAt = vm.runInContext('zoneAt', page);
 const circle = (x, y, r) => ({ x, y, r, off: false });
 
@@ -66,7 +66,7 @@ test('landed moths 20 apart (r 32) still split at their midpoint', () => {
 
 test('a landed moth\'s area is centred on its drawn body, so a point on the lower of two close moths picks it', () => {
   const frame = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-  for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), frame, { filename: f + '.js' });
   const mothZones = vm.runInContext('mothZones', frame);
   const zone = () => ({});
   // a moth folded on flat paper, its body pointing up the screen: the wings the way mothWings draws them, as caster() sums them up

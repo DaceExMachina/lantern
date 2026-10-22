@@ -7,7 +7,7 @@ const path = require('path');
 const vm = require('vm');
 
 const page = vm.createContext({});
-vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', 'stale.js'), 'utf8'), page, { filename: 'stale.js' });
+vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'stale.js'), 'utf8'), page, { filename: 'stale.js' });
 const { nextAim, settle, angleGap } = vm.runInContext('({ nextAim, settle, angleGap })', page);
 
 test('a ghost keeps its spot until a moth crowds it, then moves clear and stays there', () => {
@@ -72,7 +72,7 @@ const stale = NEEDS.map((need, i) => ({ url: `https://github.com/o/r/pull/${i}`,
 function screen(clock) {
   const el = { style: {}, getAttribute() {}, setAttribute() {} };
   const w = vm.createContext({ URLSearchParams, location: { search: '' }, performance, wall: () => clock.t, document: { getElementById: () => el } });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'fireflies', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), w, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'fireflies', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), w, { filename: f + '.js' });
   vm.runInContext('Date.now = () => wall()', w);
   // one frame, then what the shader would be handed: each light's x, y, radius, brightness, r, g, b, and the ghosts' wing corners
   const frame = (dt, s) => vm.runInContext(`drawStale(${dt}, ${s}); (() => { const out = { lights: [...flyLights.slice(0, 7 * flyLightN)], wings: [...ghostWings.slice(0, 3 * ghostWingN)] };
