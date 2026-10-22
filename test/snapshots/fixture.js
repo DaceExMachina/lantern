@@ -164,79 +164,95 @@
         if (document.elementFromPoint(x, y)?.closest('.pin') !== pin) errs.push(`the pin's hit area misses its header's ${where}`);
     }
   };
-  // A big card (6 agents, 10 PRs) redrawn the way the 500ms tick does (wiring.ts), checked to keep what the browser holds.
+  // A big card (6 agents, 10 PRs) re-rendered the way a server update or the store's one-second tick does, checked to keep
+  // what the browser holds. Each redraw changes the session's activity, and checks the card shows it, so it's sure Vue patched.
   const morph = () => {
     const now = Date.now(), q = sel => page.$('card').querySelector(sel), fail = msg => errs.push(msg); // $ isn't defined yet
     const big = { id: 'sess-big', cwd: '/Users/x/projects/big', title: 'sess-big', state: 'working', activity: 'Editing', started: now - 50 * MIN, last: now,
       subagents: Array.from({ length: 6 }, (_, i) => ({ id: `b${i}`, type: 'Explore', description: `Agent ${i}`, activity: `Step ${i}`, started: now - (9 - i) * MIN, last: now })),
       github: Array.from({ length: 10 }, (_, i) => pr(200 + i, needs[i % 5])) };
     const mid = el => { const r = el.getBoundingClientRect(); return [Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2)]; };
-    let row, body, tog, open;
+    let row, body, tog, open, redraws = 0;
     const update = () => emit('message', [...sessionsAt(0), big]);
-    // the patched children against a fresh build of the same render: a copy of them, then the render again into the
-    // emptied element, which builds every child afresh (so the live elements are gone after this)
+    const redraw = async () => { // Vue patches on a microtask, queued before this await's
+      big.activity = `Editing ${++redraws}`; update(); await Promise.resolve();
+      if (q('.state')?.textContent !== big.activity) fail(`the card never re-rendered: ${q('.state')?.textContent}`);
+    };
+    // the patched sidebar's children against a fresh build of the same render: a copy of them, then the render again into
+    // the emptied element, which builds every child afresh
     const fresh = (el, render) => {
       const patched = [...el.cloneNode(true).childNodes];
       el.replaceChildren(); render();
       const kids = [...el.childNodes];
       return patched.length === kids.length && patched.every((n, i) => n.isEqualNode(kids[i]));
     };
+    // the patched card against a fresh one: a copy of its children, then the card closed and opened again, which builds its
+    // session's rows afresh (so the live elements are gone after this)
+    const freshCard = async () => {
+      const patched = [...page.$('card').cloneNode(true).childNodes];
+      page.hideCard(); page.enterZone(page.live.moths.get('sess-big').zone); await Promise.resolve();
+      const kids = [...page.$('card').childNodes];
+      return patched.length === kids.length && patched.every((n, i) => n.isEqualNode(kids[i]));
+    };
     return [
       () => { emit('message', [...sessionsAt(0), big]); }, run(0.1),
       () => { page.enterZone(page.live.moths.get('sess-big').zone); }, run(0.1),
-      () => { // keyboard focus on an agent row, through three redraws
+      async () => { // keyboard focus on an agent row, through three redraws
         row = page.$('card').querySelectorAll('.agent')[2]; row.focus();
         if (document.activeElement !== row) return fail('the agent row didn\'t take focus');
-        for (let i = 0; i < 3; i++) page.renderCard();
+        for (let i = 0; i < 3; i++) await redraw();
         if (document.activeElement !== row || !row.isConnected) fail(`focus lost in a redraw: ${document.activeElement?.className}`);
         row.blur();
       },
-      () => { // scrolled down the body
+      async () => { // scrolled down the body
         body = q('.cardBody');
         if (body.scrollHeight <= body.clientHeight) return fail('the card doesn\'t scroll, so the check would prove nothing');
-        body.scrollTop = 40; page.renderCard();
+        body.scrollTop = 40; await redraw();
         if (q('.cardBody').scrollTop !== 40) fail(`scroll lost in a redraw: ${q('.cardBody').scrollTop}`);
         body.scrollTop = 0;
       },
-      () => { // the pointer on an agent row: WebKit won't apply :hover in a window that isn't key, and this one never is, so
+      async () => { // the pointer on an agent row: WebKit won't apply :hover in a window that isn't key, and this one never is, so
         // check what hover hangs on, that the element under the pointer is still the same one after a redraw
         const [x, y] = mid(page.$('card').querySelectorAll('.agent')[1]), under = document.elementFromPoint(x, y);
         if (!under?.closest('.agent')) return fail(`no agent row under its own middle: ${under?.className}`);
-        page.renderCard();
+        await redraw();
         if (document.elementFromPoint(x, y) !== under || !under.isConnected) fail('a redraw swapped the element under the pointer, which loses its hover');
       },
-      () => { tog = q('.tog'); tog.scrollIntoView({ block: 'nearest' }); open = !!page.live.prList['sess-big']; return `down ${mid(tog).join(' ')}`; },
-      () => { page.renderCard(); return `up ${mid(tog).join(' ')}`; }, // the tick lands between press and release
-      () => { if (!!page.live.prList['sess-big'] === open) fail('a press on the PR toggle across a redraw didn\'t toggle'); },
-      () => { // the PRs are listed now: an overflow link's tip, after a redraw, sits beside the link on screen
-        page.renderCard();
+      () => { tog = q('.tog'); tog.scrollIntoView({ block: 'nearest' }); open = tog.getAttribute('aria-expanded'); return `down ${mid(tog).join(' ')}`; },
+      async () => { await redraw(); return `up ${mid(tog).join(' ')}`; }, // a re-render lands between press and release
+      () => {
+        if (q('.tog') !== tog) fail('a re-render mid-press replaced the PR toggle, so WebKit drops the click');
+        if (q('.tog').getAttribute('aria-expanded') === open) fail('a press on the PR toggle across a redraw didn\'t toggle');
+      },
+      async () => { // the PRs are listed now: an overflow link's tip, after a redraw, sits beside the link on screen
+        await redraw();
         const ov = q('.ov'), tip = page.$('prTip');
         ov.scrollIntoView({ block: 'nearest' }); ov.focus();
         const a = ov.getBoundingClientRect(), t = tip.getBoundingClientRect();
         if (!tip.matches('.show') || Math.abs(t.bottom + 8 - a.top) > 1 && Math.abs(t.top - 8 - a.bottom) > 1) fail(`the tip is at ${t.top}-${t.bottom}, its link at ${a.top}-${a.bottom}`);
         ov.blur();
       },
-      () => { // an agent ends while a later one has focus: the focused row is still that agent's, and it all matches a fresh card
+      async () => { // an agent ends while a later one has focus: the focused row is still that agent's, and it all matches a fresh card
         row = [...page.$('card').querySelectorAll('.agent')].find(r => r.textContent.includes('Agent 2')); row.focus();
-        big.subagents = big.subagents.filter(a => a.id !== 'b0'); update(); page.renderCard();
+        big.subagents = big.subagents.filter(a => a.id !== 'b0'); await redraw();
         if (page.$('card').querySelectorAll('.agent').length !== 5) return fail('the agent never ended on the card');
         if (!document.activeElement?.textContent.includes('Agent 2')) fail(`focus went to ${document.activeElement?.textContent} when an agent ended`);
-        if (!fresh(page.$('card'), page.renderCard)) fail('after an agent ended, the patched card differs from a fresh one');
         row.blur();
+        if (!await freshCard()) fail('after an agent ended, the patched card differs from a fresh one');
       },
-      () => { // a PR above the focused one re-ranks below it, which moves the focused row
+      async () => { // a PR above the focused one re-ranks below it, which moves the focused row
         const rows = [...page.$('card').querySelectorAll('a.pr2')], focused = rows[1], url = focused?.href, above = rows[0].href;
         if (!focused) return fail('no listed PRs to focus');
         focused.focus();
-        big.github = big.github.map(p => p.url === above ? { ...p, need: 'changes' } : p); update(); page.renderCard();
+        big.github = big.github.map(p => p.url === above ? { ...p, need: 'changes' } : p); await redraw();
         if (page.$('card').querySelectorAll('a.pr2')[0].href !== url) return fail('the re-rank didn\'t move the focused row up');
         if (document.activeElement?.href !== url) fail(`focus went to ${document.activeElement?.href || document.activeElement?.className} when a PR re-ranked`);
-        if (!fresh(page.$('card'), page.renderCard)) fail('after a PR re-ranked, the patched card differs from a fresh one');
         focused.blur();
+        if (!await freshCard()) fail('after a PR re-ranked, the patched card differs from a fresh one');
       },
-      () => { // another session's card, after this one closes, starts at the top
+      async () => { // another session's card, after this one closes, starts at the top
         body = q('.cardBody'); body.scrollTop = 40;
-        page.hideCard(); page.enterZone(page.live.moths.get('sess-alpha').zone);
+        page.hideCard(); page.enterZone(page.live.moths.get('sess-alpha').zone); await Promise.resolve();
         if (q('.cardBody').scrollTop !== 0) fail(`sess-alpha's card opened scrolled to ${q('.cardBody').scrollTop}`);
         page.hideCard();
       },

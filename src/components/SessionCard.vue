@@ -3,7 +3,7 @@
 // (store.hovered, from src/scene/card.ts enterZone and hideCard), shows and hides #card, and places it every frame; this
 // only fills it. Relative times count from store.now, which ticks every second. Once hidden, the card keeps showing what it
 // last showed while it fades out; each time it opens it starts afresh (its agents closed, scrolled to the top).
-import { computed, onUpdated, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUpdate, onUpdated, ref, shallowRef, watch } from 'vue';
 import { NEED, dropTip } from '../scene/card';
 import { flyColour } from '../scene/fireflies';
 import { useLanternStore } from '../stores/lantern';
@@ -17,8 +17,14 @@ watch(() => store.hovered, (h, was) => { if (h) shown.value = h; if (h && !was) 
 const session = computed<Session | undefined>(() => { const h = shown.value; return h && 'key' in h ? store.sessions.find(o => o.id === h.key) ?? h.session : undefined; });
 const days = (ms: number) => Math.round(ms / 864e5);
 const where = (cwd: string | null | undefined) => String(cwd || '').split('/').filter(Boolean).pop() || '';
-// a redraw that took away the link #prTip was showing for takes the tip too
-onUpdated(dropTip);
+// A re-render that moves an element (a PR that re-ranks) drops its focus in WebKit, so the focused element gets it back.
+// And one that took away the link #prTip was showing for takes the tip too.
+let focused: Element | null = null;
+onBeforeUpdate(() => { focused = document.activeElement; });
+onUpdated(() => {
+  if (focused !== document.activeElement && focused instanceof HTMLElement && focused.isConnected) focused.focus({ preventScroll: true });
+  dropTip();
+});
 </script>
 
 <template>
