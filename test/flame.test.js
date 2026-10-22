@@ -35,7 +35,7 @@ function context() {
 // damped past overshooting, so it settles without a whip)
 const loose = ctx => ctx.run('Object.assign(FEEL, { stiffness: [70, 70], falloff: [3, 3], damping: [5, 5], inertia: [15, 15] })');
 // a frame of the flame at page time s, `dt` on, burning at full size
-const step = (ctx, s, dt = 1 / 60) => ctx.run(`stepFlame(${dt}, ${s}, { size: 1, flick: 1, pulse: 1 })`);
+const step = (ctx, s, dt = 1 / 60) => ctx.run(`stepFlame(${dt}, ${s}, { size: 1, pulse: 1 })`);
 
 test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between its back paper and the rest, softened, and sheltered from the wind', () => {
   const ctx = context();
@@ -47,7 +47,7 @@ test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between 
     if (paper) assert.ok(!/id="paperGlow"/.test(ctx.els.lantern.innerHTML), `${key}: only the front paper over the flame`);
     assert.strictEqual(ctx.els.lanternPaper.innerHTML === '', !paper, `${key}: nothing under the flame without paper`);
     assert.ok(/id="sparks"/.test(ctx.els.lantern.innerHTML), `${key}: somewhere for sparks`);
-    ctx.run(`drawLight(1 / 60, 3, stepFlame(1 / 60, 3, { size: 1, flick: 1, pulse: 1 }))`);
+    ctx.run(`drawLight(1 / 60, 3, stepFlame(1 / 60, 3, { size: 1, pulse: 1 }))`);
     assert.ok(ctx.run('drawn').fire, `${key}: the shader's flame`);
     assert.strictEqual(ctx.uniforms.uSoft[0] > 0, paper, `${key}: softened behind paper (${ctx.uniforms.uSoft[0]})`);
     // the paper shelters its flame: the wind leans it, but far less than the bare flames'
@@ -186,4 +186,19 @@ test('the links are joined: a kick to the lowest one reaches each link above it 
     assert.ok(first[j] >= first[j - 1], `point ${j + 1} moves at frame ${first[j]}, before point ${j} below it (${first[j - 1]})`);
   }
   assert.ok(first[n - 1] > first[0], `the tip moves after the lowest link: ${first}`);
+});
+
+test('the light flickers with the flame\'s height: brighter as it stretches past its rest height, dimmer as it shrinks', () => {
+  const ctx = context();
+  for (const key of ['chochin', 'candle']) {
+    ctx.run(`applyStyle('${key}')`);
+    for (let i = 0; i < 60; i++) step(ctx, 5);
+    const rest = 96 * ctx.run('style.flame[2]'); // at size 1
+    // the tip held at a height (dt 0 skips the spring), as a fraction of the rest height
+    const at = h => { ctx.run(`flameChain.pts.forEach((p, j) => { p.y = -${h * rest} * (j + 1) / flameChain.pts.length })`); return step(ctx, 5, 0).flick; };
+    const [tall, level, short] = [1.1, 1, 0.9].map(at);
+    assert.ok(tall > 1.03 && tall < 1.1, `${key}: stretched 10% it brightens ${tall}`);
+    assert.ok(Math.abs(level - 1) < 1e-9, `${key}: at its rest height it is unchanged ${level}`);
+    assert.ok(short < 0.97 && short > 0.9, `${key}: shrunk 10% it dims ${short}`);
+  }
 });
