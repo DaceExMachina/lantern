@@ -6,6 +6,13 @@
 // added up on one canvas that only exists while a flash plays, above everything (the lantern's string included);
 // nothing goes near the per-frame-rotated #lantern.
 
+import { live } from './live.js';
+import { $, Q, VIEW } from './scene.js';
+import { devButton, devSelect } from '../dev.js';
+import { hash, seeded } from './lanterns.js';
+import { FIREFLY_BLOOM, FLY, bloomSprite, fireflySwell } from './fireflies.js';
+import { ACHIEVEMENTS } from './stats.js';
+
 const FLASH = { hold: 4000, leave: 2200 }; // ms; the arrival takes as long as the farthest flight needs
 // Two speeds, in screen px per ms as they look in a 1024x768 window (the scene's scale there is about 1.2), scaling with
 // the scene: flying in and off (on average along a path), and swarming in the pill. ?flySpeed=0.4&swarmSpeed=0.05 tries others.
@@ -43,7 +50,7 @@ function aroundPill(s, half, rr, cx, cy) {
   const a = Math.PI / 2 + (s - line) / rr; return [cx - half + Math.cos(a) * rr, cy + Math.sin(a) * rr];
 }
 
-function flashBadge(id) {
+export function flashBadge(id) {
   flashQueue.push(id);
   if (!flashing) nextFlash();
 }

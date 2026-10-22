@@ -1,6 +1,10 @@
 // The lanterns (three that hang and a candle that stands), landing spots on them, the warm and cool palettes, and seeded
 // randomness.
 
+import { live } from './live.js';
+import { $, FLAME_BASE, FLAME_STRETCH, Q, RING, SIZE, VIEW, WING_REACH, ringAt, stretch, unit } from './scene.js';
+import { devSelect, devSlider } from '../dev.js';
+
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame, with `inside` (if any) just in front of the flame; the flame
 // and `inside` slide together as #inside (frame.js farSlide). `flame` places the flame's base and sets its size,
@@ -29,22 +33,22 @@ const SHEEN = (id, stops) => `<linearGradient id="${id}" class="sheen" gradientU
 // The straight and sloping parts (body, frieze, rope and neck bands, shoulder, skirt) are flat polished brass: each face is
 // one flat tone from this ramp (dark to lit), chosen by how squarely it faces the light (frame.js), so the shine steps from
 // face to face as the lantern twists. The onion dome and drop keep their leaning gradients.
-const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
+export const FACET_TONES = ['#2E1E0A', '#4A3213', '#6C4E1F', '#8A6A32', '#A1844B']; // blended smoothly between steps
 // the dev panel's flame (dev.js): hold it at a brightness, 0 (idle ember) to 1 (five sessions working), whatever is running,
 // and force its colour warm or violet, whatever the sessions say (frame.js)
-let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
-let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
+export let fakeFlame = devSlider('Flame', 'flame', 'intensity', 0, 1, 0.05, null, 'Hold the flame at a brightness, from an idle ember to five sessions working, whatever your sessions are doing. Double-click to go back to live', v => { fakeFlame = v; });
+export let fakeLamp = devSelect('Flame', 'lamp', 'state', ['live', 'warm', 'violet'], 'live', 'Show the lantern warm or violet (a session needs you), whatever your sessions say', v => { fakeLamp = v; });
 // a paper lantern's flame, seen through its paper: how soft its tongues' edges are, in scene units (background.js FLAME), and
 // how far the wind leans it (in place of style.flameWind, frame.js stepFlame), the paper sheltering it from most of what leans the candle's (6)
-let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 9, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
-let paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { paperWind = v; });
-let paperBounce = devSlider('Flame', 'paperbounce', 'paper bounce (higher = bouncier)', 0, 1, 0.05, 0.6, 'How much a paper lantern\'s flame bobs in height and kicks when the lantern swings (the candle\'s and the Moroccan\'s are 1; the light follows it)', v => { paperBounce = v; });
-let flickerFollow = devSlider('Flame', 'flicker', 'flicker', 0, 1.5, 0.05, 0.8, 'How much the light brightens and dims as the flame stretches and shrinks (0: steady)', v => { flickerFollow = v; });
+export let paperSoft = devSlider('Flame', 'papersoft', 'softness', 0, 20, 0.5, 9, 'How soft a paper lantern\'s flame looks through its paper', v => { paperSoft = v; });
+export let paperWind = devSlider('Flame', 'paperwind', 'wind', 0, 6, 0.1, 1, 'How far the wind leans a paper lantern\'s flame (the candle\'s leans 6, the Moroccan\'s 2)', v => { paperWind = v; });
+export let paperBounce = devSlider('Flame', 'paperbounce', 'paper bounce (higher = bouncier)', 0, 1, 0.05, 0.6, 'How much a paper lantern\'s flame bobs in height and kicks when the lantern swings (the candle\'s and the Moroccan\'s are 1; the light follows it)', v => { paperBounce = v; });
+export let flickerFollow = devSlider('Flame', 'flicker', 'flicker', 0, 1.5, 0.05, 0.8, 'How much the light brightens and dims as the flame stretches and shrinks (0: steady)', v => { flickerFollow = v; });
 // the lantern's swing (frame.js): its period in seconds, how damped it is (a ratio, lower rocks longer), how many seconds it
 // takes to forget a push the wind holds, and how hard the wind's changes push it; and how many seconds a gust of the
 // scene's wind lasts on average (?period=, ?damping=, ?forget=, ?gain=, ?gust=)
 const SWAY = { period: 3.8, damping: 0.15, forget: 1.4, gain: 1.45, gust: 3.5 };
-const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
+export const sway = Object.fromEntries(Object.entries(SWAY).map(([k, d]) => [k, Q.has(k) ? +(Q.get(k) || d) : d]));
 // One wind for the scene, in the sway's degrees: the dust, ribbon and fireflies feel it as it blows, the lantern swings
 // with it a moment later (its tassel and knot tail LAG seconds behind). Smooth noise in time: every sway.gust seconds on
 // average a new strength and side, eased between, mostly mild (the power of 1.5) so the strong gusts stand out from
@@ -60,7 +64,7 @@ const noise = x => {
   const f = (x - knotAt(i)) / (knotAt(i + 1) - knotAt(i));
   return knot(i) + (knot(i + 1) - knot(i)) * f * f * (3 - 2 * f);
 };
-const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
+export const GUST = s => (noise(s / sway.gust) + noise(s / sway.gust * 3.1 + 50) * 0.25) * 2.6, LAG = 0.6;
 const SHEENS = SHEEN('brassF', [[270, '#281B0A'], [296, '#493313'], [312, '#6C4E1F'], [318, '#896A32'], [325, '#A1844B'], [332, '#896A32'], [340, '#735222'], [356, '#6E4A1A'], [372, '#5A3A14'], [392, '#45290E'], [410, '#3A2410']])
   + SHEEN('brassS', [[270, '#211608'], [284, '#463114'], [292, '#5A431C'], [302, '#3E2B10'], [318, '#5A401C'], [325, '#7D6232'], [332, '#5A401C'], [360, '#4A3010'], [380, '#3E260C'], [410, '#3A2410']])
   + SHEEN('brassE', [[270, '#5A4121'], [310, '#7D6332'], [318, '#90753E'], [324, '#A9915E'], [326, '#B29C6A'], [328, '#A9915E'], [334, '#90753E'], [350, '#7B6232'], [372, '#7A5620'], [400, '#5A3A14'], [410, '#4A2E10']]);
@@ -171,7 +175,7 @@ function bakeFarWall() {
 // new size (if that's off by 10% or more), and swapped in only when decoded, so the lace never blinks to the vector mask.
 // Until the first bake is ready the vector mask stands in.
 let cutouts = { k: 0, want: 0, pic: '' }, cutoutsMask = null, cutoutsTimer = 0;
-function bakeCutouts() {
+export function bakeCutouts() {
   const m = $('cutouts');
   if (!m || !VIEW.px) return; // not the Moroccan, or not laid out yet
   const show = m => { cutoutsMask = m; m.style.maskType = 'alpha'; m.innerHTML = `<image href="${cutouts.pic}" x="260" y="120" width="160" height="380" preserveAspectRatio="none"/>`; };
@@ -257,10 +261,10 @@ const DRUM = (kit, y, half, height, paper = 0) => {
     + (paper ? `<path class="paperLit" d="M${n(cx - half + inset)} ${n(rimY)}${arc(rimY, half - inset, 1)}" fill="none" stroke="currentColor" stroke-width="${rimW}"/>` : '');
 };
 // A string's hash, for seeding.
-const hash = str => [...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+export const hash = str => [...String(str)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
 // Random-looking numbers that every window agrees on: seeded from a session's id, so the lantern in the toolbelt,
 // the Dock app and the screensaver all put a moth in the same place, and the candle's vine grows the same (mulberry32).
-const seeded = seed => () => {
+export const seeded = seed => () => {
   let t = seed = (seed + 0x6D2B79F5) >>> 0;
   t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61);
   return ((t ^ t >>> 14) >>> 0) / 4294967296;
@@ -271,7 +275,7 @@ const seeded = seed => () => {
 // foot are seen from above. makeCandle draws it, and gives its style (STYLES.candle) with the numbers it was drawn from;
 // the tests draw it at other numbers too: the pillar's half-width `r` and crown `rim`, the stem's height `stem`, and the
 // drawing's neck `neck`.
-const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
+export const HOP = 16; // how high a restless landed moth hops off its spot (mothTarget)
 // Landing spots run from 0.5 - PERCH_SPREAD to 0.5 + PERCH_SPREAD of the way down a body (perchAt).
 const PERCH_SPREAD = 0.44;
 function makeCandle({ r: R = 50, rim = 275, stem: STEM = 41, neck = 460 } = {}) {
@@ -678,7 +682,7 @@ const MOROCCAN_EDGES = `<g fill="none" stroke="${BRASS.lit}" stroke-width=".7"><
 const MOROCCAN_PATINA = `<g fill="none" stroke="#4A3B18" stroke-opacity=".6"><path d="M314 295h52v108h-52ZM282 295h22v108h-22ZM376 295h22v108h-22Z" stroke-width="1.4"/>
   <path d="M277 290.8h126M277 407.2h126M277 414h126" stroke-width="1.2"/><path d="M299 248h6v8h-6ZM308 248h6v8h-6ZM323 248h9v8h-9ZM335.5 248h9v8h-9ZM348 248h9v8h-9ZM366 248h6v8h-6ZM375 248h6v8h-6Z"/></g>
   ${[312.5, 367.5, 280.5, 305.5, 374.5, 399.5].flatMap(x => [293.5, 404.5].map(y => `<circle cx="${x}" cy="${y}" r="1.9" fill="#4A3B18" opacity=".5"/><circle cx="${x}" cy="${y}" r="1" fill="${BRASS.lit}"/>`)).join('')}`;
-const STYLES = {
+export const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, flameWind: paperWind, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
     surface: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: BARREL.half }, // a straight cylinder
@@ -765,21 +769,21 @@ const STYLES = {
   candle: makeCandle(),
 };
 // The bookmark's colours, picked in the settings menu (settings.ribbon): front, back and edge.
-const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
+export const RIBBONS = /** @type {Record<string, [string, string, string]>} */ ({
   cerulean: ['#4385B1', '#29567A', '#0D2A44'], madder: ['#A8433A', '#712A25', '#36110E'], ochre: ['#C08A2E', '#82601F', '#3B280A'],
   moss: ['#6E8B3F', '#4A5E29', '#1E2A0E'], plum: ['#7E4B8C', '#55325F', '#25132B'], ink: ['#46526E', '#2C344A', '#0F131D'],
 });
-function paintRibbon(name) {
+export function paintRibbon(name) {
   if (!RIBBONS[name]) name = 'cerulean';
   RIBBONS[name].forEach((c, i) => document.documentElement.style.setProperty(['--ribbonFront', '--ribbonBack', '--ribbonEdge'][i], c));
   for (const b of $('ribbons')?.children || []) b.setAttribute('aria-pressed', String(/** @type {HTMLElement} */ (b).dataset.name === name));
 }
 // which lantern is shared by every window (Dock app, iTerm panel, screensaver): the server keeps it in settings.json
-let style = STYLES.barrel;
+export let style = STYLES.barrel;
 // The hanging line from the top of the window down to where the lantern's own drawing starts: a string, or for the Moroccan
 // its chain, link after link (alternating face-on and edge-on) all the way up. Redrawn when the window's top moves. A
 // standing lantern has none; its pedestal's column runs down to the window's bottom edge instead.
-function drawHang() {
+export function drawHang() {
   const h = $('hang');
   const column = style.stands && $('cdColumn');
   live.cdLeaves = null; // drawLeaves finds them again
@@ -791,7 +795,7 @@ function drawHang() {
     links += `<ellipse cx="340" cy="${y}" rx="${k % 2 ? 3.2 : 2.2}" ry="${k % 2 ? 4 : 5}"/>`;
   h.innerHTML = links;
 }
-function applyStyle(key) {
+export function applyStyle(key) {
   style = STYLES[key] || STYLES.barrel;
   const [fx, fy, fk] = style.flame;
   const back = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
@@ -834,7 +838,7 @@ function applyStyle(key) {
 // on the paper as the lantern sways, and its moth rides it.
 const STARTS = 0.75;
 /** @returns {[number, number, number[]]} */
-function perchAt(home, along) {
+export function perchAt(home, along) {
   const { top, bottom, half } = style.body, mid = (top + bottom) / 2, spread = (bottom - top) * PERCH_SPREAD, [hx, hy] = stretch(home);
   const side = hx < 340 ? -1 : 1, start = u => { const y = mid + STARTS * spread * (1 - 2 * u); return [340 + side * half(y) / 3, y]; };
   // which side of the family's line u the home is on (+ or -), and so which one it's on: halve in on where that flips
@@ -858,23 +862,23 @@ function perchAt(home, along) {
 }
 
 // warm = everyone busy, cool = someone needs me; everything crossfades between the two
-const WARM = { halo: '#FF9F45', outer: '#F7913F', mid: '#FFC266', core: '#FFF4D6', base: '#6C8CFF', glow: '#F7B267',
+export const WARM = { halo: '#FF9F45', outer: '#F7913F', mid: '#FFC266', core: '#FFF4D6', base: '#6C8CFF', glow: '#F7B267',
   paper: '#FFB85C', thread: '#E8B48A', rings: ['#3A3050', '#4A3B58', '#6A4A58'] };
-const COOL = { halo: '#8C6CFF', outer: '#7A63F0', mid: '#9FB6FF', core: '#F0F2FF', base: '#D2B4FF', glow: '#9D7CF5',
+export const COOL = { halo: '#8C6CFF', outer: '#7A63F0', mid: '#9FB6FF', core: '#F0F2FF', base: '#D2B4FF', glow: '#9D7CF5',
   paper: '#A99BFF', thread: '#B6A6F5', rings: ['#2E2E58', '#3A3A6E', '#4E4A86'] };
-const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // singed: the turn ended in an API error
+export const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // singed: the turn ended in an API error
 // An idle session's moth resting on the lantern: a touch of the calling violet (frame.js eases it 0.15 of the way), then
 // backlit against the paper. Mostly grey: mix(mix(MOTH_IDLE, MOTH_CALL, 0.15), '#2B2440', 0.45).
-const MOTH_RESTING = '#8B7FA2';
+export const MOTH_RESTING = '#8B7FA2';
 
 // A faint tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ.
-function tintFor(s) {
+export function tintFor(s) {
   const hue = (hash(s.cwd.split('/').filter(Boolean).pop()) % 360 + (hash(s.id) % 29) - 14 + 360) % 360;
   const l = 0.72, a = 0.55 * Math.min(l, 1 - l), f = n => { const k = (n + hue / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
   return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 }
 
-const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
-const mix = (a, b, t) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t).toString(16).padStart(2, '0')).join('');
+export const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+export const mix = (a, b, t) => '#' + hex(a).map((v, i) => Math.round(v + (hex(b)[i] - v) * t).toString(16).padStart(2, '0')).join('');
 // cheap smooth noise: a few sines at unrelated frequencies
-const wobble = (s, k) => Math.sin(s * 2.3 + k) * 0.6 + Math.sin(s * 5.1 + k * 1.7) * 0.3 + Math.sin(s * 11.7 + k * 0.6) * 0.1;
+export const wobble = (s, k) => Math.sin(s * 2.3 + k) * 0.6 + Math.sin(s * 5.1 + k * 1.7) * 0.3 + Math.sin(s * 11.7 + k * 0.6) * 0.1;

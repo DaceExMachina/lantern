@@ -1,5 +1,19 @@
 // Wiring, run last once everything is defined: the live connection to the server, controls, and the animation clock.
 
+import { live } from './scene/live.js';
+import { $, Q, post } from './scene/scene.js';
+import { devKey, toggleDevPanel } from './dev.js';
+import { RIBBONS, STYLES, applyStyle, paintRibbon, style } from './scene/lanterns.js';
+import { showPencil } from './scene/pencil.js';
+import { renderGitHub } from './scene/github.js';
+import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state.js';
+import { fitView, frame } from './scene/frame.js';
+import { lanternText, setLanternText } from './scene/pages.js';
+import { clickZone, enterZone, hideCard, renderCard, renderSidebar, tapZone, zoneAt, zones } from './scene/card.js';
+import { MIN, loadStats } from './scene/stats.js';
+import { maybeRecap, openRecap } from './scene/recap.js';
+import { flashBadge } from './scene/flash.js';
+
 const es = new EventSource('/events');
 es.addEventListener('reviews', e => { live.reviews = JSON.parse(e.data); }); // PRs waiting on my review (GitHub status on)
 es.addEventListener('prose', e => { live.recentProse = JSON.parse(e.data); live.pagesData = true; }); // words from recent transcripts, for the barrel's pages

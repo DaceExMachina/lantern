@@ -5,6 +5,8 @@
 // Every value is kept in the URL as ?key=value (left out while it's the default) and applied live by its onChange.
 // Sections show in the order they're first used; double-clicking a row puts it back to its default.
 
+import { Q } from './scene/scene.js';
+
 const devRows = [];
 let devPanel = null;
 const devValue = (key, def) => {
@@ -14,19 +16,19 @@ const devValue = (key, def) => {
 };
 const devControl = (row, onChange) => { devRows.push({ ...row, onChange }); return devValue(row.key, row.def); };
 /** @returns {any} */
-const devSlider = (section, key, label, min, max, step, def, title, onChange) => devControl({ section, key, label, title, def, kind: 'range', min, max, step }, onChange);
+export const devSlider = (section, key, label, min, max, step, def, title, onChange) => devControl({ section, key, label, title, def, kind: 'range', min, max, step }, onChange);
 /** @returns {any} */
-const devToggle = (section, key, label, def, title, onChange) => devControl({ section, key, label, title, def, kind: 'checkbox' }, onChange);
+export const devToggle = (section, key, label, def, title, onChange) => devControl({ section, key, label, title, def, kind: 'checkbox' }, onChange);
 /** @returns {any} */
-const devSelect = (section, key, label, options, def, title, onChange) => devControl({ section, key, label, title, def, kind: 'select', options }, onChange);
-const devButton = (section, label, title, action) => { devRows.push({ section, label, title, kind: 'button', onChange: action }); };
+export const devSelect = (section, key, label, options, def, title, onChange) => devControl({ section, key, label, title, def, kind: 'select', options }, onChange);
+export const devButton = (section, label, title, action) => { devRows.push({ section, label, title, kind: 'button', onChange: action }); };
 
 // the backtick opens and closes the panel, unless you're typing
-function devKey(/** @type {KeyboardEvent} */ e) {
+export function devKey(/** @type {KeyboardEvent} */ e) {
   const t = /** @type {HTMLElement} */ (e.target);
   if (e.key === '`' && !e.metaKey && !e.ctrlKey && !e.altKey && !t.isContentEditable && !t.matches?.('textarea, input:not([type=range], [type=checkbox])')) toggleDevPanel();
 }
-function toggleDevPanel() {
+export function toggleDevPanel() {
   if (devPanel) { devPanel.hidden = !devPanel.hidden; return; }
   devPanel = document.createElement('div');
   devPanel.style.cssText = 'position: fixed; top: var(--space-3); left: var(--space-3); z-index: var(--z-overlay); width: 260px; max-height: calc(100vh - 24px); overflow-y: auto;'

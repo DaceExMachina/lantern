@@ -1,21 +1,26 @@
 // Fireflies: one per PR, swarming around their moth's home.
 
+import { live } from './live.js';
+import { CX, VIEW } from './scene.js';
+import { devButton } from '../dev.js';
+import { GUST, hash, hex, mix, seeded } from './lanterns.js';
+
 // ---- fireflies -----------------------------------------------------------------
 // One per PR, keyed by its URL. The colour says what it needs (swarm says how they come and go). Failing checks swell
 // faster. Drafts are amber, and one waiting on review is sky blue.
-const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '#FFD27A', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
+export const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '#FFD27A', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
 // A firefly is light, drawn by the background shader (background.js) under the SVG scene: a white-hot core in a bloom
 // of its colour, fading into a deeper, more saturated haze, adding up where glows cross. Each frame the fireflies and
 // the stale wisps (stale.js) leave theirs in flyLights (x, y, radius, brightness, r, g, b apiece) for it to draw.
-const FIREFLY_BLOOM = 50; // the bloom's radius, in scene units, at a swell's midpoint
-const FLY_LIGHTS_MAX = 128, flyLights = new Float32Array(FLY_LIGHTS_MAX * 7);
-const addFlyLight = (x, y, r, glow, col) => { if (live.flyLightN < FLY_LIGHTS_MAX) flyLights.set([x, y, r, glow, ...hex(col).map(v => v / 255)], 7 * live.flyLightN++); };
+export const FIREFLY_BLOOM = 50; // the bloom's radius, in scene units, at a swell's midpoint
+export const FLY_LIGHTS_MAX = 128, flyLights = new Float32Array(FLY_LIGHTS_MAX * 7);
+export const addFlyLight = (x, y, r, glow, col) => { if (live.flyLightN < FLY_LIGHTS_MAX) flyLights.set([x, y, r, glow, ...hex(col).map(v => v / 255)], 7 * live.flyLightN++); };
 // Always lit, easing a bit brighter over a second or two and back, on each firefly's own slow, uneven rhythm (two waves
 // that never line up the same way twice); failing checks swell faster. 0 to 1, at `s` seconds.
-const fireflySwell = (s, ph, rate = 1.1) => Math.max(0, 0.6 * Math.sin(s * rate * 0.9 + ph) + 0.4 * Math.sin(s * rate * 0.37 + ph * 2.3)) ** 2;
+export const fireflySwell = (s, ph, rate = 1.1) => Math.max(0, 0.6 * Math.sin(s * rate * 0.9 + ph) + 0.4 * Math.sin(s * rate * 0.37 + ph * 2.3)) ** 2;
 // The same light as a picture, for the badge flash's canvas (flash.js), which sits above everything and adds these on
 // ('lighter'): the shader's falloff in background.js worked out once per colour, `size` px across. Keep the two in step.
-function bloomSprite(col, size) {
+export function bloomSprite(col, size) {
   const c = document.createElement('canvas'), g = c.getContext('2d');
   c.width = c.height = size;
   const img = g.createImageData(size, size), v = hex(col).map(x => x / 255), m = Math.max(...v), deep = v.map(x => Math.min(1, Math.max(0, m - (m - x) * 1.8)));
@@ -30,7 +35,7 @@ function bloomSprite(col, size) {
   g.putImageData(img, 0, 0);
   return c;
 }
-const lanternFlies = new Map(); // reviews requested from me hang around the lantern itself
+export const lanternFlies = new Map(); // reviews requested from me hang around the lantern itself
 // How a firefly comes and goes. Everything runs off the wall clock from when the server saw the change (a PR's `seen`
 // and `since`, in ms), along a path seeded by its URL, so every window plays it at the same moment the same way:
 // - a new PR's flies in from the window's edge nearest its swarm (an entrance you can follow; sparking out of its moth
@@ -47,7 +52,7 @@ const LEAVING = new Set(['merged', 'closed']);
 // A moth's PRs in the order its fireflies are kept (it shows at most 10): ones flying off first so a merge isn't cut, then
 // the ones that need me, then the rest. A merged or closed PR with no firefly of its own yet (`flies` has none) is dropped:
 // swarm never makes one for it, so it would only take a place from a firefly that's showing.
-const byUrgency = (prs, flies) => {
+export const byUrgency = (prs, flies) => {
   const rank = p => LEAVING.has(p.need) ? 0 : ['ready', 'failing', 'changes'].includes(p.need) ? 1 : 2;
   return prs.filter(p => !LEAVING.has(p.need) || flies?.has(p.url)).sort((a, b) => rank(a) - rank(b));
 };
@@ -96,7 +101,7 @@ function loopStart(d) {
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
 // Its circling, wobble, wind and swell run off the wall clock too, so every window has each firefly in the same spot.
-function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
+export function swarm(flies, want, [cx, cy], [rMin, rMax], dt, now = Date.now()) {
   const s = now / 1000;
   if (flyTry.size) { want = new Map(want); for (const [url, t] of flyTry) if (t.flies === flies) want.set(url, { ...want.get(url), ...t }); }
   for (const [url, p] of want) if (!flies.has(url) && !LEAVING.has(p.need)) {

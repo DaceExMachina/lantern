@@ -2,7 +2,7 @@
 // stays in that module; this holds the rest, mostly what events.js hears from the server. Plain on purpose: frame()
 // reads it every frame.
 
-const live = {
+export const live = {
   // ---- from the server's event stream (events.js)
   raw: [], // the sessions as the server sent them (state.js sync turns them into `sessions` and moths)
   reviews: [], // PRs waiting on my review (GitHub status on)

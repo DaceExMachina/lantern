@@ -1,20 +1,26 @@
 // Sessions from the server, turned into moths (session moths and their agents), with their hover areas.
 
-let sessions = [];
+import { live } from './live.js';
+import { $, AMBIENT, CX, CY, EDGES, NS, SIZE, WING_SIDE, WING_UP, pathOf, post, ringHome, stretch } from './scene.js';
+import { hash, seeded } from './lanterns.js';
+import { hoverZone } from './card.js';
+import { alertMe } from './notify.js';
+
+export let sessions = [];
 let seenWaiting = new Set(), nextUp = {}; // nextUp: where each status bar count's clicks have got to
 // what the server sends, and the settings, are in live.js
-const quietEndLabel = () => { const [h, m] = live.quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
+export const quietEndLabel = () => { const [h, m] = live.quietEnd.split(':').map(Number); return `${h % 12 || 12}${m ? ':' + String(m).padStart(2, '0') : ''}${h < 12 ? 'am' : 'pm'}`; };
 // When the lantern was last violet. Each window keeps its own, from when it last saw violet (or opened), since the
 // server doesn't say yet; windows opened at different times can differ.
 let violetAt = Date.now();
 // quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
-const quiet = () => live.quietUntil > Date.now();
-const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
+export const quiet = () => live.quietUntil > Date.now();
+export const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
 // Which of the status bar's counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
 // waits, snoozed (until it does something new, or for quiet hours) or needing me.
 const restOf = s => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
 
-function sync() {
+export function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
   // orbiting (like agents do) and doesn't count as needing me.
   const alive = new Set(live.raw.map(s => s.id));
@@ -101,7 +107,7 @@ function sync() {
   seenWaiting = new Set(waiting.map(s => s.id));
 }
 
-function el(tag, attrs = {}) {
+export function el(tag, attrs = {}) {
   const n = document.createElementNS(NS, tag);
   for (const k in attrs) n.setAttribute(k, attrs[k]);
   return n;
@@ -119,7 +125,7 @@ function mothNode() {
 
 // A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.
 // A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
-function hoverArea(m, at) {
+export function hoverArea(m, at) {
   // clicking brings the session's terminal tab (or Claude app session) to the front (a subagent focuses its parent session)
   const zone = hoverZone(m, () => post('/focus', { id: m.key }), 48, at);
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity

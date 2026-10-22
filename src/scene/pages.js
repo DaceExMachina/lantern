@@ -15,7 +15,12 @@
 // paper is at its height. It's redrawn only when a fade has moved enough to see, a couple of times a second at most,
 // never per animation frame. In a window too small to read the words (the iTerm toolbelt), none of it runs.
 
-let lanternText = 'sessions';
+import { live } from './live.js';
+import { $ } from './scene.js';
+import { mix, style } from './lanterns.js';
+import { cool, level } from './frame.js';
+
+export let lanternText = 'sessions';
 // The paper's geometry comes from the lantern (style.surface, see lanterns.js): its middle and width, the heights of its
 // wires, and how much each bows at the front. `lines` lines of type share each gap between wires, riding the bow.
 const INK = { warm: '#5A3420', cool: '#2E2350' };
@@ -334,7 +339,7 @@ addEventListener('resize', () => legible() ? wakePages() : pagesTimer && sleepPa
 
 // Turning words off takes the ink out quickly (then the timer stops); turning them on brings a full page in the way the
 // first appearance does, from the words already here. Called by main.js with the shared setting.
-function setLanternText(value) {
+export function setLanternText(value) {
   if (value === lanternText) return;
   lanternText = value;
   const now = performance.now();

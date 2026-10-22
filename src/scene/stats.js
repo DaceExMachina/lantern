@@ -1,23 +1,28 @@
 // The stats panel (Stats in the settings menu): today's numbers from the event log (GET /stats), the day ribbon,
 // and the week before as mini ribbons. Hygiene over volume: the headline is how much of the moths' time was warm.
 
-const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+import { live } from './live.js';
+import { $ } from './scene.js';
+import { COOL, MOTH_CALL, MOTH_IDLE, MOTH_RESTING, WARM, mix } from './lanterns.js';
+import { ago, tipSpot } from './card.js';
+
+export const MIN = 60 * 1000, DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // The middle and bottom strips use the moths' own colours (lanterns.js, as frame.js's mothColour blends them): working
 // in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour; snoozed for good,
 // sleeping, counts as snoozed here, since the two can't be told apart on the graph).
-const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
+export const MOTHS = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
 const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050' };
 
 // the day a time falls on (yyyy-MM-dd): a day starts at the day rollover (dayStart) and is named for the date it starts on
-const dayKey = t => { const d = new Date(t), [h, m] = live.dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
-const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+export const dayKey = t => { const d = new Date(t), [h, m] = live.dayStart.split(':').map(Number); if (d.getHours() * 60 + d.getMinutes() < h * 60 + m) d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+export const clock = t => new Date(t).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
 // The ribbon's slices for one day: from the first session that day to `end` (now, or the last session's end).
 // Each slice blends what overlapped it: how much the app ran, was violet or quiet, and how much moth time was waiting.
 // The working band comes from the five-minute gauges (the latest one at the slice's middle), so it's coarser than the rest.
 // So does the snoozed share of waiting before the log first wrote a snoozed span (it only counts snoozes by hand).
 // Before the log wrote sleeping spans, sleeping waits count as snoozed.
-function slices(day, spans, gauges, count) {
+export function slices(day, spans, gauges, count) {
   const since = Math.min(Infinity, ...spans.filter(s => s[0] === 'snoozed').map(s => s[1]));
   const alive = spans.filter(s => s[0] === 'alive' && s[2] > day.start && s[1] < day.end);
   if (!alive.length) return null;
@@ -72,7 +77,7 @@ function ribbon(r, w, h) {
 }
 
 // A day's ribbon with its axis and a legend of the moth states (snoozed counts sleeping too) with their times, for the stats panel and the recap. `end` labels the right edge.
-const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
+export const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
   <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background: var(--state-${k})"></i>${k === 'snoozed' ? 'snoozed / sleeping' : k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
 
@@ -82,7 +87,7 @@ const dayRibbon = (r, end) => `<div class="dayRibbon"><div class="ribbon">${ribb
 // Hovering the ribbon swaps them for that moment's lantern state and share of moths flying (see followRibbon).
 const pct = v => v == null ? '–' : `${v}%`;
 const LAMP_WORD = { warm: 'warm', violet: 'waiting', quiet: 'quiet' }; // the lantern's headline while hovering (no lamp at all reads "off")
-const headline = d => `<div class="headline">
+export const headline = d => `<div class="headline">
   <div><b data-v="lamp">${pct(d.warmLantern)}</b><span>lantern warmth</span></div>
   <div><b data-v="flying">${pct(d.warmMoths)}</b><span>moths flying</span></div></div>`;
 
@@ -91,7 +96,7 @@ const headline = d => `<div class="headline">
 // `moment(t)`, which shows time t (or the totals, for null) as a hover would, and `onMoment` hears each one: the recap
 // moves its constellation's line and lights the star that started then, and drives the ribbon from the constellation.
 const ribbonTaps = new WeakMap(); // each popover's tap-elsewhere listener, dropped when it draws a new ribbon
-function followRibbon(box, r, day, onMoment = t => {}) {
+export function followRibbon(box, r, day, onMoment = t => {}) {
   const el = box.querySelector('.ribbon'), root = el.closest('[popover]');
   const show = s => {
     const t = s && clock(s.a), b = s && states(s), out = s
@@ -123,7 +128,7 @@ function followRibbon(box, r, day, onMoment = t => {}) {
 
 // Badges the server gives from the event log (Stats.swift decides when). They're not sorted into good or bad: what
 // each one means is up to whoever earns it. [name, how it's earned]
-const ACHIEVEMENTS = {
+export const ACHIEVEMENTS = {
   warm_all_day: ['Warm all day', 'The lantern stayed warm nine tenths of a day with sessions running'],
   clear_night: ['Clear night', 'No stale PRs for a whole week'],
   small_batches: ['Small batches', 'Never more than 3 fireflies in flight for a week'],
@@ -144,7 +149,7 @@ const ACHIEVEMENTS = {
   ghosted: ['Ghosted', 'A moth waited 3 hours or more'],
   snooze_champion: ['Snooze Button Champion', 'Snoozed 10 waits in one day'],
 };
-const badge = (id, extra = '', unearned = false) => {
+export const badge = (id, extra = '', unearned = false) => {
   const [name, how] = ACHIEVEMENTS[id] || [id, ''];
   return `<button class="badge${unearned ? ' unearned' : ''}" data-id="${id}" aria-label="${name}: ${how}">${name}${extra}</button>`;
 };
@@ -227,7 +232,7 @@ function renderStats(j) {
   restoreBadge($('statsWeek'));
 }
 
-async function loadStats() {
+export async function loadStats() {
   try { renderStats(await (await fetch('/stats')).json()); }
   catch { $('statsBody').innerHTML = '<p class="dim">Couldn’t read the stats. Is the Lantern app running?</p>'; }
 }

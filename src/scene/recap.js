@@ -3,6 +3,14 @@
 // is looked at the next day (whichever comes first; settings.recapSeen remembers the last day shown, for every
 // window), and from the stats panel for any day of the past week.
 
+import { live } from './live.js';
+import { $, post } from './scene.js';
+import { WARM, mix } from './lanterns.js';
+import { sessions } from './state.js';
+import { ago, line, prRows } from './card.js';
+import { box } from './notify.js';
+import { MIN, MOTHS, badge, clock, dayKey, dayRibbon, followRibbon, headline, slices } from './stats.js';
+
 const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
 // Each session alive that day, from the log: when it ran, how long it waited on me (snoozed waits too, as in warm
@@ -164,7 +172,7 @@ function renderRecap(j, i) {
 
 // Shows day `i` of /stats (the last one is today). `auto` is the lantern opening it by itself: it marks the day as
 // seen for every window, and says so in a notification when "notify me" is on.
-async function openRecap(i, auto = false) {
+export async function openRecap(i, auto = false) {
   const j = await (await fetch('/stats')).json(), d = j.days[i];
   const isToday = i === j.days.length - 1;
   if (auto) {
@@ -185,7 +193,7 @@ async function openRecap(i, auto = false) {
 // Yesterday's recap, the first time this window is looked at on a new day, unless a recap since then was shown; today's
 // when quiet hours start. Only the full window does this (not the iTerm panel or a screensaver), and only once settings
 // have said what was seen.
-function maybeRecap(quietStarted = false) {
+export function maybeRecap(quietStarted = false) {
   if (document.body.matches('.panel, .screensaver, .ambient') || document.hidden || live.recapSeen === null) return;
   const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
   const today = dayKey(Date.now()), [i, day] = quietStarted && live.recapSeen < today ? [7, today] : [6, dayKey(yesterday.getTime())];

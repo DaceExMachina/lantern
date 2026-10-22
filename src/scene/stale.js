@@ -6,10 +6,17 @@
 // carries onto other displays, so they drift instead of lying anywhere. Shown unless turned off in the settings
 // menu (quiet hours leave them be).
 
+import { live } from './live.js';
+import { $, VIEW, WING_SIDE, WING_UP, flapWing, post, stretch } from './scene.js';
+import { GUST, hash, mix, seeded, style } from './lanterns.js';
+import { FLY, addFlyLight } from './fireflies.js';
+import { put } from './frame.js';
+import { NEED, hoverZone, line, make, morph, prRows, zones } from './card.js';
+
 const STALE_MAX = 30;
 const wisps = new Map(); // url -> wisp
 let staleSeeded = false; // the first list is simply there; later arrivals fade in
-const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
+export const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
 
 function makeWisp(p) {
   const rand = seeded(hash(p.url));
@@ -41,7 +48,7 @@ function makeGhost(o) {
 // wing's outline (pathOf's two curves from the root out and back) sampled into a fan from the root, which the wing
 // shapes are star-shaped about. `at` takes a point on the moth to the scene.
 const WING_STEPS = 6, GHOST_TRIS = 2 * WING_STEPS - 1; // points along each curve, triangles per wing
-const ghostWings = new Float32Array(GHOSTS_MAX * 2 * GHOST_TRIS * 9);
+export const ghostWings = new Float32Array(GHOSTS_MAX * 2 * GHOST_TRIS * 9);
 function addGhostWing(pts, at, alpha) {
   const q = (a, c, b, t) => at([0, 1].map(k => (1 - t) * (1 - t) * a[k] + 2 * (1 - t) * t * c[k] + t * t * b[k]));
   const rim = [];
@@ -86,7 +93,7 @@ function planStale(s, loose) {
 }
 // One step of a critically damped spring, solved exactly so any frame length is stable: from rest it eases in, and it
 // eases out into the target without overshooting. Peak speed is about 0.37 * k * the distance; 95% there after 4.7 / k s.
-function settle(x, v, target, k, dt) {
+export function settle(x, v, target, k, dt) {
   const d = x - target, c = v + k * d, e = Math.exp(-k * dt);
   return [target + (d + c * dt) * e, (v - k * c * dt) * e];
 }
@@ -102,7 +109,7 @@ function driftTo(o, dt, s, sway) {
   return [Math.max(x0 + 24, Math.min(x0 + w - 24, x)), Math.max(y0 + 24, Math.min(y0 + h - 30, y))];
 }
 
-function drawStale(dt, s) {
+export function drawStale(dt, s) {
   const show = live.staleOn, list = live.stalePRs; // turning it off just hides them
   const now = Date.now() / 1000; // they move on the wall clock, so every window (app, panel, screensaver) has them in the same places
   const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 30 drift, the oldest cloud up
@@ -167,7 +174,7 @@ function drawStale(dt, s) {
 }
 
 // a ghost moth's card: the old session, when it was last active, and the stale PRs it made
-function renderGhostCard(m) {
+export function renderGhostCard(m) {
   const h = make('h3', '', m.o.title || m.o.id.slice(0, 8), make('span', 'chip idle', make('span', 'face', 'gone quiet'))); // the pill is its face, as on a session's card
   const days = Math.round((Date.now() - m.o.last) / 864e5), where = String(m.o.cwd || '').split('/').filter(Boolean).pop() || '';
   morph($('card'), [h, line(`${where ? where + ' · ' : ''}last active ${days ? `${days} days ago` : 'today'}`, 'dim'), ...prRows(m.prs)]);
@@ -175,7 +182,7 @@ function renderGhostCard(m) {
 }
 
 // a stale PR's card: what it is, how long since anyone touched it, and what it needs
-function renderStaleCard(p) {
+export function renderStaleCard(p) {
   const h = make('h3', '', p.label, make('span', 'chip idle', make('span', 'face', 'stale')));
   const days = Math.max(7, Math.round((Date.now() - Date.parse(p.updatedAt)) / 864e5));
   const made = p.owner ? [line(`Made by ${p.owner.title || 'an old session'}`, 'dim')] : [];

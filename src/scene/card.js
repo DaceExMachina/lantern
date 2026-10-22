@@ -1,17 +1,23 @@
 // The hover card for a moth: its session, what it needs from you, its PRs and agents.
 
+import { live } from './live.js';
+import { $, post } from './scene.js';
+import { sessions } from './state.js';
+import { FLY } from './fireflies.js';
+import { renderGhostCard, renderStaleCard } from './stale.js';
+
 // ---- hover card ------------------------------------------------------------------
-const ago = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
+export const ago = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
 const project = s => s.cwd.split('/').filter(Boolean).pop() || '(unknown)';
-function line(text, cls) { const d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; return d; }
+export function line(text, cls) { const d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; return d; }
 // Where a floating tip goes beside `el`, in window px: centred above it, or below when there's no room, and kept 8px
 // inside the window. A badge's tip and an overflow PR's both use it.
-function tipSpot(tip, el) {
+export function tipSpot(tip, el) {
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
   return { left: Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)), top: r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8 };
 }
 // an element with a class and its children (text or nodes)
-function make(tag, cls = '', ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
+export function make(tag, cls = '', ...kids) { const e = document.createElement(tag); if (cls) e.className = cls; e.append(...kids); return e; }
 // `el` with a key, so a redraw (morph) gives each row back its own element: agents by id, PRs by url, sessions by id
 const keyed = (key, el) => { el.dataset.key = key; return el; };
 // Redraws build fresh nodes, then morph patches the live ones to match instead of swapping them in, so whatever the browser
@@ -20,7 +26,7 @@ const keyed = (key, el) => { el.dataset.key = key; return el; };
 // in where they belong; whatever's left over goes. Elements only move when the order changes, and a move drops focus,
 // so the focused element gets it back afterwards.
 const HANDLERS = ['onclick', 'onpointerenter', 'onpointerleave', 'onfocus', 'onblur']; // ponytail: the ones the card sets; add any new one here
-function morph(el, kids) {
+export function morph(el, kids) {
   const old = [...el.childNodes], f = /** @type {HTMLElement | null} */ (document.activeElement);
   const next = kids.map(n => {
     const i = old.findIndex(o => o && o.nodeName === n.nodeName && o.dataset?.key === n.dataset?.key);
@@ -45,9 +51,9 @@ function link({ label, url }, text = label) {
 const short = ms => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
-const NEED = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
+export const NEED = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 // a heading, then one line per PR: a dot in its firefly's colour, the number, its state, and the title cut to fit
-function prRows(prs) {
+export function prRows(prs) {
   return [line(`PRs (${prs.length})`, 'agents'), ...prs.map(p => {
     const row = line('', 'pr'), a = document.createElement('a'), dot = document.createElement('i'), title = document.createElement('span');
     a.href = p.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = p.label;
@@ -65,8 +71,8 @@ function prRows(prs) {
 // WebKit repaint the scene under it.
 /** @typedef {{ x: number, y: number, r: number, off: boolean, target: any, onClick: () => void, cardAt?: string, menu?: () => void }} Zone */
 /** @type {Set<Zone>} */
-const zones = new Set();
-function hoverZone(target, onClick, r, cardAt) {
+export const zones = new Set();
+export function hoverZone(target, onClick, r, cardAt) {
   const zone = { x: 0, y: 0, r, off: false, target, onClick, cardAt };
   zones.add(zone);
   return zone;
@@ -74,7 +80,7 @@ function hoverZone(target, onClick, r, cardAt) {
 // Areas can overlap, so a point belongs to the nearest area that contains it: two neighbours split their overlap down the
 // middle, in whatever order they come. Plain distance, not weighted by radius: weighting would let a flying moth's wide
 // area swallow a landed neighbour's own body.
-function zoneAt(zones, x, y) {
+export function zoneAt(zones, x, y) {
   let best = null, near = Infinity;
   for (const z of zones) {
     const d = Math.hypot(x - z.x, y - z.y);
@@ -82,18 +88,18 @@ function zoneAt(zones, x, y) {
   }
   return best;
 }
-function enterZone(a) {
+export function enterZone(a) {
   clearTimeout(live.hideTimer);
   if (live.hovered === a.target && (!a.cardAt || a.target.cardAt === a.cardAt)) return; // already showing it
   live.hovered = a.target; if (a.cardAt) a.target.cardAt = a.cardAt; renderCard();
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
-function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
+export function clickZone(a, shift) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
 // A tap shows the area's card; tapping the same moth again puts it away. (Tapping the card's header runs the action.)
-function tapZone(zone) { if (live.hovered === zone.target) hideCard(); else enterZone(zone); }
-function hideCard() { live.hovered = held = shown = null; openAgents.clear(); prOver.card = ''; $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
+export function tapZone(zone) { if (live.hovered === zone.target) hideCard(); else enterZone(zone); }
+export function hideCard() { live.hovered = held = shown = null; openAgents.clear(); prOver.card = ''; $('card').classList.remove('show'); $('prTip').classList.remove('show'); }
 
-function renderCard() {
+export function renderCard() {
   dropTip();
   const m = live.hovered, s = m?.session;
   if (m?.stale) return renderStaleCard(m.stale);
@@ -276,7 +282,7 @@ function setPins(/** @type {typeof live.pinned} */ pins) {
   renderSidebar();
   if (live.hovered) renderCard(); // its pin shows the change
 }
-function renderSidebar() {
+export function renderSidebar() {
   dropTip();
   for (const id of pinnedLast.keys()) if (!isPinned(id)) pinnedLast.delete(id);
   for (const o of sessions) if (isPinned(o.id)) pinnedLast.set(o.id, o);
@@ -297,7 +303,7 @@ function holdAnchor(zone, x, y) {
   if (!held || held.zone !== zone || Math.hypot(x - held.x, y - held.y) >= CARD_HOLD) held = { zone, x, y };
   return held;
 }
-function placeCard() {
+export function placeCard() {
   if (!live.hovered) return;
   const pt = document.querySelector('svg').createSVGPoint();
   const zone = live.hovered.cardAt === 'flies' && live.hovered.flyZone ? live.hovered.flyZone : live.hovered.zone; // beside whichever area was hovered

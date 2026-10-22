@@ -1,6 +1,13 @@
 // The background drawn on the GPU: rings, glow, the light in the air with moths' shadows in it, dust and the fireflies' light (WebGL), plus
 // the light carried across onto other displays.
 
+import { live } from './live.js';
+import { $, AMBIENT, CHAIN, HEAT_COLUMN, PLUME, PLUMES, Q, SMOKE_COL, TRAIL_POINTS, VIEW, glf } from './scene.js';
+import { hex, style } from './lanterns.js';
+import { flyLights } from './fireflies.js';
+import { WISP_TINT, ghostWings } from './stale.js';
+import { swayAngle } from './frame.js';
+
 // ---- background on the GPU ------------------------------------------------------------------------------
 // The full-screen layer (background, glow rings, soft glow, the light and its shadows, dust, the fireflies' light) is drawn by a WebGL shader on a canvas
 // behind the SVG, so the GPU fills those millions of pixels and the SVG only redraws the lantern, threads and moths.
@@ -8,7 +15,7 @@ const gl = $('bg').getContext('webgl', { alpha: false, antialias: false });
 // Everything on it is soft (glow, smoke, dust, the shimmer), so it's drawn at this share of the screen's resolution and
 // the browser scales it up: at 0.6 that's about a third of the pixels and of the GPU time, and it looks the same, the
 // far wall's lace included (below 0.5 that starts to soften). fitView sizes it.
-const bgScale = 0.6;
+export const bgScale = 0.6;
 // The flame has a canvas of its own, between the lantern's back paper and the rest (index.html), so a WebGL of its own.
 const fgl = $('flame').getContext('webgl', { antialias: false });
 // A GPU reset (sleep, a display change, the GPU process restarting) loses a context and every shader and buffer on it.
@@ -238,7 +245,7 @@ void main() {
 // dust: soft points, positions worked out in JS each frame. The near specks are lit by the lantern: bright and a little
 // bigger where its glow is strong, faint out past it, and in a shadow they fade out (far more steeply than the room dims,
 // so a moth's shadow or a cap's fan reads as a gap in the dust)
-const DUST_DEBUG = Q.has('dustdebug') ? 1 : 0;
+export const DUST_DEBUG = Q.has('dustdebug') ? 1 : 0;
 const CATCH = 6; // how steeply: full light keeps a speck, the paler shadows (0.7 of the light) leave about a tenth
 const DUST = program(`
 attribute vec4 a; uniform vec4 uBox; uniform vec2 uRes; uniform float uNear, uCatch, uDpr; varying float vA, vS, vD;
@@ -312,21 +319,21 @@ const rgb = c => hex(c).map(v => v / 255);
 // the near specks start just outside the lantern's body, so none of them hide behind it; a second display has no
 // lantern, so there both rings fill in to the middle, spread evenly over the area (a square root keeps the centre from crowding)
 const ring = (from, to) => AMBIENT ? to * Math.sqrt(Math.random()) : from + Math.random() * (to - from);
-const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: ring(125, 265), w: (Math.random() - 0.5) * 0.12,
+export const dust = Array.from({ length: 102 }, () => ({ a: Math.random() * 6.28, d: ring(125, 265), w: (Math.random() - 0.5) * 0.12,
   ph: Math.random() * 10, r: 0.7 + Math.random() * 1.2, lift: 0 }));
 // a fainter, wider ring of specks out in the dark, beyond the glow
-const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: ring(230, 340), w: (Math.random() - 0.5) * 0.08,
+export const farDust = Array.from({ length: 78 }, () => ({ a: Math.random() * 6.28, d: ring(230, 340), w: (Math.random() - 0.5) * 0.08,
   ph: Math.random() * 10, r: 0.6 + Math.random() * 0.9, lift: 0 }));
-const dustData = new Float32Array((dust.length + farDust.length) * 4);
+export const dustData = new Float32Array((dust.length + farDust.length) * 4);
 
 // On a second display (the screensaver's ambient view) the lantern is on another screen. The screensaver passes both
 // screens' frames (global points, y up), so its light can carry on from where the lantern's light is, off this screen's edge.
-const REMOTE = (() => {
+export const REMOTE = (() => {
   const f = k => Q.get(k)?.split(',').map(Number);
   const L = f('lantern'), S = f('self');
   return L?.length === 4 && S?.length === 4 && ![...L, ...S].some(isNaN) ? { L, S } : null;
 })();
-function remoteLight() {
+export function remoteLight() {
   const { L: [lx, ly, lw, lh], S: [sx, sy, sw, sh] } = REMOTE;
   // the lantern display's view, worked out the same way fitView does it there
   const kx = Math.max(1, lw / lh), ky = Math.max(1, lh / lw), vw = 600 * kx, vh = 600 * ky, vx = 340 - vw / 2, vy = 320 - vh / 2;
@@ -480,7 +487,7 @@ function drawFlame({ flame: [bx, by, tx, ty], fire: f }) {
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
-function drawBackground(v) {
+export function drawBackground(v) {
   if (!VIEW.box) return; // not laid out yet
   const c = $('bg'), [x, y, w, h] = VIEW.box;
   gl.viewport(0, 0, c.width, c.height);

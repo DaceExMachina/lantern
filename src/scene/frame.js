@@ -1,11 +1,21 @@
 // The animation: one frame of the lantern, flame, moths, threads and fireflies.
 
+import { live } from './live.js';
+import { $, AMBIENT, CHAIN, CX, CY, FLAME_BASE, FLAME_STRETCH, HEAT_COLUMN, LANTERN_SPAN, PLUME, SINGE_REL, SMOKE, SMOKERS, SMOKE_REL, TRAIL, VIEW, WING_REACH, WING_SIDE, WING_UP, caster, cross, dot, facesFlame, flightFrame, lerp3, pathOf, ringPoint, ringPolar, stretch, unit, wing3d, wingsInDepthOrder } from './scene.js';
+import { devSlider, devToggle } from '../dev.js';
+import { COOL, FACET_TONES, GUST, HOP, LAG, MOTH_CALL, MOTH_IDLE, MOTH_SINGED, WARM, bakeCutouts, drawHang, fakeFlame, fakeLamp, flickerFollow, hash, mix, paperBounce, paperSoft, paperWind, perchAt, seeded, style, sway, tintFor, wobble } from './lanterns.js';
+import { el, hoverArea, quiet, sessions } from './state.js';
+import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background.js';
+import { FLY, byUrgency, lanternFlies, swarm } from './fireflies.js';
+import { drawStale, settle } from './stale.js';
+import { hideCard, placeCard, zones } from './card.js';
+
 // ---- animation ---------------------------------------------------------------
-let level = 0, cool = 0, sparkClock = 0, last = performance.now();
+export let level = 0, cool = 0, sparkClock = 0, last = performance.now();
 const sparks = [];
 let pulseIds = 0; // numbers the threads' gradients
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
-const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
+export const put = (el, k, v) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
 // How far out along its line toward home (perchAt) a moth sits when it lands, or after the hop in fidget slot `slot`.
 // Seeded by the session and the slot alone, so every window puts it in the same spot, and a flying moth's thread
@@ -16,7 +26,7 @@ const alongFor = (key, slot) => seeded(hash(`${key}:${slot ?? 'land'}`))();
 // frame() calls fitView each frame, so it follows the window and the pinned sidebar sliding in or out, and only does the work
 // when the size has changed. Each frame, before anything is drawn, so the sidebar's slide never shows a cleared canvas.
 let fitted = '';
-function fitView() {
+export function fitView() {
   const svg = document.querySelector('svg'), { width, height } = svg.getBoundingClientRect(), size = `${width} ${height} ${devicePixelRatio}`;
   if (!width || !height || size === fitted) return;
   fitted = size;
@@ -137,7 +147,7 @@ function drawRibbon(dt, s) {
 
 // One frame: the lantern burns brighter the more sessions work and turns violet while one needs me, then each part
 // draws itself in turn: the lantern and its flame, the moths one by one, the stale wisps, and the light behind it all.
-function frame(t) {
+export function frame(t) {
   fitView(); // the scene's size, should it have changed (scene.js)
   const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
@@ -179,7 +189,7 @@ const pal = k => mix(WARM[k], COOL[k], cool);
 // ---- the lantern -------------------------------------------------------------
 // The lantern's sway on its string, in degrees. Anything attached to the lantern goes through rot(), which turns a point
 // in the lantern's own units with it, about where it hangs from the top of the window.
-let swayAngle = 0;
+export let swayAngle = 0;
 // A fake twist on the chain, in degrees of yaw: the swing alone wouldn't turn the faces to the light, but the brass's lighting
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
 // its own, never past TWIST_MAX. The drawing itself doesn't turn.
