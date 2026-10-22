@@ -1,5 +1,6 @@
 // npm run snapshots [-- --update]: renders the page deterministically and compares it with test/snapshots/*.png.
-// Each scene loads index.html in WebKit with test/snapshots/fixture.js injected (seeded random, a stepped clock, a fake
+// scripts/snapshots.js builds the page, serves it over http and passes this the URL (then --update, if given). Each scene loads
+// that page in WebKit with test/snapshots/fixture.js injected (seeded random, a stepped clock, a fake
 // event stream), inside a borderless window far off screen that is never shown or activated, so nothing appears or takes
 // focus. A pixel differs when any channel is more than TOLERANCE off; any differing pixel fails, and the run writes the
 // new picture and a diff (differences in red over a faded reference) to test/snapshots/out/. --update rewrites the
@@ -16,7 +17,7 @@ let SCENES = [("barrel", "style=barrel&hover", WIDE), ("chochin", "style=chochin
   ("pinned", "style=barrel&pinned", NSSize(width: 1100, height: 700))]
 let FAR = NSScreen.screens.map(\.frame.maxX).max()! + 10000 // beyond every display, never on one (a negative origin once landed on the laptop screen)
 let TOLERANCE = 2
-let update = CommandLine.arguments.contains("--update")
+let base = CommandLine.arguments[1], update = CommandLine.arguments.contains("--update")
 let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
 let refs = root.appendingPathComponent("test/snapshots"), out = refs.appendingPathComponent("out")
 let fixture = try! String(contentsOf: refs.appendingPathComponent("fixture.js"), encoding: .utf8)
@@ -81,7 +82,7 @@ final class Shooter: NSObject, WKNavigationDelegate {
     web.setValue(false, forKey: "windowOcclusionDetectionEnabled") // keep painting although the window is never shown
     web.navigationDelegate = self
     window.contentView = web // never ordered in: it stays off screen and out of the way
-    web.loadFileURL(URL(string: root.appendingPathComponent("index.html").absoluteString + "?" + query)!, allowingReadAccessTo: root)
+    web.load(URLRequest(url: URL(string: base + "?" + query)!))
   }
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { drive() }
   func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { fatalError("\(scene): \(error)") }

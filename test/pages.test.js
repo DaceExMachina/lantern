@@ -11,7 +11,7 @@ const page = vm.createContext({
   URLSearchParams, URL, location: { search: '' }, performance, addEventListener: () => {}, setInterval: () => 7, clearInterval: () => {}, screen: 0.6,
   document: { getElementById: id => id === 'pages' ? { getScreenCTM: () => ({ a: page.screen, b: 0 }), replaceChildren: () => {} } : null },
 });
-for (const f of ['scene', 'dev', 'lanterns', 'pages']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'pages']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 test('the text sleeps in a window too small to read it, and wakes when it grows', () => {

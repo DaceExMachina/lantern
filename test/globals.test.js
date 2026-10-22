@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 test('no top-level name is declared by two page scripts', () => {
-  const dir = path.join(__dirname, '..', 'page'), seen = new Map();
+  const dir = path.join(__dirname, '..', 'public', 'page'), seen = new Map();
   for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.js'))) {
     const source = fs.readFileSync(path.join(dir, file), 'utf8');
     // top-level lines only: declarations at column 0, and every name in a `const a = .., b = ..` list on that line

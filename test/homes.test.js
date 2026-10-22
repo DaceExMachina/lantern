@@ -13,7 +13,7 @@ const stub = new Proxy(function () {}, { get: (_, k) => k === Symbol.toPrimitive
 function open(kx = 1) {
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document: stub,
     alertMe() {} }); // notifications aren't loaded
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => JSON.parse(vm.runInContext(`JSON.stringify((() => { ${code} })())`, page) ?? 'null');
   run(`VIEW.kx = ${kx}`);
   const homes = what => run(`return Object.fromEntries([...moths].filter(([, m]) => !m.leaving && !m.satellite).map(([k, m]) => [k, m.${what}]))`);

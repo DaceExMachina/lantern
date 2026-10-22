@@ -26,7 +26,7 @@ const document = { getElementById: id => els[id] ?? null, querySelectorAll: () =
 // background.js isn't loaded, so drawBackground only records what drawLight gives it, and there's no dust
 const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document, farWallTex: {},
   drawBackground: v => { page.background = v; }, dust: [], farDust: [], dustData: { set() {} } });
-for (const f of ['scene', 'dev', 'lanterns', 'pencil', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+for (const f of ['scene', 'dev', 'lanterns', 'pencil', 'state', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
 const run = code => vm.runInContext(code, page);
 
 const styles = [...run('Object.keys(STYLES)')]; // an array of this realm, so deepStrictEqual compares its items
@@ -113,7 +113,7 @@ test('moths land on the candle\'s wax: below its rim, above its dish and within 
 
 // background.js's flameHalf (a tongue's half-width up it), run as JS: it's written in scalars, so it reads as JS once typed
 const flameHalf = (() => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/);
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8').match(/float flameHalf\(float t\) \{[\s\S]*?\n\}/);
   assert.ok(src, 'background.js has flameHalf');
   return new Function(src[0].replace('float flameHalf(float t)', 'return t =>').replace(/\bfloat /g, 'let ').replace(/\b(sqrt|pow)\(/g, 'Math.$1('))();
 })();
@@ -175,7 +175,7 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
   assert.match(els.lantern.innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
   run(`for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60); drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, flick: 1, pulse: 1 }))`);
   const twist = run('twist'), wall = page.background.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide
-  assert.match(fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8'), /vUv \+ \(warp - vec2\(uSlide, 0\.0\)\)/);
   assert.ok(Math.abs(twist) > 5 && Math.abs(wall) > 1, `a big twist: ${twist}, sliding the far wall ${wall}`);
   const inside = +els.inside.getAttribute('transform').match(/^translate\((\S+) 0\)$/)[1];
   // the light and the shader's flame (its base), turned back into the lantern's own frame, slid along with the cup
@@ -190,7 +190,7 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
 
 // background.js's rimShade, run as JS on drawLight's uniforms: it's written in scalars, so it reads as JS once typed
 const rimShadeFrom = ({ flame: [fx, fy, tx, ty], rim: [x, y, z] }) => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float rimShade\(float px, float py\) \{[\s\S]*?\n\}/);
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8').match(/float rimShade\(float px, float py\) \{[\s\S]*?\n\}/);
   assert.ok(src, 'background.js has rimShade');
   const js = src[0].replace('float rimShade(float px, float py)', 'return (px, py) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|max|abs)\(/g, 'Math.$1(');
   const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -374,7 +374,7 @@ test('the candle\'s vine comes from its seed and the length of its trunk alone: 
   const bottoms = [anchor + 20, anchor + 400, anchor + 1200], svgs = bottoms.map(at);
   assert.strictEqual(at(bottoms[1]), svgs[1], 'drawn twice at one height, the same');
   const again = vm.createContext({ URLSearchParams, location: { search: '' }, performance, document }); // another load of the page
-  for (const f of ['scene', 'dev', 'lanterns', 'pencil']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), again);
+  for (const f of ['scene', 'dev', 'lanterns', 'pencil']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), again);
   assert.strictEqual(vm.runInContext(`STYLES.candle.column(${bottoms[1]})`, again), svgs[1], 'another load draws the same vine');
   assert.ok(pts(svgs[0], anchor).length > 400, `the vine above the anchor is drawn: ${pts(svgs[0], anchor).length} points`);
   assert.ok(leaves(svgs[0], split, anchor) >= 6, `shoots off the trunk between the split and the anchor: ${leaves(svgs[0], split, anchor)}`);

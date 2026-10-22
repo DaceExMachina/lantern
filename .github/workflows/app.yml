@@ -15,6 +15,10 @@ jobs:
     runs-on: macos-latest # Apple silicon
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build # app/build.sh packs dist/ into the app
       - run: sh app/build.sh "$RUNNER_TEMP/apps"
       - run: ditto -c -k --keepParent app/build/Lantern.app Lantern.zip # ditto keeps the signature intact
       - if: inputs.tag || github.event.release.tag_name

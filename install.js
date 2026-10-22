@@ -77,6 +77,15 @@ function build(dir, what, script, done) {
   }
 }
 
+// A checkout builds the page with Vite, which needs Node 20.19 or 22.12 and up. The npm package ships it built.
+function buildPage(dir) {
+  const [major, minor] = process.versions.node.split('.').map(Number);
+  if (!(major > 22 || (major === 22 && minor >= 12) || (major === 20 && minor >= 19))) {
+    throw new Error(`Building the page needs Node 20.19 or 22.12 and up, and this is ${process.versions.node}.`);
+  }
+  for (const args of [['install'], ['run', 'build']]) execFileSync('npm', args, { cwd: dir, stdio: 'inherit' });
+}
+
 function iterm(dir) {
   if (!fs.existsSync(ITERM_SCRIPTS)) return;
   const autoLaunch = path.join(ITERM_SCRIPTS, 'AutoLaunch');
@@ -119,13 +128,14 @@ async function main() {
   fs.mkdirSync(DATA, { recursive: true });
   fs.writeFileSync(SETTINGS, JSON.stringify(settings, null, 2) + '\n');
   process.env.LANTERN_PORT = String(PORT);
+  if (!npx) buildPage(dir);
   // Lantern.app runs the server and opens at login.
   tryRun('pkill', '-f', APP_BIN); // a running copy would keep its old server
   if (!build(dir, 'the app', 'app/build.sh', 'Installed Lantern.app in ~/Applications: it runs the server and opens at login') && !fs.existsSync(APP_BIN)) {
     throw new Error('Lantern.app didn\'t build, see above');
   }
   if (npx) tryRun('defaults', 'delete', 'com.lantern.app', 'pageDir'); // the app serves its own copy of the page
-  else run('defaults', 'write', 'com.lantern.app', 'pageDir', dir); // a checkout: the app serves its index.html, so edits go live
+  else run('defaults', 'write', 'com.lantern.app', 'pageDir', dir); // a checkout: the app serves its dist/ and rebuilds it as you edit, so edits go live
   run('open', ...(process.stdout.isTTY ? [] : ['-g']), APP); // agents running this get it in the background
   build(dir, 'the screensaver', 'screensaver/build.sh', 'Installed the screensaver: pick Lantern in System Settings > Wallpaper > Screen Saver');
   iterm(dir);

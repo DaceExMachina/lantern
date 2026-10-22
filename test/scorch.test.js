@@ -31,7 +31,7 @@ const clock = { wall: BASE };
 function context(origin = 1000, document = undefined) {
   const perf = { t: origin, now: () => perf.t };
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: perf, wall: () => clock.wall, document });
-  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
+  for (const f of ['scene', 'dev', 'lanterns', 'state', 'stale', 'frame', 'card']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
   run('Date.now = () => wall(); style = STYLES.candle; tongue = { cx: 341, half: 11, height: 62 };');
   return { page, run, perf, SCORCH: run('SCORCH'), mothTarget: run('mothTarget'), scorchStep: run('scorchStep'), scorchClock: run('scorchClock'),
@@ -267,7 +267,7 @@ test('nothing grows: 50 scorches on one moth add no elements, keep the spark poo
 
 // background.js's smokeBend, run as JS: it's written in scalars, so it reads as JS once typed
 const smokeBendAt = () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float smokeBend\(float age, float now, float curl\) \{[\s\S]*?\n\}/);
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8').match(/float smokeBend\(float age, float now, float curl\) \{[\s\S]*?\n\}/);
   assert.ok(src, 'background.js has smokeBend');
   const js = src[0].replace('float smokeBend(float age, float now, float curl)', 'return (age, now, curl) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|sin)\(/g, 'Math.$1(');
   return new Function('S_SIZE', 'S_LENGTH', 'RISE', js)(21, 160, 29);
@@ -282,7 +282,7 @@ test('smoke curls into Ss that swell from nothing as it ages', () => {
   assert.notStrictEqual(still(2, 5, 1), still(2, 5 + 41, 1), 'a seed offsets it');
 });
 test('a trail is full width while its head is on the moth, and tapers to a point there once it has stopped following', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'page', 'background.js'), 'utf8').match(/float trailTaper\(float age, float head\) \{.*\}/);
+  const src = fs.readFileSync(path.join(__dirname, '..', 'public', 'page', 'background.js'), 'utf8').match(/float trailTaper\(float age, float head\) \{.*\}/);
   assert.ok(src, 'background.js has trailTaper');
   const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
   const taper = new Function('smoothstep', src[0].replace('float trailTaper(float age, float head) {', 'return (age, head) => {'))(smoothstep);
