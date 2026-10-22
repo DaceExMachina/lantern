@@ -40,7 +40,6 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
   // Port 0: the server takes whichever port is free and says which once it's listening, so no other process can take
   // it first and a slow start only takes longer.
   const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
-    LANTERN_GHBUS_URL: 'http://127.0.0.1:1/events', // nothing listens there, so it never reaches the real ghbus (see fakeGhbus)
     TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
   const child = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'ignore'] });
   t.after(() => child.kill());
@@ -1394,9 +1393,9 @@ test('a session\'s PRs carry when each was opened', async t => {
   const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === 's1' && x.github?.length), 'the session\'s PR');
   assert.deepStrictEqual(s.github.map(p => [p.url, p.createdAt]), [[prUrl(1), opened]]);
 });
-// A stand-in ghbus: an event stream the server subscribes to. `send` writes an event to every open stream. With `flap`,
+// A stand-in lantern-pr: an event stream the server subscribes to. `send` writes an event to every open stream. With `flap`,
 // each stream ends as soon as it starts, before saying anything.
-async function fakeGhbus(t, flap = false) {
+async function fakeLanternPR(t, flap = false) {
   const streams = new Set();
   let connections = 0;
   const server = http.createServer((req, res) => {
@@ -1433,9 +1432,9 @@ const settled = async calls => {
 };
 const lines = (t, re) => t.output().split('\n').filter(l => re.test(l));
 
-test('a ghbus event about a PR refreshes GitHub within a couple of seconds, an issue\'s comment doesn\'t', async t => {
-  const bus = await fakeGhbus(t), { calls } = await counted(t, { LANTERN_GHBUS_URL: bus.url });
-  await until(() => lines(t, /^ghbus connected/).length, 'the server to subscribe');
+test('a lantern-pr event about a PR refreshes GitHub within a couple of seconds, an issue\'s comment doesn\'t', async t => {
+  const bus = await fakeLanternPR(t), { calls } = await counted(t, { LANTERN_PR_URL: bus.url });
+  await until(() => lines(t, /^lantern-pr connected/).length, 'the server to subscribe');
   await settled(calls);
   const before = calls();
   bus.send('issue_comment', { issue: { number: 3 } });
@@ -1445,9 +1444,9 @@ test('a ghbus event about a PR refreshes GitHub within a couple of seconds, an i
   await until(() => calls() > before, 'the event to refresh', 5000);
 });
 
-test('a burst of ghbus events is one refresh', async t => {
-  const bus = await fakeGhbus(t), { calls } = await counted(t, { LANTERN_GHBUS_URL: bus.url });
-  await until(() => lines(t, /^ghbus connected/).length, 'the server to subscribe');
+test('a burst of lantern-pr events is one refresh', async t => {
+  const bus = await fakeLanternPR(t), { calls } = await counted(t, { LANTERN_PR_URL: bus.url });
+  await until(() => lines(t, /^lantern-pr connected/).length, 'the server to subscribe');
   await settled(calls);
   const before = calls();
   for (let i = 0; i < 10; i++) bus.send('check_run');
@@ -1456,23 +1455,23 @@ test('a burst of ghbus events is one refresh', async t => {
   assert.strictEqual(calls(), before + 1);
 });
 
-// A ghbus that answers and hangs up at once (restarting, say) is no connection: each try waits longer than the last,
+// A lantern-pr that answers and hangs up at once (restarting, say) is no connection: each try waits longer than the last,
 // none is logged as connected, and none brings a refresh.
-test('a ghbus that keeps hanging up straight away is retried with backoff, quietly, with no refreshes', async t => {
-  const bus = await fakeGhbus(t, true), { calls } = await counted(t, { LANTERN_GHBUS_URL: bus.url });
+test('a lantern-pr that keeps hanging up straight away is retried with backoff, quietly, with no refreshes', async t => {
+  const bus = await fakeLanternPR(t, true), { calls } = await counted(t, { LANTERN_PR_URL: bus.url });
   await settled(calls);
   const before = calls(), tries = bus.connections();
   await wait(7000); // backing off from 1s, doubling, is at most 3 more tries in 7s; without it, about 7
   assert.ok(bus.connections() - tries <= 3, `${bus.connections() - tries} tries in 7s`);
   assert.strictEqual(calls(), before, 'no refreshes');
-  assert.deepStrictEqual(lines(t, /ghbus/), []);
+  assert.deepStrictEqual(lines(t, /lantern-pr/), []);
 });
 
-test('without ghbus the server refreshes GitHub as before and logs nothing about it', async t => {
-  const { base, calls } = await counted(t); // serve's ghbus address has nothing listening; counted waits for a refresh
+test('without lantern-pr the server refreshes GitHub as before and logs nothing about it', async t => {
+  const { base, calls } = await counted(t); // the harness turns the stream off; counted waits for a refresh
   assert.ok(calls() && (await snapshot(base)).sessions.length, 'the server refreshed and still answers');
-  await wait(3000); // a few refused tries
-  assert.deepStrictEqual(lines(t, /ghbus/), []);
+  await wait(3000); // a few tries, had it been on
+  assert.deepStrictEqual(lines(t, /lantern-pr/), []);
 });
 
 // What the card shows of an agent: its job from the meta file, its model by name from its transcript's `model` attachment (a real
@@ -1847,4 +1846,18 @@ test('a snooze survives a restart, and new activity after it still ends the snoo
   await post(second, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
   await until(async () => (await session(second)).snoozed === false, 'new activity to end the snooze');
   await until(() => JSON.parse(fs.readFileSync(path.join(home2, 'data/settings.json'), 'utf8')).snoozed?.length === 0, 'the ended snooze to leave settings.json');
+});
+
+// The harness (also the preview's server) must not reach the real lantern-pr on this Mac. Listen on its default address if
+// we can; if the real one holds it, its connection would be logged instead.
+test('the test server does not connect to the default lantern-pr stream', async t => {
+  let hits = 0;
+  const trap = http.createServer((req, res) => { hits++; res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.write(': hello\n\n'); });
+  const ours = await new Promise(r => trap.once('error', () => r(false)).listen(8788, '127.0.0.1', () => r(true)));
+  t.after(() => { trap.closeAllConnections(); trap.close(); });
+  await serve(t);
+  await wait(2500);
+  assert.strictEqual(hits, 0, 'nothing connected to the default stream');
+  assert.deepStrictEqual(lines(t, /lantern-pr/), []);
+  if (!ours) t.diagnostic('8788 was taken (the real lantern-pr?), so only the log was checked');
 });
