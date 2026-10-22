@@ -17,8 +17,9 @@ export const CX = 340, CY = 330, FLAME_BASE = 388, FLAME_STRETCH = 1.15;
 export const WING_UP = [[0, 0], [-14, -12], [-2, -18], [6, -14], [0, 0]];
 export const WING_SIDE = [[0, 0], [12, -14], [18, -4], [14, 6], [0, 0]];
 // both wings hinge on the body axis, the line between them (they point at about -96° and -12.5°)
-const AXIS = -54.4 * Math.PI / 180, AU = [Math.cos(AXIS), Math.sin(AXIS)], AN = [-Math.sin(AXIS), Math.cos(AXIS)];
-const EYE = 40; // viewer distance in moth units: smaller means stronger perspective
+const AXIS = -54.4 * Math.PI / 180;
+export const AU = [Math.cos(AXIS), Math.sin(AXIS)], AN = [-Math.sin(AXIS), Math.cos(AXIS)];
+export const EYE = 40; // viewer distance in moth units: smaller means stronger perspective
 // How far a wing tip can reach from the moth's position, per unit of size, with the perspective (see wing3d): w·EYE/√(EYE² − w²),
 // w the wing point furthest from the joint
 export const WING_REACH = (w => w * EYE / Math.sqrt(EYE * EYE - w * w))(Math.max(...[...WING_UP, ...WING_SIDE].map(([x, y]) => Math.hypot(x, y))));

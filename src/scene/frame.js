@@ -193,7 +193,7 @@ export let swayAngle = 0;
 // A fake twist on the chain, in degrees of yaw: the swing alone wouldn't turn the faces to the light, but the brass's lighting
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
 // its own, never past TWIST_MAX. The drawing itself doesn't turn.
-let twist = 0;
+export let twist = 0;
 // How far the twist slides the Moroccan's far wall across, in units (0 without one; the front stays put). The flame, its
 // burner cup and its light sit at the lantern's middle depth, so they slide half as far (#inside, lightAt): they parallax
 // between the front and the far wall.
@@ -203,8 +203,8 @@ const lightAt = () => rot(style.light[0] + farSlide / 2, style.light[1]);
 // The most the twist may turn, in degrees. The target eases into it (tanh) rather than hitting a wall, so a big gust can't
 // spin the faces round. TWIST_GAIN is how strongly it follows the sway, and TWIST_RATE how quickly (per second) the twist
 // catches up with it: the twist trails the swing by about 0.3 s, its weight, where 1.2 had it a sluggish 0.6 s behind
-// (test/page.test.js). Over twenty minutes of normal wind the twist's median is 13, its 90th percentile 32 and its peak 55.
-const TWIST_MAX = 60, TWIST_GAIN = 2.4, TWIST_RATE = 3;
+// (test/page.spec.js). Over twenty minutes of normal wind the twist's median is 13, its 90th percentile 32 and its peak 55.
+export const TWIST_MAX = 60, TWIST_GAIN = 2.4, TWIST_RATE = 3;
 // A flat face's tone: how squarely it faces a light 35 degrees to the left as the lantern twists (`angle` round the lantern,
 // `tilt` up, the light sitting a little above), squared so the tone moves plainly as it turns, with a low floor so a face
 // turned a little away still lifts off the darkest tone as the twist brings it round; blended along FACET_TONES.
@@ -646,11 +646,11 @@ function glideHome(m, dt) {
 // starting at a seeded point in the slot's first `window` seconds. Mostly a breath, `breathe` seconds long: its wings
 // open over 3s, stay open a moment, and close over 3s. Once it has waited 15 minutes it's restless, and about one slot
 // in three is a hop instead, `hop` seconds long, landing on its new spot `lift` of the way in. All in seconds.
-const FIDGET = { slot: 16, window: 8, breathe: 8, hop: 1.6, lift: 0.35 };
+export const FIDGET = { slot: 16, window: 8, breathe: 8, hop: 1.6, lift: 0.35 };
 const fidgetPhase = key => seeded(hash(key + ':fidget'))();
 // Slot n of moth `key`'s fidgets, for a session waiting since `ws` (ms, 0 if it isn't): when it starts (wall-clock
 // seconds) and what it is.
-function fidgetSlot(key, n, ws) {
+export function fidgetSlot(key, n, ws) {
   const rand = seeded(hash(`${key}:fidget:${n}`)), start = (n + fidgetPhase(key)) * FIDGET.slot + rand() * FIDGET.window;
   return { start, kind: ws && start * 1000 - ws >= 15 * 60000 && rand() < 0.35 ? 'hop' : 'breathe' };
 }

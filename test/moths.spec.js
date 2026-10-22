@@ -1,14 +1,10 @@
-// How a moth flies toward a new target (page/frame.js's mothMove): it speeds up and slows down smoothly, the way the
+// How a moth flies toward a new target (src/scene/frame.js's mothMove): it speeds up and slows down smoothly, the way the
 // ghost moths and wisps glide, instead of snapping onto a new heading at full speed.
-const test = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
+import assert from 'node:assert';
+import { test } from 'vitest';
+import { mothMove } from '../src/scene/frame.js';
+import { GUST } from '../src/scene/lanterns.js';
 
-const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance });
-for (const f of ['scene', 'dev', 'lanterns', 'stale', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'public', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
-const mothMove = vm.runInContext('mothMove', page), GUST = vm.runInContext('GUST', page);
 // a moment the wind is still: the first time it changes sign, halved in on; and the first moment it blows about 1.6 to the right
 let calm = 0, hi = 0.05, windy = 0;
 while (Math.sign(GUST(hi)) === Math.sign(GUST(calm))) { calm = hi; hi += 0.05; }

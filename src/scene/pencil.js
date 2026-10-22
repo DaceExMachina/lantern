@@ -8,7 +8,7 @@ import { devToggle } from '../dev.js';
 import { STYLES } from './lanterns.js';
 
 let pencilForced = devToggle('Demo', 'pencil', 'Jerrett\'s pencil', false, 'The pencil Jerrett sees on the candle\'s pedestal', v => { pencilForced = v; showPencil(); });
-const pencilShows = () => pencilForced || live.firstName.toLowerCase() === 'jerrett';
+export const pencilShows = () => pencilForced || live.firstName.toLowerCase() === 'jerrett';
 export function showPencil() { $('lantern').classList.toggle('pencil', pencilShows()); }
 
 // Lying along x, centred on its spot: the eraser at the left, the broken point at the right, lit from above.
