@@ -8,4 +8,11 @@ let server = LanternServer(port: UInt16(env["LANTERN_PORT"]!)!, data: env["LANTE
 server.screenLocked = { false } // a locked screen pauses adoption, and whoever runs the tests may have stepped away
 server.mirror = env["LANTERN_MIRROR"].flatMap(URL.init(string:)) // npm run preview: the live app's sessions
 server.start()
+let term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main) // kept alive for the run
+if env["LANTERN_BUILD"] != nil { // the app does this (and quits on SIGTERM through NSApp); previews don't
+    server.buildChrome()
+    signal(SIGTERM, SIG_IGN)
+    term.setEventHandler { server.stopBuilding(); exit(0) }
+    term.resume()
+}
 RunLoop.main.run()

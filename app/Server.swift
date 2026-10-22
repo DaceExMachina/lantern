@@ -136,7 +136,8 @@ struct Ordered<V> {
 
 
 /// Runs a command (found on PATH unless it's a full path) and returns its output, whatever its exit status. Its stderr goes
-/// to the app's own, so a chatty command can't fill a pipe nobody reads yet and stall until the timeout.
+/// to the app's own, so a chatty command can't fill a pipe nobody reads yet and stall until the timeout. Once the command
+/// is gone it waits a second more for the pipe to drain, so a background process it left holding stdout can't hold us up.
 func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 10) -> (ok: Bool, out: String) {
     let p = Process(), out = Pipe()
     p.executableURL = URL(fileURLWithPath: cmd.hasPrefix("/") ? cmd : "/usr/bin/env")
@@ -146,8 +147,15 @@ func run(_ cmd: String, _ args: [String], cwd: String? = nil, timeout: Double = 
     p.standardOutput = out
     guard (try? p.run()) != nil else { return (false, "") }
     DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { if p.isRunning { p.terminate() } }
-    let data = out.fileHandleForReading.readDataToEndOfFile()
+    let lock = NSLock(), drained = DispatchSemaphore(value: 0)
+    var data = Data()
+    DispatchQueue.global().async {
+        while case let chunk = out.fileHandleForReading.availableData, !chunk.isEmpty { lock.lock(); data += chunk; lock.unlock() }
+        drained.signal()
+    }
     p.waitUntilExit()
+    _ = drained.wait(timeout: .now() + 1)
+    lock.lock(); defer { lock.unlock() }
     return (p.terminationStatus == 0 && p.terminationReason == .exit, String(decoding: data, as: UTF8.self))
 }
 
@@ -268,6 +276,58 @@ final class LanternServer {
         broadcast()
     }
 
+    // Keeps dist/ built. A checkout with Vite installed gets `vite build --watch` as a child of the server, so a saved change
+    // rebuilds, pageVersion() notices and open windows reload. Only the app starts it (a preview or test server doesn't).
+    // Its pid is kept in node_modules, so a watcher an earlier run left behind (a crash, a kill) is stopped first: one per
+    // checkout. If it exits it comes back after a growing pause (a broken config must not spin); one that ran for half a
+    // minute starts the pause over. Its output joins the app's log. SIGTERM, which is how the app is relaunched, stops it too.
+    var vite: Process?, watching = false
+    var vitePid: String { web + "/node_modules/.lantern-vite.pid" }
+    func buildChrome() {
+        guard FileManager.default.isExecutableFile(atPath: web + "/node_modules/.bin/vite"),
+              ["js", "ts", "mjs", "mts"].contains(where: { FileManager.default.fileExists(atPath: web + "/vite.config." + $0) }) else { return }
+        watching = true
+        DispatchQueue.global().async { // asking the user's shell for node takes a moment
+            let vite = self.web + "/node_modules/.bin/vite"
+            if let old = (try? String(contentsOfFile: self.vitePid, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines), let pid = Int32(old),
+               run("/bin/ps", ["-p", old, "-o", "command="]).out.contains(vite) { kill(pid, SIGTERM) } // ours, not another project's vite on a reused pid
+            let node = self.nodeDir()
+            DispatchQueue.main.async { if node == nil { self.watching = false } else { self.runVite(node, pause: 1) } } // no node: said once, not retried
+        }
+    }
+    // Where node lives, for Vite's `#!/usr/bin/env node`: $LANTERN_NODE, else what the user's login shell finds, which covers
+    // nvm, Homebrew and the rest, since an app's own PATH has none of them.
+    func nodeDir() -> String? {
+        let env = ProcessInfo.processInfo.environment
+        let found = env["LANTERN_NODE"] ?? run(env["SHELL"] ?? "/bin/zsh", ["-ilc", "command -v node"], timeout: 5).out.split(separator: "\n").last.map(String.init)
+        guard let node = found, node.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: node) else { print("vite build --watch: can't find node (set LANTERN_NODE)"); return nil }
+        return (node as NSString).deletingLastPathComponent
+    }
+    func runVite(_ node: String?, pause: Double) {
+        guard watching else { return }
+        let p = Process(), began = Date(), env = ProcessInfo.processInfo.environment
+        p.executableURL = URL(fileURLWithPath: web + "/node_modules/.bin/vite")
+        p.arguments = ["build", "--watch"]
+        p.currentDirectoryURL = URL(fileURLWithPath: web)
+        p.environment = env.merging(["PATH": (node.map { $0 + ":" } ?? "") + (env["PATH"] ?? "/usr/bin:/bin")]) { $1 }
+        p.standardInput = FileHandle.nullDevice
+        p.terminationHandler = { [weak self] _ in DispatchQueue.main.async {
+            guard let self, self.vite === p else { return }
+            let wait = Date().timeIntervalSince(began) > 30 ? 1 : pause
+            print("vite build --watch exited; trying again in \(Int(wait)) s")
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.runVite(node, pause: min(wait * 2, 60)) }
+        } }
+        guard (try? p.run()) != nil else { return print("vite build --watch won't start") }
+        vite = p
+        try? "\(p.processIdentifier)".write(toFile: vitePid, atomically: true, encoding: .utf8)
+    }
+    func stopBuilding() {
+        watching = false
+        let p = vite; vite = nil; p?.terminate()
+        // the file may already be a newer app's, after a relaunch: only remove our own
+        if let p, (try? String(contentsOfFile: vitePid, encoding: .utf8)) == "\(p.processIdentifier)" { try? FileManager.default.removeItem(atPath: vitePid) }
+    }
+
     func begin() {
         stats.open()
         stats.begin("server")
@@ -346,12 +406,30 @@ final class LanternServer {
         let text = String(decoding: (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
         DispatchQueue.global().async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
     }
-    // the newest change to index.html or any of its scripts in page/
+    // What changes when the page does, so open windows reload: the newest of index.html and its scripts in page/, or, for a Vite
+    // build, the newest file in dist/. A rebuild empties dist/ for a moment (and touches its folders), so the version holds
+    // where it was until index.html is back, and folders don't count: a window must not reload into the gap.
+    var builtVersion = 0.0
     func pageVersion() -> Double {
-        let scripts = ((try? FileManager.default.contentsOfDirectory(atPath: web + "/page")) ?? []).map { web + "/page/" + $0 }
-        return ([web + "/index.html"] + scripts).compactMap { fileTimes($0)?.mtime }.max() ?? 0
+        let fm = FileManager.default
+        if root != web {
+            let files = (fm.enumerator(atPath: web + "/dist")?.allObjects as? [String] ?? []).map { web + "/dist/" + $0 }
+            let newest = files.compactMap { f -> Double? in var dir: ObjCBool = false; return fm.fileExists(atPath: f, isDirectory: &dir) && !dir.boolValue ? fileTimes(f)?.mtime : nil }.max()
+            if fm.fileExists(atPath: web + "/dist/index.html"), let newest { builtVersion = newest }
+            return builtVersion
+        }
+        let scripts = ((try? fm.contentsOfDirectory(atPath: web + "/page")) ?? []).map { "/page/" + $0 }
+        return (["/index.html"] + scripts).compactMap { fileTimes(web + $0)?.mtime }.max() ?? 0
     }
-
+    // Where the static page is served from: a Vite build in dist/ when there is one, else the checkout itself. Once it has
+    // been there, a rebuild that empties dist/ for a moment doesn't send the page back to the checkout's index.html (which
+    // after Vite takes over can't run unbuilt): the page is a 503 until the new build lands. It never goes back, so a dist/
+    // removed for good keeps answering 503 until the app restarts.
+    var built = false
+    var root: String {
+        if FileManager.default.fileExists(atPath: web + "/dist/index.html") { built = true }
+        return built ? web + "/dist" : web
+    }
     // MARK: hook events
 
     let prep = DispatchQueue(label: "lantern.events")
@@ -769,7 +847,7 @@ final class LanternServer {
         }
     }
     func respond(_ c: NWConnection, _ status: Int, _ type: String? = nil, _ body: Data = Data(), headers: String = "") {
-        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error", 502: "Bad Gateway"][status] ?? ""
+        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"][status] ?? ""
         var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\n" + headers
         if let type { head += "Content-Type: \(type)\r\n" }
         if status != 204 && status != 304 { head += "Content-Length: \(body.count)\r\n" }
@@ -784,7 +862,13 @@ final class LanternServer {
     // A page file. `no-cache` makes browsers ask every time (heuristic caching kept a phone on old files after updates), and
     // the ETag (modification time and size) lets that ask end in a 304 with no body when nothing changed.
     func serveFile(_ c: NWConnection, _ req: Request, _ path: String, _ type: String) {
-        guard let data = FileManager.default.contents(atPath: web + path), let mtime = fileTimes(web + path)?.mtime else { return respond(c, 404) }
+        let file = root + path
+        guard let data = FileManager.default.contents(atPath: file), let mtime = fileTimes(file)?.mtime else {
+            if built && path == "/index.html" { // mid-rebuild: a page that lands here tries again by itself
+                return respond(c, 503, "text/html; charset=utf-8", Data("<!doctype html><meta http-equiv=\"refresh\" content=\"1\"><title>Lantern</title><p>Rebuilding...".utf8), headers: "Retry-After: 1\r\n")
+            }
+            return respond(c, 404)
+        }
         let etag = "\"\(Int(mtime))-\(data.count)\""
         let headers = "Cache-Control: no-cache\r\nETag: \(etag)\r\n"
         if req.headers["if-none-match"] == etag { return respond(c, 304, headers: headers) }
@@ -992,11 +1076,18 @@ final class LanternServer {
         if req.method == "GET" && req.url == "/stats" {
             return stats.report(warmGoal: warmGoal) { self.respond(c, 200, "application/json", Data(jsonText($0).utf8)) }
         }
-        let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
+        if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
+        if root != web { // a Vite build: any file in dist/ with a known extension, in plain folders (no dot-names, so no ..)
+            let types = ["js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
+                         "woff2": "font/woff2", "json": "application/json", "map": "application/json"]
+            if page.range(of: #"^(/[A-Za-z0-9_-][A-Za-z0-9._-]*)+$"#, options: .regularExpression) != nil, let type = types[(page as NSString).pathExtension] {
+                return serveFile(c, req, page, type)
+            }
+        }
+        let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = files[page] { return serveFile(c, req, page, type) }
         if page.range(of: #"^/page/[a-z]+\.js$"#, options: .regularExpression) != nil { return serveFile(c, req, page, "text/javascript; charset=utf-8") }
-        if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
         respond(c, 404)
     }
 }
