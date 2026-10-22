@@ -11,8 +11,11 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 60) { print("FAIL: timed out");
 let bundle = Bundle(path: CommandLine.arguments[1])!
 bundle.load()
 let cls = bundle.principalClass as! ScreenSaverView.Type
+let FAR = NSScreen.screens.map(\.frame.maxX).max()! + 10000 // beyond every display, never on one (a negative origin once landed on the laptop screen)
 func win() -> NSWindow { // borderless, off every screen, never ordered front
-    NSWindow(contentRect: NSRect(x: -30000, y: -30000, width: 400, height: 300), styleMask: .borderless, backing: .buffered, defer: true)
+    let w = NSWindow(contentRect: NSRect(x: FAR, y: 0, width: 400, height: 300), styleMask: .borderless, backing: .buffered, defer: true)
+    w.collectionBehavior = [.transient, .ignoresCycle]
+    return w
 }
 let frame = NSRect(x: 0, y: 0, width: 400, height: 300)
 let preview = cls.init(frame: frame, isPreview: true)!
