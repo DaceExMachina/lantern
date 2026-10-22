@@ -180,14 +180,7 @@ const SMOKE_REL = 3, SINGE_REL = 0.8;
 // tip and how much wider it gets per unit up, the rise over which it fades in above the tip, the heights between which it
 // fades out, and how far it bends what's seen through it (across, and half that up), all in scene units.
 const HEAT_COLUMN = { half: 18, widen: 0.12, start: 12, fade: [120, 220], bend: 1.25 };
-// How many links the bare flame's spine has, from its base up to its tip (frame.js stepFlame, background.js spineX).
+// How many links the flame's spine has, from its base up to its tip (frame.js stepFlame, background.js spineX).
 const CHAIN = 6;
 // a number as a GLSL float, exactly (a whole number gets its .0; any other already has a point or an exponent)
 const glf = v => Number.isInteger(v) ? v.toFixed(1) : String(v);
-function flamePath(w, h, lean) {
-  const bx = 340, by = FLAME_BASE, tx = bx + lean, ty = by - h, f = n => n.toFixed(1);
-  return `M${f(bx - w * 0.55)} ${f(by - h * 0.14)}` +
-    `C${f(bx - w * 1.05)} ${f(by - h * 0.45)} ${f(tx - w * 0.35 + lean * 0.2)} ${f(ty + h * 0.35)} ${f(tx)} ${f(ty)}` +
-    `C${f(tx + w * 0.35 + lean * 0.2)} ${f(ty + h * 0.35)} ${f(bx + w * 1.05)} ${f(by - h * 0.45)} ${f(bx + w * 0.55)} ${f(by - h * 0.14)}` +
-    `C${f(bx + w * 0.6)} ${f(by + h * 0.1)} ${f(bx - w * 0.6)} ${f(by + h * 0.1)} ${f(bx - w * 0.55)} ${f(by - h * 0.14)}Z`;
-}

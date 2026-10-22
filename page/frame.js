@@ -135,7 +135,6 @@ function frame(t) {
   // the flame's size (ember-small when idle), its flicker, and its slow violet pulse while someone needs me
   swingLantern(elapsed, s);
   const flame = stepFlame(dt, s, { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), flick: 1 + wobble(s * 1.6, 3) * 0.06, pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) });
-  if (style.paper) drawFlame(s, flame);
   // the outer tongue in the scene, for scorched moths to aim at: its middle, half its widest (0.72 of its 34, background.js
   // tongue) and its height
   tongue = style.scorches ? { cx: (flame.base[0] + flame.tip[0]) / 2, half: 0.72 * 34 * flame.size * style.flame[2], height: flame.base[1] - flame.tip[1] } : null;
@@ -211,7 +210,7 @@ function swingLantern(elapsed, s) {
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
-  $('lanternLayer').style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
+  for (const layer of [$('lanternBack'), $('lanternLayer')]) layer.style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
   twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * TWIST_GAIN / TWIST_MAX) - twist) * dt * TWIST_RATE;
   farSlide = style.farWall ? -twist * 0.2 : 0;
   put($('inside'), 'transform', `translate(${(farSlide / 2).toFixed(2)} 0)`);
@@ -239,10 +238,9 @@ function swingLantern(elapsed, s) {
 }
 
 // ---- the flame ---------------------------------------------------------------------------------------------------
-// A bare flame (the candle's and the Moroccan's) is drawn by the background's shader (background.js BARE_FLAME), so the
-// SVG doesn't repaint it every frame. A paper lantern's stays in the SVG (drawFlame): its paper and session text, drawn
-// behind the flame, would hide one drawn under the SVG.
-// The bare flame's spine is a chain of CHAIN links from its base up to its tip (its outer tongue's), each point a weight on
+// The flame is drawn by a shader (background.js FLAME) on its own canvas between the lantern's back paper and the rest
+// (index.html), so the SVG doesn't repaint it every frame. A paper lantern's is softened, as if seen through paper.
+// The flame's spine is a chain of CHAIN links from its base up to its tip (its outer tongue's), each point a weight on
 // a damped spring to the point below it, so a swing or a gust travels up it, base first and tip after: it can
 // bend into an S and whip, then settle. At rest the chain stands straight up, as tall as the flame burns, bent over by the
 // wind (style.flameWind) and stretched by it, and pushed aside by a moth flying close, each most at the tip. When the
@@ -316,29 +314,6 @@ function stepFlame(dt, s, flame) {
     turb: feel.turbulence * (1 + 1.5 * gutter + tear) + 2 * feel.moth * near,
     blue: [wobble(s, 5) * 1.2 + pts[0].x / k, 4, 10 * flick * breathe, 5 * flick * (2 - breathe), 0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick] };
 }
-// A paper lantern's flame, in the SVG: layered tongues that lean and stretch independently, ember-small when idle
-function drawFlame(s, { size, flick, pulse }) {
-  const layers = [['fOuter', 34, 96, 9, 2], ['fMid', 24, 70, 6, 3], ['fCore', 13, 40, 3, 4]];
-  for (const [id, w, h, lean, k] of /** @type {[string, number, number, number, number][]} */ (layers)) {
-    const n = $(id);
-    put(n, 'd', flamePath(w * (1 + wobble(s, k + 9) * 0.05), h * (1 + wobble(s * 1.3, k) * 0.08), wobble(s, k) * lean));
-    put(n, 'fill', pal(id.slice(1).toLowerCase()));
-  }
-  // the blue at its root swells and brightens with the flicker, and breathes
-  const base = $('fBase'), breathe = 1 + 0.05 * Math.sin(s * 1.7);
-  put(base, 'fill', pal('base'));
-  put(base, 'cx', (340 + wobble(s, 5) * 1.2).toFixed(2));
-  put(base, 'rx', (10 * flick * breathe).toFixed(2)); put(base, 'ry', (5 * flick * (2 - breathe)).toFixed(2));
-  put(base, 'opacity', (0.55 * (0.8 + 0.2 * wobble(s * 2, 6)) * flick).toFixed(3));
-  const grow = `translate(340 ${FLAME_BASE}) scale(${size.toFixed(3)})`;
-  put($('tongues'), 'transform', `${grow} translate(-340 -${FLAME_BASE})`);
-  // the halo grows with the flame, and stretches and leans like a tongue (46 by 118), its tip pushed sideways about its base
-  const hh = 1 + wobble(s * 1.3, 1) * 0.08, lean = Math.atan(-(wobble(s, 1) * 6) / (118 * hh)) * 180 / Math.PI;
-  put($('fHalo'), 'transform', `${grow} skewX(${lean.toFixed(2)}) scale(${(1 + wobble(s, 10) * 0.05).toFixed(3)} ${hh.toFixed(3)}) translate(-340 -${FLAME_BASE})`);
-  put($('fHalo'), 'color', pal('halo'));
-  put($('flame'), 'opacity', pulse.toFixed(3));
-}
-
 // sparks float off the tip, more of them the busier things get; not from a paper lantern, whose flame is hidden behind paper.
 // They're drawn in the flame's own units (#sparks), turned with the lantern and slid with #inside.
 function drawSparks(dt, s, { size, tip }) {
@@ -562,10 +537,10 @@ function drawLight(dt, s, { size, flick, pulse, base, tip, spine, turb, tear, bl
       : style.holder ? [0, style.holder[1] / Math.max(4, style.holder[0] - flameY)] : [0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
     flame: [...base, ...tip],
-    // a bare flame, drawn by the shader (background.js drawBareFlame): its scale, the time, and stepFlame's turbulence,
-    // tearing and blue root, its opacity, and its colours (halo, tongues out to in, the blue)
-    fire: !style.paper && !AMBIENT ? { scale: size * style.flame[2], t: s % 3600, // ponytail: the noise jumps once an hour as the time wraps
-      spine, turb, tear, blue, alpha: pulse,
+    // the flame, drawn by the shader (background.js drawFlame): its scale, the time, and stepFlame's turbulence,
+    // tearing and blue root, its opacity, how soft it is (a paper lantern's, seen through paper), and its colours (halo, tongues out to in, the blue)
+    fire: !AMBIENT ? { scale: size * style.flame[2], t: s % 3600, // ponytail: the noise jumps once an hour as the time wraps
+      spine, turb, tear, blue, alpha: pulse, soft: style.paper ? paperSoft : 0,
       cols: ['halo', 'outer', 'mid', 'core', 'base'].map(pal) } : null,
     rim: style.shadeFromHolder && !remote ? [style.flame[0], style.holder[1], style.holder[0]] : [0, 0, 0],
     // each band seen from the flame's live centre: its slope, spread wide by the flame's size (about 18 across beside it)

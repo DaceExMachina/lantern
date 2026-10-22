@@ -11,7 +11,9 @@ const vm = require('vm');
 const row = () => ({ classList: { toggle() {} } }); // a settings row
 const attrs = {}, els = {
   lantern: { innerHTML: '', getAttribute: k => attrs[k] ?? null, setAttribute: (k, v) => { attrs[k] = v; } },
+  lanternPaper: { innerHTML: '' },
   lanternLayer: { style: { transform: '' } },
+  lanternBack: { style: { transform: '' } },
   style: { value: '' },
   textToggle: { disabled: false, parentElement: row() },
   ribbons: { children: [{ disabled: false }, { disabled: false }, { disabled: false }], parentElement: row() },
@@ -67,7 +69,7 @@ test('the candle is the fourth lantern in the menu', () => {
   assert.strictEqual(run('STYLES.candle.name'), 'Pillar candle');
 });
 
-// The sway turns #lanternLayer, the lantern's own layer, by a CSS transform, so WebKit turns the picture it has rather
+// The sway turns #lanternLayer and #lanternBack, the lantern's own layers, by a CSS transform, so WebKit turns the picture it has rather
 // than drawing the lantern afresh; nothing writes a turn onto the drawing (#lantern) itself.
 test('a standing lantern holds still with nothing to hang from; every hanging one sways on one, turning its layer', () => {
   assert.deepStrictEqual(styles.filter(k => run(`STYLES.${k}.stands`)), ['candle'], 'the candle, and only the candle, stands');
@@ -77,11 +79,11 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     run(`applyStyle('${key}')`);
     // each frame's sway, and the turn it gives the lantern's layer
     const frames = [...run(`Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, ${start} + i / 60),
-      [swayAngle, document.getElementById('lanternLayer').style.transform]))`)];
+      [swayAngle, document.getElementById('lanternLayer').style.transform, document.getElementById('lanternBack').style.transform]))`)];
     const sway = frames.map(f => f[0]);
     assert.strictEqual(attrs.transform, undefined, `${key}: the drawing itself is never turned, only its layer`);
     start += 30;
-    const hang = /id="hang"/.test(els.lantern.innerHTML);
+    const hang = /id="hang"/.test(els.lantern.innerHTML + els.lanternPaper.innerHTML);
     if (run(`STYLES.${key}.stands`)) {
       assert.ok(sway.every(a => a === 0), `${key} stands still`);
       assert.strictEqual(els.lanternLayer.style.transform, 'rotate(0.000deg)', `${key} is drawn unturned`);
@@ -90,7 +92,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     } else {
       assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: at most ${Math.max(...sway.map(Math.abs))}`);
       assert.ok(Math.min(...sway) < -0.1 && Math.max(...sway) > 0.1, `${key} swings to and fro, past the middle: ${Math.min(...sway)} to ${Math.max(...sway)}`);
-      const off = frames.find(([a, t]) => t !== `rotate(${a.toFixed(3)}deg)`);
+      const off = frames.find(([a, t, back]) => t !== `rotate(${a.toFixed(3)}deg)` || back !== t);
       assert.ok(!off, `${key} is drawn turned by its sway: ${off}`);
       assert.ok(hang, `${key} hangs from a string or chain`);
     }
@@ -117,7 +119,7 @@ const flameHalf = (() => {
 })();
 test('a moth landed on the candle, of any size and in any pose, stays clear of the flame at its fullest, at the top of a hop too', () => {
   const [fx, fy, k] = run('STYLES.candle.flame'), clear = 10, HOP = run('HOP'), tallest = 96 * run('FLAME_STRETCH');
-  // the outer tongue's outline at full size, as background.js BARE_FLAME draws it: at its tallest, leaning as far as
+  // the outer tongue's outline at full size, as background.js FLAME draws it: at its tallest, leaning as far as
   // stepFlame lets it either way, its middle bent and swollen by the most turbulence a gust and a moth give at full size
   const turb = 4, flame = new Map();
   for (const lean of [-0.6 * tallest, 0, 0.6 * tallest]) for (let t = -0.5; t <= 1; t += 0.005) {

@@ -1,5 +1,5 @@
-// The flame (page/frame.js stepFlame, page/background.js BARE_FLAME): the candle's and the Moroccan's is drawn by the
-// background's shader and moved by a spring, a paper lantern's stays in the SVG. The page is plain classic scripts, run here
+// The flame (page/frame.js stepFlame, page/background.js FLAME): every lantern's is drawn by a shader on its own canvas and
+// moved by a spring, a paper lantern's softened behind its paper. The page is plain classic scripts, run here
 // in a vm context in index.html's order, over a stub DOM and a stub WebGL that records the uniforms each draw sets.
 const test = require('node:test');
 const assert = require('node:assert');
@@ -21,12 +21,13 @@ function context() {
     getUniformLocation: (_, name) => name,
   }, { get: (t, k) => k in t ? t[k] : typeof k === 'string' && k.startsWith('uniform') ? (loc, ...v) => { uniforms[loc] = v.length === 1 && v[0]?.length ? [...v[0]] : v; } : () => ({}) });
   const node = () => ({ attrs: {}, getAttribute(k) { return this.attrs[k] ?? null; }, setAttribute(k, v) { this.attrs[k] = String(v); } });
-  const els = { bg: { getContext: () => gl, addEventListener() {}, width: 1200, height: 800 }, lantern: { ...node(), innerHTML: '' }, lanternLayer: { style: {} }, style: { value: '' } }; // lanternLayer: the layer the sway turns (frame.js swingLantern)
+  const canvas = { getContext: () => gl, addEventListener() {}, width: 1200, height: 800 };
+  const els = { bg: canvas, flame: canvas, lantern: { ...node(), innerHTML: '' }, lanternPaper: { innerHTML: '' }, lanternLayer: { style: {} }, lanternBack: { style: {} }, style: { value: '' } }; // the layers the sway turns (frame.js swingLantern)
   const page = vm.createContext({ URLSearchParams, location: { search: '' }, performance: { now: () => 0 }, devicePixelRatio: 2, window: {},
     document: { getElementById: id => els[id] ?? null, querySelectorAll: () => [] } });
   for (const f of ['scene', 'dev', 'lanterns', 'state', 'background', 'frame']) vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'page', f + '.js'), 'utf8'), page, { filename: f + '.js' });
   const run = code => vm.runInContext(code, page);
-  run('VIEW.box = [40, 20, 600, 600]; flyLightN = 0; ghostWingN = 0; farWallTex = {}'); // the Moroccan's far wall counts as baked already
+  run('VIEW.box = [40, 20, 600, 600]; VIEW.layer = [140, 20, 400, 600]; flyLightN = 0; ghostWingN = 0; farWallTex = {}'); // the Moroccan's far wall counts as baked already
   run('realDraw = drawBackground; drawBackground = v => { drawn = v; realDraw(v); }'); // keeping what drawLight gives it
   return { run, els, uniforms };
 }
@@ -36,15 +37,22 @@ const loose = ctx => ctx.run('Object.assign(FEEL, { stiffness: [70, 70], falloff
 // a frame of the flame at page time s, `dt` on, burning at full size
 const step = (ctx, s, dt = 1 / 60) => ctx.run(`stepFlame(${dt}, ${s}, { size: 1, flick: 1, pulse: 1 })`);
 
-test('a paper lantern keeps its flame in the SVG; the candle and the Moroccan leave theirs to the shader', () => {
+test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between its back paper and the rest, softened, and sheltered from the wind', () => {
   const ctx = context();
   for (const key of ['barrel', 'chochin', 'moroccan', 'candle']) {
     const paper = key === 'barrel' || key === 'chochin';
     ctx.run(`applyStyle('${key}'); swingLantern(1 / 60, 3)`);
-    assert.strictEqual(/id="fOuter"/.test(ctx.els.lantern.innerHTML), paper, `${key}: the SVG's tongues`);
+    // a paper lantern's back paper (its glow) goes under the flame's canvas, the rest over it; any other's is all over it
+    assert.strictEqual(/id="paperGlow"/.test(ctx.els.lanternPaper.innerHTML), paper, `${key}: the back paper under the flame`);
+    if (paper) assert.ok(!/id="paperGlow"/.test(ctx.els.lantern.innerHTML), `${key}: only the front paper over the flame`);
+    assert.strictEqual(ctx.els.lanternPaper.innerHTML === '', !paper, `${key}: nothing under the flame without paper`);
     assert.ok(/id="sparks"/.test(ctx.els.lantern.innerHTML), `${key}: somewhere for sparks`);
     ctx.run(`drawLight(1 / 60, 3, stepFlame(1 / 60, 3, { size: 1, flick: 1, pulse: 1 }))`);
-    assert.strictEqual(ctx.run('drawn').fire === null, paper, `${key}: the shader's flame`);
+    assert.ok(ctx.run('drawn').fire, `${key}: the shader's flame`);
+    assert.strictEqual(ctx.uniforms.uSoft[0] > 0, paper, `${key}: softened behind paper (${ctx.uniforms.uSoft[0]})`);
+    // the paper shelters its flame: the wind leans it, but far less than the bare flames'
+    const wind = ctx.run('style.flameWind');
+    if (paper) assert.ok(wind > 0 && wind <= ctx.run('STYLES.moroccan.flameWind') / 2, `${key}: the wind leans it ${wind}, under half the Moroccan's`);
   }
 });
 
@@ -58,11 +66,15 @@ test('the tip the smoke, the hot air and the rim\'s shadow leave from is the sha
   // nothing of any tongue shows above its tip or below its base, however its spine falls across a pixel
   const tongue = new Function('flameHalf', src.match(/float tongue\(vec2 q, float w, float h, float px\) \{[\s\S]*?\n\}/)[0]
     .replace('float tongue(vec2 q, float w, float h, float px)', 'return (q, w, h, px) =>').replace(/\bfloat /g, 'let ')
-    .replace(/\babs\(/g, 'Math.abs(').replace(/\bclamp\(([^;]*), 0\.0, 1\.0\)/, 'Math.min(1, Math.max(0, $1))'))(half);
-  for (const [w, h] of [[34, 96], [24, 70], [13, 40]]) for (const y of [h, h * 1.001, h * 1.2, -0.05 * h]) for (const x of [0, 0.1, -0.3]) {
-    assert.strictEqual(tongue({ x, y }, w, h, 1), 0, `a tongue ${w} by ${h} shows at ${x}, ${y}: a line off its tip`);
+    .replace(/\babs\(/g, 'Math.abs(').replace(/\bclamp\(([^;]*?), 0\.0, 1\.0\)/g, 'Math.min(1, Math.max(0, $1))'))(half);
+  // at a pixel's softness (a bare flame) and at a paper lantern's
+  for (const px of [1, 8]) for (const [w, h] of [[34, 96], [24, 70], [13, 40]]) for (const y of [h, h * 1.001, h * 1.2, -0.05 * h]) for (const x of [0, 0.1, -0.3]) {
+    assert.strictEqual(tongue({ x, y }, w, h, px), 0, `a tongue ${w} by ${h} shows at ${x}, ${y} (px ${px}): a line off its tip`);
   }
-  assert.ok(tongue({ x: 0, y: 48 }, 34, 96, 1) === 1, 'and covers its middle');
+  assert.ok(tongue({ x: 0, y: 48 }, 34, 96, 1) === 1 && tongue({ x: 0, y: 48 }, 34, 96, 8) === 1, 'and covers its middle');
+  // behind paper its tip fades out on the way up rather than stopping at a line
+  const tip = y => tongue({ x: 0, y }, 34, 96, 8);
+  assert.ok(tip(80) === 1 && tip(91) > 0.4 && tip(91) < 1 && tip(94) > 0 && tip(94) < tip(91) && tip(95.9) < 0.05, `a soft tip fades out to nothing: ${[80, 91, 94, 95.9].map(tip)}`);
   assert.match(src, /q\.x -= spineX\(t\) \+ uShape\.y \* mid \*/, 'the tongues stand on the spine, and the noise is weighed by mid');
   // the spine, run as JS: a curve through the chain's points, the base's at t = 0 and the tip's at t = 1
   const CHAIN = ctx.run('CHAIN'), glf = ctx.run('glf');
