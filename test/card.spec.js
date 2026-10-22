@@ -64,6 +64,11 @@ const session = o => ({ id: 's1', cwd: '/w/proj', title: 'proj', state: 'waiting
 const TEN = [pr(1, 'draft'), pr(2, 'ready'), pr(3, 'draft'), pr(4, 'waiting'), pr(5, 'waiting'), pr(6, 'draft'), pr(7, 'draft'), pr(8, 'draft'), pr(9, 'draft'), pr(10, 'draft'), pr(11, 'draft')];
 const fire = (el, type, init = {}) => el.dispatchEvent(Object.assign(new Event(type), init));
 
+test('a PR with feedback waiting ranks below changes requested and above ready, and says so', async () => {
+  const card = await show(session({ github: [pr(1, 'ready'), pr(2, 'feedback'), pr(3, 'changes')] }));
+  assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · 1 change requested · 1 feedback waiting · 1 ready');
+});
+
 test('the PR header sums them up, and a hovered chip puts its title there until the pointer leaves', async () => {
   const card = await show(session({ github: TEN }));
   const [ph] = find(card, 'ph');

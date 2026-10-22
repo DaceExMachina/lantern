@@ -1208,6 +1208,24 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
     changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
+// Feedback is waiting on a PR when someone but its author reviewed it, with more than an approval, after the newest commit.
+test('a PR with a review newer than its newest commit needs feedback; the author, an approval or an older review do not', async t => {
+  const hour = 3600000, commit = Date.now() - 2 * hour, after = iso(commit + hour), before = iso(commit - hour);
+  const node = (n, reviews) => ({ ...prNode(n, iso(Date.now())), isDraft: false, author: { login: 'me' }, reviews: { nodes: reviews.map(([who, state, at]) => ({ author: { login: who }, state, submittedAt: at })) },
+    commits: { nodes: [{ commit: { committedDate: iso(commit), statusCheckRollup: null } }] } });
+  const { gh, repo } = ghRepo([node(1, [['you', 'COMMENTED', after]]), node(2, [['me', 'COMMENTED', after]]), node(3, [['you', 'APPROVED', after]]),
+    node(4, [['you', 'COMMENTED', before]]), node(5, [['you', 'PENDING', null]])]);
+  const id = UUID(9), file = `.claude/projects/-work-9/${id}.jsonl`, made = n => [
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${n}`, content: prUrl(n) + '\n' }] } }];
+  let home = '';
+  const base = await serve(t, { [file]: jsonl([user('Fix it'), ...[1, 2, 3, 4, 5].flatMap(made)]) }, h => home = h, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === 5), 'a refresh to find all five');
+  assert.deepStrictEqual(s.github.map(p => [p.url, p.need]).sort(), [1, 2, 3, 4, 5].map(n => [prUrl(n), n === 1 ? 'feedback' : 'waiting']));
+});
+
 // GitHub sometimes answers the query with exit 0 and every list empty. That must not wipe the PRs: the last good answer holds
 // until it ages out (LANTERN_GH_KEEP_SECONDS), and then a really empty account shows empty.
 test('an empty GitHub answer after a good one keeps the PRs until the kept answer ages out', async t => {

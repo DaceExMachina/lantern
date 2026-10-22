@@ -69,7 +69,7 @@ test('the state and PR tokens are the colours the scene draws', () => {
   const js = {
     '--state-working': MOTHS.working, '--state-waiting': MOTHS.waiting, '--state-snoozed': MOTHS.snoozed, '--state-idle': MOTHS.idle,
     '--lantern-warm': RIBBON.warm, '--lantern-violet': RIBBON.violet, '--lantern-quiet': RIBBON.quiet, '--accent-warm': WARM.mid,
-    '--pr-ready': FLY.ready, '--pr-failing': FLY.failing, '--pr-changes': FLY.changes, '--pr-draft': FLY.draft,
+    '--pr-ready': FLY.ready, '--pr-failing': FLY.failing, '--pr-changes': FLY.changes, '--pr-feedback': FLY.feedback, '--pr-draft': FLY.draft,
     '--pr-in-review': FLY.quiet, '--pr-review': FLY.review, '--pr-mention': FLY.mention,
   };
   for (const [token, colour] of Object.entries(js)) assert.strictEqual(tokens[token]?.toUpperCase(), colour.toUpperCase(), `${token} in index.html's :root`);

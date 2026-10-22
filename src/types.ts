@@ -31,7 +31,7 @@ interface ForYou { questions?: Opt<string[]>; you?: Opt<(string | Link)[]> }
 /** What a firefly shows of a PR: what it needs, when the server first saw it (ms), and since when it's needed that, and
  * what it needed before. */
 export interface FlyState { need: string; seen?: Opt<number>; since?: Opt<number>; was?: Opt<string> }
-/** A PR as GitHub sees it. `need` is ready, failing, changes, waiting, draft, merged or closed. */
+/** A PR as GitHub sees it. `need` is ready, failing, changes, feedback, waiting, draft, merged or closed. */
 export interface PR extends FlyState { url: string; label: string; title: string | null; createdAt?: Opt<string> }
 export interface Agent {
   id: string; type?: Opt<string>; description?: Opt<string>; model?: Opt<string>; activity?: Opt<string>;
