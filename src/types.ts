@@ -224,7 +224,7 @@ export interface Zone {
 }
 /** A ghost moth: an old session that made some of the stale PRs, drifting faintly (stale.ts). */
 export interface Ghost extends Drifter {
-  o: Owner & { prs: StalePR[] }; zone: Zone; prs: StalePR[]; beat: number; back: number; x: number; y: number; rate: number; out: number;
+  o: Owner & { prs: StalePR[] }; zone: Zone; prs: StalePR[]; beat: number; back: number; x: number; y: number; rate: number; out: number; woke?: number;
 }
 /** A stale PR's wisp (stale.ts). */
 export interface Wisp extends Drifter { p: StalePR; zone: Zone; wob: number; a: number; w: number; period: number; born: number; gone: number | undefined }

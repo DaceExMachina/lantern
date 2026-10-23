@@ -37,10 +37,12 @@ function makeWisp(p: StalePR): Wisp {
 // hover areas are plain circles (card.ts), not SVG ones, for the same reason.
 const GHOSTS_MAX = 8;
 // A ghost whose session is being resumed (its owner's `resuming` stamp, set by the server when it's clicked, so every window
-// has it) or has just woken (gone from the list: the session is live again) flies off like a moth leaving, its wisps in tow,
-// FLY_S seconds to the far corner. The moth that comes in is the live session's own, arriving the usual way. A resume the
-// session never answers (RESUME_S) lets the ghost fly back. `out` is how far along its flight it is, 0 to 1.
+// has it) or has woken (its session is live) flies off like a moth leaving, its wisps in tow, FLY_S seconds to the far
+// corner, and is gone once it's clear (its wisps with it). The moth that comes in is the live session's own, arriving the
+// usual way. A resume the session never answers (RESUME_S) lets the ghost fly back. `out`, how far along its flight it is
+// (0 to 1), comes from the wall clock, so every window has it in the same place.
 const FLY_S = 3, RESUME_S = 45;
+const fly = (secs: number) => Math.min(1, Math.max(0, secs / FLY_S));
 export const ghosts = new Map<string, Ghost>(); // session id -> ghost moth
 function makeGhost(o: Owner & { prs: StalePR[] }): Ghost {
   const rand = seeded(hash(o.id));
@@ -133,9 +135,15 @@ export function drawStale(dt: number, s: number) {
   planStale(s, [...wisps.values()].filter(d => !ghosts.has(d.p.owner?.id ?? '')));
   for (const [id, m] of ghosts) {
     const i = kept.findIndex(o => o.id === id), o = kept[i];
-    const away = !o || o.resuming != null && now * 1000 - o.resuming < RESUME_S * 1000;
-    m.out = Math.min(1, Math.max(0, m.out + (away ? dt : -dt) / FLY_S));
-    if (!o && m.out >= 1) { zones.delete(m.zone); ghosts.delete(id); continue; }
+    const woke = alive.has(id);
+    if (!o && !woke) { zones.delete(m.zone); ghosts.delete(id); continue; }
+    if (woke) m.woke ??= now; // a session opened some other way has no click to start from
+    const stamp = (o ?? m.o).resuming, since = stamp != null ? now - stamp / 1000 : woke ? now - (m.woke ?? now) : -1;
+    m.out = since < 0 ? 0 : woke || since < RESUME_S ? fly(since) : fly(RESUME_S + FLY_S - since);
+    if (woke && m.out >= 1) { // clear of the window: it and the wisps that circled it are done
+      for (const [url, d] of wisps) if (d.p.owner?.id === id) { zones.delete(d.zone); wisps.delete(url); }
+      zones.delete(m.zone); ghosts.delete(id); continue;
+    }
     if (o) { m.o = o; m.prs = o.prs; m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3; }
     [m.x, m.y] = driftTo(m, m.aim ??= m.pref, dt, now, 22);
     if (m.out > 0) { // straight out from the lantern to past the window's far corner, speeding up

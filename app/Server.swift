@@ -132,6 +132,7 @@ final class Re {
     }
 }
 
+let RESUME_MS = 45_000.0 // how long a ghost's resume gets to show up as a live session before the ghost flies back (stale.ts RESUME_S)
 let UUID_RE = Re("^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$", .caseInsensitive)
 let PR_CREATE = Re("\\bgh\\s+pr\\s+create\\b")
 let PR_URL = Re("https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+")
@@ -925,7 +926,8 @@ final class LanternServer {
         if json && req.url == "/resume" {
             guard let id = body?["id"] as? String, UUID_RE.test(id),
                   let o = owners.values.compactMap({ $0 as? JSON }).first(where: { str($0["id"]) == id }) else { return respond(c, 404) }
-            resuming[id] = now(); broadcast() // the ghosts fly off at the click, in every window
+            if let t = resuming[id], now() - t < RESUME_MS { return respond(c, 204) } // a second click while it's starting
+            resuming = resuming.filter { now() - $0.value < RESUME_MS }; resuming[id] = now(); broadcast() // the ghosts fly off at the click, in every window
             let shell = "cd '\(str(o["cwd"]).replacingOccurrences(of: "'", with: "'\\''"))' && claude --resume \(id)"
             let script = shell.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             DispatchQueue.global().async {
