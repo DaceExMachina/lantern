@@ -24,9 +24,10 @@ const JOSTLE = Q.has('jostle') ? Number(Q.get('jostle')) || 0 : 1;
 // size, so the pill gets lighter and lacier (?count=1 is the densest)
 const BACKING = Q.get('backing') !== '0'; // a soft glow behind the words, so the text keeps its contrast over gaps (?backing=0 turns it off)
 const COUNT = Q.has('count') ? Math.min(1, Number(Q.get('count')) || 1) : 0.5;
-// The colours PR fireflies come in: half the yellow of a draft, two fifths the orange of one with changes asked for,
+// The colours the badge's fireflies come in: half its own gold (not a PR colour), two fifths the orange of one with changes asked for,
 // and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
-const FLASH_COLOURS: [number, string][] = [[0.5, FLY.draft], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.review]];
+const BADGE_GOLD = '#FFD27A';
+const FLASH_COLOURS: [number, string][] = [[0.5, BADGE_GOLD], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.review]];
 const flashQueue: string[] = [];
 let flashing = false;
 
@@ -183,7 +184,7 @@ function playFlash(id: string) {
     // one pace per loop, so its fireflies never bunch; the rim's a little quicker, since the edge clips half its wander
     const way = (ring % 2 ? -1 : 1) * (0.9 + rand() * 0.2);
     for (let i = 0; i < n; i++) {
-      let pick = rand(), col = FLY.draft;
+      let pick = rand(), col = BADGE_GOLD;
       for (const [share, c] of FLASH_COLOURS) if ((pick -= share) < 0) { col = c; break; }
       const wander = () => (0.0015 + rand() * 0.0015) * (rand() < 0.5 ? -1 : 1); // radians per ms, each its own
       flies.push({ rr, s0: at + i * loop / n, v: way * (ring || still ? swarm : Math.max(swarm, 0.008 * px / 1.2)), col, ph: rand() * 6.28,
@@ -243,8 +244,8 @@ function playFlash(id: string) {
   const bg = backing.getContext('2d'), away = backing.width * 2;
   if (!bg) { layer.remove(); return Promise.resolve(); }
   bg.scale(k, k);
-  bg.shadowColor = FLY.draft; bg.shadowBlur = 2 * blur * k; bg.shadowOffsetX = away * k; bg.fillStyle = FLY.draft; bg.lineWidth = 4;
-  bg.strokeStyle = FLY.draft; bg.textAlign = 'center'; bg.textBaseline = 'middle'; bg.lineJoin = 'round';
+  bg.shadowColor = BADGE_GOLD; bg.shadowBlur = 2 * blur * k; bg.shadowOffsetX = away * k; bg.fillStyle = BADGE_GOLD; bg.lineWidth = 4;
+  bg.strokeStyle = BADGE_GOLD; bg.textAlign = 'center'; bg.textBaseline = 'middle'; bg.lineJoin = 'round';
   words.forEach((e, i) => {
     const css = getComputedStyle(e), b = nth(boxes, i), text = e.textContent ?? '';
     bg.font = `${css.fontStyle} ${css.fontWeight} ${css.fontSize} ${css.fontFamily}`;

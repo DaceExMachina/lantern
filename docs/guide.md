@@ -64,7 +64,8 @@ With [GitHub status](setup.md#github-status) on, fireflies show what each PR nee
 | Green | Ready to merge |
 | Red, pulsing faster | Failing checks |
 | Orange | Changes requested |
-| Amber | Draft |
+| Gold | Feedback waiting: a reviewer (not a bot) had the last word, in a review or a comment, since your latest push. Pushing, replying or an approval clears it |
+| Teal | Draft |
 | Blue | Waiting on review |
 
 A new PR's firefly flies in from the window edge nearest its moth. When one turns green it flashes. When a PR merges, its firefly flares and shakes, loops, then zooms off the window on the side away from its moth. A closed PR's firefly dims and drifts off the nearest edge. Reviews requested from you hover by the lantern, and the footer links to them.

@@ -9,8 +9,8 @@ import type { Firefly, FlyState, Point, Vec3 } from '../types';
 
 // ---- fireflies -----------------------------------------------------------------
 // One per PR, keyed by its URL. The colour says what it needs (swarm says how they come and go). Failing checks swell
-// faster. Drafts are amber, and one waiting on review is sky blue.
-export const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', draft: '#FFD27A', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
+// faster. Drafts are teal, feedback waiting is gold, and one waiting on review is sky blue.
+export const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', feedback: '#FFD27A', draft: '#7FE6B8', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
 const FLY_BY_NEED = new Map(Object.entries(FLY));
 /** A need's firefly colour (sky blue for any other). */
 export const flyColour = (need: string) => FLY_BY_NEED.get(need) ?? FLY.quiet;
@@ -59,7 +59,7 @@ const LEAVING = new Set(['merged', 'closed']);
 // the ones that need me, then the rest. A merged or closed PR with no firefly of its own yet (`flies` has none) is dropped:
 // swarm never makes one for it, so it would only take a place from a firefly that's showing.
 export const byUrgency = <P extends FlyState & { url: string }>(prs: P[], flies: Map<string, Firefly> | undefined) => {
-  const rank = (p: P) => LEAVING.has(p.need) ? 0 : ['ready', 'failing', 'changes'].includes(p.need) ? 1 : 2;
+  const rank = (p: P) => LEAVING.has(p.need) ? 0 : ['ready', 'failing', 'changes', 'feedback'].includes(p.need) ? 1 : 2;
   return prs.filter(p => !LEAVING.has(p.need) || flies?.has(p.url)).sort((a, b) => rank(a) - rank(b));
 };
 // A merge's three motions overlap, each fading out as the next fades in, both already moving: the shake, the loop (30%

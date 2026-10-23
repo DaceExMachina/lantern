@@ -17,7 +17,7 @@ export function tipSpot(tip: HTMLElement, el: Element) {
 export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
-export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
+export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a
 // click run `onClick` (or on a right-click, `menu`) and hide it. `target` is what `hovered` becomes; `cardAt` says which of
@@ -110,7 +110,7 @@ export const footLine = (s: Session, now: number) => `${project(s)} · ${short(n
 // The session's PRs, worst first, under a header that sums them up ("PRs · 1 ready · 2 in review · 8 drafts"). Either
 // chips coloured by state, each putting its title in the header while hovered, or two-line rows (title; dot, number,
 // state) capped at the worst PR_CAP so the card still fits beside its moth.
-const ORDER = ['failing', 'changes', 'ready', 'waiting', 'draft', 'merged', 'closed'];
+const ORDER = ['failing', 'changes', 'feedback', 'ready', 'waiting', 'draft', 'merged', 'closed'];
 const SHORT: Record<string, string | undefined> = { ...NEED, ready: 'ready', failing: 'failing' };
 export const PR_CAP = 4;
 export const AGENT_CAP = 5; // the expanded card's agents, past which a "more" button lists the rest

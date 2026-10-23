@@ -146,7 +146,7 @@ In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F
 | Accents | `--accent-violet` links and icons · `--accent-violet-line` link underlines · `--focus` focus outlines · `--accent` checked controls · `--accent-warm` the stats headline · `--accent-warm-ink` and `--accent-warm-surface` badges · `--warn-ink` warnings |
 | Session states | `--state-working`, `--state-waiting`, `--state-snoozed`, `--state-idle`, and the lantern's `--lantern-warm`, `--lantern-violet`, `--lantern-quiet` |
 | Hover card | `--state-waiting-chip` the "needs you" pill · `--error-surface` and `--error-ink` the error pill · `--surface-tray` the tray of work under the card · `--agents-surface`, `--agents-line`, `--agents-ink`, `--agents-ink-dim` the running agents' band, and the "waiting on agents" pill |
-| PR needs | `--pr-ready`, `--pr-failing`, `--pr-changes`, `--pr-draft`, `--pr-in-review`, `--pr-review` (a review asked of you), `--pr-mention` |
+| PR needs | `--pr-ready`, `--pr-failing`, `--pr-changes`, `--pr-feedback` (the last word since the latest push is a reviewer's), `--pr-draft`, `--pr-in-review`, `--pr-review` (a review asked of you), `--pr-mention` |
 | Spacing | `--space-0-5` 2px · `--space-1` 4px · `--space-1-5` 6px · `--space-2` 8px · `--space-3` 12px · `--space-4` 16px · `--space-5` 24px · `--space-6` 32px |
 | Radius | `--radius-sm` 3px · `--radius-md` 6px controls · `--radius-lg` 10px panels and cards · `--radius-pill` |
 | Type | `--font-serif` (Georgia) · `--font-mono` · `--text-xs` 11px labels · `--text-sm` 12.5px panel text · `--text-md` 14px · `--text-lg` 16px values · `--text-xl` 20px · `--text-display` 40px · `--weight-regular` and `--weight-bold` (Georgia has no other faces) · `--leading` · `--tracking-label` |

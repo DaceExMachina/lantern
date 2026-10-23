@@ -1208,6 +1208,45 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
     changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
+// Feedback is waiting on a PR when, after the newest commit, the last non-bot review or comment is from someone but its author and isn't an approval. It beats ready; the author's reply clears it until the reviewer speaks again.
+test("a reviewer's last word since the newest commit makes feedback; a bot, the author's reply, an older review or an approval do not", async t => {
+  const hour = 3600000, commit = Date.now() - 4 * hour, at = n => iso(commit + n * hour);
+  const node = (n, reviews, extra = {}, comments = []) => ({ ...prNode(n, iso(Date.now())), isDraft: false, author: { login: 'me' }, ...extra,
+    reviews: { nodes: reviews.map(([who, state, when, type = 'User']) => ({ author: { __typename: type, login: who }, state, submittedAt: when })) },
+    comments: { nodes: comments.map(([who, when, type = 'User']) => ({ author: { __typename: type, login: who }, createdAt: when })) },
+    commits: { nodes: [{ commit: { committedDate: iso(commit), statusCheckRollup: null } }] } });
+  const cases = [
+    ['feedback', node(1, [['you', 'COMMENTED', at(1)]])],
+    ['feedback', node(2, [['you', 'COMMENTED', at(1)]], { reviewDecision: 'APPROVED' })], // beats ready
+    ['feedback', node(3, [['you', 'APPROVED', at(1)], ['you', 'COMMENTED', at(2)]])],
+    ['waiting', node(4, [['you', 'COMMENTED', at(1)], ['me', 'COMMENTED', at(2)]])], // the author's reply clears it
+    ['feedback', node(16, [['you', 'COMMENTED', at(1)], ['me', 'COMMENTED', at(2)], ['you', 'COMMENTED', at(3)]])], // and the reviewer's next word brings it back
+    ['waiting', node(17, [['you', 'COMMENTED', at(1)]], {}, [['me', at(2)]])], // a page comment from the author clears it too
+    ['waiting', node(5, [['me', 'COMMENTED', at(1)]])],
+    ['waiting', node(6, [['coderabbitai', 'COMMENTED', at(1), 'Bot']])],
+    ['waiting', node(7, [['you', 'COMMENTED', at(-1)]])],
+    ['waiting', node(8, [['you', 'PENDING', null]])],
+    ['waiting', node(9, [['you', 'COMMENTED', at(1)], ['you', 'APPROVED', at(2)]])], // an approval clears it
+    ['feedback', node(10, [], {}, [['you', at(1)]])], // a conversation comment counts
+    ['waiting', node(11, [], {}, [['coderabbitai', at(1), 'Bot']])],
+    ['waiting', node(12, [], {}, [['me', at(1)]])],
+    ['waiting', node(13, [['you', 'APPROVED', at(2)]], {}, [['you', at(1)]])], // a comment, then an approval
+    ['waiting', node(14, [], {}, [['you', at(-1)]])],
+    ['feedback', node(15, [['you', 'APPROVED', at(1)]], {}, [['you', at(2)]])], // a comment after the approval
+  ];
+  const { gh, repo } = ghRepo(cases.map(([, c], i) => ({ ...c, url: prUrl(i + 1), number: i + 1 }))); // numbered in order
+  const id = UUID(9), file = `.claude/projects/-work-9/${id}.jsonl`, made = n => [
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${n}`, content: prUrl(n) + '\n' }] } }];
+  let home = '';
+  const base = await serve(t, { [file]: jsonl([user('Fix it'), ...cases.flatMap((_, i) => made(i + 1))]) }, h => home = h, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === cases.length), 'a refresh to find them all');
+  const need = Object.fromEntries(s.github.map(p => [p.url, p.need]));
+  assert.deepStrictEqual(cases.map((_, i) => need[prUrl(i + 1)]), cases.map(c => c[0]));
+});
+
 // GitHub sometimes answers the query with exit 0 and every list empty. That must not wipe the PRs: the last good answer holds
 // until it ages out (LANTERN_GH_KEEP_SECONDS), and then a really empty account shows empty.
 test('an empty GitHub answer after a good one keeps the PRs until the kept answer ages out', async t => {

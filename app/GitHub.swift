@@ -12,7 +12,7 @@ let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 // Where GitHub lives and which `security` to run, so a test can point them at stand-ins (never the real Keychain).
 let GH_WEB = ProcessInfo.processInfo.environment["LANTERN_GITHUB_WEB"] ?? "https://github.com", GH_API = ProcessInfo.processInfo.environment["LANTERN_GITHUB_API"] ?? "https://api.github.com"
 let SECURITY = ProcessInfo.processInfo.environment["LANTERN_SECURITY"] ?? "/usr/bin/security"
-let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName repository { name nameWithOwner } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
+let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }"
 func prQuery(_ fields: String) -> String {
     """
     query {
@@ -22,12 +22,29 @@ func prQuery(_ fields: String) -> String {
     }
     """
 }
-// what a PR needs from me: merged/closed (gone), checks failing, changes requested, ready to merge, or nothing yet
+// Feedback is waiting while the last word after the newest commit belongs to a reviewer: the newest review or page comment
+// since (bots skipped, since they comment on every push) is from someone but the author and isn't an approval. A push, the
+// author's reply or an approval clears it. Without a commit date (a token without checks access asks for none) there is no
+// telling.
+// ponytail: committedDate is the committer date, so "Update branch" or a merge from main adds a commit and clears feedback
+// nobody answered; GitHub's pushedDate is gone from GraphQL.
+func feedbackWaiting(_ p: JSON) -> Bool {
+    let login = { (x: JSON?) in (x?["author"] as? JSON)?["login"] as? String }
+    guard let committed = (((p["commits"] as? JSON)?["nodes"] as? [JSON])?.first?["commit"] as? JSON)?["committedDate"] as? String else { return false }
+    let nodes = { (key: String) in (p[key] as? JSON)?["nodes"] as? [JSON] ?? [] }
+    // an unsubmitted review has no date
+    let events = nodes("reviews").map { (who: $0, at: $0["submittedAt"] as? String ?? "", approval: str($0["state"]) == "APPROVED") }
+        + nodes("comments").map { (who: $0, at: $0["createdAt"] as? String ?? "", approval: false) }
+    let since = events.filter { ($0.who["author"] as? JSON)?["__typename"] as? String != "Bot" && $0.at > committed }
+    return since.max { $0.at < $1.at }.map { login($0.who) != login(p) && !$0.approval } ?? false
+}
+// what a PR needs from me: merged/closed (gone), checks failing, changes requested, feedback waiting, ready to merge, or nothing yet
 func prNeed(_ p: JSON) -> String {
     if str(p["state"]) != "OPEN" { return str(p["state"]) == "MERGED" ? "merged" : "closed" }
     let checks = p["statusCheckRollup"] as? [JSON] ?? [], result = { (c: JSON) in str(or(c["conclusion"], c["state"])) }
     if checks.contains(where: { ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].contains(result($0)) }) { return "failing" }
     if str(p["reviewDecision"]) == "CHANGES_REQUESTED" { return "changes" }
+    if feedbackWaiting(p) { return "feedback" }
     let running = checks.contains { (truthy($0["status"]) && str($0["status"]) != "COMPLETED") || result($0) == "PENDING" }
     if str(p["reviewDecision"]) == "APPROVED" && !running { return "ready" }
     return truthy(p["isDraft"]) ? "draft" : "waiting"
