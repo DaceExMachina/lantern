@@ -51,7 +51,7 @@ onUpdated(() => {
       <div :class="{ gist: !full }">{{ shown.stale.title || '' }}</div>
       <div :class="full ? 'dim' : 'foot counts'">{{ `${NEED[shown.stale.need] || shown.stale.need} · untouched for ${stillFor(shown.stale)} days` }}</div>
       <div v-if="full && shown.stale.owner" class="dim">{{ `Made by ${shown.stale.owner.title || 'an old session'}` }}</div>
-      <div v-if="!full" class="hint">Click wisp for details, double click to open PR</div>
+      <div v-if="!full" class="hint">Click for details, double click to open PR</div>
     </template>
     <template v-else-if="ghost">
       <h3><span class="title"><span class="face">{{ ghost.o.title || ghost.o.id.slice(0, 8) }}</span></span><span class="chip idle"><span class="face">gone quiet</span></span></h3>
@@ -62,7 +62,7 @@ onUpdated(() => {
       </template>
       <template v-else>
         <div class="foot counts">{{ `${ghost.prs.length} stale PR${ghost.prs.length > 1 ? 's' : ''}` }}</div>
-        <div class="hint">Click moth for details, double click to resume session</div>
+        <div class="hint">Click for details, double click to resume session</div>
       </template>
     </template>
   </template>

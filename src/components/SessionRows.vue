@@ -56,7 +56,7 @@ function toggleList() {
   <template v-if="compact">
     <div v-if="gist" class="gist">{{ gist }}</div>
     <div v-if="counts" class="foot counts">{{ counts }}</div>
-    <div class="hint">Click moth for details, double click to open session</div>
+    <div class="hint">Click for details, double click to open session</div>
   </template>
   <div v-else class="cardBody">
     <div v-if="stateLine(s)" :class="['state', { error: s.state !== 'working' && s.error }]">{{ stateLine(s) }}</div>

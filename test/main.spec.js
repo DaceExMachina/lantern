@@ -87,8 +87,10 @@ test('pointing at a moth shows its compact card, and clicking it expands the car
   assert.strictEqual(live.hovered, moth, 'its card, pointing at it');
   assert.strictEqual(scene.style.cursor, 'pointer');
   assert.deepStrictEqual([live.expanded, cardEl.classList.contains('compact')], [false, true], 'compact while hovered');
+  assert.strictEqual(getComputedStyle(cardEl).width, '300px');
   fire(scene, 'click', 110, 205);
   assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [moth, true, false], 'expanded by the click');
+  assert.strictEqual(getComputedStyle(cardEl).width, '300px', 'as wide as the compact card');
   assert.deepStrictEqual(fetch.mock.calls, [], 'and the session isn\'t brought to the front');
   fire(scene, 'click', 110, 205);
   assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'a second click puts it away');
@@ -163,7 +165,10 @@ const urls = fetch => fetch.mock.calls.map(([url, init]) => [url, JSON.parse(ini
 async function expandsAndStays({ live, scene, cardEl, fire }, [x, y], target) {
   fire(scene, 'pointermove', x, y);
   assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [target, false, true], 'compact on hover');
+  const compactWidth = getComputedStyle(cardEl).width;
   fire(scene, 'click', x, y);
+  assert.strictEqual(getComputedStyle(cardEl).width, compactWidth, 'an expanded card is as wide as the compact one');
+  assert.strictEqual(compactWidth, '300px', 'which is the card\'s max-width');
   assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [target, true, false], 'expanded by a click');
   fire(scene, 'pointermove', 5, 5); timer(1999);
   assert.strictEqual(live.hovered, target, 'and it stays while the pointer is away less than 2 seconds');
@@ -175,6 +180,10 @@ test('a ghost moth: hover is compact, a click expands and holds, only a double c
   const ghost = w.stale.ghosts.get('old'), p = w.at(ghost.zone);
   await expandsAndStays(w, p, ghost.zone.target);
   assert.deepStrictEqual(w.fetch.mock.calls, [], 'a single click resumes nothing');
+  w.fire(w.scene, 'click', ...p, { shiftKey: true }); // expanded, so this puts it away like a plain click would
+  assert.deepStrictEqual([w.live.expanded, w.fetch.mock.calls], [false, []], 'a shift-click is a plain click: no resume');
+  w.fire(w.scene, 'click', ...p, { shiftKey: true });
+  assert.ok(w.live.expanded, 'and expands it');
   w.fire(w.scene, 'click', ...p); w.fire(w.scene, 'click', ...p); w.fire(w.scene, 'dblclick', ...p);
   assert.deepStrictEqual(urls(w.fetch), [['/resume', { id: 'old' }]], 'a double click resumes it, once');
 });
@@ -206,6 +215,8 @@ test('an orphan wisp: hover is a compact PR card, a click expands and holds, a d
   const wisp = w.stale.wisps.get(pr(1).url), p = w.at(wisp.zone);
   await expandsAndStays(w, p, wisp.zone.target);
   assert.deepStrictEqual(opened.mock.calls, [], 'a single click opens nothing');
+  w.fire(w.scene, 'click', ...p, { shiftKey: true }); w.fire(w.scene, 'click', ...p, { shiftKey: true });
+  assert.deepStrictEqual([opened.mock.calls, w.live.expanded], [[], true], 'a shift-click opens nothing either, it just expands');
   w.fire(w.scene, 'dblclick', ...p);
   assert.deepStrictEqual(opened.mock.calls, [[pr(1).url, '_blank', 'noopener']]);
   assert.deepStrictEqual(w.fetch.mock.calls, []);

@@ -111,11 +111,12 @@ for (const type of ['pointerdown', 'pointermove'] as const) $('scene').addEventL
   if (z && (!live.expanded || z.target === live.hovered)) { inZone = true; enterZone(z); } else leaveZones();
 });
 $('scene').addEventListener('pointerleave', e => isTouch(e) || leaveZones());
-// A click or tap on an area (a moth, a ghost, a wisp) expands its card; a shift-click runs the area's menu or click action.
+// A click or tap on an area (a moth, a ghost, a wisp) expands its card; a shift-click runs the area's menu (a moth snoozes), and
+// on one with none (a ghost, a wisp) is a plain click.
 // It listens on the scene itself: iOS only sends a tap's click to an element with a click listener of its own.
 $('scene').addEventListener('click', e => {
   const z = zoneFor(e);
-  if (z) e.shiftKey ? clickZone(z, true) : expandCard(z);
+  if (z) e.shiftKey && z.menu ? clickZone(z, true) : expandCard(z);
 });
 // A double click runs the area's click action: opens a moth's session, resumes a ghost's, opens an orphan wisp's PR. Its first
 // click expanded the card and its second put it away (card.ts expandCard), so the action runs from a settled page. Shift-click
