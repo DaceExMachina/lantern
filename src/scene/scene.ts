@@ -22,9 +22,13 @@ export function $(id: string, type: abstract new () => Element = HTMLElement): E
 // or wisps made there at all.
 export const Q = new URLSearchParams(location.search);
 export const AMBIENT = Q.has('ambient');
-// The height of the app window's drag strip, which takes every click on it (index.html's --titlebar): 0 outside the app. Read once, since body.app is set at load.
+// The height of the app window's drag strip, which takes every click on it (index.html's --titlebar): 0 outside the app. Read once, since body.app is set at load. Outside the app nothing is read but a selector: under happy-dom, `document.body` itself costs the
+// homes spec 1.5 GB of heap across its module copies, enough to fail CI.
 let bar: number | undefined;
-export const titlebar = () => bar ??= parseFloat(getComputedStyle(document.body).getPropertyValue('--titlebar')) || 0;
+export const titlebar = () => {
+  const app = document.querySelector('body.app');
+  return bar ??= app ? parseFloat(getComputedStyle(app).getPropertyValue('--titlebar')) || 0 : 0;
+};
 // The pinned sidebar's width (index.html's --dock-width), which PinnedDock tells the app window so its drag strip stops short of it.
 export const dockWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dock-width')) || 0;
 // arr[i] for an index known to be in range, which noUncheckedIndexedAccess can't see; it throws if it isn't
