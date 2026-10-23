@@ -1,7 +1,7 @@
 // The animation: one frame of the lantern, flame, moths, threads and fireflies.
 
 import { live } from './live';
-import { $, AMBIENT, byId, nth, CHAIN, CX, CY, FLAME_BASE, FLAME_STRETCH, HEAT_COLUMN, LANTERN_SPAN, PLUME, SINGE_REL, SMOKE, SMOKERS, SMOKE_REL, TRAIL, VIEW, WING_REACH, WING_SIDE, WING_UP, caster, cross, dot, facesFlame, flightFrame, lerp3, pathOf, ringPoint, ringPolar, stretch, unit, wing3d, wingsInDepthOrder } from './scene';
+import { $, AMBIENT, byId, nth, CHAIN, CX, CY, FLAME_BASE, FLAME_STRETCH, HEAT_COLUMN, LANTERN_SPAN, PLUME, SINGE_REL, SMOKE, SMOKERS, SMOKE_REL, TRAIL, VIEW, WING_REACH, WING_SIDE, WING_UP, caster, cross, dot, facesFlame, flightFrame, lerp3, pathOf, ringPoint, ringPolar, stretch, unit, wing3d } from './scene';
 import { devSlider, devToggle } from '../dev';
 import { COOL, FACET_TONES, GUST, HOP, LAG, MOTH_CALL, MOTH_IDLE, MOTH_SINGED, WARM, bakeCutouts, drawHang, fakeFlame, fakeLamp, flickerFollow, hash, mix, paperBounce, paperSoft, paperWind, perchAt, seeded, style, sway, tintFor, wobble } from './lanterns';
 import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
@@ -177,8 +177,8 @@ export function frame(t: number) {
     if (!aim) continue; // it flew off and is gone
     if (m.parentId === undefined) { mothFireflies(m, dt, s); if (m.zone) mothZones(m, aim.needsMe); }
     mothMove(m, aim, dt, s);
-    const [upPts, sidePts] = mothWings(m, aim, dt, s);
-    mothColour(m, aim.needsMe, upPts, sidePts, dt);
+    const [far, near] = mothWings(m, aim, dt, s);
+    mothColour(m, aim.needsMe, far, near, dt);
     mothZs(m, s);
     mothThread(m, dt, s);
   }
@@ -892,18 +892,20 @@ function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: numbe
   const landOpen = 0.05 + 0.05 * m.open + 0.75 * breath;
   const openAt = (lag: number, extra: number) => (Math.PI / 2 - wingLift(beat, lag, height)) * (1 - f) + (landOpen + extra) * f;
   const upPts = wing3d(WING_UP, T, N, openAt(0, 0), sweep * (1 - f)), sidePts = wing3d(WING_SIDE, T, N, openAt(0.18, 0.06), sweep * (1 - f));
-  put(m.up, 'd', pathOf(upPts)); put(m.side, 'd', pathOf(sidePts));
-  wingsInDepthOrder(m.up, upPts, m.side, sidePts);
+  // The nearer wing paints on top: the front path takes whichever it is. Moving a path to the end of its group instead
+  // leaks its old renderer in WebKit every time, and a flying moth's wings swap places every beat.
+  const [far, near] = upPts.depth > sidePts.depth ? [sidePts, upPts] : [upPts, sidePts];
+  put(m.back, 'd', pathOf(far)); put(m.front, 'd', pathOf(near));
   const tilt = m.tilt ?? 0;
   put(m.g, 'transform', `translate(${m.x.toFixed(1)} ${m.y.toFixed(1)}) rotate(${tilt.toFixed(1)}) scale(${m.size})`);
   m.shade = caster(m.x, m.y, tilt, m.size, [...upPts, ...sidePts]);
-  return [upPts, sidePts];
+  return [far, near];
 }
 
 // Moths near the lantern catch its light, the session that needs me turns violet, and a scorched one is charred a
 // little, healing as its episode runs out.
 // Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
-function mothColour(m: Moth, needsMe: boolean, upPts: Wing, sidePts: Wing, dt: number) {
+function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number) {
   const host = m.parentId === undefined ? m : live.moths.get(m.parentId), calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
   m.cool += ((calling ? (host?.session?.snoozed ? 0.5 : 1) : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3; // idle and landed: a hint of violet (MOTH_RESTING)
   const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330);
@@ -917,7 +919,7 @@ function mothColour(m: Moth, needsMe: boolean, upPts: Wing, sidePts: Wing, dt: n
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
   const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
-  for (const [path, pts] of [[m.up, upPts], [m.side, sidePts]] as const) {
+  for (const [path, pts] of [[m.back, far], [m.front, near]] as const) {
     const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
     if (path.style.fill !== tone) path.style.fill = tone;
   }
