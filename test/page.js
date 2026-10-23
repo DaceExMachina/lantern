@@ -33,8 +33,16 @@ HTMLCanvasElement.prototype.getContext = function (type, ...rest) { return type 
 // happy-dom has no 2d canvas: a test whose page draws text calls this for a context that accepts anything
 // (and returns the log of what it was asked). It lasts until vi.restoreAllMocks() and vi.unstubAllGlobals().
 export function stubCanvas2d() {
-  const webgl = HTMLCanvasElement.prototype.getContext, calls = [], anything = new Proxy(function () {}, { get: (_, k) => k === Symbol.toPrimitive ? () => 10 : (calls.push(k), anything), apply: () => anything });
+  // `filled`: each fillText as the font it was filled in and its text
+  const webgl = HTMLCanvasElement.prototype.getContext, calls = [], filled = [];
+  let font = '';
+  const fillText = text => { filled.push(`${font} ${text}`); };
+  const anything = new Proxy(function () {}, {
+    get: (_, k) => k === Symbol.toPrimitive ? () => 10 : (calls.push(k), k === 'fillText' ? fillText : anything),
+    set: (_, k, v) => { if (k === 'font') font = v; return true; },
+    apply: () => anything,
+  });
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (type, ...rest) { return type === '2d' ? anything : webgl.call(this, type, ...rest); });
   vi.stubGlobal('Path2D', class {});
-  return calls; // the names of everything asked of any 2d context
+  return Object.assign(calls, { filled }); // the names of everything asked of any 2d context
 }

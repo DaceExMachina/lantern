@@ -21,11 +21,13 @@ import { live } from './live';
 import { byId, nth } from './scene';
 import type { Point, Surface } from '../types';
 
+/** A line of type: each character but the spaces, and how far along the line it starts, at TYPE's size. */
+type Line = [char: string, x: number][];
 /** A block of session text on the paper: when it came and how long it holds, how dark at its peak, whether it's printed
  * mirrored, its type size, width, where it sits (`from` round the paper, `row` down it), its lines, its slant, and when
  * it began leaving. */
 interface Block {
-  born: number; hold: number; peak: number; mirror: boolean; size: number; width: number; from: number; row: number; lines: string[];
+  born: number; hold: number; peak: number; mirror: boolean; size: number; width: number; from: number; row: number; lines: Line[];
   alpha: number; drawnAlpha: number; slope: number; leaving?: number;
 }
 import { mix, style } from './lanterns';
@@ -58,18 +60,37 @@ let introAt = 0, introTimer: ReturnType<typeof setInterval> | undefined, inking 
 let flat: HTMLCanvasElement | undefined, drawn = { scale: 0, cool: -1 }, dirty = false;
 let paper: Surface | undefined; // the surface the blocks were laid out for
 
+// The type is filled a character at a time, all at one font size (TYPE) and scaled to each block's size by the canvas's
+// transform. WebKit (macOS 26) keeps what it works out for every distinct string it fills, at each font size, and gives
+// it back only under memory pressure: whole lines at each block's own size grew the web process by about 130 MB an hour
+// of new text, and never shrank. Single characters at one size are a hundred or so strings however long it runs. Georgia
+// has no kerning or ligatures in a canvas, so a line set from its characters' advances is the line filled whole.
+const TYPE = 10;
+const advances = new Map<string, number>();
 let measure: CanvasRenderingContext2D | null | undefined;
-const widthOf = (text: string, size: number) => {
+const advance = (c: string) => {
+  let a = advances.get(c);
+  if (a !== undefined) return a;
   measure ??= document.createElement('canvas').getContext('2d');
   if (!measure) return 0;
-  measure.font = `${size}px ${FONT}`;
-  return measure.measureText(text).width;
+  measure.font = `${TYPE}px ${FONT}`;
+  a = measure.measureText(c).width;
+  advances.set(c, a);
+  return a;
 };
-const wrapWords = (text: string, width: number, size: number) => text.split(' ').reduce((lines, w) => {
+const widthOf = (text: string) => Array.from(text).reduce((w, c) => w + advance(c), 0);
+// `width` at TYPE's size
+const wrapWords = (text: string, width: number) => text.split(' ').reduce((lines, w) => {
   const last = lines[lines.length - 1];
-  if (last && widthOf(last + ' ' + w, size) <= width) lines[lines.length - 1] = last + ' ' + w; else lines.push(w);
+  if (last && widthOf(last + ' ' + w) <= width) lines[lines.length - 1] = last + ' ' + w; else lines.push(w);
   return lines;
 }, new Array<string>());
+function setLine(line: string) {
+  const out: Line = [];
+  let x = 0;
+  for (const c of line) { if (c !== ' ') out.push([c, x]); x += advance(c); }
+  return out;
+}
 
 // A paragraph from one place: a live session's runs, or the recent transcripts' pool, both oldest first. From a random
 // starting run it takes the ones after it until there are about 160 words, skipping starts shown lately. Nothing when
@@ -150,7 +171,7 @@ function addBlock(d: Surface, now: number, age = 0) {
   const width = d.r * 2 / d.lines * (1.8 + r() * 1.0);
   const block: Block = {
     born: now - age, hold: HOLD * (0.6 + r() * 0.8), peak: 0.4 + r() * 0.3, mirror: r() < 0.4, size, width,
-    from: 0, row: 0, lines: wrapWords(text, width, size), alpha: 0, drawnAlpha: -1,
+    from: 0, row: 0, lines: wrapWords(text, width * TYPE / size).map(setLine), alpha: 0, drawnAlpha: -1,
     // pasted on a little askew: 4 to 8 degrees either way, so the baseline climbs or falls as it goes round
     slope: Math.tan((4 + r() * 4) * Math.PI / 180) * (r() < 0.5 ? -1 : 1),
   };
@@ -169,7 +190,6 @@ function addBlock(d: Surface, now: number, age = 0) {
 function typeset(ctx: CanvasRenderingContext2D, b: Block, d: Surface) {
   const wires = d.ribs.map(y => flatY(d, y));
   ctx.globalAlpha = b.alpha;
-  ctx.font = `${b.size}px ${FONT}`;
   b.lines.forEach((line, i) => {
     const row = b.row + i, g = Math.floor(row / d.lines);
     if (g < 0 || g >= d.ribs.length - 1) return; // above or below the paper
@@ -180,7 +200,8 @@ function typeset(ctx: CanvasRenderingContext2D, b: Block, d: Surface) {
     if (b.mirror) ctx.scale(-1, 1);
     ctx.translate(s, base + s * b.slope); // the baseline is at base + u * slope, u being how far round
     ctx.rotate(Math.atan(b.slope));
-    ctx.fillText(line, 0, 0);
+    ctx.scale(b.size / TYPE, b.size / TYPE);
+    for (const [c, x] of line) ctx.fillText(c, x, 0);
     ctx.restore();
   });
 }
@@ -218,6 +239,7 @@ function render(out: HTMLCanvasElement, d: Surface, s: number) {
   f.clearRect(0, 0, fw, fh);
   f.setTransform(s, 0, 0, s, U * s, -vTop * s);
   f.fillStyle = mix(INK.warm, INK.cool, cool);
+  f.font = `${TYPE}px ${FONT}`;
   for (const b of blocks) if (b.alpha > 0) typeset(f, b, d);
   o.setTransform(1, 0, 0, 1, 0, 0);
   o.globalCompositeOperation = 'source-over';

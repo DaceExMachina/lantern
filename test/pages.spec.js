@@ -119,3 +119,16 @@ test('in steady state the text is drawn on the paper\'s canvas, never encoded in
   assert.ok(calls.includes('fillText'), 'with words on it');
   assert.deepStrictEqual(encodes, []);
 });
+
+test('the type is filled a character at a time at one font size, so new text adds nothing WebKit keeps', async () => {
+  // WebKit keeps what it works out for each distinct string and font it fills, and gives it back only under memory
+  // pressure, so whole lines at each block's size grew the web process for as long as new text came (pages.ts TYPE)
+  const calls = stubCanvas2d();
+  const p = await load(2);
+  p.live.recentProse = Array.from({ length: 40 }, (_, i) => `Run ${i} says something new about lantern number ${i * 7}, and the paper it lights up.`);
+  p.live.pagesData = true;
+  vi.advanceTimersByTime(10 * 60 * 1000);
+  const filled = new Set(calls.filled), chars = new Set(p.live.recentProse.join('').replaceAll(' ', ''));
+  assert.ok(calls.filled.length > 1000, `the text was drawn: ${calls.filled.length} fills`);
+  assert.ok(filled.size <= chars.size, `${filled.size} distinct fonts and strings filled, from ${chars.size} characters`);
+});
