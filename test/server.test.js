@@ -100,6 +100,71 @@ test('a turn that ends with background agents running is paused, and their activ
 test('a turn that asks a question or names a Blocker is waiting, with the question as its note', t => replay(t, 'question'));
 test('snooze, snooze for good, and wake', t => replay(t, 'snooze'));
 test('a manual /compact ends idle, an automatic one leaves the session as it was', t => replay(t, 'compact'));
+
+// Auto-compaction fires hooks whether or not a turn is running (PreCompact, PostCompact, then SessionStart with source
+// compact), and what they leave behind has to be what the session was before: an idle one still waiting on me with its
+// note, a busy one still working.
+async function compaction(t) {
+  const base = await serve(t), id = 'auto-compact';
+  const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/w', ...more });
+  const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return [s.state, s.note]; };
+  const compact = async (expected) => {
+    for (const [ev, more] of [['PreCompact', { trigger: 'auto' }], ['PostCompact', { trigger: 'auto' }], ['SessionStart', { source: 'compact' }]]) {
+      await hook(ev, more);
+      assert.deepStrictEqual(await shown(), expected, ev);
+    }
+  };
+  return { hook, shown, compact };
+}
+test('an automatic compaction on a finished turn with no turn after it leaves the session waiting', async t => {
+  const { hook, shown, compact } = await compaction(t);
+  await hook('UserPromptSubmit', { prompt: 'go' });
+  await hook('Stop', { last_assistant_message: 'Done.' });
+  assert.deepStrictEqual(await shown(), ['waiting', 'Finished its turn']);
+  await compact(['waiting', 'Finished its turn']);
+});
+test('a prompt after an automatic compaction is a working turn as usual', async t => {
+  const { hook, shown, compact } = await compaction(t);
+  await hook('UserPromptSubmit', { prompt: 'go' });
+  await hook('Stop', { last_assistant_message: 'Done.' });
+  await compact(['waiting', 'Finished its turn']);
+  await hook('UserPromptSubmit', { prompt: 'and now this' });
+  assert.deepStrictEqual(await shown(), ['working', '']);
+  await hook('Stop', { last_assistant_message: 'Done again.' });
+  assert.deepStrictEqual((await shown())[0], 'waiting');
+});
+test('an automatic compaction in the middle of a turn keeps the session working until its Stop', async t => {
+  const { hook, shown, compact } = await compaction(t);
+  await hook('UserPromptSubmit', { prompt: 'go' });
+  await hook('PreToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' } });
+  await compact(['working', '']);
+  await hook('PostToolUse', { tool_name: 'Bash', tool_input: { command: 'ls' } });
+  assert.deepStrictEqual(await shown(), ['working', '']);
+  await hook('Stop', { last_assistant_message: 'Done.' });
+  assert.deepStrictEqual(await shown(), ['waiting', 'Finished its turn']);
+});
+
+test('a restart seeds a transcript with no turn line anywhere as at its prompt', async t => {
+  const id = UUID(8), line = JSON.stringify({ type: 'attachment', sessionId: id, cwd: '/w', attachment: { type: 'file', content: 'x'.repeat(10000) } });
+  const base = await serve(t, { [`.claude/projects/-w/${id}.jsonl`]: Array(400).fill(line).join('\n') + '\n' }); // 4 MB, past the first two windows
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the transcript to be seeded');
+  assert.strictEqual(s.state, 'idle');
+});
+
+// Dace's "qa script" session (Oct 22, 02:29Z) was left working after a restart. Its turn had ended; an automatic compaction
+// then wrote the boundary and summary, followed by ~300 KB of re-injected files and attachments, which pushed both out of
+// the 256 KB window the seed reads, so it found no turn line at all and read the session as mid-turn. Seeding reads back
+// until it finds one.
+test('a restart seeds a session whose transcript ends in a compaction as at its prompt, however much the compaction re-injected after it', async t => {
+  const id = UUID(7), line = o => JSON.stringify({ sessionId: id, cwd: '/w', ...o });
+  const turn = [line({ type: 'user', message: { role: 'user', content: 'go' } }), line({ type: 'assistant', message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'Done.' }] } }),
+    line({ type: 'system', subtype: 'turn_duration' }), line({ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' }),
+    line({ type: 'user', isCompactSummary: true, message: { role: 'user', content: 'This session is being continued from a previous conversation.' } })];
+  const attachments = Array.from({ length: 30 }, () => line({ type: 'attachment', attachment: { type: 'file', content: 'x'.repeat(10000) } }));
+  const base = await serve(t, { [`.claude/projects/-w/${id}.jsonl`]: [...turn, ...attachments].join('\n') + '\n' });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the transcript to be seeded');
+  assert.strictEqual(s.state, 'idle');
+});
 test('SessionEnd removes the session', t => replay(t, 'session-end'));
 test('a turn\'s plain sentences become its prose, consecutive ones joined into runs, without code, links, names, digits or talk to the person', t => replay(t, 'prose'));
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
