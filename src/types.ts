@@ -67,10 +67,10 @@ export const isSession = (x: unknown): x is Session => isRecord(x)
 export interface Review { url: string; label: string; title: string | null }
 export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']);
 /** The old session that made a stale PR. */
-export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number }
+export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number; resuming?: Opt<number> }
 /** One of my PRs no session owns and nobody has touched for a week. */
 export interface StalePR extends PR { updatedAt: string; owner?: Opt<Owner> }
-const isOwner = (x: unknown): x is Owner => isRecord(x) && isString(x['id']) && optString(x['title']) && optString(x['cwd']) && isNumber(x['last']);
+const isOwner = (x: unknown): x is Owner => isRecord(x) && isString(x['id']) && optString(x['title']) && optString(x['cwd']) && isNumber(x['last']) && optNumber(x['resuming']);
 export const isStalePR = (x: unknown): x is StalePR => isRecord(x) && isString(x['updatedAt']) && opt(isOwner)(x['owner']) && isPR(x);
 /** The GitHub accounts connected, and a sign-in under way (device flow). */
 export interface GitHub { accounts: { login: string; error: string }[]; signIn: { url: string; code: string } | null }
@@ -224,7 +224,7 @@ export interface Zone {
 }
 /** A ghost moth: an old session that made some of the stale PRs, drifting faintly (stale.ts). */
 export interface Ghost extends Drifter {
-  o: Owner & { prs: StalePR[] }; zone: Zone; prs: StalePR[]; beat: number; back: number; x: number; y: number; rate: number;
+  o: Owner & { prs: StalePR[] }; zone: Zone; prs: StalePR[]; beat: number; back: number; x: number; y: number; rate: number; out: number;
 }
 /** A stale PR's wisp (stale.ts). */
 export interface Wisp extends Drifter { p: StalePR; zone: Zone; wob: number; a: number; w: number; period: number; born: number; gone: number | undefined }

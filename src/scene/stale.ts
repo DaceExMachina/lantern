@@ -7,7 +7,7 @@
 // menu (quiet hours leave them be).
 
 import { live } from './live';
-import { $, VIEW, WING_SIDE, WING_UP, flapWing, nth, post, stretch } from './scene';
+import { $, CX, CY, VIEW, WING_SIDE, WING_UP, flapWing, nth, post, stretch } from './scene';
 import { GUST, hash, mix, seeded, style } from './lanterns';
 import { addFlyLight, flyColour } from './fireflies';
 import { put } from './frame';
@@ -36,10 +36,15 @@ function makeWisp(p: StalePR): Wisp {
 // in the SVG makes WebKit repaint the scene under it every frame, the Moroccan's masked brass and lace included. Their
 // hover areas are plain circles (card.ts), not SVG ones, for the same reason.
 const GHOSTS_MAX = 8;
+// A ghost whose session is being resumed (its owner's `resuming` stamp, set by the server when it's clicked, so every window
+// has it) or has just woken (gone from the list: the session is live again) flies off like a moth leaving, its wisps in tow,
+// FLY_S seconds to the far corner. The moth that comes in is the live session's own, arriving the usual way. A resume the
+// session never answers (RESUME_S) lets the ghost fly back. `out` is how far along its flight it is, 0 to 1.
+const FLY_S = 3, RESUME_S = 45;
 export const ghosts = new Map<string, Ghost>(); // session id -> ghost moth
 function makeGhost(o: Owner & { prs: StalePR[] }): Ghost {
   const rand = seeded(hash(o.id));
-  const m: Ghost = { o, zone: hoverZone(() => card, () => post('/resume', { id: m.o.id }), 20), prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, x: 0, y: 0,
+  const m: Ghost = { o, zone: hoverZone(() => card, () => post('/resume', { id: m.o.id }), 20), prs: [], pref: rand() * 6.283, dist: 190 + rand() * 90, ph: rand() * 6.28, beat: rand() * 6.28, back: 0, out: 0, x: 0, y: 0,
     rate: 0.88 + seeded(hash(o.id + ':wings'))() * 0.24 }; // a living moth's wingbeat, at its own speed
   const card: GhostTarget = { ghost: m, zone: m.zone };
   return m;
@@ -111,7 +116,9 @@ function driftTo(o: Drifter, aim: number, dt: number, s: number, sway: number): 
 }
 
 export function drawStale(dt: number, s: number) {
-  const show = live.staleOn, list = live.stalePRs; // turning it off just hides them
+  const show = live.staleOn; // turning it off just hides them
+  // a PR whose session is live again isn't stale, however long ago GitHub last said so: the server rebuilds the list only when it asks GitHub
+  const alive = new Set(live.raw.map(s => s.id)), list = live.stalePRs.filter(p => !alive.has(p.owner?.id ?? ''));
   const now = Date.now() / 1000; // they move on the wall clock, so every window (app, panel, screensaver) has them in the same places
   const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 30 drift, the oldest cloud up
   const want = new Map(drifting.map((p, i) => [p.url, [p, i] as const]));
@@ -126,24 +133,29 @@ export function drawStale(dt: number, s: number) {
   planStale(s, [...wisps.values()].filter(d => !ghosts.has(d.p.owner?.id ?? '')));
   for (const [id, m] of ghosts) {
     const i = kept.findIndex(o => o.id === id), o = kept[i];
-    if (!o) { zones.delete(m.zone); ghosts.delete(id); continue; }
-    m.o = o; m.prs = o.prs;
-    m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3;
+    const away = !o || o.resuming != null && now * 1000 - o.resuming < RESUME_S * 1000;
+    m.out = Math.min(1, Math.max(0, m.out + (away ? dt : -dt) / FLY_S));
+    if (!o && m.out >= 1) { zones.delete(m.zone); ghosts.delete(id); continue; }
+    if (o) { m.o = o; m.prs = o.prs; m.back = kept.length > 1 ? i / (kept.length - 1) : 0.3; }
     [m.x, m.y] = driftTo(m, m.aim ??= m.pref, dt, now, 22);
+    if (m.out > 0) { // straight out from the lantern to past the window's far corner, speeding up
+      const ang = Math.atan2(m.y - CY, m.x - CX), far = Math.hypot(w, h) / 2 + 100, e = m.out * m.out;
+      m.x += (CX + Math.cos(ang) * far - m.x) * e; m.y += (CY + Math.sin(ang) * far - m.y) * e;
+    }
     const beat = m.beat + now * 22.4 * m.rate;
     const liftAt = (lag: number) => 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3), sweep = 0.4 * Math.cos(beat);
     const roll = 0.7 * Math.sin(now * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
     // both wings are the same flat colour, so the order they're drawn in doesn't show
     const k = 1 - m.back * 0.3, at = ([x, y]: Point): Point => [m.x + (x - 2) * k, m.y + (y - 6) * k]; // the wings sit 2 left of and 6 above the moth's position
     const alpha = 0.14 * (1 - m.back * 0.5);
-    if (show) { addGhostWing(flapWing(WING_SIDE, liftAt(0.18), sweep, roll), at, alpha); addGhostWing(flapWing(WING_UP, liftAt(0), sweep, roll), at, alpha); }
-    Object.assign(m.zone, { x: m.x, y: m.y, off: !show });
+    if (show && m.out < 1) { addGhostWing(flapWing(WING_SIDE, liftAt(0.18), sweep, roll), at, alpha); addGhostWing(flapWing(WING_UP, liftAt(0), sweep, roll), at, alpha); }
+    Object.assign(m.zone, { x: m.x, y: m.y, off: !show || m.out > 0 });
   }
   for (const [url, d] of wisps) {
     const entry = want.get(url);
     if (entry) { d.p = entry[0]; d.gone = undefined; } else d.gone ??= 0;
     if (d.gone !== undefined) { // back to life: it lifts away and fades
-      d.gone += dt / 2;
+      d.gone += dt / (ghosts.has(d.p.owner?.id ?? '') ? FLY_S : 2); // following its ghost off, it fades as slowly as the ghost flies
       if (d.gone >= 1) { zones.delete(d.zone); wisps.delete(url); continue; }
     }
     d.born = Math.min(1, d.born + dt / 2);
@@ -162,7 +174,7 @@ export function drawStale(dt: number, s: number) {
     const spark = Math.max(0, Math.sin(now * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
     if (show) addFlyLight(x, y, 40, lit * fade, pale); // drawn as light by the background shader, like the fireflies
-    Object.assign(d.zone, { x, y, off: !show || d.gone !== undefined });
+    Object.assign(d.zone, { x, y, off: !show || d.gone !== undefined || !!moth?.out });
   }
   // the overflow: everything past 30 as a faint cloud low on the right, with a count
   $('staleCloud', SVGGElement).style.display = show && clouded > 0 ? '' : 'none';
