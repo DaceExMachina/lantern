@@ -136,3 +136,71 @@ test('every screen draws the wisps and ghosts in the same places, whatever its f
   assert.strictEqual(outB.wings.length, outA.wings.length);
   outA.wings.forEach((v, i) => assert.ok(Math.abs(v - outB.wings[i]) < 1e-3, `ghost wing value ${i}: ${v} against ${outB.wings[i]}`));
 });
+
+// A ghost whose session is resumed flies off like a moth leaving, its wisps in tow; the live session's own moth comes in the usual way.
+test('a ghost whose session is live again leaves at once, flying off with its wisps, and is gone within seconds', async () => {
+  const clock = { t: BASE }, { w, frame } = await screen(clock);
+  const live = (await import('../src/scene/live.ts')).live;
+  for (let i = 0; i < 3; i++) { clock.t += 16; frame(0.016, i * 0.016); }
+  const ghost = [...w.ghosts.values()][0], wisps = [...w.wisps.values()].filter(d => d.p.owner);
+  assert.strictEqual(wisps.length, 2);
+  const home = Math.hypot(ghost.x - 340, ghost.y - 330);
+  live.raw = [{ id: 'old-session', state: 'working', subagents: [] }]; // the resumed session shows up in the snapshot
+  const dist = () => Math.hypot(ghost.x - 340, ghost.y - 330), seen = [];
+  let out;
+  for (let t = 0; t < 1.5; t += 0.05) { clock.t += 50; out = frame(0.05, t); seen.push(dist()); }
+  assert.ok(ghost.out > 0.3 && dist() > home + 50, `it is flying off already: out ${ghost.out}, ${home} -> ${dist()}`);
+  assert.ok(seen.every((d, i) => i === 0 || d >= seen[i - 1] - 1e-6), 'and keeps going outward');
+  assert.ok(wisps.every(d => Math.hypot(d.zone.x - ghost.x, d.zone.y - ghost.y) < 60), 'its wisps are still with it');
+  for (let t = 0; t < 3.5; t += 0.05) { clock.t += 50; out = frame(0.05, 2 + t); }
+  assert.strictEqual(w.ghosts.size, 0, 'the ghost is gone');
+  assert.strictEqual(out.lights.length / 7, stale.length - 2, 'and so are its wisps, the other PRs still drift');
+  assert.strictEqual(out.wings.length, 0);
+});
+
+test('clicking a ghost starts the fly-off, and a resume that never answers lets it fly back', async () => {
+  const clock = { t: BASE }, { w, frame } = await screen(clock);
+  const post = vi.fn(() => Promise.resolve());
+  vi.stubGlobal('fetch', post);
+  for (let i = 0; i < 3; i++) { clock.t += 16; frame(0.016, i * 0.016); }
+  const ghost = [...w.ghosts.values()][0];
+  w.zoneAt(w.zones, ghost.x, ghost.y).onClick();
+  assert.deepStrictEqual([post.mock.calls[0][0], JSON.parse(post.mock.calls[0][1].body)], ['/resume', { id: 'old-session' }], 'the click asks the server to resume it');
+  // the server's answer to the click, in every window: the owner is stamped with the click's time
+  const live = (await import('../src/scene/live.ts')).live;
+  for (const p of live.stalePRs) if (p.owner) p.owner.resuming = clock.t;
+  for (let t = 0; t < 2; t += 0.05) { clock.t += 50; frame(0.05, t); }
+  assert.ok(ghost.out > 0.3, `it flies off while it waits: ${ghost.out}`);
+  assert.ok([...w.wisps.values()].filter(d => d.p.owner).every(d => d.zone.off), 'and its wisps, off with it, can\'t be hovered');
+  assert.strictEqual(w.ghosts.size, 1, 'and stays, since its PRs are still stale');
+  clock.t += 50e3; // no session ever turned up
+  for (let t = 0; t < 4; t += 0.05) { clock.t += 50; frame(0.05, 2 + t); }
+  assert.strictEqual(ghost.out, 0, 'it flew back');
+  vi.unstubAllGlobals();
+});
+
+test('a session that comes live after the ghost has flown off takes the ghost and its wisps with it at once, no snap back', async () => {
+  const clock = { t: BASE }, { w, frame } = await screen(clock), live = (await import('../src/scene/live.ts')).live;
+  vi.stubGlobal('fetch', () => Promise.resolve());
+  for (let i = 0; i < 3; i++) { clock.t += 16; frame(0.016, i * 0.016); }
+  for (const p of live.stalePRs) if (p.owner) p.owner.resuming = clock.t;
+  let out;
+  for (let t = 0; t < 4; t += 0.05) { clock.t += 50; out = frame(0.05, t); } // iTerm and Claude take a while to start
+  assert.strictEqual(w.ghosts.size, 1, 'the ghost waits, off the window');
+  assert.strictEqual(out.wings.length, 0, 'and out of sight');
+  live.raw = [{ id: 'old-session', state: 'working', subagents: [] }];
+  clock.t += 50; out = frame(0.05, 4);
+  assert.strictEqual(w.ghosts.size, 0, 'the ghost is gone the frame the session is live');
+  assert.strictEqual(w.wisps.size, stale.length - 2, 'and its wisps, not left to snap back onto drift spots');
+  assert.strictEqual(out.lights.length / 7, stale.length - 2);
+  vi.unstubAllGlobals();
+});
+
+test('a ghost that falls out of the top eight is gone as before, its PRs staying on as loose wisps in place', async () => {
+  const clock = { t: BASE }, { w, frame } = await screen(clock), live = (await import('../src/scene/live.ts')).live;
+  for (let i = 0; i < 3; i++) { clock.t += 16; frame(0.016, i * 0.016); }
+  for (const p of live.stalePRs) p.owner = undefined; // no longer anyone's to show
+  clock.t += 16; const out = frame(0.016, 0.1);
+  assert.strictEqual(w.ghosts.size, 0, 'no flight, no one waking');
+  assert.strictEqual(out.lights.length / 7, stale.length, 'every PR still drifts as a light');
+});

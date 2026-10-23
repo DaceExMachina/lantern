@@ -132,6 +132,7 @@ final class Re {
     }
 }
 
+let RESUME_MS = 45_000.0 // how long a ghost's resume gets to show up as a live session before the ghost flies back (stale.ts RESUME_S)
 let UUID_RE = Re("^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$", .caseInsensitive)
 let PR_CREATE = Re("\\bgh\\s+pr\\s+create\\b")
 let PR_URL = Re("https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+")
@@ -192,8 +193,15 @@ final class LanternServer {
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
     var stale: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
     var owners: JSON = [:] // dead PR url -> the old session that made it (or NSNull: looked, found none); looked up once
-    // the stale list as the page gets it: each PR with the old session that made it, when there is one
-    func staleOut() -> [JSON] { stale.map { p in var p = p; if let o = owners[str(p["url"])] as? JSON { p["owner"] = o }; return p } }
+    var resuming: [String: Double] = [:] // old session id -> when a ghost moth's click asked to resume it (pages fly the ghost off for a while)
+    /// The stale list as the pages get it, each PR with its owner (and when a click asked to resume that session).
+    func staleOut() -> [JSON] {
+        stale.map { p in
+            var p = p
+            if var o = owners[str(p["url"])] as? JSON { if let t = resuming[str(o["id"])] { o["resuming"] = t }; p["owner"] = o }
+            return p
+        }
+    }
     var accounts = Ordered<JSON>() // login -> { token, error }
     var signIn: JSON? // a device-flow sign-in in progress: { code, url, until }
     var githubEpoch = 0 // counts clearGitHub, so a refresh that began before one can tell its answer is out of date
@@ -918,6 +926,8 @@ final class LanternServer {
         if json && req.url == "/resume" {
             guard let id = body?["id"] as? String, UUID_RE.test(id),
                   let o = owners.values.compactMap({ $0 as? JSON }).first(where: { str($0["id"]) == id }) else { return respond(c, 404) }
+            if let t = resuming[id], now() - t < RESUME_MS { return respond(c, 204) } // a second click while it's starting
+            resuming = resuming.filter { now() - $0.value < RESUME_MS }; resuming[id] = now(); broadcast() // the ghosts fly off at the click, in every window
             let shell = "cd '\(str(o["cwd"]).replacingOccurrences(of: "'", with: "'\\''"))' && claude --resume \(id)"
             let script = shell.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             DispatchQueue.global().async {
@@ -932,7 +942,7 @@ final class LanternServer {
                       tell current session of current window to write text "\(script)"
                     end tell
                     """], timeout: 30)
-                DispatchQueue.main.async { self.respond(c, r.ok ? 204 : 500) }
+                DispatchQueue.main.async { if !r.ok { self.resuming[id] = nil; self.broadcast() }; self.respond(c, r.ok ? 204 : 500) } // a failed one: the ghost comes back
             }
             return
         }
