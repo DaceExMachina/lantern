@@ -1208,25 +1208,33 @@ test('a PR that leaves the list merged or closed stays a while saying so', async
     changes.filter(([, c]) => c !== 'appeared').sort(), 'and the log still has one merged and one closed');
 });
 
-// Feedback is waiting on a PR when, after the newest commit, someone but its author (and not a bot) reviewed it and the newest
-// such review isn't an approval. It beats ready, and the author's own replies don't clear it.
-test('a review newer than the newest commit makes feedback; the author, a bot, an older review or a later approval do not', async t => {
+// Feedback is waiting on a PR when, after the newest commit, the last non-bot review or comment is from someone but its author and isn't an approval. It beats ready; the author's reply clears it until the reviewer speaks again.
+test("a reviewer's last word since the newest commit makes feedback; a bot, the author's reply, an older review or an approval do not", async t => {
   const hour = 3600000, commit = Date.now() - 4 * hour, at = n => iso(commit + n * hour);
-  const node = (n, reviews, extra = {}) => ({ ...prNode(n, iso(Date.now())), isDraft: false, author: { login: 'me' }, ...extra,
+  const node = (n, reviews, extra = {}, comments = []) => ({ ...prNode(n, iso(Date.now())), isDraft: false, author: { login: 'me' }, ...extra,
     reviews: { nodes: reviews.map(([who, state, when, type = 'User']) => ({ author: { __typename: type, login: who }, state, submittedAt: when })) },
+    comments: { nodes: comments.map(([who, when, type = 'User']) => ({ author: { __typename: type, login: who }, createdAt: when })) },
     commits: { nodes: [{ commit: { committedDate: iso(commit), statusCheckRollup: null } }] } });
   const cases = [
     ['feedback', node(1, [['you', 'COMMENTED', at(1)]])],
     ['feedback', node(2, [['you', 'COMMENTED', at(1)]], { reviewDecision: 'APPROVED' })], // beats ready
     ['feedback', node(3, [['you', 'APPROVED', at(1)], ['you', 'COMMENTED', at(2)]])],
-    ['feedback', node(4, [['you', 'COMMENTED', at(1)], ['me', 'COMMENTED', at(2)]])], // the author's reply doesn't clear it
+    ['waiting', node(4, [['you', 'COMMENTED', at(1)], ['me', 'COMMENTED', at(2)]])], // the author's reply clears it
+    ['feedback', node(16, [['you', 'COMMENTED', at(1)], ['me', 'COMMENTED', at(2)], ['you', 'COMMENTED', at(3)]])], // and the reviewer's next word brings it back
+    ['waiting', node(17, [['you', 'COMMENTED', at(1)]], {}, [['me', at(2)]])], // a page comment from the author clears it too
     ['waiting', node(5, [['me', 'COMMENTED', at(1)]])],
     ['waiting', node(6, [['coderabbitai', 'COMMENTED', at(1), 'Bot']])],
     ['waiting', node(7, [['you', 'COMMENTED', at(-1)]])],
     ['waiting', node(8, [['you', 'PENDING', null]])],
     ['waiting', node(9, [['you', 'COMMENTED', at(1)], ['you', 'APPROVED', at(2)]])], // an approval clears it
+    ['feedback', node(10, [], {}, [['you', at(1)]])], // a conversation comment counts
+    ['waiting', node(11, [], {}, [['coderabbitai', at(1), 'Bot']])],
+    ['waiting', node(12, [], {}, [['me', at(1)]])],
+    ['waiting', node(13, [['you', 'APPROVED', at(2)]], {}, [['you', at(1)]])], // a comment, then an approval
+    ['waiting', node(14, [], {}, [['you', at(-1)]])],
+    ['feedback', node(15, [['you', 'APPROVED', at(1)]], {}, [['you', at(2)]])], // a comment after the approval
   ];
-  const { gh, repo } = ghRepo(cases.map(c => c[1]));
+  const { gh, repo } = ghRepo(cases.map(([, c], i) => ({ ...c, url: prUrl(i + 1), number: i + 1 }))); // numbered in order
   const id = UUID(9), file = `.claude/projects/-work-9/${id}.jsonl`, made = n => [
     { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
     { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${n}`, content: prUrl(n) + '\n' }] } }];

@@ -13,6 +13,7 @@ let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 let GH_WEB = ProcessInfo.processInfo.environment["LANTERN_GITHUB_WEB"] ?? "https://github.com", GH_API = ProcessInfo.processInfo.environment["LANTERN_GITHUB_API"] ?? "https://api.github.com"
 let SECURITY = ProcessInfo.processInfo.environment["LANTERN_SECURITY"] ?? "/usr/bin/security"
 let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }"
+let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }"
 func prQuery(_ fields: String) -> String {
     """
     query {
@@ -22,18 +23,21 @@ func prQuery(_ fields: String) -> String {
     }
     """
 }
-// Feedback is waiting when, after the newest commit, someone but the author (and not a bot, which comments on every push)
-// reviewed it and the newest such review isn't an approval. The author's own replies don't clear it: feedback given and no
-// commits since is still waiting. Without a commit date (a token without checks access asks for none) there is no telling.
+// Feedback is waiting while the last word after the newest commit belongs to a reviewer: the newest review or page comment
+// since (bots skipped, since they comment on every push) is from someone but the author and isn't an approval. A push, the
+// author's reply or an approval clears it. Without a commit date (a token without checks access asks for none) there is no
+// telling.
 // ponytail: committedDate is the committer date, so "Update branch" or a merge from main adds a commit and clears feedback
 // nobody answered; GitHub's pushedDate is gone from GraphQL.
 func feedbackWaiting(_ p: JSON) -> Bool {
     let login = { (x: JSON?) in (x?["author"] as? JSON)?["login"] as? String }
     guard let committed = (((p["commits"] as? JSON)?["nodes"] as? [JSON])?.first?["commit"] as? JSON)?["committedDate"] as? String else { return false }
-    let since = ((p["reviews"] as? JSON)?["nodes"] as? [JSON] ?? []).filter {
-        login($0) != login(p) && ($0["author"] as? JSON)?["__typename"] as? String != "Bot" && ($0["submittedAt"] as? String ?? "") > committed // an unsubmitted review has no date
-    }
-    return since.max { str($0["submittedAt"]) < str($1["submittedAt"]) }.map { str($0["state"]) != "APPROVED" } ?? false
+    let nodes = { (key: String) in (p[key] as? JSON)?["nodes"] as? [JSON] ?? [] }
+    // an unsubmitted review has no date
+    let events = nodes("reviews").map { (who: $0, at: $0["submittedAt"] as? String ?? "", approval: str($0["state"]) == "APPROVED") }
+        + nodes("comments").map { (who: $0, at: $0["createdAt"] as? String ?? "", approval: false) }
+    let since = events.filter { ($0.who["author"] as? JSON)?["__typename"] as? String != "Bot" && $0.at > committed }
+    return since.max { $0.at < $1.at }.map { login($0.who) != login(p) && !$0.approval } ?? false
 }
 // what a PR needs from me: merged/closed (gone), checks failing, changes requested, feedback waiting, ready to merge, or nothing yet
 func prNeed(_ p: JSON) -> String {
