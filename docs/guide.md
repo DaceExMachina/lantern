@@ -55,7 +55,7 @@ Fireflies hang around a session's moth, one for each open PR it owns, up to ten.
 
 A session owns a PR when it, or one of its agents in any worktree, created it with `gh pr create`. It also owns its branch's PR when it's the only session in that folder. Merely mentioning a PR doesn't count. Without GitHub status, a firefly appears when the "You:" line points at one of those PRs.
 
-A moth lands on the side of the lantern facing its home, as high up the paper as its home sits round the lantern, so landed moths spread out and their threads don't cross. While it's landed, a dotted line in its thread colour ties it to one of its fireflies back home.
+A moth always keeps to one side of the lantern, and lands on that side, facing its home, as high up the paper as its home sits round the lantern, so landed moths spread out and their threads don't cross. While it's landed, a dotted line in its thread colour ties it to one of its fireflies back home.
 
 With [GitHub status](setup.md#github-status) on, fireflies show what each PR needs:
 

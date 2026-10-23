@@ -99,12 +99,12 @@ export const SIZE = { session: 1.4, supervisor: 0.9, subagent: 0.55 };
 // Session moths' homes (state.ts sync hands them out): n spots spread evenly round an oval about the lantern, clear of
 // every lantern's body. It leaves out the arc at the bottom within 150 to either side of the middle, where the candle's
 // stand is, and the one at the top within 60, where the string or chain hangs. The i-th, clockwise from the bottom left;
-// a moth doubling up on a taken spot (`layer` 1, 2...) sits a little further in, and half a spot round. Each session wanders around its home.
-export function ringHome(i: number, n: number, layer = 0) {
-  const k = 1 - 0.18 * layer, [low, high] = ringGaps(k), side = Math.PI - low - high; // the arc each side
-  let a = (i + 0.5 + layer / 2) * 2 * side / n; // a second layer sits between two spots, so no two share a direction
+// Each session wanders around its home.
+export function ringHome(i: number, n: number) {
+  const [low, high] = ringGaps(), side = Math.PI - low - high; // the arc each side
+  let a = (i + 0.5) * 2 * side / n;
   if (a > side) a += 2 * high; // over the top
-  return ringPoint(Math.PI / 2 + low + a, k);
+  return ringPoint(Math.PI / 2 + low + a);
 }
 // The oval homes sit on (on the 600x600 square): the point at angle `a` on a ring k of the way out, and a point's
 // [angle, how far out] (1 on the ring itself).
@@ -112,11 +112,11 @@ export const RING = { x: 340, y: 320, rx: 225, ry: 235 };
 export const ringPoint = (a: number, k = 1): Point => [RING.x + RING.rx * k * Math.cos(a), RING.y + RING.ry * k * Math.sin(a)];
 export const ringPolar = ([x, y]: Point): Point => { const p = (x - RING.x) / RING.rx, q = (y - RING.y) / RING.ry; return [Math.atan2(q, p), Math.hypot(p, q)]; };
 // The gaps at the bottom and top of a ring k of the way out, as angles from straight down and straight up.
-const ringGaps = (k: number): Point => [Math.asin(Math.min(1, 150 / RING.rx / k)), Math.asin(60 / RING.rx / k)];
+const ringGaps = (): Point => [Math.asin(150 / RING.rx), Math.asin(60 / RING.rx)];
 // The point on the ring `u` of the way round its side (`side` -1 the left, 1 the right), from the bottom gap (0) to the
 // top one (1).
 export function ringAt(u: number, side: number) {
-  const [low, high] = ringGaps(1);
+  const [low, high] = ringGaps();
   return ringPoint(Math.PI / 2 - side * (low + u * (Math.PI - low - high))); // from straight down, round toward `side`
 }
 export const EDGES: Point[] = [[20,80],[660,140],[30,600],[660,560],[340,-20],[-20,330],[700,330]];
