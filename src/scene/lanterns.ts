@@ -870,7 +870,7 @@ export const MOTH_RESTING = '#8B7FA2';
 
 // A faint tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ.
 export function tintFor(s: Session) {
-  const hue = (hash((s.cwd ?? '').split('/').filter(Boolean).pop()) % 360 + (hash(s.id) % 29) - 14 + 360) % 360;
+  const hue = (hash((s.cwd ?? '').split('/').filter(Boolean).pop()) % 360 + (hash(s.look ?? s.id) % 29) - 14 + 360) % 360;
   const l = 0.72, a = 0.55 * Math.min(l, 1 - l), f = (n: number) => { const k = (n + hue / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
   return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 }

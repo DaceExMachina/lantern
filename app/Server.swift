@@ -390,7 +390,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "fork"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -516,13 +516,15 @@ final class LanternServer {
         if joining, let dir {
             s["createdPending"] = true
             DispatchQueue.global().async {
-                let made = createdPRs(dir + ".jsonl", dir)
+                let made = createdPRs(dir + ".jsonl", dir), fork = forkOf(dir + ".jsonl")
                 DispatchQueue.main.async {
                     guard var s = self.sessions[id] else { return }
                     let created = s["created"] as? [String] ?? [], all = created + made.filter { !created.contains($0) }
                     if !all.isEmpty { s["created"] = all }
                     s["createdPending"] = nil
+                    s["fork"] = fork
                     self.sessions[id] = s
+                    self.inherit(id)
                     if !made.isEmpty { self.refreshGitHub() }
                 }
             }
@@ -725,6 +727,24 @@ final class LanternServer {
             if t - ((s["last"] as? Double) ?? 0) > limit { sessions[id] = nil; agents[id] = nil; changed = true; continue }
         }
         if changed { broadcast() }
+    }
+
+    /// A fork carries on the moth of the session it was copied from: it wears that session's look (the page gives it the same
+    /// home and tint, and the moth itself), owns the PRs it made, and the parent goes. Unless the parent is still running, then
+    /// the fork is a moth of its own. A parent still on the books but not running is one only seeded from disk, or one whose
+    /// process now runs the fork (a branch). Decided once, when the fork first shows up.
+    func inherit(_ id: String) {
+        guard var s = sessions[id], let fork = s["fork"] as? JSON else { return }
+        s["fork"] = nil
+        let parent = str(fork["parent"]), pids = Set(s["pids"] as? [Int] ?? [])
+        if let p = sessions[parent], !truthy(p["unconfirmed"]) && pids.isDisjoint(with: p["pids"] as? [Int] ?? []) { sessions[id] = s; return }
+        let created = s["created"] as? [String] ?? [], made = (fork["made"] as? [String] ?? []).filter { !created.contains($0) }
+        s["look"] = fork["look"]
+        s["created"] = created + made
+        sessions[id] = s
+        sessions[parent] = nil; agents[parent] = nil
+        broadcast()
+        if !made.isEmpty { refreshGitHub() }
     }
 
     // A side session whose parent is still alive reports back to that session, so its waiting isn't waiting on Dace.

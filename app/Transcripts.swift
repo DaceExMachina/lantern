@@ -167,6 +167,11 @@ func readTail(_ file: String, _ bytes: Int) -> String? {
     try? fh.seek(toOffset: size - len)
     return String(decoding: (try? fh.read(upToCount: Int(len))) ?? Data(), as: UTF8.self)
 }
+func readHead(_ file: String, _ bytes: Int) -> String? {
+    guard let fh = FileHandle(forReadingAtPath: file) else { return nil }
+    defer { try? fh.close() }
+    return String(decoding: (try? fh.read(upToCount: bytes)) ?? Data(), as: UTF8.self)
+}
 func tail(_ file: String, _ bytes: Int = 256 * 1024) -> [String] { (readTail(file, bytes) ?? "").components(separatedBy: "\n") }
 
 // A renamed session has custom-title.json; otherwise the transcript keeps logging an auto-generated title, so read its tail.
@@ -275,6 +280,23 @@ func findOwners(_ urls: [String]) -> [String: Any] {
         }
     } }
     return found
+}
+
+// A forked session (Claude Code's /branch) starts its transcript with copies of the parent's messages, same uuids, each marked
+// "forkedFrom":{"sessionId":<parent>,...}, so the first copied line names the parent. `claude --resume --fork-session` leaves
+// no such mark, so only a branch is found.
+// ponytail: reads the first 256 KB, so a copied first message longer than that goes unseen.
+let FORKED_FROM = Re("\"forkedFrom\":\\{\"sessionId\":\"([0-9a-f-]{36})\"")
+func forkedFrom(_ file: String) -> String? { readHead(file, 256 * 1024).flatMap { FORKED_FROM.match($0)?[1] } }
+
+/// What a fork takes from the session it was copied from, read once when the fork first shows up: `look`, the first ancestor's
+/// id (a fork of a fork wears the original's look), and `made`, the PRs the parent created. Nil for a session that isn't a fork.
+func forkOf(_ file: String) -> JSON? {
+    let folder = (file as NSString).deletingLastPathComponent
+    guard let parent = forkedFrom(file) else { return nil }
+    var root = parent
+    for _ in 0..<8 { guard let up = forkedFrom("\(folder)/\(root).jsonl") else { break }; root = up }
+    return ["parent": parent, "look": root, "made": createdPRs("\(folder)/\(parent).jsonl", "\(folder)/\(parent)")]
 }
 
 // PRs a session created, read back from its transcript and its subagents' (a restart forgets the live ones).
@@ -441,6 +463,7 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
     if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
     s["created"] = createdPRs(file, dir)
+    s["fork"] = forkOf(file)
     let agents = liveSubagents(dir)
     let tasks = openTasks(lines)
     s["taskSince"] = tasks
@@ -620,6 +643,7 @@ extension LanternServer {
             self.seeded.insert(id)
             loadTitle(id, sessionPath(str(s["project"]), id))
         }
+        for (s, _) in seeded { inherit(str(s["id"])) } // after the batch, so a parent seeded beside its fork is there to hand over
     }
 
     // Hooks can miss a session (iTerm restarting, a hook failing), so now and then any running `claude` the lantern

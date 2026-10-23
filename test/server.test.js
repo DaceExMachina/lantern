@@ -1223,6 +1223,65 @@ test('stats: a refresh that goes out while a joining session reads its PRs back 
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });
 
+// A branch (/branch) copies the parent's messages into the fork's transcript, uuids kept, each marked with the session it came
+// from. The parent made PR 1 before the branch and PR 2 after it, so only reading the parent's own transcript finds PR 2.
+const made = (n, call) => [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${call}`, name: 'Bash', input: { command: 'gh pr create --draft --fill' } }] } },
+  { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${call}`, content: prUrl(n) + '\n' }] } }];
+const forkFile = id => `.claude/projects/-work/${id}.jsonl`;
+function branched(parent, fork) {
+  const before = [user('Fix it'), ...made(1, 1)].map((l, n) => ({ ...l, uuid: `copied-${n}` }));
+  const copy = before.map(l => ({ ...l, sessionId: fork, forkedFrom: { sessionId: parent, messageUuid: l.uuid } }));
+  return { [forkFile(parent)]: jsonl([...before, answer('Opened one.'), ...made(2, 2)]), [forkFile(fork)]: jsonl([{ type: 'custom-title', customTitle: 'branch', sessionId: fork }, ...copy, user('Try another way')]) };
+}
+const old = (...files) => home => { for (const f of files) { const dayAgo = new Date(Date.now() - 24 * 3600 * 1000); fs.utimesSync(path.join(home, f), dayAgo, dayAgo); } };
+const fire = (base, body, pid) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': pid }, body: JSON.stringify(body) });
+const aliveSpans = (home, ids) => sql(path.join(home, 'data/stats.sqlite'), `SELECT session, ended IS NULL AS open FROM spans WHERE kind = 'alive' AND session IN (${ids.map(i => `'${i}'`)}) ORDER BY began`);
+
+test('a fork of a session that is no longer running carries on its moth: same look, its PRs, and the parent goes', async t => {
+  const [parent, fork] = [UUID(3), UUID(4)];
+  const base = await serve(t, { ...branched(parent, fork), 'data/stats.sqlite': statsLog([['server', null, Date.now() - 2 * 3600000, Date.now() - 60000]]) }); // both only seeded from disk: neither is running
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === 1 && s; }, 'the fork to take over from the seeded parent');
+  assert.strictEqual(sessions[0].id, fork);
+  assert.strictEqual(sessions[0].look, parent, 'it wears the parent\'s look');
+  assert.deepStrictEqual(sessions[0].created, [prUrl(1), prUrl(2)], 'its own copy of PR 1, and PR 2 only the parent made');
+  assert.strictEqual(sessions[0].fork, undefined, 'the server\'s bookkeeping stays home');
+});
+
+test('a fork the hooks bring in, whose parent ended long ago, wears its look and owns its PRs', async t => {
+  const [parent, fork] = [UUID(3), UUID(4)];
+  let home = '';
+  const base = await serve(t, branched(parent, fork), h => { home = h; old(forkFile(parent), forkFile(fork))(h); });
+  await fire(base, { session_id: fork, hook_event_name: 'UserPromptSubmit', cwd: '/work', transcript_path: path.join(home, forkFile(fork)), prompt: 'go' }, String(process.pid));
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === fork && x.created?.length === 2), 'the fork to read its PRs back');
+  assert.strictEqual(s.look, parent);
+  assert.deepStrictEqual(s.created, [prUrl(1), prUrl(2)]);
+});
+
+test('a branch run by the same process hands the parent\'s moth over, and the stats log them one after the other', async t => {
+  const [parent, fork] = [UUID(3), UUID(4)];
+  let home = '';
+  const base = await serve(t, branched(parent, fork), h => { home = h; old(forkFile(parent), forkFile(fork))(h); });
+  await fire(base, { session_id: parent, hook_event_name: 'UserPromptSubmit', cwd: '/work', transcript_path: path.join(home, forkFile(parent)), prompt: 'go' }, String(process.pid));
+  await until(() => aliveSpans(home, [parent]).length, 'the parent\'s time to start');
+  await fire(base, { session_id: fork, hook_event_name: 'UserPromptSubmit', cwd: '/work', transcript_path: path.join(home, forkFile(fork)), prompt: 'go' }, String(process.pid));
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === 1 && s[0].id === fork && s[0].look && s; }, 'the fork to take the parent\'s place');
+  assert.strictEqual(sessions[0].look, parent);
+  const spans = await until(() => { const s = aliveSpans(home, [parent, fork]); return s.length === 2 && s[0].open === 0 && s; }, 'the parent\'s time to end');
+  assert.deepStrictEqual(spans, [{ session: parent, open: 0 }, { session: fork, open: 1 }], 'the parent\'s time ends where the fork\'s begins, so the copied history counts once');
+});
+
+test('a fork whose parent is still running is a moth of its own', async t => {
+  const [parent, fork] = [UUID(3), UUID(4)];
+  let home = '';
+  const base = await serve(t, branched(parent, fork), h => { home = h; old(forkFile(parent), forkFile(fork))(h); });
+  await fire(base, { session_id: parent, hook_event_name: 'UserPromptSubmit', cwd: '/work', transcript_path: path.join(home, forkFile(parent)), prompt: 'go' }, String(process.pid));
+  await fire(base, { session_id: fork, hook_event_name: 'UserPromptSubmit', cwd: '/work', transcript_path: path.join(home, forkFile(fork)), prompt: 'go' }, String(process.ppid)); // another process
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === 2 && s.find(x => x.id === fork)?.created?.length && s; }, 'the fork to read its PRs back');
+  assert.strictEqual(sessions.find(x => x.id === fork).look, undefined, 'no look of the parent\'s');
+  assert.deepStrictEqual(sessions.find(x => x.id === fork).created, [prUrl(1)], 'only the PR in its own copy of the history');
+  assert.ok(sessions.some(x => x.id === parent), 'the parent stays');
+});
+
 // A session that joins while a refresh is out (adopted, say) isn't in that refresh's answer. Until one looks at it, it
 // keeps the PRs it owned rather than dropping them as strays. Here s2 works outside any git repo, so no refresh ever looks
 // at it, while s1 in the repo makes the refreshes run.

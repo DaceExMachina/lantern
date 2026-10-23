@@ -29,7 +29,7 @@ export function sync() {
   const kept = new Set(), shown = AMBIENT ? [] : sessions; // the ambient view only needs the sessions for the glow's colour
   for (const s of shown) {
     kept.add(s.id);
-    let m = sessionMoth(s.id);
+    let m = sessionMoth(s.id) ?? heir(s, alive);
     if (!m) live.moths.set(s.id, m = makeSessionMoth(s.id));
     // whatever an earlier snapshot said, the server sends it now, so it isn't leaving: every window shows the latest snapshot
     m.session = s; m.leaving = false;
@@ -55,13 +55,13 @@ export function sync() {
   // active ones choose first and resting ones (snoozed for good, or idle: both change rarely, unlike working and waiting)
   // after, so a resting moth takes a free spot rather than push an active one out. Past 16, they double up where it's
   // least crowded. A join or leave can move the others; frame.ts glides them there.
-  const want = (id: string): number => seeded(hash(id))(), resting = (s: Session) => Number(s.forGood || s.state === 'idle');
+  const want = (s: Session): number => seeded(hash(s.look ?? s.id))(), resting = (s: Session) => Number(s.forGood || s.state === 'idle');
   const own = shown.filter(s => !sessionMoth(s.id)?.satellite)
-    .sort((a, b) => resting(a) - resting(b) || want(a.id) - want(b.id) || (a.id < b.id ? -1 : 1));
-  const n = Math.min(16, Math.max(3, own.length)), held = new Array<number>(n).fill(0), off = (i: number, id: string) => Math.abs(i + 0.5 - want(id) * n);
-  for (const { id } of own) {
-    const i = held.reduce((best, c, i) => c < (held[best] ?? 0) || c === held[best] && off(i, id) < off(best, id) ? i : best, 0);
-    const m = sessionMoth(id), layer = held[i] ?? 0;
+    .sort((a, b) => resting(a) - resting(b) || want(a) - want(b) || (a.id < b.id ? -1 : 1));
+  const n = Math.min(16, Math.max(3, own.length)), held = new Array<number>(n).fill(0), off = (i: number, s: Session) => Math.abs(i + 0.5 - want(s) * n);
+  for (const s of own) {
+    const i = held.reduce((best, c, i) => c < (held[best] ?? 0) || c === held[best] && off(i, s) < off(best, s) ? i : best, 0);
+    const m = sessionMoth(s.id), layer = held[i] ?? 0;
     held[i] = layer + 1;
     if (m) m.spot = ringHome(i, n, layer);
   }
@@ -84,6 +84,18 @@ export function el<K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<s
 export function sessionMoth(id: string): SessionMoth | undefined {
   const m = live.moths.get(id);
   return m?.parentId === undefined ? m : undefined;
+}
+
+// A fork carries on its parent's moth: it takes over the one that wore the fork's look and has no session in this snapshot,
+// keeping its place, thread and mood, so the parent doesn't fly off while a stranger flies in.
+function heir(s: Session, now: Set<string>): SessionMoth | undefined {
+  if (!s.look) return undefined;
+  for (const [k, m] of live.moths) {
+    if (m.parentId !== undefined || now.has(k) || (m.session?.look ?? k) !== s.look) continue;
+    live.moths.delete(k); m.key = s.id; live.moths.set(s.id, m);
+    return m;
+  }
+  return undefined;
 }
 
 function mothNode() {

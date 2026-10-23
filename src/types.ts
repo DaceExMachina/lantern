@@ -39,7 +39,7 @@ export interface Agent {
 }
 export interface Session {
   id: string; state: string; subagents: Agent[]; cwd?: Opt<string>; started?: Opt<number>; last?: Opt<number>;
-  parent?: Opt<string>; title?: Opt<string>; snoozed?: Opt<boolean>; forGood?: Opt<boolean>; error?: Opt<boolean>;
+  parent?: Opt<string>; look?: Opt<string>; title?: Opt<string>; snoozed?: Opt<boolean>; forGood?: Opt<boolean>; error?: Opt<boolean>;
   waitingSince?: Opt<number>; note?: Opt<string>; activity?: Opt<string>; prompt?: Opt<string>;
   forYou?: Opt<ForYou>; github?: Opt<PR[]>; created?: Opt<string[]>; ticks?: Opt<number>;
   tasks?: Opt<string[]>; taskStarted?: Opt<Record<string, number>>; prose?: Opt<string[]>;
@@ -57,7 +57,7 @@ const isAgent = (x: unknown): x is Agent => isRecord(x) && isString(x['id']) && 
   && optString(x['model']) && optString(x['activity']) && optNumber(x['started']) && optNumber(x['last']);
 export const isSession = (x: unknown): x is Session => isRecord(x)
   && isString(x['id']) && isString(x['state']) && arrayOf(isAgent)(x['subagents']) && optString(x['cwd']) && optNumber(x['started']) && optNumber(x['last'])
-  && optString(x['parent']) && optString(x['title']) && optBoolean(x['snoozed']) && optBoolean(x['forGood']) && optBoolean(x['error'])
+  && optString(x['parent']) && optString(x['look']) && optString(x['title']) && optBoolean(x['snoozed']) && optBoolean(x['forGood']) && optBoolean(x['error'])
   && optNumber(x['waitingSince']) && optString(x['note']) && optString(x['activity']) && optString(x['prompt'])
   && opt(isForYou)(x['forYou']) && opt(arrayOf(isPR))(x['github']) && opt(isStrings)(x['created']) && optNumber(x['ticks'])
   && opt(isStrings)(x['tasks']) && opt(isNumberRecord)(x['taskStarted']) && opt(isStrings)(x['prose']);
