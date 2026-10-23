@@ -323,7 +323,15 @@ func linesWorthParsing(_ file: String, isCall: @escaping (String) -> Bool) -> An
 /// only in the subagent's transcript) and its finishing wakes the subagent, not the session. One memmem over the mapped
 /// file, as in linesWorthParsing, so an 85 MB transcript costs milliseconds.
 func taskStart(_ file: String, _ id: String) -> Double? {
-    lineWith(file, "\"backgroundTaskId\":\"\(id)\"").flatMap { (parse($0) as? JSON).flatMap(lineTime) }
+    for key in ["backgroundTaskId", "taskId"] { // a shell's launch, then a Monitor's
+        if let line = lineWith(file, "\"\(key)\":\"\(id)\"").flatMap({ parse($0) as? JSON }), launchedTask(line) == id { return lineTime(line) }
+    }
+    return nil
+}
+/// The task a transcript line launched, if it's a tool result carrying `backgroundTaskId` (Bash run_in_background) or `taskId` (Monitor).
+func launchedTask(_ line: JSON) -> String? {
+    guard let r = line["toolUseResult"] as? JSON else { return nil }
+    return (r["backgroundTaskId"] ?? r["taskId"]) as? String
 }
 /// A transcript line's timestamp in ms.
 func lineTime(_ line: JSON) -> Double? {
@@ -332,8 +340,8 @@ func lineTime(_ line: JSON) -> Double? {
     return (line["timestamp"] as? String).flatMap(iso.date).map { ($0.timeIntervalSince1970 * 1000).rounded(.down) }
 }
 /// The background tasks (shells, monitors) this transcript's tail started that nothing has ended, id -> when it started
-/// (the same stamp taskStart gives, so the freshness rule treats a seeded task like a Stop-listed one). A launch is a
-/// tool result carrying `backgroundTaskId` (Bash run_in_background) or `taskId` (Monitor); it ends with a task-notification
+/// (the same stamp taskStart gives, so the freshness rule treats a seeded task like a Stop-listed one). A launch is
+/// a `launchedTask` line; it ends with a task-notification
 /// that has a `<status>` (a Monitor's event notices don't), or a TaskStop's result. A task a subagent started is in the
 /// subagent's transcript, so never here.
 /// ponytail: only the tail is read; a launch before it is long past TASK_FRESH_MS in any case that matters.
@@ -343,7 +351,7 @@ func openTasks(_ lines: [String]) -> [String: Double] {
     for line in lines {
         if line.contains("<status>"), let id = ended.match(line)?[1] { open[id] = nil; continue }
         guard line.contains("\"toolUseResult\""), let j = parse(Data(line.utf8)) as? JSON, let r = j["toolUseResult"] as? JSON else { continue }
-        if let id = (r["backgroundTaskId"] ?? r["taskId"]) as? String, let at = lineTime(j) { open[id] = at }
+        if let id = launchedTask(j), let at = lineTime(j) { open[id] = at }
         if str(r["message"]).hasPrefix("Successfully stopped task"), let id = r["task_id"] as? String { open[id] = nil }
     }
     return open

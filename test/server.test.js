@@ -2152,3 +2152,16 @@ test('a seeded session waiting on its own background shell is paused, not landed
     { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'idle', monitor: 'paused' }); // old: open but past TASK_FRESH_MS, so it rests
   assert.strictEqual(sessions.find(s => s.id === UUID(0)).note, 'Waiting on 1 background task');
 });
+
+// A Monitor's launch result carries taskId, not backgroundTaskId, so a Stop listing a session's own Monitor found no start
+// line and dropped it: the session landed instead of pausing on its watch.
+test('Stop counts a Monitor the session started (its launch carries taskId)', async t => {
+  const id = UUID(0), file = `.claude/projects/-work/${id}.jsonl`, started = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  let home;
+  const base = await serve(t, { [file]: jsonl([user('watch CI'), { type: 'user', cwd: '/work', timestamp: started, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'Monitor started (task bmon1)' }] }, toolUseResult: { taskId: 'bmon1', timeoutMs: 1800000, persistent: false } }]) }, h => home = h);
+  const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/work', transcript_path: path.join(home, file), ...more });
+  await hook('UserPromptSubmit', { prompt: 'watch CI' });
+  await hook('Stop', { last_assistant_message: 'Watching.', background_tasks: [{ id: 'bmon1', type: 'monitor', status: 'running', description: 'CI results' }] });
+  const s = (await snapshot(base)).sessions.find(x => x.id === id);
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'paused', note: 'Waiting on 1 background task', tasks: ['CI results'] });
+});
