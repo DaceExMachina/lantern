@@ -353,10 +353,10 @@ test('the expanded card lists five agents and "n more", which lists the rest', a
   assert.strictEqual(find(await show(session({ state: 'working', subagents })), 'job').length, 5, 'and five again on a new card');
 });
 
-// a stale PR's wisp or a ghost moth, hovered
-const hoverStale = async (stale) => {
+// a stale PR's wisp or a ghost moth, hovered (compact), or clicked too (expanded)
+const hoverStale = async (stale, click = true) => {
   const target = { stale, zone: hoverZone(() => target, () => {}, 12) };
-  enterZone(target.zone);
+  (click ? expandCard : enterZone)(target.zone);
   await nextTick();
   return $('card');
 };
@@ -392,4 +392,27 @@ test('a wisp whose session has gone quiet shows that session\'s ghost card', asy
     assert.ok(text(card).includes('PRs (1)'));
     assert.ok(!text(card).includes('Made by'), 'not the PR-only card');
   } finally { ghosts.delete('quiet'); }
+});
+
+test('hovering a ghost or a wisp shows a compact card with a hint that names its double click', async () => {
+  const hint = card => find(card, 'hint').map(text);
+  setSessions({ id: 'known', state: 'idle', subagents: [], title: 'My session', last: now });
+  let card = await hoverStale({ ...wisp, owner: { id: 'known', title: 'My session', last: now } }, false);
+  assert.deepStrictEqual(hint(card), ['Click moth for details, double click to open session'], 'a wisp of a live session');
+  hideCard();
+  const o = { id: 'quiet', title: 'Imageproxy PR 11', cwd: '/w/imageproxy', last: now - 9 * 864e5 };
+  const stale = { ...wisp, owner: o };
+  ghosts.set('quiet', { o, prs: [stale, { ...wisp, url: 'https://github.com/o/r/pull/10', owner: o }] });
+  try {
+    card = await hoverStale(stale, false);
+    assert.deepStrictEqual(hint(card), ['Click moth for details, double click to resume session'], 'a ghost, or the wisp of one');
+    assert.deepStrictEqual([find(card, 'counts').map(text), text(card).includes('PRs ('), find(card, 'pr').length], [['2 stale PRs'], false, 0], 'its PRs counted, not listed');
+  } finally { ghosts.delete('quiet'); }
+  hideCard();
+  card = await hoverStale(wisp, false);
+  assert.deepStrictEqual(hint(card), ['Click wisp for details, double click to open PR'], 'an orphan wisp');
+  assert.deepStrictEqual([find(card, 'gist').map(text), find(card, 'counts').map(text)], [['Old PR'], ['review · untouched for 9 days']], 'its title and age');
+  assert.ok(!text(card).includes('Made by'));
+  card = await hoverStale(wisp);
+  assert.deepStrictEqual(hint(card), [], 'and expanded, no hint');
 });

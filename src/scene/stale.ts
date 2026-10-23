@@ -12,6 +12,7 @@ import { GUST, hash, mix, seeded, style } from './lanterns';
 import { addFlyLight, flyColour } from './fireflies';
 import { put } from './frame';
 import { hoverZone, zones } from './card';
+import { sessionMoth } from './state';
 import type { Drifter, Ghost, GhostTarget, Owner, Point, StalePR, StaleTarget, Wisp } from '../types';
 
 const STALE_MAX = 30;
@@ -21,8 +22,9 @@ export const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out towar
 
 function makeWisp(p: StalePR): Wisp {
   const rand = seeded(hash(p.url));
-  // hovering shows the PR's card; clicking (or clicking the card) opens it
-  const card: StaleTarget = { stale: p, zone: hoverZone(() => card, () => open(p.url, '_blank', 'noopener'), 12) }, zone = card.zone;
+  // hovering shows the PR's card, which is its session's (the live moth's or the ghost's) when Lantern knows that session: the
+  // double click then does what a double click on that moth or ghost does. Otherwise it opens the PR.
+  const card: StaleTarget = { stale: p, zone: hoverZone(() => card, () => { const id = p.owner?.id ?? '', z = sessionMoth(id)?.zone ?? ghosts.get(id)?.zone; if (z) z.onClick(); else open(p.url, '_blank', 'noopener'); }, 12) }, zone = card.zone;
   const d = { p, zone, pref: rand() * 6.283, dist: 180 + rand() * 100, wob: rand(), ph: rand() * 6.28, a: rand() * 6.28, w: (0.25 + rand() * 0.2) * (rand() < 0.5 ? -1 : 1),
     period: 30 + rand() * 30,
     born: staleSeeded ? 0 : 1, gone: undefined };
@@ -31,7 +33,7 @@ function makeWisp(p: StalePR): Wisp {
 
 // Ghost moths: an old session that made some of the stale PRs drifts faintly in the background, the same moth as the
 // flying ones, flapping the same way, but pale and nearly see-through. Hovering shows the session and its stale PRs;
-// clicking resumes it in a new iTerm tab. At most 8, the most recently active; older ones drift lower and fainter.
+// a double click resumes it in a new iTerm tab. At most 8, the most recently active; older ones drift lower and fainter.
 // Like the wisps' light, they're drawn by the background shader (background.ts drawGhosts), not the SVG: anything moving
 // in the SVG makes WebKit repaint the scene under it every frame, the Moroccan's masked brass and lace included. Their
 // hover areas are plain circles (card.ts), not SVG ones, for the same reason.

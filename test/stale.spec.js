@@ -158,13 +158,13 @@ test('a ghost whose session is live again leaves at once, flying off with its wi
   assert.strictEqual(out.wings.length, 0);
 });
 
-test('clicking a ghost starts the fly-off, and a resume that never answers lets it fly back', async () => {
+test('a ghost\'s click action (its double click) starts the fly-off, and a resume that never answers lets it fly back', async () => {
   const clock = { t: BASE }, { w, frame } = await screen(clock);
   const post = vi.fn(() => Promise.resolve());
   vi.stubGlobal('fetch', post);
   for (let i = 0; i < 3; i++) { clock.t += 16; frame(0.016, i * 0.016); }
   const ghost = [...w.ghosts.values()][0];
-  w.zoneAt(w.zones, ghost.x, ghost.y).onClick();
+  w.zoneAt(w.zones, ghost.x, ghost.y).onClick(); // what a double click runs (wiring.ts)
   assert.deepStrictEqual([post.mock.calls[0][0], JSON.parse(post.mock.calls[0][1].body)], ['/resume', { id: 'old-session' }], 'the click asks the server to resume it');
   // the server's answer to the click, in every window: the owner is stamped with the click's time
   const live = (await import('../src/scene/live.ts')).live;
