@@ -66,21 +66,72 @@ test('a tap outside the moths and the card puts the card away; a mouse click or 
 
 // Hover areas are plain circles (card.ts), found from the scene's own pointer events (wiring.ts zoneFor), so a moth's card
 // and its click only work if those handlers reach them
-test('pointing at a moth shows its card, and clicking it brings its session to the front', async () => {
-  const { state, live, fetch } = await open();
+// a session moth at (100, 200) on the page's real scene, and pointer events on the scene, the card and the window
+async function withMoth() {
+  const o = await open();
   flatScene();
-  const scene = document.getElementById('scene');
-  const moth = { key: 'api', zone: null };
-  moth.zone = state.hoverArea(() => moth, 'moth');
-  Object.assign(moth.zone, { x: 100, y: 200 });
-  const fire = (type, x, y) => scene.dispatchEvent(Object.assign(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y }), { pointerType: 'mouse' }));
-  fire('pointermove', 300, 300);
+  window.lanternTick = () => {}; // no frames while the timers run
+  const scene = document.getElementById('scene'), cardEl = document.getElementById('card');
+  const moth = { key: 'api', session: { id: 'api', state: 'waiting' }, zone: null }, other = { key: 'web', zone: null };
+  moth.zone = o.state.hoverArea(() => moth, 'moth'); other.zone = o.state.hoverArea(() => other, 'moth');
+  Object.assign(moth.zone, { x: 100, y: 200 }); Object.assign(other.zone, { x: 400, y: 200 });
+  const fire = (el, type, x = 0, y = 0, init = {}) => el.dispatchEvent(Object.assign(new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, ...init }), { pointerType: 'mouse' }));
+  return { ...o, scene, cardEl, moth, other, fire };
+}
+
+test('pointing at a moth shows its compact card, and clicking it expands the card rather than opening the session', async () => {
+  const { live, fetch, scene, cardEl, moth, fire } = await withMoth();
+  fire(scene, 'pointermove', 300, 300);
   assert.strictEqual(live.hovered, null, 'nothing away from it');
-  fire('pointermove', 110, 205);
+  fire(scene, 'pointermove', 110, 205);
   assert.strictEqual(live.hovered, moth, 'its card, pointing at it');
   assert.strictEqual(scene.style.cursor, 'pointer');
-  fire('click', 110, 205);
-  assert.deepStrictEqual(fetch.mock.calls.map(([url, o]) => [url, JSON.parse(o.body)]), [['/focus', { id: 'api' }]]);
+  assert.deepStrictEqual([live.expanded, cardEl.classList.contains('compact')], [false, true], 'compact while hovered');
+  fire(scene, 'click', 110, 205);
+  assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [moth, true, false], 'expanded by the click');
+  assert.deepStrictEqual(fetch.mock.calls, [], 'and the session isn\'t brought to the front');
+  fire(scene, 'click', 110, 205);
+  assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'a second click puts it away');
+  fire(scene, 'click', 110, 205, { shiftKey: true });
+  assert.deepStrictEqual(fetch.mock.calls.map(([url]) => url), ['/snooze'], 'shift-click still snoozes');
+});
+
+test('a hover card is a tooltip: the pointer passes through it, and it goes the moment the pointer leaves the moth', async () => {
+  const { live, scene, cardEl, moth, fire } = await withMoth();
+  fire(scene, 'pointermove', 110, 205);
+  assert.strictEqual(getComputedStyle(cardEl).pointerEvents, 'none', 'a compact card takes no pointer events');
+  assert.strictEqual(live.hovered, moth, 'shown while pointing at it');
+  fire(scene, 'pointermove', 300, 300); timer(0);
+  assert.strictEqual(live.hovered, null, 'gone at once, no grace period');
+});
+
+test('an expanded card stays until the pointer has been away from it and its moth for 2 seconds, or a click lands elsewhere', async () => {
+  const { live, scene, cardEl, moth, other, fire } = await withMoth();
+  const expanded = () => { fire(scene, 'pointermove', 110, 205); fire(scene, 'click', 110, 205); assert.ok(live.expanded); };
+  expanded();
+  assert.strictEqual(getComputedStyle(cardEl).pointerEvents, 'auto', 'an expanded card takes the pointer');
+  fire(scene, 'pointermove', 300, 300); timer(1999);
+  assert.strictEqual(live.hovered, moth, 'still open just short of 2 seconds away');
+  timer(1);
+  assert.strictEqual(live.hovered, null, 'closed at 2 seconds');
+  expanded();
+  fire(scene, 'pointermove', 300, 300); timer(1500);
+  fire(scene, 'pointermove', 110, 205); timer(5000);
+  assert.ok(live.expanded && live.hovered === moth, 'coming back to its moth in time keeps it');
+  fire(scene, 'pointerleave', 300, 300); fire(cardEl, 'pointerenter'); timer(5000);
+  assert.ok(live.expanded, 'and so does moving onto the card');
+  fire(cardEl, 'pointerleave'); fire(scene, 'pointermove', 410, 205);
+  assert.strictEqual(live.hovered, moth, 'another moth doesn\'t take it over on hover');
+  timer(2000);
+  assert.strictEqual(live.hovered, null, 'and it closes 2 seconds after leaving the card');
+  expanded();
+  fire(cardEl, 'click');
+  assert.ok(live.expanded, 'a click on the card keeps it');
+  fire(document.body, 'click');
+  assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'a click elsewhere closes it');
+  expanded();
+  fire(scene, 'click', 410, 205);
+  assert.deepStrictEqual([live.hovered, live.expanded], [other, true], 'a click on another moth expands that one\'s');
 });
 
 // A moth's hover area at (100, 100) with radius 40, in screen and scene coordinates alike, under the open card.
@@ -96,18 +147,29 @@ async function withCard() {
   return { ...o, zone, clickCard };
 }
 
-test('a click on a session\'s card body opens it only where the card covers its own moth; a stale PR\'s card opens from anywhere', async () => {
+test('a click on a session\'s card body does nothing (it opens from its header); a stale PR\'s card opens from anywhere but a link', async () => {
   const { card, live, zone, clickCard } = await withCard();
   const open = vi.spyOn(card, 'clickZone').mockImplementation(() => {});
   const opened = () => open.mock.calls.map(([z]) => z);
-  live.hovered = { session: { id: 's1' }, zone };
-  clickCard(300, 300);
-  assert.deepStrictEqual(opened(), [], 'away from its moth');
-  clickCard(110, 95);
-  assert.deepStrictEqual(opened(), [zone], 'over its moth (a tall card in the iTerm panel)');
-  clickCard(110, 95, 'a'); clickCard(110, 95, 'button');
-  assert.strictEqual(opened().length, 1, 'but not on a link or button there (a row, the PR toggle)');
+  live.hovered = { key: 's1', session: { id: 's1' }, zone };
+  clickCard(300, 300); clickCard(110, 95);
+  assert.deepStrictEqual(opened(), [], 'not even over its own moth');
   live.hovered = { stale: {}, zone: 'wisp' };
-  clickCard(300, 300);
-  assert.deepStrictEqual(opened(), [zone, 'wisp'], 'a stale PR\'s card');
+  clickCard(300, 300); clickCard(300, 300, 'a');
+  assert.deepStrictEqual(opened(), ['wisp'], 'a stale PR\'s card, but not from a link on it');
+});
+
+test('a click on a card button that takes itself away (the agents\' "more") keeps the card open, and Escape closes it', async () => {
+  const { live, scene, cardEl, fire } = await withMoth();
+  fire(scene, 'pointermove', 110, 205); fire(scene, 'click', 110, 205);
+  assert.ok(live.expanded);
+  const more = cardEl.appendChild(document.createElement('button'));
+  let reached = false;
+  more.addEventListener('click', () => more.remove()); // as Vue's v-if does, before the click bubbles out to the window
+  addEventListener('click', () => { reached = true; }, { once: true });
+  fire(more, 'click');
+  assert.ok(reached && !more.isConnected, 'the click reached the window after its button was gone');
+  assert.ok(live.expanded, 'and the card stayed open');
+  dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'Escape closes it');
 });

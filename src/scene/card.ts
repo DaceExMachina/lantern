@@ -44,20 +44,36 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
 }
 // The card's contents are src/components/SessionCard.vue's, from the store that chrome.update fills; the scene only says
 // what it's for, shows and hides it, and places it every frame (placeCard).
+// Hovering a session's moth shows its card compact, a tooltip the pointer passes through (`compact` on #card); a click
+// expands it (live.expanded), and it stays until a click elsewhere or the pointer has been away from it and its moth a
+// while (wiring.ts). A stale PR's and a ghost's cards are hover cards that hold while the pointer is on them, as before.
+function paint(t: Hovered) {
+  chrome.update();
+  const c = $('card');
+  c.classList.add('show');
+  c.classList.toggle('compact', 'key' in t && !live.expanded);
+}
 export function enterZone(a: Zone) {
   clearTimeout(live.hideTimer);
   const t = a.target, cardAt = 'session' in t ? t.cardAt : undefined;
   if (live.hovered === t && (!a.cardAt || cardAt === a.cardAt)) return; // already showing it
+  if (live.hovered !== t) live.expanded = false;
   live.hovered = t; if (a.cardAt && 'session' in t) t.cardAt = a.cardAt;
-  chrome.update();
-  $('card').classList.add('show');
+  paint(t);
+}
+// A click on a session's moth expands its card; another click on it puts the card away.
+export function expandCard(zone: Zone) {
+  if (live.expanded && live.hovered === zone.target) return hideCard();
+  enterZone(zone);
+  live.expanded = true;
+  paint(zone.target);
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
-// A tap shows the area's card; tapping the same moth again puts it away. (Tapping the card's header runs the action.)
+// A tap shows the area's card; tapping the same one again puts it away. (A session moth's tap expands it, as a click does.)
 export function tapZone(zone: Zone) { if (live.hovered === zone.target) hideCard(); else enterZone(zone); }
-export function hideCard() { live.hovered = held = shown = null; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
-// The card's header opens its session (a click on its moth does the same; shift-click snoozes), and its pill does what a
+export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
+// The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
@@ -97,6 +113,7 @@ export const footLine = (s: Session, now: number) => `${project(s)} · ${short(n
 const ORDER = ['failing', 'changes', 'ready', 'waiting', 'draft', 'merged', 'closed'];
 const SHORT: Record<string, string | undefined> = { ...NEED, ready: 'ready', failing: 'failing' };
 export const PR_CAP = 4;
+export const AGENT_CAP = 5; // the expanded card's agents, past which a "more" button lists the rest
 const rank = (need: string) => (ORDER.indexOf(need) + 1) || ORDER.length + 1;
 export const worstFirst = (prs: PR[]) => [...prs].sort((a, b) => rank(a.need) - rank(b.need));
 export function prSummary(prs: PR[]) {

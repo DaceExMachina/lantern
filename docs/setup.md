@@ -47,7 +47,7 @@ The installer skips all of this, because macOS doesn't quarantine an app built o
 
 ## Terminals and click to focus
 
-Clicking a moth brings its session to the front. How it does that depends on where the session runs:
+Clicking the header of a moth's card brings its session to the front. How it does that depends on where the session runs:
 
 | Where the session runs | What a click does |
 |---|---|

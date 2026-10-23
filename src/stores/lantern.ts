@@ -14,6 +14,7 @@ export const useLanternStore = defineStore('lantern', () => {
   // the scene's own (src/scene/live.ts chrome.update): its sessions and the hover card's target
   const sessions = shallowRef<Session[]>([]);
   const hovered = shallowRef<Hovered | null>(null);
+  const expanded = ref(false); // whether a click expanded the card (card.ts expandCard)
   // the clock relative times count from, a second at a time
   const now = ref(Date.now());
   setInterval(() => { now.value = Date.now(); }, 1000);
@@ -47,5 +48,5 @@ export const useLanternStore = defineStore('lantern', () => {
   // the card's pin and the sidebar's: pins or unpins a session, newest at the bottom
   const togglePin = (id: string) => setPins(pinned.value.some(p => p.id === id) ? pinned.value.filter(p => p.id !== id) : [...pinned.value, { id }]);
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
-  return { sessions, hovered, pinned, pinnable, docked, setPins, togglePin, now, settings, reviews, link, github, stats, statsFailed, recap };
+  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, now, settings, reviews, link, github, stats, statsFailed, recap };
 });

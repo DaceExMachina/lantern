@@ -3,8 +3,8 @@
 // frame() and the session text's tick itself), and a fake EventSource plays a fixture covering every kind of moth,
 // firefly, wisp and ghost. The harness calls __drive() until it returns 'done'; each other answer names a snapshot to take.
 // The page's query picks the scene: style=<lantern>, ambient for the second screen's view, hover to snap a hover card,
-// chrome to snap the menu, stats, recap, a card and the dev panel instead of the later scene (with /stats from statsLog),
-// pinned to dock sess-alpha and sess-bravo in the sidebar and check the scene refitted beside it. morph runs
+// chrome to snap the menu, stats, recap, a card (hovered, then expanded) and the dev panel instead of the later scene (with
+// /stats from statsLog), pinned to dock sess-alpha and sess-bravo in the sidebar and check the scene refitted beside it. morph runs
 // test/morph.test.js's checks instead of taking pictures: its steps answer with the mouse events to send (test/morph/main.swift).
 // sway, with screensaver, swings the lantern to the end of its swing and checks the page doesn't scroll (test/morph.test.js too).
 (() => {
@@ -112,13 +112,16 @@
     const today = page.dayKey(now), before = page.dayKey(now - 864e5);
     return { days, spans, gauges, prs, tally: { warm_all_day: [3, today], revived: [1, before] }, achievements: [['revived', before], ['warm_all_day', today]], streak: 3, warmGoal: 70 };
   };
+  // A session's card expanded, as a click on its moth does, placed at once rather than over frames that would move the clock
+  const expand = id => async () => { page.hideCard(); page.expandCard(page.live.moths.get(id).zone); await Promise.resolve(); page.placeCard(); };
   // the chrome scenes: each panel opened over the barrel in turn, then closed (a function, as run() adds to LAST)
   const chrome = () => [
     () => { page.$('menu').showPopover(); page.$('help').open = true; }, snap('menu'),
     () => { emit('github', { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
     async () => { page.$('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { page.$('stats').hidePopover(); },
     async () => { await page.openRecap(6); }, snap('recap'), () => { page.$('recap').hidePopover(); },
-    () => { page.enterZone(page.live.moths.get('sess-alpha').zone); }, run(0.1), snap('card'), () => { page.hideCard(); },
+    () => { page.enterZone(page.live.moths.get('sess-alpha').zone); }, run(0.1), snap('card-hover'),
+    expand('sess-alpha'), snap('card'), () => { page.hideCard(); },
     () => { page.toggleDevPanel(); }, snap('dev'),
     // last, because it changes settings the scenes above rely on: the menu with other settings, accounts connected, the home-grown
     // switches flipped and times of day with a single-digit hour (which the time inputs need padded)
@@ -189,13 +192,13 @@
     // session's rows afresh (so the live elements are gone after this)
     const freshCard = async () => {
       const patched = [...page.$('card').cloneNode(true).childNodes];
-      page.hideCard(); page.enterZone(page.live.moths.get('sess-big').zone); await Promise.resolve();
+      page.hideCard(); page.expandCard(page.live.moths.get('sess-big').zone); await Promise.resolve();
       const kids = [...page.$('card').childNodes];
       return patched.length === kids.length && patched.every((n, i) => n.isEqualNode(kids[i]));
     };
     return [
       () => { emit('message', [...sessionsAt(0), big]); }, run(0.1),
-      () => { page.enterZone(page.live.moths.get('sess-big').zone); }, run(0.1),
+      () => { page.expandCard(page.live.moths.get('sess-big').zone); }, run(0.1),
       async () => { // keyboard focus on an agent row, through three redraws
         row = page.$('card').querySelectorAll('.agent')[2]; row.focus();
         if (document.activeElement !== row) return fail('the agent row didn\'t take focus');
@@ -251,7 +254,7 @@
       },
       async () => { // another session's card, after this one closes, starts at the top
         body = q('.cardBody'); body.scrollTop = 40;
-        page.hideCard(); page.enterZone(page.live.moths.get('sess-alpha').zone); await Promise.resolve();
+        page.hideCard(); page.expandCard(page.live.moths.get('sess-alpha').zone); await Promise.resolve();
         if (q('.cardBody').scrollTop !== 0) fail(`sess-alpha's card opened scrolled to ${q('.cardBody').scrollTop}`);
         page.hideCard();
       },
@@ -310,7 +313,8 @@
     ...(Q.has('pinned') ? [() => { // docked once the lantern has settled: the settings sync also brings the dock's clock up to date
       emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31', pinned: [{ id: 'sess-alpha' }, { id: 'sess-bravo', chips: true }] });
     }, run(0.1), refitted, snap('open')] : []),
-    ...(Q.has('hover') ? [() => { page.enterZone(page.live.moths.get('sess-bravo').zone); }, snap('hover'), hits, () => { page.hideCard(); },
+    ...(Q.has('hover') ? [() => { page.enterZone(page.live.moths.get('sess-bravo').zone); }, snap('hover'),
+      async () => { page.expandCard(page.live.moths.get('sess-bravo').zone); await Promise.resolve(); }, hits, // left where it was, as no frame runs () => { page.hideCard(); },
       // a stale PR's card and a ghost's, with their pills
       () => { page.enterZone([...page.wisps.values()][0].zone); }, snap('stale'), () => { page.hideCard(); page.enterZone([...page.ghosts.values()][0].zone); }, snap('ghost'), () => { page.hideCard(); }] : []),
     ...(Q.has('morph') ? morph() : []),

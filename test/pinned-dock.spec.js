@@ -10,7 +10,7 @@ import SessionCard from '../src/components/SessionCard.vue';
 import { chrome, live } from '../src/scene/live';
 import { $ } from '../src/scene/scene';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
-import { enterZone, hideCard } from '../src/scene/card';
+import { expandCard, hideCard } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 import { parseSettings } from '../src/types';
 
@@ -24,7 +24,7 @@ const mount = () => {
   apps.forEach(a => a.unmount());
   const pinia = createPinia();
   store = useLanternStore(pinia);
-  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.now = Date.now(); };
+  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.now = Date.now(); };
   apps = [createApp(SessionCard).use(pinia), createApp(PinnedDock).use(pinia)];
   apps[0].mount($('card')); apps[1].mount('#dock .stack');
 };
@@ -49,7 +49,7 @@ afterEach(() => { apps.forEach(a => a.unmount()); apps = []; vi.restoreAllMocks(
 
 const show = async s => {
   live.raw = [...live.raw.filter(o => o.id !== s.id), s]; sync();
-  enterZone(sessionMoth(s.id).zone);
+  if (!live.expanded || live.hovered !== sessionMoth(s.id)) expandCard(sessionMoth(s.id).zone);
   await nextTick();
   return $('card');
 };
@@ -233,4 +233,11 @@ test('a re-render between press and release keeps every sidebar control\'s eleme
   assert.strictEqual(document.activeElement, tog, 'and the focused one keeps focus');
   tog.click(); await nextTick();
   assert.strictEqual(find($('dock'), 'chips').length, 1, 'and the release toggles the list');
+});
+
+test('the sidebar lists every agent, with no "more" past the card\'s five', async () => {
+  const subagents = Array.from({ length: 7 }, (_, i) => ({ id: `a${i}`, description: `Agent ${i}`, started: now - (9 - i) * 1e3, last: now }));
+  setSessions(session({ state: 'working', subagents }));
+  await pins({ id: 's1' });
+  assert.deepStrictEqual([find($('dock'), 'job').length, find($('dock'), 'more').length], [7, 0]);
 });

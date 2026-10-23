@@ -96,11 +96,12 @@ function mothNode() {
   return { g, up, side };
 }
 
-// A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.
+// A hover area for a moth: shows its card (beside the area it came from), a click expands the card (wiring.ts) and its
+// header runs the area's click action, opening the session; right-click snoozes.
 // A session moth has two once it lands: one on the moth, and one over the fireflies it left back home.
 // `moth` hands back the moth, which can be the one still being made.
 export function hoverArea(moth: () => SessionMoth, at: CardAt): Zone {
-  // clicking brings the session's terminal tab (or Claude app session) to the front
+  // its click action, which the card's header runs, brings the session's terminal tab (or Claude app session) to the front
   const zone = hoverZone(moth, () => post('/focus', { id: moth().key }), 48, at);
   // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
   // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight

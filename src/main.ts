@@ -26,5 +26,5 @@ createApp(PinnedDock).use(pinia).mount('#dock .stack');
 createApp(StatusLine).use(pinia).mount('#statusSlot'); // display: contents, so the line is the footer's own grid item
 const store = useLanternStore(pinia);
 // the scene's side of the store: copied over after a sync and when the card's target changes, never per frame
-chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.now = Date.now(); };
+chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.now = Date.now(); };
 connect(store);

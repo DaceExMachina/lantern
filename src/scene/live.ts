@@ -11,7 +11,7 @@ interface Live {
   raw: Session[]; reviews: Review[]; stalePRs: StalePR[]; recentProse: string[]; pagesData: boolean; firstName: string;
   quietUntil: number; quietEnd: string; quietEndOn: boolean; dayStart: string; supervisor: RegExp; staleOn: boolean;
   recapSeen: string | null;
-  moths: Map<string, Moth>; hovered: Hovered | null; hideTimer: ReturnType<typeof setTimeout> | undefined;
+  moths: Map<string, Moth>; hovered: Hovered | null; expanded: boolean; hideTimer: ReturnType<typeof setTimeout> | undefined;
   tally: Stats['tally']; pinnedBadge: string | null; cdLeaves: Leaf[] | null; farWall: HTMLCanvasElement | null;
   flyLightN: number; ghostWingN: number;
 }
@@ -32,8 +32,9 @@ export const live: Live = {
   recapSeen: null, // the last day (yyyy-MM-dd) a recap opened by itself, once settings say (recap.ts)
   // ---- the scene's own
   moths: new Map(), // key -> moth (state.ts sync)
-  // hovering a moth pins a card to it; a short grace period (hideTimer) stops it flickering as the moth drifts (card.ts)
-  hovered: null, hideTimer: undefined,
+  // hovering a moth pins a card to it, and a click on a session's expands it; a grace period (hideTimer) stops it
+  // flickering as the moth drifts, and gives the pointer a moment to come back to an expanded one (card.ts, wiring.ts)
+  hovered: null, expanded: false, hideTimer: undefined,
   tally: {}, // every badge ever earned, as id -> [times, last day] (stats.ts, from the log recap.ts and stats.ts read)
   pinnedBadge: null, // the badge whose tip a click keeps open (stats.ts, flash.ts)
   cdLeaves: null, // the candle's fluttering leaves, found by frame.ts drawLeaves, forgotten when lanterns.ts drawHang redraws

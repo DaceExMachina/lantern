@@ -24,7 +24,7 @@ Want a prebuilt app instead, or help with the iTerm2 panel and screensaver? See 
 
 Big moths are sessions and small ones are their subagents. The more of them working, the brighter the flame. A moth that needs you lands on the lantern and turns the light violet.
 
-Hover a moth to see what it's doing and what it wants from you. Click it to jump to its terminal tab or Claude app session, or right-click to snooze it (twice puts it to sleep until you wake it). Fireflies are a session's pull requests, coloured by what each one needs once GitHub status is on. The stats panel tells you how your day went, with badges and a daily recap.
+Hover a moth for a quick look at what it's doing and what it wants from you. Click it for its full card, whose header jumps to its terminal tab or Claude app session. Right-click to snooze it (twice puts it to sleep until you wake it). Fireflies are a session's pull requests, coloured by what each one needs once GitHub status is on. The stats panel tells you how your day went, with badges and a daily recap.
 
 The [guide](docs/guide.md) has the rest.
 

@@ -11,7 +11,7 @@ import './scene/github'; // its dev toggle
 import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
 import { fitView, frame } from './scene/frame';
 import { setLanternText } from './scene/pages';
-import { clickZone, enterZone, hideCard, tapZone, zoneAt, zones } from './scene/card';
+import { clickZone, enterZone, expandCard, hideCard, tapZone, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
 import { flashBadge } from './scene/flash';
@@ -85,11 +85,10 @@ const SAVER = Q.has('screensaver');
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
 $('card').addEventListener('pointerenter', () => clearTimeout(live.hideTimer));
-// A session's card opens it from its header (card.ts), or from a click on its body where the card covers its own moth (a
-// tall card in the iTerm panel). The other cards (a stale PR, a ghost) open from anywhere on them.
+// A stale PR's or a ghost's card opens it from anywhere on it but a link. A session's opens from its header (card.ts).
 $('card').addEventListener('click', e => {
   const h = live.hovered;
-  if (h && !(e.target instanceof Element && e.target.closest('a, button')) && (!('session' in h && h.session) || zoneAtPoint(e) === h.zone)) clickZone(h.zone, e.shiftKey);
+  if (h && !('key' in h) && !(e.target instanceof Element && e.target.closest('a, button'))) clickZone(h.zone, e.shiftKey);
 });
 // every hover area's pointer handling: the area under the pointer is the nearest one that contains it (card.ts's zoneAt).
 // Only the scene's own pointer events count, never ones on the card, the footer or a menu over it.
@@ -100,28 +99,40 @@ export const zoneAtPoint = (e: MouseEvent) => {
   return zoneAt(zones, p.x, p.y);
 };
 const zoneFor = (e: MouseEvent) => e.target instanceof Element && e.target.closest('#scene') ? zoneAtPoint(e) : null;
-// Touch has no hover, so a tap stands in: it shows the card (tapZone), and tapping the card's header then opens it.
+// Touch has no hover, so a tap stands in: it expands a session's card (as a click does) or shows another area's.
 // Taps never run a hover area's click action or hide the card on pointerleave, which a finger lifting would trigger at once.
 // A long press reaches snooze through the contextmenu event below.
 const isTouch = (e: Event) => 'pointerType' in e && e.pointerType === 'touch';
-// Leaving every area (or the scene) starts the card's grace period, once.
+// Leaving every area (or the scene, or the card) starts the card's grace period, once: an expanded card waits EXPANDED_GRACE
+// for the pointer to come back to it or its moth; a compact hover card, a tooltip, goes at once. While a card is expanded, other moths don't take it over on hover.
+const EXPANDED_GRACE = 2000;
+const hideSoon = (hoverMs: number) => { clearTimeout(live.hideTimer); live.hideTimer = setTimeout(hideCard, live.expanded ? EXPANDED_GRACE : hoverMs); };
 let inZone = false;
-const leaveZones = () => { if (inZone) { inZone = false; live.hideTimer = setTimeout(hideCard, 700); } };
+const leaveZones = () => { if (inZone) { inZone = false; hideSoon($('card').matches('.compact') ? 0 : 700); } };
 for (const type of ['pointerdown', 'pointermove'] as const) $('scene').addEventListener(type, e => {
   if (isTouch(e)) return;
   const z = zoneFor(e);
   $('scene').style.cursor = z ? 'pointer' : '';
-  if (z) { inZone = true; enterZone(z); } else leaveZones();
+  if (z && (!live.expanded || z.target === live.hovered)) { inZone = true; enterZone(z); } else leaveZones();
 });
 $('scene').addEventListener('pointerleave', e => isTouch(e) || leaveZones());
-// A click on an area runs it, and a tap shows its card. It listens on the scene itself: iOS only sends a tap's click to an
-// element with a click listener of its own. A tap anywhere else puts the card away.
-$('scene').addEventListener('click', e => { const z = zoneFor(e); if (z) isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey); });
-addEventListener('click', e => { if (isTouch(e) && !zoneFor(e) && !(e.target instanceof Element && e.target.closest('#card'))) hideCard(); });
+// A click or tap on a session's moth expands its card. A click on another area (or a shift-click) runs it, and a tap
+// shows that area's card. It listens on the scene itself: iOS only sends a tap's click to an element with a click listener of its own.
+$('scene').addEventListener('click', e => {
+  const z = zoneFor(e);
+  if (z) 'key' in z.target && !e.shiftKey ? expandCard(z) : isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey);
+});
+// A click anywhere but the card and its own moth puts away an expanded card (or, from a tap, any card), and so does Escape.
+// It listens while the click is on its way down, before the button it lands on can take itself away (the agents' "more")
+// and leave nothing to tell it was on the card; a click on another moth then expands that one's (above).
+addEventListener('click', e => {
+  if ((live.expanded || isTouch(e)) && zoneFor(e)?.target !== live.hovered && !(e.target instanceof Element && e.target.closest('#card'))) hideCard();
+}, true);
+addEventListener('keydown', e => { if (e.key === 'Escape' && live.expanded) hideCard(); });
 $('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());
-$('card').addEventListener('pointerleave', e => { if (!isTouch(e)) live.hideTimer = setTimeout(hideCard, 400); });
+$('card').addEventListener('pointerleave', e => { if (!isTouch(e)) hideSoon(400); });
 
 // the daily recap: checked when the window comes back into view, and every minute (a window left open overnight)
 addEventListener('visibilitychange', () => maybeRecap());

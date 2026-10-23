@@ -8,7 +8,7 @@ To check the server directly, open <http://127.0.0.1:7717>. If that loads but se
 
 ## macOS asks again whether Lantern can control iTerm2 or Terminal
 
-macOS treats an app signed on your own Mac as a new app every time it's rebuilt. So after the installer or `app/build.sh` rebuilds Lantern, the next click on a moth brings the question back. Allow it. If you clicked Don't Allow, switch Lantern back on in System Settings > Privacy & Security > Automation.
+macOS treats an app signed on your own Mac as a new app every time it's rebuilt. So after the installer or `app/build.sh` rebuilds Lantern, the next session you open from a card brings the question back. Allow it. If you clicked Don't Allow, switch Lantern back on in System Settings > Privacy & Security > Automation.
 
 ## Port 7717 is taken
 
