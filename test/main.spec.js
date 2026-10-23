@@ -259,3 +259,12 @@ test('a click on a card button that takes itself away (the agents\' "more") keep
   dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
   assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'Escape closes it');
 });
+
+// Lantern.app loads its page with ?app so the page keeps clear of the window's drag strip (index.html's body.app --titlebar);
+// a browser tab has none.
+test('the app window\'s page is marked body.app, and a plain tab\'s is not', async () => {
+  await open('?app');
+  assert.strictEqual(document.body.classList.contains('app'), true, '?app');
+  await open();
+  assert.strictEqual(document.body.classList.contains('app'), false, 'a plain page');
+});

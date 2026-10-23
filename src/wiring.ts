@@ -58,7 +58,7 @@ es.onerror = () => {
 };
 
 // the iTerm2 toolbelt opens the page with ?panel for a compact layout, the screensaver with ?screensaver
-for (const mode of ['panel', 'screensaver', 'ambient']) if (Q.has(mode)) document.body.classList.add(mode);
+for (const mode of ['panel', 'screensaver', 'ambient', 'app']) if (Q.has(mode)) document.body.classList.add(mode);
 fitView();
 // the dev panel (dev.ts): the backtick key opens and closes it, unless you're typing; ?dev opens it on load
 addEventListener('keydown', devKey);

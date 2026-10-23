@@ -22,6 +22,9 @@ export function $(id: string, type: abstract new () => Element = HTMLElement): E
 // or wisps made there at all.
 export const Q = new URLSearchParams(location.search);
 export const AMBIENT = Q.has('ambient');
+// The height of the app window's drag strip, which takes every click on it (index.html's --titlebar): 0 outside the app. Read once, since body.app is set at load.
+let bar: number | undefined;
+export const titlebar = () => bar ??= parseFloat(getComputedStyle(document.body).getPropertyValue('--titlebar')) || 0;
 // arr[i] for an index known to be in range, which noUncheckedIndexedAccess can't see; it throws if it isn't
 export const nth = <T>(arr: readonly T[], i: number): T => {
   const v = arr[i];

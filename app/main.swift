@@ -14,7 +14,7 @@ let data = env["LANTERN_DATA"] ?? support
 // writes it there when LANTERN_PORT is set). `open --env LANTERN_PORT=…` still overrides it.
 let saved = FileManager.default.contents(atPath: data + "/settings.json").flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]
 let port = env["LANTERN_PORT"] ?? (saved?["port"] as? NSNumber)?.stringValue ?? "7717"
-let home = URL(string: "http://127.0.0.1:\(port)/")!
+let home = URL(string: "http://127.0.0.1:\(port)/?app")!
 
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     var window: NSWindow!
