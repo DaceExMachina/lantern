@@ -326,8 +326,12 @@ test('a hovered moth\'s card is compact: the header, one line of what it wants o
   assert.deepStrictEqual([find(card, 'gist').map(text), find(card, 'foot').map(text)], [['Merge it?'], ['1 PR']], 'a waiting session\'s question');
   card = await hover(session({ forYou: { you: ['Look at ', { label: '#1', url: pr(1).url }] } }));
   assert.deepStrictEqual([find(card, 'gist').map(text), find(card, 'foot').map(text)], [['Look at #1'], []], 'or its "You:" message, and no count with no work');
+  assert.deepStrictEqual(find(card, 'hint').map(text), ['Click moth for details, double click to open session'], 'with the moth\'s clicks hinted, even with no work counted');
+  assert.strictEqual(find(card, 'go').length, 0, 'no open arrow on the compact card');
   expandCard(sessionMoth('s1').zone); await nextTick();
   assert.deepStrictEqual([find(card, 'gist').length, find(card, 'cardBody').length], [0, 1], 'a click expands it in full');
+  assert.strictEqual(find(card, 'hint').length, 0, 'and the expanded card has no hint');
+  assert.strictEqual(find(card, 'go').length, 1, 'but it has the open arrow');
   hideCard(); await nextTick();
   assert.deepStrictEqual([find(card, 'gist').length, find(card, 'cardBody').length], [0, 1], 'and fading out, it stays in full');
 });
