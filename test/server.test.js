@@ -2128,3 +2128,27 @@ test('a refused GitHub refresh token is not reconnect when another Lantern saved
   assert.strictEqual(await g.error(), '', 'the same poll retried, so it never said reconnect'); // its answer is still on its way
   assert.deepStrictEqual(stub.seen.refreshes, ['r1']);
 });
+
+// Dace's PR-watch session (Oct 22, 7fd92067): a turn ended while its own background shell (bk0eb85kg, launched with
+// run_in_background) still ran, then Lantern restarted. Seeding only counted agents, so it came back landed instead of paused
+// on the shell. The launch is a tool result with toolUseResult.backgroundTaskId (a Monitor's is taskId); it ends with a
+// task-notification carrying a <status> (a Monitor's event notices have none) or a TaskStop.
+test('a seeded session waiting on its own background shell is paused, not landed (the PR-watch restart)', async t => {
+  const at = minutes => new Date(Date.now() - minutes * 60 * 1000).toISOString();
+  const launch = (task, minutes, key = 'backgroundTaskId') => ({ type: 'user', cwd: '/work', timestamp: at(minutes), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: `Command running in background with ID: ${task}.` }] }, toolUseResult: { stdout: '', interrupted: false, [key]: task } });
+  const notice = (task, inner) => ({ type: 'queue-operation', operation: 'enqueue', timestamp: at(1), content: `<task-notification>\n<task-id>${task}</task-id>\n${inner}\n</task-notification>` });
+  const watching = (...extra) => [user('watch the PR'), ...extra, answer('Watching CI, I will pick it up when it finishes.'), turnEnd];
+  const cases = {
+    running: watching(launch('bk0eb85kg', 5)),
+    completed: watching(launch('bk0eb85kg', 5), notice('bk0eb85kg', '<status>completed</status>')),
+    stopped: watching(launch('bk0eb85kg', 5), { type: 'user', cwd: '/work', toolUseResult: { message: 'Successfully stopped task: bk0eb85kg (gh pr checks)', task_id: 'bk0eb85kg' } }),
+    old: watching(launch('bk0eb85kg', 31)),
+    monitor: watching(launch('bmon', 5, 'taskId'), notice('bmon', '<summary>Monitor event: "CI"</summary>\n<event>unit|success</event>')),
+  };
+  const names = Object.keys(cases);
+  const base = await serve(t, Object.assign({}, ...names.map((n, i) => transcript(UUID(i), cases[n]))));
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === names.length && s; }, 'every transcript to be seeded');
+  assert.deepStrictEqual(Object.fromEntries(names.map((n, i) => [n, sessions.find(s => s.id === UUID(i)).state])),
+    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'idle', monitor: 'paused' }); // old: open but past TASK_FRESH_MS, so it rests
+  assert.strictEqual(sessions.find(s => s.id === UUID(0)).note, 'Waiting on 1 background task');
+});
