@@ -144,6 +144,13 @@ test('an automatic compaction in the middle of a turn keeps the session working 
   assert.deepStrictEqual(await shown(), ['waiting', 'Finished its turn']);
 });
 
+test('a restart seeds a transcript with no turn line anywhere as at its prompt', async t => {
+  const id = UUID(8), line = JSON.stringify({ type: 'attachment', sessionId: id, cwd: '/w', attachment: { type: 'file', content: 'x'.repeat(10000) } });
+  const base = await serve(t, { [`.claude/projects/-w/${id}.jsonl`]: Array(400).fill(line).join('\n') + '\n' }); // 4 MB, past the first two windows
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the transcript to be seeded');
+  assert.strictEqual(s.state, 'idle');
+});
+
 // Dace's "qa script" session (Oct 22, 02:29Z) was left working after a restart. Its turn had ended; an automatic compaction
 // then wrote the boundary and summary, followed by ~300 KB of re-injected files and attachments, which pushed both out of
 // the 256 KB window the seed reads, so it found no turn line at all and read the session as mid-turn. Seeding reads back

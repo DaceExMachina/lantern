@@ -229,7 +229,7 @@ func lastTurn(_ lines: [String]) -> Turn? {
 /// re-injected files after its summary, so the summary and boundary that mark the turn's end can sit past the first window.
 func lastTurn(file: String) -> Turn {
     for kb in [256, 2048, 16384] { if let turn = lastTurn(tail(file, kb * 1024)) { return turn } }
-    return Turn()
+    return Turn(done: true, idle: true) // none anywhere: a live turn always leaves a recent line, so it's at its prompt, and the hooks correct it
 }
 func transcripts(_ dir: String) -> [String] {
     ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).filter { $0.hasSuffix(".jsonl") }.sorted().map { dir + "/" + $0 }
