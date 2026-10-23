@@ -908,6 +908,18 @@ test('a new session in the same iTerm tab replaces the old one, and other tabs a
   assert.deepStrictEqual(sessions.map(x => x.id).sort(), [UUID(2), UUID(3)]);
 });
 
+test('a new session in a tab leaves the session there alone while its process still runs', async t => {
+  const base = await serve(t), tab = 'w0t0p0:00000001-0000-4000-8000-00000000000a';
+  const hook = (id, pid) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-iterm-session': tab, ...(pid ? { 'x-claude-pid': String(pid) } : {}) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'Stop', cwd: '/work', last_assistant_message: 'Done.' }) });
+  await hook(UUID(1), process.pid); // a live pid: this test's own process
+  await hook(UUID(3)); // a `claude` started from inside it shares the tab id
+  await until(async () => (await snapshot(base)).sessions.some(x => x.id === UUID(3)), 'the new session to land');
+  await hook(UUID(1), process.pid); // and the first one speaking again (not joining) doesn't remove the second
+  await wait(100);
+  assert.deepStrictEqual((await snapshot(base)).sessions.map(x => x.id).sort(), [UUID(1), UUID(3)]);
+});
+
 // Claude Code's sessions/<pid>.json says whether a running session is busy or idle, and that wins over the transcript;
 // without a status there (older versions, or one it doesn't know), the transcript's last turn decides.
 // One session in two processes, one idle and one with a status Claude Code added later: the unknown one says nothing, so

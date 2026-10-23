@@ -240,16 +240,11 @@ func fileTimes(_ file: String) -> (birth: Double, mtime: Double)? {
     let ms = { (t: timespec) in Double(t.tv_sec) * 1000 + Double(t.tv_nsec) / 1_000_000 }
     return (ms(st.st_birthtimespec), ms(st.st_mtimespec))
 }
-func byNewest(_ files: [String]) -> [String] {
-    let dated: [(file: String, mtime: Double, at: Int)] = files.enumerated().map { ($0.element, fileTimes($0.element)?.mtime ?? 0, $0.offset) }
-    return dated.sorted { $0.mtime != $1.mtime ? $0.mtime > $1.mtime : $0.at < $1.at }.map(\.file) // stable, like JS sort
-}
-
 /// The same session's transcript can sit in two config folders (a frozen copy and the live one): only the newest of each id stays, in the order given.
 func newestCopies(_ files: [String]) -> [String] {
-    var best: [String: String] = [:]
-    for f in byNewest(files) { let id = (f as NSString).lastPathComponent; if best[id] == nil { best[id] = f } }
-    return files.filter { best[($0 as NSString).lastPathComponent] == $0 }
+    var best: [String: (file: String, mtime: Double)] = [:]
+    for f in files { let id = (f as NSString).lastPathComponent, m = fileTimes(f)?.mtime ?? 0; if m > (best[id]?.mtime ?? -1) { best[id] = (f, m) } } // a tie keeps the first
+    return files.filter { best[($0 as NSString).lastPathComponent]?.file == $0 }
 }
 
 // Which old session made each dead PR. Every transcript from the last 60 days is mapped into memory and searched
