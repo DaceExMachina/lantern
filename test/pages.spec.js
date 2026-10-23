@@ -12,6 +12,7 @@ async function load(screen) {
   const pages = document.createElementNS('http://www.w3.org/2000/svg', 'g');
   pages.id = 'pages';
   pages.getScreenCTM = () => /** @type {any} */ ({ a: scale.screen, b: 0 });
+  pages.getCTM = () => /** @type {any} */ ({ a: scale.screen, d: scale.screen, e: 0, f: 0 });
   document.querySelector('svg').append(pages);
   const scale = { screen };
   vi.resetModules();
@@ -31,7 +32,7 @@ test('the text sleeps in a window too small to read it, and wakes when it grows'
 test('turning the text off takes the ink out in the intro\'s time, then stops the timer; on again brings it back at once', async () => {
   stubCanvas2d();
   const p = await load(2);
-  const INTRO = 1200, ink = () => { p.tickPages(); return +document.getElementById('pagesInk').getAttribute('opacity'); };
+  const INTRO = 1200, ink = () => { p.tickPages(); return +document.getElementById('pagesInk').style.opacity; };
   p.live.pagesData = true; // the server has sent its words
   vi.advanceTimersByTime(250); // the first tick primes the page and starts the ink coming up
   vi.advanceTimersByTime(INTRO);
@@ -102,4 +103,19 @@ test('on the chōchin the tiles cover the ball, squash toward the top and bottom
   assert.ok(Math.abs(t.y0 - (y + d.bow(y) * Math.cos((a(n / 2) + a(n / 2 + 1)) / 2) ** 2 / 2)) < 1e-9 && t.y0 < y - 1, `on the wire, bowed up: ${t.y0}`);
   // blocks go only where the paper is at least half its widest: not in the gaps by the caps
   assert.strictEqual(fillRows(d).join(), '3,27');
+});
+
+test('in steady state the text is drawn on the paper\'s canvas, never encoded into a Blob, data URL or object URL', async () => {
+  const calls = stubCanvas2d();
+  const encodes = [];
+  for (const name of ['toBlob', 'toDataURL']) vi.spyOn(HTMLCanvasElement.prototype, name).mockImplementation(() => { encodes.push(name); return ''; });
+  vi.spyOn(URL, 'createObjectURL').mockImplementation(() => { encodes.push('createObjectURL'); return ''; });
+  vi.stubGlobal('Worker', class { constructor() { encodes.push('Worker'); } });
+  const p = await load(2);
+  p.live.recentProse = ['Some words the sessions wrote, long enough to wrap onto a few lines of the paper before they stop.'];
+  p.live.pagesData = true;
+  vi.advanceTimersByTime(3 * 60 * 1000); // three minutes of fades moving
+  assert.ok(calls.filter(c => c === 'drawImage').length > 20, 'the page was drawn and redrawn as the fades moved');
+  assert.ok(calls.includes('fillText'), 'with words on it');
+  assert.deepStrictEqual(encodes, []);
 });
