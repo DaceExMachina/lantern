@@ -96,18 +96,20 @@ func security(_ args: [String]) -> String? {
     let r = run(SECURITY, args)
     return r.ok ? r.out.trim : nil
 }
-// What an account keeps in its Keychain item: JSON with the access token, when it expires, the refresh token and when that
-// expires (times in ms since the epoch). Items saved before refresh tokens were kept hold the bare token.
+// What an account keeps in its Keychain item: JSON with the access token and the refresh token. Items saved before refresh
+// tokens were kept hold the bare token. (GitHub refuses an expired token or refresh token itself, so no expiry is kept.)
 func credential(_ t: JSON) -> JSON? {
     guard let token = t["access_token"] as? String, !token.isEmpty else { return nil }
-    let at = { (key: String) in (t[key] as? NSNumber).map { now() + $0.doubleValue * 1000 } }
     var c: JSON = ["token": token]
-    c["expires"] = at("expires_in"); c["refresh"] = t["refresh_token"]; c["refreshExpires"] = at("refresh_token_expires_in")
+    c["refresh"] = t["refresh_token"]
     return c
 }
 func storedCredential(_ text: String) -> JSON { parse(Data(text.utf8)) as? JSON ?? ["token": text] }
+func keychainCredential(_ login: String) -> JSON? { security(["find-generic-password", "-s", KEYCHAIN, "-a", login, "-w"]).map(storedCredential) }
 func saveCredential(_ login: String, _ c: JSON) {
-    _ = security(["add-generic-password", "-U", "-s", KEYCHAIN, "-a", login, "-l", "Claude Lantern GitHub", "-w", jsonText(c)])
+    if security(["add-generic-password", "-U", "-s", KEYCHAIN, "-a", login, "-l", "Claude Lantern GitHub", "-w", jsonText(c)]) == nil {
+        print("GitHub: couldn't save \(login)'s token to the Keychain") // never the token itself
+    }
 }
 enum Renewal { case renewed(JSON), rejected, offline } // rejected: no refresh token, or GitHub refused it, so reconnect
 
@@ -133,8 +135,7 @@ extension LanternServer {
                 ? folders.map { f in { ghGraphql(f.cwd) } }
                 : tokens.map { login, account in {
                     let ask = { (c: JSON) in fetch(GH_API + "/graphql", method: "POST", headers: ["Authorization": "Bearer \(str(c["token"]))", "User-Agent": "lantern-pr"], body: ["query": prQuery(PR_GQL)]) }
-                    var c = account
-                    if let expires = c["expires"] as? Double, expires < now() + 5 * 60_000, case .renewed(let new) = self.renew(login, c) { c = new } // about to expire
+                    let c = account
                     var r = ask(c)
                     if r.status == 401 { // expired or revoked: refresh once and ask again
                         switch self.renew(login, c) {
@@ -284,24 +285,29 @@ extension LanternServer {
     func loadAccounts() {
         let logins = (settings["githubAccounts"] as? [Any] ?? []).map { str($0) }
         DispatchQueue.global().async {
-            let found = logins.compactMap { login in security(["find-generic-password", "-s", KEYCHAIN, "-a", login, "-w"]).map { (login, storedCredential($0)) } }
+            let found = logins.compactMap { login in keychainCredential(login).map { (login, $0) } }
             DispatchQueue.main.async {
-                for (login, c) in found where !str(c["token"]).isEmpty { self.accounts[login] = c }
+                for (login, c) in found where (c["token"] as? String)?.isEmpty == false { self.accounts[login] = c }
                 if self.accounts.count > 0 { self.refreshGitHub() }
             }
         }
     }
     // Trade an account's refresh token for a new pair. GitHub rotates them, so the new pair goes into the Keychain and the
-    // account before anything uses it. Device-flow tokens need no client secret.
+    // account before anything uses it. Device-flow tokens need no client secret. A second Lantern on the same Keychain (a
+    // preview) may have rotated the pair first: its newer one is adopted, before refreshing and again if GitHub refuses ours.
     func renew(_ login: String, _ c: JSON) -> Renewal {
-        guard let refresh = c["refresh"] as? String, (c["refreshExpires"] as? Double ?? .infinity) > now() else { return .rejected }
+        let adopt = { (k: JSON) -> Renewal in DispatchQueue.main.sync { self.accounts[login] = k }; return .renewed(k) }
+        if let k = keychainCredential(login), str(k["token"]) != str(c["token"]) { return adopt(k) }
+        guard let refresh = c["refresh"] as? String else { return .rejected }
         let r = fetch(GH_WEB + "/login/oauth/access_token", method: "POST", headers: ["Accept": "application/json", "Content-Type": "application/json"],
                       body: ["client_id": CLIENT_ID, "grant_type": "refresh_token", "refresh_token": refresh])
         if r.status == 0 || r.status >= 500 { return .offline }
-        guard let json = r.json, let new = credential(json) else { return .rejected }
+        guard let json = r.json, let new = credential(json) else {
+            if let k = keychainCredential(login), str(k["refresh"]) != refresh { return adopt(k) }
+            return .rejected
+        }
         saveCredential(login, new)
-        DispatchQueue.main.sync { accounts[login] = new }
-        return .renewed(new)
+        return adopt(new)
     }
     func connectGitHub() {
         DispatchQueue.global().async {

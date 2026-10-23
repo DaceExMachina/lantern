@@ -1959,39 +1959,49 @@ test('a hook whose transcript is under ~/.claude-work finds its project when tha
   assert.deepStrictEqual((await snapshot(base)).sessions.map(x => [x.id, x.project]), [['s1', '-w']]);
 });
 
-// GitHub App user tokens last 8 hours, so the account has to trade its refresh token for a new pair on a 401 (or just before
-// the token runs out) instead of asking to reconnect. A stand-in GitHub answers /graphql only for tokens it has granted, and
-// /login/oauth/access_token for the refresh tokens in `grants` (refresh token -> [access token, next refresh token]). A
-// stand-in `security` keeps the Keychain item in a file, so these tests never touch the real Keychain.
-async function githubAccount(t, item, grants) {
-  const live = new Set(), seen = { bearers: [], refreshes: [] }, kc = fs.mkdtempSync(path.join(tmp, 'kc-')), security = path.join(kc, 'security');
+// GitHub App user tokens last 8 hours, so on a 401 the account trades its refresh token for a new pair instead of asking to
+// reconnect. A stand-in GitHub answers /graphql only for tokens it has granted (a good answer takes a moment, so a test can
+// look before it lands), and /login/oauth/access_token for the refresh tokens in `grants` (refresh token -> [access token, next
+// refresh token]), each good once, as GitHub rotates them. `gate` holds every /graphql answer until it's released. A stand-in
+// `security` keeps the Keychain item in a file, so these tests never touch the real Keychain.
+async function githubStub(t, grants) {
+  const live = new Set(), seen = { bearers: [], refreshes: [] };
+  let release, gate = new Promise(r => release = r);
+  release();
   const stub = http.createServer((req, res) => {
     let body = '';
     req.on('data', c => body += c);
-    req.on('end', () => {
-      const reply = (status, json) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(json)); };
+    req.on('end', async () => {
+      const reply = (status, json, after = 0) => setTimeout(() => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(json)); }, after);
       if (req.url === '/graphql') {
         const bearer = req.headers.authorization.replace('Bearer ', '');
         seen.bearers.push(bearer);
-        return live.has(bearer) ? setTimeout(reply, 500, 200, { data: { reviews: { nodes: [] }, mine: { nodes: [] }, closed: { nodes: [] } } }) : reply(401, { message: 'Bad credentials' }); // a good answer takes a moment, so a test can look before it lands
+        await gate;
+        return live.has(bearer) ? reply(200, { data: { reviews: { nodes: [] }, mine: { nodes: [] }, closed: { nodes: [] } } }, 500) : reply(401, { message: 'Bad credentials' });
       }
       const sent = JSON.parse(body);
       assert.deepStrictEqual([sent.grant_type, sent.client_id], ['refresh_token', 'Iv23liGsGuBVmd5HoOSn']);
       seen.refreshes.push(sent.refresh_token);
       const grant = grants[sent.refresh_token];
-      if (!grant) return reply(200, { error: 'bad_refresh_token' });
+      delete grants[sent.refresh_token];
+      if (!grant) return reply(200, { error: 'bad_refresh_token' }, 800); // late, so a Lantern that lost a race has seen the winner's save
       live.add(grant[0]);
-      reply(200, { access_token: grant[0], refresh_token: grant[1], expires_in: 28800, refresh_token_expires_in: 15811200 });
+      reply(200, { access_token: grant[0], refresh_token: grant[1], expires_in: 28800, refresh_token_expires_in: 15811200 }, 200);
     });
   });
   await new Promise(r => stub.listen(0, '127.0.0.1', r));
   t.after(() => stub.close());
-  const url = `http://127.0.0.1:${stub.address().port}`;
-  fs.writeFileSync(path.join(kc, 'octo'), item);
+  return { url: `http://127.0.0.1:${stub.address().port}`, seen, live, hold: () => { gate = new Promise(r => release = r); }, release: () => release() };
+}
+function keychain(item) {
+  const dir = fs.mkdtempSync(path.join(tmp, 'kc-')), security = path.join(dir, 'security');
+  fs.writeFileSync(path.join(dir, 'octo'), item);
   fs.writeFileSync(security, `#!/bin/sh\ncmd=$1; shift\nwhile [ $# -gt 0 ]; do case $1 in -a) a=$2; shift;; -w) [ "$cmd" = add-generic-password ] && { w=$2; shift; };; -s|-l) shift;; esac; shift; done\n` +
-    `if [ "$cmd" = add-generic-password ]; then printf %s "$w" > '${kc}/'"$a"; else /bin/cat '${kc}/'"$a"; fi\n`, { mode: 0o755 });
-  const base = await serve(t, { 'data/settings.json': '{"githubAccounts":["octo"]}' }, () => {}, { LANTERN_SECURITY: security, LANTERN_GITHUB_WEB: url, LANTERN_GITHUB_API: url });
-  const stored = () => JSON.parse(fs.readFileSync(path.join(kc, 'octo'), 'utf8'));
+    `if [ "$cmd" = add-generic-password ]; then printf %s "$w" > '${dir}/'"$a"; else /bin/cat '${dir}/'"$a"; fi\n`, { mode: 0o755 });
+  return { security, stored: () => JSON.parse(fs.readFileSync(path.join(dir, 'octo'), 'utf8')), save: text => fs.writeFileSync(path.join(dir, 'octo'), text) };
+}
+async function githubServer(t, stub, kc) {
+  const base = await serve(t, { 'data/settings.json': '{"githubAccounts":["octo"]}' }, () => {}, { LANTERN_SECURITY: kc.security, LANTERN_GITHUB_WEB: stub.url, LANTERN_GITHUB_API: stub.url });
   const error = () => new Promise((done, fail) => { // the account row's error, off the start of the event stream
     const req = http.get(base + '/events', res => {
       let text = '';
@@ -2003,20 +2013,26 @@ async function githubAccount(t, item, grants) {
     });
     req.on('error', e => e.code !== 'ECONNRESET' && fail(e));
   });
-  return { base, seen, stored, error, live };
+  // Asks for another poll and waits until it goes out: that is after the one running has finished and recorded its outcome.
+  const polled = async () => { const n = stub.seen.bearers.length; await post(base, '/settings', { github: true }); await until(() => stub.seen.bearers.length > n, 'another poll'); };
+  return { base, error, polled };
 }
-const far = Date.now() + 86400000 * 30;
+async function githubAccount(t, item, grants) {
+  const stub = await githubStub(t, grants), kc = keychain(item);
+  return { ...stub, ...kc, ...await githubServer(t, stub, kc), seen: stub.seen };
+}
 
 test('a 401 refreshes the GitHub token once, retries and keeps the account connected', async t => {
-  const g = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'r1', refreshExpires: far }), { r1: ['fresh1', 'r2'] });
+  const g = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'r1' }), { r1: ['fresh1', 'r2'] });
   await until(() => g.seen.bearers.includes('fresh1'), 'the retry with the new token');
-  assert.deepStrictEqual(g.seen.bearers, ['old', 'fresh1']);
+  await g.polled(); // the poll that retried is done: it must not have said reconnect
+  assert.deepStrictEqual(g.seen.bearers.slice(0, 2), ['old', 'fresh1']);
   assert.deepStrictEqual(g.seen.refreshes, ['r1']);
-  assert.strictEqual(await g.error(), '', 'the 401 was retried in the same poll, so it never said reconnect'); // the retry's answer is still on its way
+  assert.strictEqual(await g.error(), '');
 });
 
 test('the rotated GitHub refresh token is saved and used for the next refresh', async t => {
-  const g = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'r1', refreshExpires: far }), { r1: ['fresh1', 'r2'], r2: ['fresh2', 'r3'] });
+  const g = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'r1' }), { r1: ['fresh1', 'r2'], r2: ['fresh2', 'r3'] });
   await until(() => g.seen.bearers.includes('fresh1'), 'the first refresh');
   assert.strictEqual(g.stored().refresh, 'r2', 'the Keychain holds the new refresh token');
   g.live.delete('fresh1'); // the token runs out again
@@ -2026,17 +2042,50 @@ test('the rotated GitHub refresh token is saved and used for the next refresh', 
   assert.deepStrictEqual([g.stored().token, g.stored().refresh], ['fresh2', 'r3']);
 });
 
-test('a GitHub token about to expire is refreshed before it is used', async t => {
-  const g = await githubAccount(t, JSON.stringify({ token: 'old', expires: Date.now() + 60000, refresh: 'r1', refreshExpires: far }), { r1: ['fresh1', 'r2'] });
-  await until(() => g.seen.bearers.length, 'a query');
-  assert.deepStrictEqual(g.seen.bearers, ['fresh1'], 'the old token was never sent');
-});
-
 test('a GitHub refresh that fails, or a token with no refresh token, marks the account to reconnect', async t => {
-  const dead = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'gone', refreshExpires: far }), {});
+  const dead = await githubAccount(t, JSON.stringify({ token: 'old', refresh: 'gone' }), {});
   await until(async () => (await dead.error()) === 'expired', 'the dead refresh token to say reconnect');
   assert.deepStrictEqual(dead.seen.refreshes, ['gone']);
   const bare = await githubAccount(t, 'old', { r1: ['fresh1', 'r2'] }); // saved before refresh tokens were kept
   await until(async () => (await bare.error()) === 'expired', 'a bare token to say reconnect');
   assert.deepStrictEqual(bare.seen.refreshes, []);
+  assert.strictEqual(bare.seen.bearers[0], 'old', 'the saved token itself was sent');
+});
+
+// `npm run preview` runs a second Lantern on the same Keychain item. Both get the 401 together and both trade r1; GitHub
+// honours one, so the other must take the pair the winner saved instead of showing reconnect.
+test('two Lanterns sharing a GitHub Keychain item both stay connected when one rotates the refresh token', async t => {
+  const stub = await githubStub(t, { r1: ['fresh1', 'r2'] }), kc = keychain(JSON.stringify({ token: 'old', refresh: 'r1' }));
+  stub.hold(); // both sit on their first answer until both are asking
+  const a = await githubServer(t, stub, kc), b = await githubServer(t, stub, kc);
+  await until(() => stub.seen.bearers.length >= 2, 'both Lanterns to ask');
+  stub.release();
+  await until(() => stub.seen.refreshes.length === 2 && stub.seen.bearers.filter(x => x === 'fresh1').length === 2, 'both to refresh and retry');
+  await a.polled(); await b.polled();
+  assert.deepStrictEqual([await a.error(), await b.error()], ['', ''], 'neither says reconnect');
+  assert.strictEqual(kc.stored().refresh, 'r2');
+});
+
+// The same race, one step at a time. Another Lantern rotated the pair before ours asked GitHub for anything...
+test('a GitHub 401 takes the newer pair another Lantern saved instead of refreshing', async t => {
+  const stub = await githubStub(t, {}), kc = keychain(JSON.stringify({ token: 'old', refresh: 'r1' }));
+  stub.hold();
+  const g = await githubServer(t, stub, kc);
+  await until(() => stub.seen.bearers.length, 'the first ask');
+  stub.live.add('fresh1'); kc.save(JSON.stringify({ token: 'fresh1', refresh: 'r2' })); // the other Lantern
+  stub.release();
+  await until(() => stub.seen.bearers.includes('fresh1'), 'the retry with the saved token');
+  await g.polled();
+  assert.deepStrictEqual(stub.seen.refreshes, [], 'GitHub was not asked');
+  assert.strictEqual(await g.error(), '');
+});
+// ...or while ours was asking, so GitHub refuses the refresh token it already rotated for the other one.
+test('a refused GitHub refresh token is not reconnect when another Lantern saved a newer pair meanwhile', async t => {
+  const stub = await githubStub(t, {}), kc = keychain(JSON.stringify({ token: 'old', refresh: 'r1' }));
+  const g = await githubServer(t, stub, kc);
+  await until(() => stub.seen.refreshes.length, 'the refresh');
+  stub.live.add('fresh1'); kc.save(JSON.stringify({ token: 'fresh1', refresh: 'r2' })); // the refusal is on its way
+  await until(() => stub.seen.bearers.includes('fresh1'), 'the retry with the saved token');
+  assert.strictEqual(await g.error(), '', 'the same poll retried, so it never said reconnect'); // its answer is still on its way
+  assert.deepStrictEqual(stub.seen.refreshes, ['r1']);
 });
