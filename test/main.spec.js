@@ -96,6 +96,18 @@ test('pointing at a moth shows its compact card, and clicking it expands the car
   assert.deepStrictEqual(fetch.mock.calls.map(([url]) => url), ['/snooze'], 'shift-click still snoozes');
 });
 
+test('double-clicking a moth opens its session, and shift-click and right-click still snooze', async () => {
+  const { live, fetch, scene, moth, fire } = await withMoth();
+  fire(scene, 'pointermove', 110, 205);
+  fire(scene, 'click', 110, 205); fire(scene, 'click', 110, 205); fire(scene, 'dblclick', 110, 205);
+  assert.deepStrictEqual(fetch.mock.calls.map(([url]) => url), ['/focus'], 'the session is brought to the front, once');
+  assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'and the card is put away');
+  fetch.mockClear();
+  fire(scene, 'dblclick', 110, 205, { shiftKey: true });
+  fire(scene, 'dblclick', 300, 300);
+  assert.deepStrictEqual(fetch.mock.calls, [], 'a shift double click or one off the moth opens nothing');
+});
+
 test('a hover card is a tooltip: the pointer passes through it, and it goes the moment the pointer leaves the moth', async () => {
   const { live, scene, cardEl, moth, fire } = await withMoth();
   fire(scene, 'pointermove', 110, 205);

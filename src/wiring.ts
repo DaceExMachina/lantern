@@ -122,6 +122,12 @@ $('scene').addEventListener('click', e => {
   const z = zoneFor(e);
   if (z) 'key' in z.target && !e.shiftKey ? expandCard(z) : isTouch(e) ? tapZone(z) : clickZone(z, e.shiftKey);
 });
+// A double click on a session's moth opens its session, as the card's header does. Its first click expanded the card and its
+// second put it away (card.ts expandCard), so the session opens from a settled page. Shift-click and right-click are untouched.
+$('scene').addEventListener('dblclick', e => {
+  const z = zoneFor(e);
+  if (z && 'key' in z.target && !e.shiftKey) clickZone(z, false);
+});
 // A click anywhere but the card and its own moth puts away an expanded card (or, from a tap, any card), and so does Escape.
 // It listens while the click is on its way down, before the button it lands on can take itself away (the agents' "more")
 // and leave nothing to tell it was on the card; a click on another moth then expands that one's (above).
