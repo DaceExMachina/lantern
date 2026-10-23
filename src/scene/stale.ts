@@ -7,7 +7,7 @@
 // menu (quiet hours leave them be).
 
 import { live } from './live';
-import { $, CX, CY, VIEW, WING_SIDE, WING_UP, flapWing, nth, post, stretch } from './scene';
+import { $, CX, CY, VIEW, WING_SIDE, WING_UP, flapWing, nth, post, roof, stretch } from './scene';
 import { GUST, hash, mix, seeded, style } from './lanterns';
 import { addFlyLight, flyColour } from './fireflies';
 import { put } from './frame';
@@ -116,7 +116,7 @@ function driftTo(o: Drifter, aim: number, dt: number, s: number, sway: number): 
   const px = o.px = 340 + Math.cos(o.ang) * o.dist, py = o.py = 320 + Math.sin(o.ang) * o.dist * 0.95;
   const [x0, y0, w, h] = VIEW.box || [40, 20, 600, 600];
   const [x, y] = stretch([px + Math.sin(s * 0.08 + o.ph) * sway, py + Math.sin(s * 0.12 + o.ph * 2) * sway * 0.4]);
-  return [Math.max(x0 + 24, Math.min(x0 + w - 24, x)), Math.max(y0 + 24, Math.min(y0 + h - 30, y))];
+  return [Math.max(x0 + 24, Math.min(x0 + w - 24, x)), Math.max(roof() + 24, Math.min(y0 + h - 30, y))];
 }
 
 export function drawStale(dt: number, s: number) {

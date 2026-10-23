@@ -25,6 +25,8 @@ export const AMBIENT = Q.has('ambient');
 // The height of the app window's drag strip, which takes every click on it (index.html's --titlebar): 0 outside the app. Read once, since body.app is set at load.
 let bar: number | undefined;
 export const titlebar = () => bar ??= parseFloat(getComputedStyle(document.body).getPropertyValue('--titlebar')) || 0;
+// The pinned sidebar's width (index.html's --dock-width), which PinnedDock tells the app window so its drag strip stops short of it.
+export const dockWidth = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--dock-width')) || 0;
 // arr[i] for an index known to be in range, which noUncheckedIndexedAccess can't see; it throws if it isn't
 export const nth = <T>(arr: readonly T[], i: number): T => {
   const v = arr[i];
@@ -125,6 +127,8 @@ export const LANTERN_SPAN = 200;
 // fitView; none of the three until it first lays out)
 export type Box = [number, number, number, number];
 export const VIEW: { kx: number, ky: number, top: number, box?: Box, px?: number, layer?: Box } = { kx: 1, ky: 1, top: 20 }; // top: where the lantern hangs from, the visible area's top edge
+// The top of the band creatures fly in, in scene units: the visible area's top edge, below the app window's drag strip (titlebar, in pixels).
+export const roof = () => (VIEW.box?.[1] ?? VIEW.top) + titlebar() / (VIEW.px || 1);
 export const stretch = ([x, y]: Point): Point => [340 + (x - 340) * VIEW.kx, 320 + (y - 320) * VIEW.ky];
 
 // A scorched moth's smoke trail (frame.ts smoke, background.ts trailSmoke): the seconds it's left over, a point on its path

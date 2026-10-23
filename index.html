@@ -43,7 +43,7 @@
     --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
     --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s; --slide: .45s cubic-bezier(.4, 0, .2, 1); --faded: .4;
     /* layout */
-    --dock-width: 380px; --titlebar: 0px; /* the height of the app window's drag strip along the top (app/main.swift DragStrip), which takes every click on it: 28px under body.app, nothing in a browser tab, the iTerm panel or a screensaver */
+    --dock-width: 380px; --titlebar: 0px; /* the height of the app window's drag strip along the top (app/main.swift DragStrip), which takes every click on it (it stops short of the pinned sidebar): 28px under body.app, nothing in a browser tab, the iTerm panel or a screensaver */
   }
   body.app { --titlebar: 28px; } /* wiring.ts sets it from ?app, which Lantern.app adds to its URL */
   /* thin scrollbars tinted to the app on every scroller. The standard properties are all WebKit needs now; the ::-webkit-scrollbar
@@ -400,7 +400,7 @@
   #dock { grid-row: 1; grid-column: 2; width: 0; overflow: hidden; background: var(--night); /* the footer's (body's), so the two read as one chrome */
     color: var(--ink); font-size: var(--text-sm); line-height: var(--leading); transition: width var(--slide); }
   .pinned #dock { width: var(--dock-width); }
-  #dock .stack { width: var(--dock-width); height: 100%; overflow-y: auto; box-sizing: border-box; padding-top: var(--titlebar); scroll-padding-top: var(--titlebar); } /* the scroller, so its scrollbar is inside the column */
+  #dock .stack { width: var(--dock-width); height: 100%; overflow-y: auto; box-sizing: border-box; } /* the scroller, so its scrollbar is inside the column */
   #dock section { padding: var(--space-3); }
   #dock section + section { border-top: 1px solid var(--line); }
   #dock .tray { border-radius: 0; }
