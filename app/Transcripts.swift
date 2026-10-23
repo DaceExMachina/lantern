@@ -190,7 +190,7 @@ let NOT_A_PROMPT = Re("^\\s*<(command-name|local-command-|bash-|task-notificatio
 // stop_hook_summary both write follows an end_turn every time). Only the lines that mark a turn count: a prompt, a tool's
 // result, an assistant message, the turn_duration marker, an interrupt and a compaction. Everything else Claude Code writes (attachments, titles, local commands, meta reminders, kinds it adds
 // later) is skipped, so a session renamed after its turn still reads as waiting.
-func lastTurn(_ lines: [String]) -> Turn {
+func lastTurn(_ lines: [String]) -> Turn? {
     var ended = false // a turn_duration marker comes after the final message, so keep looking back for its text
     var answered = false // the last line is a tool's result: done only if that tool was a subagent's hand-back
     for line in lines.reversed() {
@@ -223,6 +223,12 @@ func lastTurn(_ lines: [String]) -> Turn {
         }
         return Turn(done: false, cwd: j["cwd"]) // a prompt, or a second tool result: mid-turn
     }
+    return nil // no turn line in these lines
+}
+/// The newest turn in a file's tail, reading further back while the window holds none. A compaction leaves hundreds of KB of
+/// re-injected files after its summary, so the summary and boundary that mark the turn's end can sit past the first window.
+func lastTurn(file: String) -> Turn {
+    for kb in [256, 2048, 16384] { if let turn = lastTurn(tail(file, kb * 1024)) { return turn } }
     return Turn()
 }
 func transcripts(_ dir: String) -> [String] {
@@ -265,7 +271,7 @@ func findOwners(_ urls: [String]) -> [String: Any] {
         let dir = String(sessionFile.dropLast(".jsonl".count)), made = Set(createdPRs(sessionFile, dir))
         for url in urls where made.contains(url) && found[url] is NSNull {
             found[url] = ["id": (dir as NSString).lastPathComponent, "title": readTitle(dir, nil) ?? NSNull(),
-                          "cwd": lastTurn(tail(sessionFile)).cwd ?? NSNull(), "last": fileTimes(sessionFile)?.mtime ?? 0] as JSON
+                          "cwd": lastTurn(file: sessionFile).cwd ?? NSNull(), "last": fileTimes(sessionFile)?.mtime ?? 0] as JSON
         }
     } }
     return found
@@ -406,7 +412,7 @@ func liveSubagents(_ dir: String, modelled: Set<String> = []) -> Ordered<JSON> {
     var agents = Ordered<JSON>()
     for f in transcripts(dir + "/subagents") {
         guard let agent = Re("^agent-([A-Za-z0-9_-]+)\\.jsonl$").match((f as NSString).lastPathComponent)?[1], let mtime = fileTimes(f)?.mtime,
-              now() - mtime <= AGENT_EXPIRE_MS, !lastTurn(tail(f, 64 * 1024)).done else { continue }
+              now() - mtime <= AGENT_EXPIRE_MS, lastTurn(tail(f, 64 * 1024))?.done != true else { continue }
         var a: JSON = ["type": "", "description": "", "activity": "", "tries": 3, "last": mtime, "started": fileTimes(f)?.birth ?? mtime]
         if let m = agentModel(f, first: !modelled.contains(agent)) { a["model"] = m }
         if let data = FileManager.default.contents(atPath: "\(dir)/subagents/agent-\(agent).meta.json"), let j = parse(data) as? JSON {
@@ -423,7 +429,7 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     let id = ((file as NSString).lastPathComponent as NSString).deletingPathExtension, dir = String(file.dropLast(6))
     guard UUID_RE.test(id), let st = fileTimes(file) else { return nil }
     let lines = tail(file)
-    var turn = lastTurn(lines)
+    var turn = lastTurn(file: file)
     // Claude Code's own status wins: busy is a turn (or agents) running; idle with no finished turn to wait on is at the
     // prompt (idle), as check() reads it, and idle after a finished turn is that turn waiting on me
     if busy == true { turn.done = false; turn.idle = false } else if busy == false && !turn.done { turn.done = true; turn.idle = true }
