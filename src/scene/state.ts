@@ -50,18 +50,16 @@ export function sync() {
     }
   }
   for (const [k, m] of live.moths) if (!kept.has(k)) m.leaving = true;
-  // Homes depend only on the sessions the server sent, so every window agrees however they arrived. A session stays on
-  // its own side of the lantern (the left when its seeded angle is under a half), so its moth never lands across from
-  // where it flies. Each side has its share of the 3 to 16 spots round the oval, and its sessions, in seeded order, spread
-  // evenly over that stretch of it. A session's state plays no part, so a moth landing or taking off moves nobody. Only
-  // a join or leave can move the others; frame.ts glides them there. ponytail: past about 12 on one side they sit closer
-  // than 40 apart; add a second ring in if that ever shows.
+  // Homes depend only on the sessions the server sent (not their state), so every window agrees however they arrived and
+  // a moth landing or taking off moves nobody. In seeded-angle order, half the sessions go to each side of the lantern (the
+  // odd one to the side its angle prefers), spread evenly over that side's share of the 3 to N spots round the oval. A
+  // join or leave re-plans, and frame.ts glides the moths to their new homes.
   const want = (id: string): number => seeded(hash(id))();
   const own = shown.filter(s => !sessionMoth(s.id)?.satellite)
     .sort((a, b) => want(a.id) - want(b.id) || (a.id < b.id ? -1 : 1));
-  const n = Math.min(16, Math.max(3, own.length));
+  const n = Math.max(3, own.length), mid = own[own.length >> 1], leftCount = (own.length >> 1) + (own.length & 1 && mid && want(mid.id) < 0.5 ? 1 : 0);
   for (const left of [true, false]) {
-    const first = left ? 0 : Math.ceil(n / 2), count = left ? Math.ceil(n / 2) : Math.floor(n / 2), mine = own.filter(s => (want(s.id) < 0.5) === left);
+    const first = left ? 0 : Math.ceil(n / 2), count = left ? Math.ceil(n / 2) : Math.floor(n / 2), mine = left ? own.slice(0, leftCount) : own.slice(leftCount);
     mine.forEach(({ id }, k) => { const m = sessionMoth(id); if (m) m.spot = ringHome(first + (k + 0.5) * count / mine.length - 0.5, n); });
   }
   for (const s of shown) { const m = sessionMoth(s.id); if (m) m.home ??= m.spot ?? [CX, CY]; } // a satellite's then circles its parent's (frame.ts)

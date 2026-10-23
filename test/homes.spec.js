@@ -51,39 +51,38 @@ test('two windows agree on every home, whatever order sessions reached them in a
   assert.deepStrictEqual(two, one, 'the same spot for every session in both windows');
 });
 
-test('sessions spread round the lantern, clear of the stand and the string', async () => {
-  // A side that hashes crowded doubles up its spots, so two can come within 35 of each other, never on top.
+test('sessions spread evenly round the lantern, clear of the stand and the string', async () => {
+  // Sixteen evenly round the oval are 60.8 apart, fewer further; the old overflow put a moth 39 from another.
   const own = KEYS.filter(k => k !== 'side'), w = await open();
   for (let n = 2; n <= own.length; n++) {
     const spots = (await open()).show(own.slice(0, n));
-    assert.ok(closest(spots) > 35, `${n} sessions: the closest two are ${closest(spots).toFixed(1)} apart`);
+    assert.ok(closest(spots) > 55, `${n} sessions: the closest two are ${closest(spots).toFixed(1)} apart`);
   }
-  for (let n = 1; n <= 20; n++) for (let i = 0; i < n; i++) for (const layer of [0, 1]) {
-    const [x, y] = w.scene.ringHome(i, n, layer);
+  for (let n = 1; n <= 20; n++) for (let i = 0; i < n; i++) {
+    const [x, y] = w.scene.ringHome(i, n);
     assert.ok(Math.abs(x - 340) >= 60 - 1e-9 || y > 240, `spot ${i} of ${n} keeps 60 off the string: ${x.toFixed(1)}, ${y.toFixed(1)}`);
     assert.ok(Math.abs(x - 340) >= 150 - 1e-9 || y < 420, `spot ${i} of ${n} keeps off the candle's stand: ${x.toFixed(1)}, ${y.toFixed(1)}`);
   }
-  // past sixteen they double up, the second a little further in, never on top of another
+  // past sixteen they just sit closer, never on top of another
   const many = (await open()).show([...own, 'a', 'b', 'c', 'd']);
   assert.strictEqual(Object.keys(many).length, 20);
-  assert.ok(closest(many) > 35, `twenty sessions: the closest two are ${closest(many).toFixed(1)} apart`);
+  assert.ok(closest(many) > 45, `twenty sessions: the closest two are ${closest(many).toFixed(1)} apart`);
 });
 
-test('a session stays on its own side whatever the others do: landing, taking off, joining and leaving move nobody across', async () => {
+test('landing and taking off move nobody; a join or leave re-plans, half the sessions to a side', async () => {
   // On main, a session going idle chose its spot after the active ones, so landing handed it a spot on the far side while
   // its thread (home) had pointed to the near one, and took the others' spots with it.
-  const own = KEYS.filter(k => k !== 'side'), w = await open(), side = spot => Math.sign(spot[0] - 340);
+  const own = KEYS.filter(k => k !== 'side'), w = await open();
   let spots = w.show(own.slice(0, 12)), idle = [];
-  const first = Object.fromEntries(Object.entries(spots).map(([k, v]) => [k, side(v)]));
-  for (let i = 0; i < 12; i++) { // each in turn lands, then another takes off
+  for (let i = 0; i < 12; i++) { // each in turn lands, while the oldest takes off
     idle = [...idle, own[i]].slice(-5);
     const next = w.show(own.slice(0, 12), idle);
     assert.deepStrictEqual(next, spots, `${own[i]} landing moved nobody`);
     spots = next;
   }
-  for (let n = 3; n <= 16; n++) for (const k of [n, 16 - n + 3]) {
-    const at = w.show(own.slice(0, k));
-    for (const [id, spot] of Object.entries(at)) assert.strictEqual(side(spot), first[id] ?? side(spot), `${id} stays on its side with ${k} sessions`);
+  for (let n = 1; n <= 16; n++) {
+    const left = Object.values(w.show(own.slice(0, n))).filter(p => p[0] < 340).length;
+    assert.ok(Math.abs(2 * left - n) <= 1, `${n} sessions: ${left} on the left`);
   }
 });
 
@@ -292,7 +291,7 @@ test('landed moths spread up and down the paper, in their homes\' order, never o
     }
     if (idle.length >= 5) { // with a few on the paper, they reach most of the way up and down it
       const b = w.lanterns.style.body, height = (b.bottom - b.top) * 2 * w.lanterns.PERCH_SPREAD, ys = all.map(p => p[1]);
-      assert.ok(Math.max(...ys) - Math.min(...ys) > 0.25 * height, `${where}: they span ${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} of ${height.toFixed(0)}`);
+      assert.ok(Math.max(...ys) - Math.min(...ys) > 0.4 * height, `${where}: they span ${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} of ${height.toFixed(0)}`);
     }
   }
 });
@@ -362,9 +361,9 @@ test('every home\'s landing line has room on the paper', async () => {
   const w = await open(), { ringHome, VIEW } = w.scene, { perchAt } = w.lanterns;
   for (const key of ['chochin', 'moroccan', 'barrel', 'candle']) for (const kx of [1, 1.6]) {
     VIEW.kx = kx; w.lanterns.applyStyle(key);
-    for (let n = 1; n <= 16; n++) for (let i = 0; i < n; i++) for (const layer of [0, 1]) {
-      const h = ringHome(i, n, layer), [ax, ay] = perchAt(h, 0), [bx, by] = perchAt(h, 1), len = Math.hypot(bx - ax, by - ay);
-      assert.ok(len > 9, `${key} ${kx}x, home ${i} of ${n}${layer ? ', further in' : ''}: its landing line is ${len.toFixed(1)} long`);
+    for (let n = 1; n <= 16; n++) for (let i = 0; i < n; i++) {
+      const h = ringHome(i, n), [ax, ay] = perchAt(h, 0), [bx, by] = perchAt(h, 1), len = Math.hypot(bx - ax, by - ay);
+      assert.ok(len > 9, `${key} ${kx}x, home ${i} of ${n}: its landing line is ${len.toFixed(1)} long`);
     }
   }
 });
