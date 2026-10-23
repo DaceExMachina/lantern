@@ -30,11 +30,11 @@ export const gl = new Proxy(Object.assign(recorded, { uniforms: {} }), {
 const getContext = HTMLCanvasElement.prototype.getContext;
 HTMLCanvasElement.prototype.getContext = function (type, ...rest) { return type === 'webgl' ? gl : getContext.call(this, type, ...rest); };
 
-// happy-dom has no 2d canvas: a test whose page draws text calls this for a context that accepts anything and a canvas that
-// encodes nothing. It lasts until vi.restoreAllMocks() and vi.unstubAllGlobals().
+// happy-dom has no 2d canvas: a test whose page draws text calls this for a context that accepts anything
+// (and returns the log of what it was asked). It lasts until vi.restoreAllMocks() and vi.unstubAllGlobals().
 export function stubCanvas2d() {
-  const webgl = HTMLCanvasElement.prototype.getContext, anything = new Proxy(function () {}, { get: () => anything, apply: () => anything });
+  const webgl = HTMLCanvasElement.prototype.getContext, calls = [], anything = new Proxy(function () {}, { get: (_, k) => k === Symbol.toPrimitive ? () => 10 : (calls.push(k), anything), apply: () => anything });
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function (type, ...rest) { return type === '2d' ? anything : webgl.call(this, type, ...rest); });
-  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(done => done(null));
-  vi.stubGlobal('OffscreenCanvas', undefined); // so a page is encoded on the main thread, by toBlob
+  vi.stubGlobal('Path2D', class {});
+  return calls; // the names of everything asked of any 2d context
 }

@@ -10,7 +10,9 @@
 // Driven by a timer, not CSS transitions, since the screensaver's web view doesn't run animation frames.
 //
 // Drawn cheaply: the blocks are typeset flat on an offscreen canvas (the paper unrolled), then that page is warped onto
-// the paper in tiles, and shown as one picture on the paper. On the barrel a tile is a whole vertical strip, a cylinder
+// the paper in tiles, onto one canvas that lies over the lantern's back paper (index.html #pagesInk; a canvas inside the
+// SVG doesn't paint in WebKit, and a picture would have to be encoded every time a fade moved: 40 MB a minute of disk
+// writes in WebKit's networking process, and memory that never came back). On the barrel a tile is a whole vertical strip, a cylinder
 // being the same all the way down; on the round chōchin the strips are cut into bands as well, each band as wide as the
 // paper is at its height. It's redrawn only when a fade has moved enough to see, a couple of times a second at most,
 // never per animation frame. In a window too small to read the words (the iTerm toolbelt), none of it runs.
@@ -52,9 +54,8 @@ let primed = false, waitFrom = performance.now(), pagesTimer: ReturnType<typeof 
 // the whole set's ink comes up together (or goes out) over INTRO, on a quicker timer of its own, rather than at once
 const INTRO = 1200, PRIME_AGE = 2 * FADE + HOLD;
 let introAt = 0, introTimer: ReturnType<typeof setInterval> | undefined, inking = 1; // inking: 1 coming up, -1 going out
-// the unrolled page, the warped one, and what it was last drawn with; `showing` is the picture on the paper, and `busy`
-// while a new one is being encoded and decoded
-export let flat: HTMLCanvasElement | undefined, warped: HTMLCanvasElement | undefined, drawn = { scale: 0, cool: -1 }, showing = '', busy = false, dirty = false;
+// the unrolled page, and what the paper's canvas was last drawn with
+let flat: HTMLCanvasElement | undefined, drawn = { scale: 0, cool: -1 }, dirty = false;
 let paper: Surface | undefined; // the surface the blocks were laid out for
 
 let measure: CanvasRenderingContext2D | null | undefined;
@@ -204,10 +205,9 @@ const paperBox = (d: Surface) => {
   return { x: d.cx - d.r, y: d.top - m, w: 2 * d.r, h: d.bottom - d.top + 2 * m };
 };
 
-// Typesets every block flat, warps the page onto the paper, and lights it, `s` device pixels to a paper unit.
-function render(d: Surface, s: number) {
-  const out = warped ??= document.createElement('canvas'), B = paperBox(d), U = d.r * Math.PI / 2;
-  const W = Math.ceil(B.w * s), H = Math.ceil(B.h * s);
+// Typesets every block flat, warps the page onto the paper's canvas, and lights it, `s` device pixels to a paper unit.
+function render(out: HTMLCanvasElement, d: Surface, s: number) {
+  const B = paperBox(d), U = d.r * Math.PI / 2, W = Math.ceil(B.w * s), H = Math.ceil(B.h * s);
   if (out.width !== W || out.height !== H) { out.width = W; out.height = H; }
   const flatCanvas = flat ??= document.createElement('canvas');
   const vTop = flatY(d, d.top), vBottom = flatY(d, d.bottom), fw = Math.ceil(2 * U * s), fh = Math.ceil((vBottom - vTop) * s);
@@ -222,6 +222,10 @@ function render(d: Surface, s: number) {
   o.setTransform(1, 0, 0, 1, 0, 0);
   o.globalCompositeOperation = 'source-over';
   o.clearRect(0, 0, W, H);
+  o.save();
+  o.setTransform(s, 0, 0, s, -B.x * s, -B.y * s);
+  o.clip(new Path2D(d.outline)); // the paper's edge, scalloped between the wires
+  o.setTransform(1, 0, 0, 1, 0, 0);
   const down = d.ry ? TILES_DOWN : 1, step = (vBottom - vTop) / down; // a cylinder is the same all the way down
   for (let j = 0; j < down; j++) {
     const v0 = vTop + j * step, v1 = j === down - 1 ? vBottom : v0 + step;
@@ -238,6 +242,7 @@ function render(d: Surface, s: number) {
       o.drawImage(flatCanvas, (t.u0 + U) * s, sy, (t.u1 - t.u0) * s, (j === down - 1 ? fh : (v1 - vTop) * s) - sy, x0, y0, x1 - x0, y1 - y0);
     }
   }
+  o.restore();
   o.globalCompositeOperation = 'destination-in';
   o.setTransform(s * d.light.rx, 0, 0, s * d.light.ry, (d.light.cx - B.x) * s, (d.light.cy - B.y) * s);
   const light = o.createRadialGradient(0, 0, 0, 0, 0, 1);
@@ -246,36 +251,6 @@ function render(d: Surface, s: number) {
   o.fillRect(-B.w, -B.h, 2 * B.w, 2 * B.h); // the whole box, in the light's units
   for (const b of blocks) b.drawnAlpha = b.alpha;
   drawn = { scale: s, cool }; dirty = false;
-  show(out);
-}
-
-// Puts the warped page on the paper as a picture, swapped in only once it's decoded so the words never blink out.
-// (A canvas inside the SVG would skip the encoding, but WebKit doesn't paint one in a foreignObject.) The PNG is encoded
-// in a worker: on the main thread a big page's encoding stalls it for 10 to 20ms each time, a dropped frame or two.
-// ponytail: WebKit before macOS 13.3 has no OffscreenCanvas, so there it's encoded on the main thread as before.
-let encoder: Worker | undefined;
-const ENCODER = 'onmessage = async e => { const c = new OffscreenCanvas(e.data.width, e.data.height); '
-  + 'c.getContext("2d").drawImage(e.data, 0, 0); postMessage(await c.convertToBlob()); };';
-function encode(out: HTMLCanvasElement, done: (blob: Blob | null) => void) {
-  if (typeof OffscreenCanvas === 'undefined') return out.toBlob(done);
-  const worker = encoder ??= new Worker(URL.createObjectURL(new Blob([ENCODER], { type: 'text/javascript' })));
-  worker.onmessage = e => { const blob: unknown = e.data; done(blob instanceof Blob ? blob : null); };
-  worker.onerror = () => done(null);
-  createImageBitmap(out).then(bmp => worker.postMessage(bmp, [bmp]), () => done(null));
-}
-function show(out: HTMLCanvasElement) {
-  busy = true;
-  const ink = byId('pagesInk', SVGImageElement); // a lantern picked meanwhile has its own, for its own paper
-  encode(out, async blob => {
-    if (!blob) { busy = false; dirty = true; return; } // nothing to show; the next tick tries again
-    const url = URL.createObjectURL(blob), img = new Image();
-    img.src = url;
-    await img.decode().catch(() => {});
-    ink?.setAttribute('href', url);
-    const was = showing;
-    showing = url; busy = false;
-    if (was) setTimeout(() => URL.revokeObjectURL(was), 1000); // after the picture has swapped
-  });
 }
 
 // Paper units to CSS pixels on screen, whatever the sway's rotation and however the lantern is drawn.
@@ -284,15 +259,25 @@ const toScreen = () => { const m = pagesG()?.getScreenCTM(); return m ? Math.hyp
 // Until a paper lantern is drawn there's nothing to judge, so the timer may start and its tick judges.
 const legible = () => { const d = style.surface; return !pagesG() || !d || toScreen() * (d.bottom - d.top) >= MIN_PAPER; };
 
-// The picture on the paper, rebuilt whenever the lantern is drawn afresh (picking a lantern replaces its drawing).
-function drawPages(root: Element, d: Surface) {
-  const B = paperBox(d);
-  root.innerHTML = `<image id="pagesInk" x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" preserveAspectRatio="none" href="${showing}"/>`;
-  drawn = { scale: 0, cool: -1 };
+const ink = () => byId('pagesInk', HTMLCanvasElement);
+// Lays the canvas over the paper's box in the lantern's layer (#pagesG's matrix to the layer is only a scale and a shift,
+// whatever the lantern's drawing), turning about the same point as the layer does when frame.ts sways them together.
+function lay(out: HTMLCanvasElement, root: SVGGElement, d: Surface) {
+  const layer = root.ownerSVGElement, m = root.getCTM();
+  if (!layer || !m) return;
+  const B = paperBox(d), home = parseFloat(layer.style.left) || 0; // the layer's left edge in the scene, its top at 0
+  const left = home + m.a * B.x + m.e, top = m.d * B.y + m.f;
+  const [ox = 0, oy = 0] = getComputedStyle(layer).transformOrigin.split(' ').map(parseFloat);
+  Object.assign(out.style, {
+    left: `${left}px`, top: `${top}px`, width: `${m.a * B.w}px`, height: `${m.d * B.h}px`,
+    transformOrigin: `${home + ox - left}px ${oy - top}px`,
+  });
 }
 
 export function tickPages() {
-  const root = pagesG(), d = style.surface;
+  const root = pagesG(), d = style.surface, out = ink();
+  if (!out) return;
+  out.hidden = !root || !d;
   if (!root || !d) return; // not a paper lantern
   if (!legible()) return sleepPages(); // a lantern picked in a window too small to read it
   if (paper !== d) { forget(); paper = d; } // another lantern: a fresh set laid out for its paper
@@ -304,7 +289,6 @@ export function tickPages() {
     fadeInk(1);
     nextBlockAt = now + every(d);
   }
-  if (!root.firstChild) drawPages(root, d);
   if (lanternText !== 'off' && now >= nextBlockAt) { addBlock(d, now); nextBlockAt = now + every(d); }
   inkOpacity();
   blocks = blocks.filter(b => {
@@ -316,8 +300,8 @@ export function tickPages() {
     return fadeOut > 0;
   });
   const s = toScreen() * devicePixelRatio;
-  if (busy) return; // the last picture isn't up yet; what changed is still dirty next tick
-  if (dirty || Math.abs(s - drawn.scale) > 0.01 || Math.abs(cool - drawn.cool) > 0.03) render(d, s);
+  if (dirty || Math.abs(s - drawn.scale) > 0.01 || Math.abs(cool - drawn.cool) > 0.03) render(out, d, s);
+  lay(out, root, d);
 }
 // Brighter flame, clearer words, times the first set's quick fade in. INK_OPACITY keeps the words faint on any paper.
 const INK_OPACITY = 0.75;
@@ -332,7 +316,8 @@ function inkOpacity() {
   const fade = intro(), done = fade === (inking > 0 ? 1 : 0);
   if (done) { clearInterval(introTimer); introTimer = undefined; }
   if (done && inking < 0) { forget(); stopPages(); return; } // faded out: nothing left running
-  byId('pagesInk', SVGImageElement)?.setAttribute('opacity', (INK_OPACITY * (0.5 + 0.5 * Math.max(level, cool * 0.45)) * fade).toFixed(3));
+  const out = ink();
+  if (out) out.style.opacity = (INK_OPACITY * (0.5 + 0.5 * Math.max(level, cool * 0.45)) * fade).toFixed(3);
 }
 
 function stopPages() { clearInterval(pagesTimer); clearInterval(introTimer); pagesTimer = introTimer = undefined; }
@@ -342,9 +327,13 @@ function wakePages() {
   if (pagesTimer || lanternText === 'off' || !legible()) return;
   pagesTimer = setInterval(tickPages, 250);
 }
-// Drops every block and the picture, ready to prime a paper already full.
+// Drops every block and the page on the paper (a canvas of no size is blank and holds no pixels), ready to prime a paper
+// already full.
 function forget() {
-  blocks = []; pagesG()?.replaceChildren(); URL.revokeObjectURL(showing); showing = '';
+  blocks = [];
+  const out = ink();
+  if (out) out.width = out.height = 0;
+  drawn = { scale: 0, cool: -1 };
   primed = false;
 }
 // A window shrunk too small to read in drops the words and stops everything; grown back, they fade in again.

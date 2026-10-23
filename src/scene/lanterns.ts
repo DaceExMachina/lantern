@@ -232,12 +232,12 @@ const SUNKEN = (cx: number, half: (y: number) => number, ribs: number[], dip: nu
 // the Odawara barrel: a straight cylinder on 20 close wires (top and bottom edges included), each bowed from the flame's
 // height like its drums. `cap` is the half-width of the lacquer drums where they grip the paper.
 const BARREL_RIBS = Array.from({ length: 20 }, (_, i) => 216 + (445 - 216) * i / 19);
-const BARREL: Surface & { cap: number } = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350, half: () => 60,
+const BARREL: Omit<Surface, 'outline'> & { cap: number } = { cx: 340, r: 60, cap: 63, top: 216, bottom: 445, bow: y => 120 * (y - 350) / 1350, half: () => 60,
   light: { cx: 340, cy: 340, rx: 88, ry: 165 }, ribs: BARREL_RIBS, gap: (BARREL_RIBS[1] ?? 0) - (BARREL_RIBS[0] ?? 0), lines: 2, shown: 8 };
 const ODAWARA = SUNKEN(BARREL.cx, BARREL.half, BARREL.ribs, 1.2, BARREL.bow);
 // the chōchin, in its mockup units: round (a little wider than tall), its wires wider apart and bowing away from the
 // middle, so it sinks in less
-const BALL: Surface & { cy: number, ry: number } = { cx: 95, cy: 122, r: 52, ry: 48, top: 74, bottom: 170, gap: 10, lines: 3, shown: 10, bow: y => 0.115 * (y - 122),
+const BALL: Omit<Surface, 'outline'> & { cy: number, ry: number } = { cx: 95, cy: 122, r: 52, ry: 48, top: 74, bottom: 170, gap: 10, lines: 3, shown: 10, bow: y => 0.115 * (y - 122),
   ribs: [74, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170], light: { cx: 95, cy: 120, rx: 76, ry: 69 },
   half: y => 52 * Math.sqrt(Math.max(0, 1 - ((y - 122) / 48) ** 2)) };
 const CHOCHIN = SUNKEN(BALL.cx, BALL.half, BALL.ribs, 0.35, BALL.bow);
@@ -694,7 +694,7 @@ const MOROCCAN_PATINA = `<g fill="none" stroke="#4A3B18" stroke-opacity=".6"><pa
 export const STYLES = {
   barrel: {
     name: 'Book-page barrel', flame: [340, 388, 1], light: [340, 350], paper: true, flameWind: paperWind, ribbon: [340, 470], knot: [341, 139], caps: [BARREL.top, BARREL.bottom, BARREL.cap],
-    surface: BARREL, body: { top: BARREL.top, bottom: BARREL.bottom, half: BARREL.half }, // a straight cylinder
+    surface: { ...BARREL, outline: ODAWARA.outline }, body: { top: BARREL.top, bottom: BARREL.bottom, half: BARREL.half }, // a straight cylinder
     back: `<path d="M340 20 L340 136.6" stroke="#C9B49C" stroke-width="2"/>
     <defs><clipPath id="bodyClip"><path d="${ODAWARA.outline}"/></clipPath></defs>
     <path id="paperShape" d="${ODAWARA.outline}" fill="url(#paperShade)"/>
@@ -713,7 +713,7 @@ export const STYLES = {
   },
   chochin: {
     name: 'Round chōchin', flame: [340, 379, 0.95], light: [340, 336], paper: true, flameWind: paperWind, tassel: [95, 178.5], knot: [95.4, 56.5], caps: [221, 441, 46], // pivot in the drawing's own units
-    surface: BALL,
+    surface: { ...BALL, outline: CHOCHIN.outline },
     body: { top: 240, bottom: 422, half: y => 124.8 * Math.sqrt(Math.max(0, 1 - ((y - 330.8) / 115.2) ** 2)) }, // centred on the glow rings (y 330)
     // the caps' faces that turn toward the paper catch the flame (class paperLit, coloured each frame), drawn behind it
     back: MOCK(`${PAPER_GRAD('.6')}<path d="M95 -7.5V55.6" stroke="#C9B49C" stroke-width="0.8"/>

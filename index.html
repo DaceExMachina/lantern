@@ -242,10 +242,11 @@
      flame burns behind the front paper and over the back. The flame's canvas is as wide but never turned: its shader
      draws the flame upright at its swung base. */
   .lanternLayer { right: auto; will-change: transform; }
-  #flame { right: auto; }
+  #flame, #pagesInk { right: auto; bottom: auto; }
+  #pagesInk { will-change: transform; } /* swayed with the layers (placed over the paper by pages.ts lay) */
   /* ambient (a second display's screensaver): the lantern's light and the drifting dust */
   #lantern:not(.pencil) #cdPencil { display: none; } /* Jerrett's pencil on the candle (src/scene/pencil.ts) */
-  .ambient #lantern, .ambient #lanternPaper, .ambient #flame { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
+  .ambient #lantern, .ambient #lanternPaper, .ambient #pagesInk, .ambient #flame { display: none; } /* no moths, fireflies or wisps are made there; the lantern drawing is the one thing to skip */
   /* a badge just earned (src/scene/flash.ts): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: var(--z-flash); }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -429,6 +430,7 @@
   </defs>
   <g id="lanternPaper"></g>
 </svg>
+<canvas id="pagesInk" aria-hidden="true"></canvas><!-- the session text on the paper, over the back paper (pages.ts) -->
 <canvas id="flame"></canvas>
 <svg id="lanternLayer" class="lanternLayer" aria-hidden="true"><g id="lantern"></g></svg>
 <svg aria-hidden="true">

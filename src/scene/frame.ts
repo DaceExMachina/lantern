@@ -236,7 +236,7 @@ export function swingLantern(elapsed: number, s: number) {
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
-  for (const layer of [$('lanternBack', SVGSVGElement), $('lanternLayer', SVGSVGElement)]) layer.style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
+  for (const layer of [$('lanternBack', SVGSVGElement), $('lanternLayer', SVGSVGElement), $('pagesInk', HTMLCanvasElement)]) layer.style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
   twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * TWIST_GAIN / TWIST_MAX) - twist) * dt * TWIST_RATE;
   farSlide = style.farWall ? -twist * 0.2 : 0;
   put(byId('inside', SVGGElement), 'transform', `translate(${(farSlide / 2).toFixed(2)} 0)`);

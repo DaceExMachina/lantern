@@ -152,7 +152,7 @@ export async function fetchStats(): Promise<Stats> {
 interface Body { top: number; bottom: number; half: (y: number) => number }
 /** A paper lantern's paper, which session text is printed on (pages.ts); see lanterns.ts BARREL. */
 export interface Surface {
-  cx: number; r: number; top: number; bottom: number; ribs: number[]; gap: number; lines: number; shown: number;
+  cx: number; r: number; top: number; bottom: number; ribs: number[]; gap: number; lines: number; shown: number; outline: string;
   bow: (y: number) => number; half: (y: number) => number; light: { cx: number; cy: number; rx: number; ry: number }; cy?: number; ry?: number;
 }
 /** A lantern: what's drawn, where its flame and light are, and what it does (see the notes on lanterns.ts STYLES). */
