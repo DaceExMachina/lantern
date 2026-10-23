@@ -11,6 +11,7 @@ import SessionCard from '../src/components/SessionCard.vue';
 import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
+import { ghosts } from '../src/scene/stale';
 import { enterZone, expandCard, hideCard, hoverZone } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 import { parseSettings } from '../src/types';
@@ -370,4 +371,16 @@ test('the PR-only card\'s header is laid out like a session\'s: a .title and a p
   const card = await hoverStale(wisp);
   assert.strictEqual(find(card, 'title').length, 1);
   assert.strictEqual(find(card.querySelector('h3'), 'chip').length, 1);
+});
+
+test('a wisp whose session has gone quiet shows that session\'s ghost card', async () => {
+  const o = { id: 'quiet', title: 'Imageproxy PR 11', cwd: '/w/imageproxy', last: now - 9 * 864e5 };
+  const stale = { ...wisp, owner: o };
+  ghosts.set('quiet', { o, prs: [stale] });
+  try {
+    const card = await hoverStale(stale);
+    assert.ok(text(card).includes('gone quiet'), 'the ghost card');
+    assert.ok(text(card).includes('PRs (1)'));
+    assert.ok(!text(card).includes('Made by'), 'not the PR-only card');
+  } finally { ghosts.delete('quiet'); }
 });

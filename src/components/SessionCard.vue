@@ -7,8 +7,9 @@
 import { computed, onBeforeUpdate, onUpdated, ref, shallowRef, watch } from 'vue';
 import { NEED, dropTip } from '../scene/card';
 import { flyColour } from '../scene/fireflies';
+import { ghosts } from '../scene/stale';
 import { useLanternStore } from '../stores/lantern';
-import type { Hovered, Session } from '../types';
+import type { Ghost, Hovered, Session } from '../types';
 import SessionRows from './SessionRows.vue';
 
 const store = useLanternStore();
@@ -17,12 +18,17 @@ const shown = shallowRef<Hovered | null>(null), opened = ref(0), full = ref(fals
 // and full once a click expands it (store.expanded); fading out, it stays as it was.
 watch([() => store.hovered, () => store.expanded], ([h, x], [was]) => { if (h) { shown.value = h; full.value = x; } if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
 // a session's card finds its session in the store, or while its moth leaves, the one the moth last had; a stale PR's wisp
-// shows its owner's card when Lantern knows that session, and only an orphan gets the PR-only card
+// shows its owner's card when Lantern knows that session (live: the session card; gone quiet: its ghost's card), and only
+// a PR with no known session gets the PR-only card
 const session = computed<Session | undefined>(() => {
   const h = shown.value;
   if (!h) return undefined;
   if ('key' in h) return store.sessions.find(o => o.id === h.key) ?? h.session;
   return 'stale' in h ? store.sessions.find(o => o.id === h.stale.owner?.id) : undefined;
+});
+const ghost = computed<Ghost | undefined>(() => {
+  const h = shown.value;
+  return h && 'ghost' in h ? h.ghost : h && 'stale' in h && !session.value ? ghosts.get(h.stale.owner?.id ?? '') : undefined;
 });
 const days = (ms: number) => Math.round(ms / 864e5);
 const where = (cwd: string | null | undefined) => String(cwd || '').split('/').filter(Boolean).pop() || '';
@@ -39,17 +45,17 @@ onUpdated(() => {
 <template>
   <template v-if="shown">
     <SessionRows v-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" />
-    <template v-else-if="'stale' in shown">
+    <template v-else-if="!ghost && 'stale' in shown">
       <h3><span class="title"><span class="face">{{ shown.stale.label }}</span></span><span class="chip idle"><span class="face">stale</span></span></h3>
       <div>{{ shown.stale.title || '' }}</div>
       <div class="dim">{{ `${NEED[shown.stale.need] || shown.stale.need} · untouched for ${Math.max(7, days(store.now - Date.parse(shown.stale.updatedAt)))} days` }}</div>
       <div v-if="shown.stale.owner" class="dim">{{ `Made by ${shown.stale.owner.title || 'an old session'}` }}</div>
     </template>
-    <template v-else-if="'ghost' in shown">
-      <h3><span class="title"><span class="face">{{ shown.ghost.o.title || shown.ghost.o.id.slice(0, 8) }}</span></span><span class="chip idle"><span class="face">gone quiet</span></span></h3>
-      <div class="dim">{{ `${where(shown.ghost.o.cwd) ? where(shown.ghost.o.cwd) + ' · ' : ''}last active ${days(store.now - shown.ghost.o.last) ? `${days(store.now - shown.ghost.o.last)} days ago` : 'today'}` }}</div>
-      <div class="agents">{{ `PRs (${shown.ghost.prs.length})` }}</div>
-      <div v-for="p in shown.ghost.prs" :key="p.url" class="pr"><i :style="{ background: flyColour(p.need) }"></i><a :href="p.url" target="_blank" rel="noopener">{{ p.label }}</a>{{ ` ${NEED[p.need] || p.need} · ` }}<span :title="p.title ?? ''">{{ p.title ?? '' }}</span></div>
+    <template v-else-if="ghost">
+      <h3><span class="title"><span class="face">{{ ghost.o.title || ghost.o.id.slice(0, 8) }}</span></span><span class="chip idle"><span class="face">gone quiet</span></span></h3>
+      <div class="dim">{{ `${where(ghost.o.cwd) ? where(ghost.o.cwd) + ' · ' : ''}last active ${days(store.now - ghost.o.last) ? `${days(store.now - ghost.o.last)} days ago` : 'today'}` }}</div>
+      <div class="agents">{{ `PRs (${ghost.prs.length})` }}</div>
+      <div v-for="p in ghost.prs" :key="p.url" class="pr"><i :style="{ background: flyColour(p.need) }"></i><a :href="p.url" target="_blank" rel="noopener">{{ p.label }}</a>{{ ` ${NEED[p.need] || p.need} · ` }}<span :title="p.title ?? ''">{{ p.title ?? '' }}</span></div>
     </template>
   </template>
 </template>
