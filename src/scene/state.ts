@@ -88,12 +88,12 @@ export function sessionMoth(id: string): SessionMoth | undefined {
 
 function mothNode() {
   const g = el('g', { class: 'moth' });
-  const up = el('path', { d: pathOf(WING_UP), class: 'wing' }), side = el('path', { d: pathOf(WING_SIDE), class: 'wing' });
+  const back = el('path', { d: pathOf(WING_SIDE), class: 'wing' }), front = el('path', { d: pathOf(WING_UP), class: 'wing' });
   const wings = el('g', { transform: 'translate(-2 -6)' }); // same offset as the original artwork, so it pivots the same way
-  wings.append(side, up);
+  wings.append(back, front);
   g.append(wings);
   $('moths', SVGGElement).append(g);
-  return { g, up, side };
+  return { g, back, front };
 }
 
 // A hover area for a moth: shows its card (beside the area it came from), click opens the session, right-click snoozes.

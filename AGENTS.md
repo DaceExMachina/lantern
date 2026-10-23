@@ -24,4 +24,5 @@ State is decided in one place. Handlers and seeding record facts, `derive()` in 
 - TypeScript in `src/` avoids casts: no `as` (except `as const`), non-null `!`, `any`, `@ts-ignore` or `@ts-expect-error`. Narrow with guards, `in`, `instanceof` and validating parsers for server JSON, and prefer generics (`shallowRef<Stats | null>(null)`). Where a cast is the idiom, put `// cast: why` on its line. `test/types-casts.test.js` enforces it.
 - Every new test must prove it can fail: break the line it guards, confirm it goes red, then restore it.
 - Never load scripts, styles or fonts from a CDN at runtime. Bundle them.
+- Never move an element that's already in the page (`appendChild` or `insertBefore` of a connected node) in code that runs again and again. WebKit keeps the old renderer every time, so a move per frame leaks for as long as the element lives (moth wings reordered that way leaked about 700 renderers a minute). Change what fixed elements draw instead. `test/moves.spec.js` checks the scene's frames.
 - No em dashes in docs or UI copy.

@@ -185,7 +185,7 @@ export interface Scorch {
 /** What every moth has: its drawing, size, where it is, and the animation state frame.ts keeps on it from frame to frame
  * (each starts unset; the tests build moths with only some of it). */
 interface MothBase {
-  key: string; g: SVGGElement; up: SVGPathElement; side: SVGPathElement; size: number;
+  key: string; g: SVGGElement; back: SVGPathElement; front: SVGPathElement; size: number; // front draws whichever wing is nearer
   x: number; y: number; phase: number; cool: number; leaving: boolean;
   session?: Session; flies?: Map<string, Firefly>;
   vx?: number; vy?: number; tilt?: number; roll?: number; fold?: number; open?: number; beat?: number; rate?: number;
