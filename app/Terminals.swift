@@ -9,9 +9,13 @@ func claudePids() -> [String] {
 
 /// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet, and
 /// whether it says that session is mid-turn: its own `status`, "busy" or "idle" (nil for anything else, or none).
+/// The record has to be that process's own: it names when the process started (procStart, in UTC and the C locale), and a pid that was reused
+/// after the process ended leaves the old record behind, so a record whose start differs from the running process's is stale.
 func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
     guard let (dir, d) = CLAUDE_DIRS.lazy.compactMap({ dir in FileManager.default.contents(atPath: "\(dir)/sessions/\(pid).json").map { (dir, $0) } }).first, let j = parse(d) as? JSON,
           let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String else { return nil }
+    // (a record without procStart, from an older Claude Code, can't be checked and is taken as written)
+    if let started = j["procStart"] as? String, run("/usr/bin/env", ["LC_ALL=C", "TZ=UTC", "ps", "-o", "lstart=", "-p", pid]).out.split(whereSeparator: \.isWhitespace) != started.split(whereSeparator: \.isWhitespace) { return nil }
     // the folder that knows this process is where it writes; elsewhere may hold a stale copy
     let mine = "\(dir)/projects/\(cwd.projectName)/\(id).jsonl"
     let f = FileManager.default.fileExists(atPath: mine) ? mine : sessionPath(cwd.projectName, id) + ".jsonl"
@@ -32,20 +36,12 @@ func bySession(_ procs: [(file: String, pid: Int?, busy: Bool?)]) -> [(file: Str
     return out.items.map { ($0.0, $0.1.pids, $0.1.busy) }
 }
 
-// The transcripts of running terminal `claude`s, however long they've been quiet, each with its processes when known.
-// Claude Code names a process's session in sessions/<pid>.json. Without that (older versions), each process writes into
-// the project folder named after its working folder, so the newest transcripts there (one per process) stand in.
+// The transcripts of running terminal `claude`s, however long they've been quiet, each with its processes. Claude Code
+// names a process's session in sessions/<pid>.json. A process without a usable record (a session so new its transcript
+// isn't written yet) isn't guessed at from its folder's newest transcripts, which are other, long-finished sessions: its
+// hooks bring it in.
 func liveTranscripts() -> [(file: String, pids: [Int], busy: Bool?)] {
-    var live: [(file: String, pid: Int?, busy: Bool?)] = [], rest: [String] = []
-    for pid in claudePids() { if let f = sessionFile(pid) { live.append((f.file, Int(pid), f.busy)) } else { rest.append(pid) } }
-    if rest.isEmpty { return bySession(live) }
-    var count = Ordered<Int>()
-    for line in run("lsof", ["-a", "-d", "cwd", "-p", rest.joined(separator: ","), "-Fn"]).out.components(separatedBy: "\n") where line.hasPrefix("n") {
-        let d = String(line.dropFirst()).projectName
-        count[d] = (count[d] ?? 0) + 1
-    }
-    let named = Set(live.map(\.file))
-    return bySession(live) + count.items.flatMap { d, n in byNewest(newestCopies(PROJECT_ROOTS.flatMap { transcripts($0 + "/" + d) })).filter { !named.contains($0) }.prefix(n).map { ($0, [], nil) } }
+    bySession(claudePids().compactMap { pid in sessionFile(pid).map { ($0.file, Int(pid), $0.busy) } })
 }
 
 // The Claude app keeps a file per session it runs, with its own id for it (local_...) next to the Claude Code session

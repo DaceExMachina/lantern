@@ -504,7 +504,12 @@ final class LanternServer {
         // `claude --resume`), so each one goes in `pids`, the latest hook's last (focusing uses it).
         if let pid = e["pid"] as? String, Re("^[0-9]{1,9}$").test(pid), let p = Int(pid) { s["pids"] = (s["pids"] as? [Int] ?? []).filter { $0 != p } + [p] }
         let iterm = ((e["iterm"] as? String) ?? "").components(separatedBy: ":").last! // ITERM_SESSION_ID looks like w0t1p0:<uuid>
-        if UUID_RE.test(iterm) { s["iterm"] = iterm }
+        if UUID_RE.test(iterm) {
+            s["iterm"] = iterm
+            // a new session in a tab replaces whichever one was there before it, unless that one still has a process running
+            // (a `claude` started from inside it shares the tab id)
+            if joining { for (other, o) in sessions.items where str(o["iterm"]) == iterm && !(o["pids"] as? [Int] ?? []).contains(where: { kill(pid_t($0), 0) == 0 || errno == EPERM }) { sessions[other] = nil; agents[other] = nil } }
+        }
         // which terminal (or app) runs it, so a click can bring the right window to the front; see focusTerminal
         for (key, pattern) in [("term", "^[A-Za-z0-9._ -]{1,40}$"), ("app", "^[A-Za-z0-9.-]{1,100}$"), ("pane", "^[0-9]{1,9}$"), ("kitty", "^(unix|tcp):[^\\s'\"]{1,200}$")] {
             if let v = e[key] as? String, Re(pattern).test(v) { s[key] = v }

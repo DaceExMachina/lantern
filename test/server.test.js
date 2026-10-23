@@ -853,6 +853,73 @@ test('a long-quiet session whose claude process is alive is seeded with that pro
   assert.deepStrictEqual({ pids: s.pids, state: s.state }, { pids: [proc.pid], state: 'waiting' });
 });
 
+// Only a running claude process makes a live moth. A new claude whose transcript isn't written yet has no usable
+// sessions/<pid>.json, and its folder's newest transcript (a long-finished session) must not stand in for it.
+test('a claude with no session record yet does not bring back the finished session in its folder', async t => {
+  const proc = spawn('sleep', ['60']), old = UUID(1), real = UUID(2), other = spawn('sleep', ['60']);
+  t.after(() => { proc.kill(); other.kill(); });
+  const base = await serve(t, {
+    [`.claude/projects/-work/${old}.jsonl`]: jsonl([user('Fix it'), answer('Fixed. **You:** try it'), turnEnd]),
+    [`.claude/projects/-elsewhere/${real}.jsonl`]: jsonl([user('Other'), answer('Done.'), turnEnd]),
+    [`.claude/sessions/${other.pid}.json`]: JSON.stringify({ pid: other.pid, sessionId: real, cwd: '/elsewhere' }),
+    'no-bin/ps': `#!/bin/sh\necho "${proc.pid} claude"\necho "${other.pid} claude"\n`,
+    'no-bin/lsof': '#!/bin/sh\necho "p1"\necho "n/work"\n',
+  }, home => {
+    for (const bin of ['ps', 'lsof']) fs.chmodSync(path.join(home, 'no-bin', bin), 0o755);
+    const old10 = new Date(Date.now() - 10 * 24 * 3600 * 1000);
+    fs.utimesSync(path.join(home, `.claude/projects/-work/${old}.jsonl`), old10, old10);
+  });
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.some(x => x.id === real) && s; }, 'the running session to be seeded');
+  assert.deepStrictEqual(sessions.map(x => x.id), [real]);
+});
+
+// sessions/<pid>.json names when its process started (procStart). A pid reused by another claude after the first ended
+// leaves the old record behind, and it must not count for the new process.
+test('a sessions record whose process start differs from the running pid\'s is stale and ignored', async t => {
+  const stale = spawn('sleep', ['60']), fresh = spawn('sleep', ['60']), a = UUID(1), b = UUID(2);
+  t.after(() => { stale.kill(); fresh.kill(); });
+  const started = 'Thu Oct 22 22:43:53 2026';
+  const base = await serve(t, {
+    [`.claude/projects/-work/${a}.jsonl`]: jsonl([user('Old'), answer('Done.'), turnEnd]),
+    [`.claude/projects/-work/${b}.jsonl`]: jsonl([user('New'), answer('Done.'), turnEnd]),
+    [`.claude/sessions/${stale.pid}.json`]: JSON.stringify({ pid: stale.pid, sessionId: a, cwd: '/work', procStart: 'Mon Oct 12 09:00:00 2026' }),
+    [`.claude/sessions/${fresh.pid}.json`]: JSON.stringify({ pid: fresh.pid, sessionId: b, cwd: '/work', procStart: started }),
+    'no-bin/ps': `#!/bin/sh\ncase "$*" in *lstart*) echo "${started}";; *) echo "${stale.pid} claude"; echo "${fresh.pid} claude";; esac\n`,
+  }, home => {
+    fs.chmodSync(path.join(home, 'no-bin/ps'), 0o755);
+    const old10 = new Date(Date.now() - 10 * 24 * 3600 * 1000);
+    for (const id of [a, b]) fs.utimesSync(path.join(home, `.claude/projects/-work/${id}.jsonl`), old10, old10);
+  });
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.some(x => x.id === b) && s; }, 'the verified session to be seeded');
+  assert.deepStrictEqual(sessions.map(x => x.id), [b]);
+});
+
+// One tab holds one session: a session starting in a tab replaces the one that was there, when that one has no process left.
+test('a new session in the same iTerm tab replaces the old one, and other tabs are left alone', async t => {
+  const base = await serve(t);
+  const tab = n => `w0t0p0:0000000${n}-0000-4000-8000-00000000000a`;
+  const hook = (id, iterm) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-iterm-session': iterm },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'Stop', cwd: '/work', last_assistant_message: 'Done.' }) });
+  await hook(UUID(1), tab(1));
+  await hook(UUID(2), tab(2));
+  await until(async () => (await snapshot(base)).sessions.length === 2, 'both sessions to land');
+  await hook(UUID(3), tab(1));
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.some(x => x.id === UUID(3)) && s; }, 'the new session to land');
+  assert.deepStrictEqual(sessions.map(x => x.id).sort(), [UUID(2), UUID(3)]);
+});
+
+test('a new session in a tab leaves the session there alone while its process still runs', async t => {
+  const base = await serve(t), tab = 'w0t0p0:00000001-0000-4000-8000-00000000000a';
+  const hook = (id, pid) => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-iterm-session': tab, ...(pid ? { 'x-claude-pid': String(pid) } : {}) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'Stop', cwd: '/work', last_assistant_message: 'Done.' }) });
+  await hook(UUID(1), process.pid); // a live pid: this test's own process
+  await hook(UUID(3)); // a `claude` started from inside it shares the tab id
+  await until(async () => (await snapshot(base)).sessions.some(x => x.id === UUID(3)), 'the new session to land');
+  await hook(UUID(1), process.pid); // and the first one speaking again (not joining) doesn't remove the second
+  await wait(100);
+  assert.deepStrictEqual((await snapshot(base)).sessions.map(x => x.id).sort(), [UUID(1), UUID(3)]);
+});
+
 // Claude Code's sessions/<pid>.json says whether a running session is busy or idle, and that wins over the transcript;
 // without a status there (older versions, or one it doesn't know), the transcript's last turn decides.
 // One session in two processes, one idle and one with a status Claude Code added later: the unknown one says nothing, so
@@ -951,8 +1018,8 @@ async function twoProcs(t, listed = true, adopt = 0.2) {
   let home;
   const base = await serve(t, {
     [file]: jsonl([user('Fix it'), answer('Fixed. **You:** try it')]), // the transcript alone would say waiting
-    ...Object.fromEntries([app, term].map((p, i) => [`.claude/sessions/${p.pid}.json`, JSON.stringify({ ...TWO_PROCS[i], pid: p.pid })])),
-    'no-bin/ps': '#!/bin/sh\n[ -f "$HOME/pids" ] && while read -r line; do echo "$line"; done < "$HOME/pids"\n', // builtins only: PATH is empty
+    ...Object.fromEntries([app, term].map((p, i) => [`.claude/sessions/${p.pid}.json`, JSON.stringify({ ...TWO_PROCS[i], pid: p.pid, procStart: 'Thu Oct 22 22:43:53 2026' })])), // the fake ps below says every process started then
+    'no-bin/ps': '#!/bin/sh\ncase "$*" in *lstart*) echo "Thu Oct 22 22:43:53 2026"; exit;; esac\n[ -f "$HOME/pids" ] && while read -r line; do echo "$line"; done < "$HOME/pids"\n', // builtins only: PATH is empty
     pids: listed ? ps([app, term]) : '',
   }, h => {
     home = h;
