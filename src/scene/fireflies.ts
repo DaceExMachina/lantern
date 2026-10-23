@@ -9,8 +9,8 @@ import type { Firefly, FlyState, Point, Vec3 } from '../types';
 
 // ---- fireflies -----------------------------------------------------------------
 // One per PR, keyed by its URL. The colour says what it needs (swarm says how they come and go). Failing checks swell
-// faster. Drafts are teal, feedback waiting is gold, and one waiting on review is sky blue.
-export const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', feedback: '#FFD27A', draft: '#7FE6B8', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
+// faster. Drafts are pale yellow, feedback waiting is gold, and one waiting on review is sky blue.
+export const FLY = { ready: '#C8F48A', failing: '#FF9E8C', changes: '#FFAA6E', feedback: '#FFD27A', draft: '#FFF2B8', review: '#E8F48A', mention: '#E8F48A', quiet: '#8CCBFF', closed: '#A9A9C0' }; // closed: a reopened PR's firefly fades up from this grey
 const FLY_BY_NEED = new Map(Object.entries(FLY));
 /** A need's firefly colour (sky blue for any other). */
 export const flyColour = (need: string) => FLY_BY_NEED.get(need) ?? FLY.quiet;
