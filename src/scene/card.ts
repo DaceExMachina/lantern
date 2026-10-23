@@ -1,7 +1,7 @@
 // The hover card for a moth: its session, what it needs from you, its PRs and agents.
 
 import { chrome, live } from './live';
-import { $ } from './scene';
+import { $, titlebar } from './scene';
 import { sessionMoth } from './state';
 import type { Agent, CardAt, Hovered, PR, Session, Zone } from '../types';
 
@@ -12,7 +12,8 @@ export const project = (s: Session) => (s.cwd ?? '').split('/').filter(Boolean).
 // inside the window. A badge's tip and an overflow PR's both use it.
 export function tipSpot(tip: HTMLElement, el: Element) {
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
-  return { left: Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)), top: r.top - h - 8 >= 8 ? r.top - h - 8 : r.bottom + 8 };
+  const min = Math.max(8, titlebar());
+  return { left: Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)), top: r.top - h - 8 >= min ? r.top - h - 8 : r.bottom + 8 };
 }
 export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
@@ -163,7 +164,7 @@ export function placeCard() {
   const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   // while the pointer is on it (opening an agent, say), it stays put rather than flipping above its moth, moving up only
   // as far as it must to stay on screen
-  const to = { x: Math.max(8, x), y: Math.max(8, Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
+  const to = { x: Math.max(8, x), y: Math.max(8, titlebar(), Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
   shown = shown ? { x: shown.x + (to.x - shown.x) * 0.2, y: shown.y + (to.y - shown.y) * 0.2 } : to; // a new card starts in place
   c.style.transform = `translate(${shown.x}px, ${shown.y}px)`;
 }

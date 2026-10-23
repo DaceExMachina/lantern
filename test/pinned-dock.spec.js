@@ -246,11 +246,14 @@ test('the sidebar lists every agent, with no "more" past the card\'s five', asyn
 
 // The app window lays a clear strip over the top of the page to drag it by (app/main.swift DragStrip), and AppKit gives that
 // strip every click on it. So the first card's header, pin included, sat under it and could not be pressed (the last pin left
-// could not be unpinned). The sidebar starts below the strip.
-test('the sidebar starts below the app window\'s drag strip, which takes every click on it', () => {
+// could not be unpinned). Only the app window has the strip, so only its page (?app, which sets body.app) keeps clear of it,
+// by --titlebar; the sidebar starts below it, and a card scrolled up under it comes back out.
+test('under the app window\'s drag strip nothing sits: --titlebar is its height under body.app, and the sidebar keeps clear of it', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, '../index.html'), 'utf8'), swift = fs.readFileSync(path.join(import.meta.dirname, '../app/main.swift'), 'utf8');
-  const strip = Number(swift.match(/DragStrip\(frame: [^\n]*height: (\d+)\)\)/)?.[1]);
-  assert.ok(strip > 0, 'found the strip\'s height in main.swift');
-  assert.strictEqual(html.match(/--titlebar:\s*(\d+)px/)?.[1], String(strip), '--titlebar is the strip\'s height');
-  assert.match(html, /#dock \.stack \{[^}]*padding-top: var\(--titlebar\)/, 'the column starts below it');
+  const strip = swift.match(/DragStrip\(frame: [^\n]*height: (\d+)\)\)/)?.[1];
+  assert.ok(strip, 'found the strip\'s height in main.swift');
+  assert.match(swift, /let home = URL\(string: "[^"]*\/\?app"\)/, 'the app loads its page with ?app');
+  assert.match(html, /--titlebar: 0px;/, 'no strip by default');
+  assert.strictEqual(html.match(/body\.app \{ --titlebar: (\d+)px; \}/)?.[1], strip, 'the app\'s is the strip\'s height');
+  assert.match(html, /#dock \.stack \{[^}]*padding-top: var\(--titlebar\); scroll-padding-top: var\(--titlebar\)/, 'the column starts below it');
 });

@@ -43,8 +43,9 @@
     --shadow-lg: 0 8px 28px rgb(0 0 0 / .45); --rim: inset 0 0 0 1px rgb(255 255 255 / .22); --blur-glass: blur(6px);
     --z-tip: 1; --z-flash: 5; --z-overlay: 10; --fade: .15s; --slide: .45s cubic-bezier(.4, 0, .2, 1); --faded: .4;
     /* layout */
-    --dock-width: 380px; --titlebar: 28px; /* the app window's drag strip along the top (app/main.swift DragStrip), which takes every click on it */
+    --dock-width: 380px; --titlebar: 0px; /* the height of the app window's drag strip along the top (app/main.swift DragStrip), which takes every click on it: 28px under body.app, nothing in a browser tab, the iTerm panel or a screensaver */
   }
+  body.app { --titlebar: 28px; } /* wiring.ts sets it from ?app, which Lantern.app adds to its URL */
   /* thin scrollbars tinted to the app on every scroller. The standard properties are all WebKit needs now; the ::-webkit-scrollbar
      pseudo-elements are ignored once scrollbar-color is set, and without it they'd turn macOS's overlay bars into space-taking ones */
   * { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
@@ -120,7 +121,7 @@
   #ribbons button:disabled { cursor: default; }
   /* the stats panel: the settings menu's look, over the scene; anchored at the top so a badge's card opening below it
      doesn't shift the badges */
-  #stats, #recap { inset: var(--space-5) 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 48px); padding: var(--space-4); }
+  #stats, #recap { inset: max(var(--space-5), var(--titlebar)) 0 auto; margin: 0 auto; box-sizing: border-box; width: min(560px, calc(100vw - 24px)); height: fit-content; max-height: calc(100vh - 24px - max(var(--space-5), var(--titlebar))); padding: var(--space-4); }
   #stats:popover-open { gap: var(--space-4); }
   #recap:popover-open { gap: var(--space-3); }
   #stats h3 { margin: 0; font-size: 13px; font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: var(--tracking-label); text-transform: uppercase; }
@@ -248,7 +249,7 @@
   /* a badge just earned (src/scene/flash.ts): fireflies packed into a glowing pill near the top, with the name in dark ink */
   #flash { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: var(--z-flash); }
   #flash canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: 22px; left: 0; right: 0; margin: 0 auto; width: fit-content;
+  #flash .pill { all: unset; pointer-events: auto; cursor: pointer; position: absolute; top: max(22px, var(--titlebar)); left: 0; right: 0; margin: 0 auto; width: fit-content;
     display: flex; flex-direction: column; align-items: center; max-width: calc(100vw - 48px); box-sizing: border-box; padding: var(--space-3) 30px 13px;
     border-radius: var(--radius-pill); text-align: center; color: #2B2440; opacity: 0; font-family: var(--font-serif); } /* the book pages' face */
   #flash .pill b { font-size: 16.8px; font-weight: var(--weight-bold); }
@@ -399,7 +400,7 @@
   #dock { grid-row: 1; grid-column: 2; width: 0; overflow: hidden; background: var(--night); /* the footer's (body's), so the two read as one chrome */
     color: var(--ink); font-size: var(--text-sm); line-height: var(--leading); transition: width var(--slide); }
   .pinned #dock { width: var(--dock-width); }
-  #dock .stack { width: var(--dock-width); height: 100%; overflow-y: auto; box-sizing: border-box; padding-top: var(--titlebar); } /* the scroller, so its scrollbar is inside the column */
+  #dock .stack { width: var(--dock-width); height: 100%; overflow-y: auto; box-sizing: border-box; padding-top: var(--titlebar); scroll-padding-top: var(--titlebar); } /* the scroller, so its scrollbar is inside the column */
   #dock section { padding: var(--space-3); }
   #dock section + section { border-top: 1px solid var(--line); }
   #dock .tray { border-radius: 0; }
