@@ -247,13 +247,31 @@ test('the sidebar lists every agent, with no "more" past the card\'s five', asyn
 // The app window lays a clear strip over the top of the page to drag it by (app/main.swift DragStrip), and AppKit gives that
 // strip every click on it. So the first card's header, pin included, sat under it and could not be pressed (the last pin left
 // could not be unpinned). Only the app window has the strip, so only its page (?app, which sets body.app) keeps clear of it,
-// by --titlebar; the sidebar starts below it, and a card scrolled up under it comes back out.
-test('under the app window\'s drag strip nothing sits: --titlebar is its height under body.app, and the sidebar keeps clear of it', () => {
+// by --titlebar. The sidebar is the exception: the strip stops short of it (the page tells the app the sidebar's width), so
+// it starts at the very top with no padding.
+test('under the app window\'s drag strip nothing sits: --titlebar is its height under body.app, and the sidebar has no gap at the top', () => {
   const html = fs.readFileSync(path.join(import.meta.dirname, '../index.html'), 'utf8'), swift = fs.readFileSync(path.join(import.meta.dirname, '../app/main.swift'), 'utf8');
   const strip = swift.match(/DragStrip\(frame: [^\n]*height: (\d+)\)\)/)?.[1];
   assert.ok(strip, 'found the strip\'s height in main.swift');
   assert.match(swift, /let home = URL\(string: "[^"]*\/\?app"\)/, 'the app loads its page with ?app');
   assert.match(html, /--titlebar: 0px;/, 'no strip by default');
   assert.strictEqual(html.match(/body\.app \{ --titlebar: (\d+)px; \}/)?.[1], strip, 'the app\'s is the strip\'s height');
-  assert.match(html, /#dock \.stack \{[^}]*padding-top: var\(--titlebar\); scroll-padding-top: var\(--titlebar\)/, 'the column starts below it');
+  assert.doesNotMatch(html.match(/#dock \.stack \{[^}]*\}/)?.[0] ?? '', /titlebar/, 'the column starts at the top');
+});
+
+// The app window's drag strip spans the width left of the sidebar (app/main.swift DragStrip.stopShort), so the page tells it
+// the sidebar's width when it opens and closes: its --dock-width, or 0.
+test('the app is told the sidebar\'s width when it opens and closes', async () => {
+  const sent = [], bridge = { messageHandlers: { dock: { postMessage: w => sent.push(w) } } };
+  vi.stubGlobal('webkit', bridge);
+  mount(); // the page as it loads: closed
+  assert.deepStrictEqual(sent, [0], 'closed at load: the full width');
+  setSessions(session());
+  await pins({ id: 's1' });
+  assert.deepStrictEqual(sent, [0, 380], 'opening: the column\'s width');
+  await pins();
+  assert.deepStrictEqual(sent, [0, 380, 0], 'closing: nothing');
+  vi.stubGlobal('webkit', undefined);
+  await pins({ id: 's1' }); // a browser tab has no bridge, and nothing throws
+  assert.strictEqual(sent.length, 3);
 });

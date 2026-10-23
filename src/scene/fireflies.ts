@@ -1,7 +1,7 @@
 // Fireflies: one per PR, swarming around their moth's home.
 
 import { live } from './live';
-import { CX, VIEW, nth } from './scene';
+import { CX, VIEW, nth, roof } from './scene';
 import type { Box } from './scene';
 import { devButton } from '../dev';
 import { GUST, hash, hex, mix, seeded } from './lanterns';
@@ -151,6 +151,7 @@ export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, 
       const [ox, oy, g, z] = leaveStep(f.leave.kind, t, f.leave.d, f.leave.start);
       x += ox; y += oy; glow *= g; size *= z;
     }
+    if (!f.leave) y = Math.max(y, roof() + size); // under the app's drag strip, bloom and all; one leaving flies out past it
     f.x = x; f.y = y; f.size = size;
     if (f.leave && !gone && t > (f.leave.kind === 'merged' ? exitAt(f.leave.start) : 0) && offScreen(x, y, size)) { flies.delete(url); continue; } // only on its way out: a loop near the top edge dips off screen and back
     addFlyLight(x, y, size, glow, f.col);

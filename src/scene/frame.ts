@@ -1,7 +1,7 @@
 // The animation: one frame of the lantern, flame, moths, threads and fireflies.
 
 import { live } from './live';
-import { $, AMBIENT, byId, nth, CHAIN, CX, CY, FLAME_BASE, FLAME_STRETCH, HEAT_COLUMN, LANTERN_SPAN, PLUME, SINGE_REL, SMOKE, SMOKERS, SMOKE_REL, TRAIL, VIEW, WING_REACH, WING_SIDE, WING_UP, caster, cross, dot, facesFlame, flightFrame, lerp3, pathOf, ringPoint, ringPolar, stretch, unit, wing3d } from './scene';
+import { $, AMBIENT, byId, nth, CHAIN, CX, CY, FLAME_BASE, FLAME_STRETCH, HEAT_COLUMN, LANTERN_SPAN, PLUME, SINGE_REL, SMOKE, SMOKERS, SMOKE_REL, TRAIL, VIEW, WING_REACH, WING_SIDE, WING_UP, caster, cross, dot, facesFlame, flightFrame, lerp3, pathOf, ringPoint, ringPolar, roof, stretch, unit, wing3d } from './scene';
 import { devSlider, devToggle } from '../dev';
 import { COOL, FACET_TONES, GUST, HOP, LAG, MOTH_CALL, MOTH_IDLE, MOTH_SINGED, WARM, bakeCutouts, drawHang, fakeFlame, fakeLamp, flickerFollow, hash, mix, paperBounce, paperSoft, paperWind, perchAt, seeded, style, sway, tintFor, wobble } from './lanterns';
 import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
@@ -837,6 +837,8 @@ export function mothMove(m: Moth, { tx, ty, ease, needsMe }: Aim, dt: number, s:
   m.lastAim = needsMe ? m.perchAim : undefined; m.lastT = [tx, ty];
   if (!needsMe) tx += GUST(s) * 1.8; // a flying moth leans into the wind but gives a little, about a third of the lantern's sway; the spring eases it
   [m.x, m.vx] = settle(m.x, m.vx || 0, tx, ease, dt); [m.y, m.vy] = settle(m.y, m.vy || 0, ty, ease, dt);
+  const top = m.leaving ? -Infinity : roof() + WING_REACH * m.size; // under the app's drag strip, wings and all; one leaving flies out past it
+  if (m.y < top) { m.y = top; m.vy = 0; }
   // lean gently into the direction of travel, eased so position jitter doesn't shake it
   // each landing settles at its own angle around the outward direction, so moths on the lantern don't all match
   if (needsMe && !m.wasLanded) m.landJitter = ((m.rand || Math.random)() * 2 - 1) * 15;

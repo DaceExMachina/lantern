@@ -19,6 +19,7 @@ let home = URL(string: "http://127.0.0.1:\(port)/?app")!
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     var window: NSWindow!
     var web: WKWebView!
+    var strip: DragStrip!
     var server: LanternServer!
     var term: DispatchSourceSignal?
 
@@ -45,6 +46,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         let config = WKWebViewConfiguration()
         // The page sets the Dock badge with navigator.setAppBadge, which only Safari's Dock web apps have; hand it to the Dock tile.
         config.userContentController.add(self, name: "badge")
+        config.userContentController.add(self, name: "dock") // the pinned sidebar's width, so the drag strip stops short of it
         config.userContentController.addUserScript(WKUserScript(source: """
             navigator.setAppBadge = n => (webkit.messageHandlers.badge.postMessage(n ?? 0), Promise.resolve());
             navigator.clearAppBadge = () => navigator.setAppBadge(0);
@@ -64,7 +66,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         // strip along the top (the title bar's height) hands them to the window instead: drag to move, double-click to zoom.
         let container = NSView(frame: window.contentRect(forFrameRect: window.frame))
         web.frame = container.bounds; web.autoresizingMask = [.width, .height]
-        let strip = DragStrip(frame: NSRect(x: 0, y: container.bounds.height - 28, width: container.bounds.width, height: 28))
+        strip = DragStrip(frame: NSRect(x: 0, y: container.bounds.height - 28, width: container.bounds.width, height: 28))
         strip.autoresizingMask = [.width, .minYMargin]
         container.addSubview(web); container.addSubview(strip)
         window.contentView = container
@@ -103,7 +105,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let n = message.body as? Int ?? 0
-        NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil
+        if message.name == "dock" { strip.stopShort(of: CGFloat(n)) } else { NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil }
     }
 
     // Links leave the app for your browser; only the Lantern page itself loads in here.
@@ -129,6 +131,9 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 // A minimal menu bar, so the usual shortcuts work: quit, close, minimise, full screen, copy, reload.
 // A see-through title bar for a window whose content runs under it.
 final class DragStrip: NSView {
+    // The pinned sidebar starts at the very top, so the strip spans only the width left of it (0: the full width). Resizing the
+    // window keeps that gap (autoresizing keeps the margin).
+    func stopShort(of dock: CGFloat) { if let w = superview?.bounds.width { frame.size.width = max(0, w - dock) } }
     override func mouseDown(with event: NSEvent) {
         if event.clickCount == 2 { window?.performZoom(nil) } else { window?.performDrag(with: event) }
     }

@@ -7,7 +7,7 @@
 // button is replaced.
 import { computed, onBeforeUpdate, onUpdated, shallowRef, watch } from 'vue';
 import { dropTip } from '../scene/card';
-import { $ } from '../scene/scene';
+import { $, dockWidth } from '../scene/scene';
 import { useLanternStore } from '../stores/lantern';
 import type { Session } from '../types';
 import SessionRows from './SessionRows.vue';
@@ -18,8 +18,12 @@ const open = computed(() => rows.value.length > 0);
 // when nothing can be shown the column keeps what it showed, so it slides out whole
 const kept = shallowRef<{ s: Session; ended: boolean }[]>([]);
 watch(rows, r => { if (r.length) kept.value = r; }, { immediate: true, flush: 'sync' });
-// the column is open while it has something to show; closed, it's out of the tab order and the accessibility tree
-watch(open, o => { document.body.classList.toggle('pinned', o); $('dock').inert = !o; }, { immediate: true, flush: 'sync' });
+// the column is open while it has something to show; closed, it's out of the tab order and the accessibility tree. The app
+// window's drag strip stops short of it (app/main.swift), so the column's width goes there on every open and close.
+watch(open, o => {
+  document.body.classList.toggle('pinned', o); $('dock').inert = !o;
+  window.webkit?.messageHandlers.dock?.postMessage(o ? dockWidth() : 0);
+}, { immediate: true, flush: 'sync' });
 // A re-render that moves an element drops its focus in WebKit, so the focused element gets it back; and one that took away
 // the link #prTip was showing for takes the tip too.
 let focused: Element | null = null;
