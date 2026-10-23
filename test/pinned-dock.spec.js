@@ -2,6 +2,8 @@
 // the pin in a card's header pins or unpins its session, the server's list decides what every window docks, and the dock
 // stacks them in full, in the order they were pinned. test/morph.test.js checks the same patching in WebKit.
 import assert from 'node:assert';
+import fs from 'node:fs';
+import path from 'node:path';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
@@ -240,4 +242,15 @@ test('the sidebar lists every agent, with no "more" past the card\'s five', asyn
   setSessions(session({ state: 'working', subagents }));
   await pins({ id: 's1' });
   assert.deepStrictEqual([find($('dock'), 'job').length, find($('dock'), 'more').length], [7, 0]);
+});
+
+// The app window lays a clear strip over the top of the page to drag it by (app/main.swift DragStrip), and AppKit gives that
+// strip every click on it. So the first card's header, pin included, sat under it and could not be pressed (the last pin left
+// could not be unpinned). The sidebar starts below the strip.
+test('the sidebar starts below the app window\'s drag strip, which takes every click on it', () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, '../index.html'), 'utf8'), swift = fs.readFileSync(path.join(import.meta.dirname, '../app/main.swift'), 'utf8');
+  const strip = Number(swift.match(/DragStrip\(frame: [^\n]*height: (\d+)\)\)/)?.[1]);
+  assert.ok(strip > 0, 'found the strip\'s height in main.swift');
+  assert.strictEqual(html.match(/--titlebar:\s*(\d+)px/)?.[1], String(strip), '--titlebar is the strip\'s height');
+  assert.match(html, /#dock \.stack \{[^}]*padding-top: var\(--titlebar\)/, 'the column starts below it');
 });
