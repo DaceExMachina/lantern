@@ -72,12 +72,6 @@ export function wing3d(pts: Point[], T: Vec3, N: Vec3, open: number, sweep = 0):
 // How a wing catches the flame (dx, dy: the flame from the moth, in the moth's own axes): 1 when the face we see is
 // toward the flame, 0 when the flame is behind the wing.
 export const facesFlame = (normal: Vec3, dx: number, dy: number) => (Math.sign(normal[2]) * (normal[0] * dx + normal[1] * dy) > 0 ? 1 : 0);
-// Paint a moth's two wings with the nearer one on top (the DOM order is the paint order).
-export function wingsInDepthOrder(a: Element, aPts: Wing, b: Element, bPts: Wing) {
-  const front = aPts.depth > bPts.depth ? a : b;
-  const parent = front.parentNode;
-  if (parent && parent.lastChild !== front) parent.appendChild(front);
-}
 // In flight the body lies along AU and the wings spread across the screen, lifting toward the viewer; `roll` turns
 // the whole moth around its body axis: 0 is seen from above, 90 degrees fully side-on.
 export const flightFrame = (roll: number): { T: Vec3, N: Vec3 } => ({ T: [AU[0], AU[1], 0], N: [AN[0] * Math.sin(roll), AN[1] * Math.sin(roll), Math.cos(roll)] });

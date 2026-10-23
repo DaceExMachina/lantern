@@ -69,12 +69,17 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         container.addSubview(web); container.addSubview(strip)
         window.contentView = container
         window.isReleasedWhenClosed = false // closing hides it; the page keeps running for the badge
-        window.center()
-        window.setFrameAutosaveName("Lantern") // remembers size and position between launches
+        // Put the window back exactly where it was. AppKit's own restore (setFrameAutosaveName) re-maps the saved frame onto the
+        // screen the window starts on, which in a background launch is not necessarily the one it was on, so read the saved frame
+        // ourselves. It's stored in AppKit's format ("x y w h" and then the screen), written by saveFrame below.
+        if let n = UserDefaults.standard.string(forKey: "NSWindow Frame Lantern")?.split(separator: " ").prefix(4).compactMap({ Double($0) }), n.count == 4,
+           NSScreen.screens.contains(where: { $0.visibleFrame.intersects(NSRect(x: n[0], y: n[1], width: n[2], height: n[3])) }) {
+            window.setFrame(NSRect(x: n[0], y: n[1], width: n[2], height: n[3]), display: false)
+        } else { window.center() }
         window.delegate = self
         window.makeKeyAndOrderFront(nil)
-        // Autosave stores only the frame, and in full screen that frame is the whole display, so full screen is remembered
-        // separately. The autosaved frame puts the window back on its display first; full screen then takes over that display.
+        // The saved frame is the windowed one (in full screen the frame is the whole display), so full screen is remembered
+        // separately. The saved frame puts the window back on its display first; full screen then takes over that display.
         if UserDefaults.standard.bool(forKey: "fullScreen") { DispatchQueue.main.async { self.window.toggleFullScreen(nil) } }
         web.load(URLRequest(url: home))
     }
