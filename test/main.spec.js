@@ -87,8 +87,10 @@ test('pointing at a moth shows its compact card, and clicking it expands the car
   assert.strictEqual(live.hovered, moth, 'its card, pointing at it');
   assert.strictEqual(scene.style.cursor, 'pointer');
   assert.deepStrictEqual([live.expanded, cardEl.classList.contains('compact')], [false, true], 'compact while hovered');
+  assert.strictEqual(getComputedStyle(cardEl).width, '300px');
   fire(scene, 'click', 110, 205);
   assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [moth, true, false], 'expanded by the click');
+  assert.strictEqual(getComputedStyle(cardEl).width, '300px', 'as wide as the compact card');
   assert.deepStrictEqual(fetch.mock.calls, [], 'and the session isn\'t brought to the front');
   fire(scene, 'click', 110, 205);
   assert.deepStrictEqual([live.hovered, live.expanded], [null, false], 'a second click puts it away');
@@ -146,6 +148,80 @@ test('an expanded card stays until the pointer has been away from it and its mot
   assert.deepStrictEqual([live.hovered, live.expanded], [other, true], 'a click on another moth expands that one\'s');
 });
 
+// Ghost moths and wisps follow the moths' model through the same handlers: hover = compact card, click = an expanded card that
+// stays, double click = the area's action. They're the real ones drawStale makes, found where it has put them.
+const BASE = Date.UTC(2026, 9, 20, 12);
+const pr = (i, owner) => ({ url: `https://github.com/o/r/pull/${i}`, label: `#${i}`, title: `PR ${i}`, need: 'ready', updatedAt: new Date(BASE - 9 * 864e5).toISOString(), owner });
+async function withStale(prs) {
+  const o = await withMoth();
+  const stale = await import('../src/scene/stale');
+  o.live.stalePRs = prs;
+  for (let i = 0; i < 3; i++) stale.drawStale(0.016, i * 0.016);
+  const at = z => [Math.round(z.x), Math.round(z.y)];
+  return { ...o, stale, at };
+}
+const urls = fetch => fetch.mock.calls.map(([url, init]) => [url, JSON.parse(init?.body ?? 'null')]);
+// hover, click, then check the card is expanded and stays through a click elsewhere on the scene a moment away
+async function expandsAndStays({ live, scene, cardEl, fire }, [x, y], target) {
+  fire(scene, 'pointermove', x, y);
+  assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [target, false, true], 'compact on hover');
+  const compactWidth = getComputedStyle(cardEl).width;
+  fire(scene, 'click', x, y);
+  assert.strictEqual(getComputedStyle(cardEl).width, compactWidth, 'an expanded card is as wide as the compact one');
+  assert.strictEqual(compactWidth, '300px', 'which is the card\'s max-width');
+  assert.deepStrictEqual([live.hovered, live.expanded, cardEl.classList.contains('compact')], [target, true, false], 'expanded by a click');
+  fire(scene, 'pointermove', 5, 5); timer(1999);
+  assert.strictEqual(live.hovered, target, 'and it stays while the pointer is away less than 2 seconds');
+  fire(scene, 'pointermove', x, y);
+}
+
+test('a ghost moth: hover is compact, a click expands and holds, only a double click resumes its session', async () => {
+  const w = await withStale([pr(1, { id: 'old', title: 'Old', last: BASE })]);
+  const ghost = w.stale.ghosts.get('old'), p = w.at(ghost.zone);
+  await expandsAndStays(w, p, ghost.zone.target);
+  assert.deepStrictEqual(w.fetch.mock.calls, [], 'a single click resumes nothing');
+  w.fire(w.scene, 'click', ...p, { shiftKey: true }); // expanded, so this puts it away like a plain click would
+  assert.deepStrictEqual([w.live.expanded, w.fetch.mock.calls], [false, []], 'a shift-click is a plain click: no resume');
+  w.fire(w.scene, 'click', ...p, { shiftKey: true });
+  assert.ok(w.live.expanded, 'and expands it');
+  w.fire(w.scene, 'click', ...p); w.fire(w.scene, 'click', ...p); w.fire(w.scene, 'dblclick', ...p);
+  assert.deepStrictEqual(urls(w.fetch), [['/resume', { id: 'old' }]], 'a double click resumes it, once');
+});
+
+test('a wisp whose PR belongs to a ghost acts like that ghost: compact, expands, and a double click resumes the session', async () => {
+  const w = await withStale([pr(1, { id: 'old', title: 'Old', last: BASE })]);
+  const wisp = w.stale.wisps.get(pr(1).url), p = w.at(wisp.zone);
+  assert.ok(w.stale.ghosts.has('old'));
+  await expandsAndStays(w, p, wisp.zone.target);
+  assert.deepStrictEqual(w.fetch.mock.calls, []);
+  w.fire(w.scene, 'dblclick', ...p);
+  assert.deepStrictEqual(urls(w.fetch), [['/resume', { id: 'old' }]]);
+});
+
+test('a wisp whose PR belongs to a live session acts like its moth: a double click brings the session forward', async () => {
+  const w = await withStale([pr(1, { id: 'api', title: 'Api', last: BASE })]);
+  w.live.raw = []; // not yet in the snapshot, so the wisp is still drawn
+  w.live.moths.set('api', w.moth); // the moth's key is 'api'
+  const wisp = w.stale.wisps.get(pr(1).url), p = w.at(wisp.zone);
+  await expandsAndStays(w, p, wisp.zone.target);
+  w.fire(w.scene, 'dblclick', ...p);
+  assert.deepStrictEqual(urls(w.fetch), [['/focus', { id: 'api' }]]);
+});
+
+test('an orphan wisp: hover is a compact PR card, a click expands and holds, a double click opens the PR', async () => {
+  const w = await withStale([pr(1, undefined)]);
+  const opened = vi.fn();
+  vi.stubGlobal('open', opened);
+  const wisp = w.stale.wisps.get(pr(1).url), p = w.at(wisp.zone);
+  await expandsAndStays(w, p, wisp.zone.target);
+  assert.deepStrictEqual(opened.mock.calls, [], 'a single click opens nothing');
+  w.fire(w.scene, 'click', ...p, { shiftKey: true }); w.fire(w.scene, 'click', ...p, { shiftKey: true });
+  assert.deepStrictEqual([opened.mock.calls, w.live.expanded], [[], true], 'a shift-click opens nothing either, it just expands');
+  w.fire(w.scene, 'dblclick', ...p);
+  assert.deepStrictEqual(opened.mock.calls, [[pr(1).url, '_blank', 'noopener']]);
+  assert.deepStrictEqual(w.fetch.mock.calls, []);
+});
+
 // A moth's hover area at (100, 100) with radius 40, in screen and scene coordinates alike, under the open card.
 async function withCard() {
   const o = await open();
@@ -159,16 +235,14 @@ async function withCard() {
   return { ...o, zone, clickCard };
 }
 
-test('a click on a session\'s card body does nothing (it opens from its header); a stale PR\'s card opens from anywhere but a link', async () => {
+test('a click on a card body does nothing, not even over its own area (the header opens a session)', async () => {
   const { card, live, zone, clickCard } = await withCard();
   const open = vi.spyOn(card, 'clickZone').mockImplementation(() => {});
-  const opened = () => open.mock.calls.map(([z]) => z);
   live.hovered = { key: 's1', session: { id: 's1' }, zone };
   clickCard(300, 300); clickCard(110, 95);
-  assert.deepStrictEqual(opened(), [], 'not even over its own moth');
-  live.hovered = { stale: {}, zone: 'wisp' };
-  clickCard(300, 300); clickCard(300, 300, 'a');
-  assert.deepStrictEqual(opened(), ['wisp'], 'a stale PR\'s card, but not from a link on it');
+  live.hovered = { stale: {}, zone };
+  clickCard(300, 300);
+  assert.deepStrictEqual(open.mock.calls, []);
 });
 
 test('a click on a card button that takes itself away (the agents\' "more") keeps the card open, and Escape closes it', async () => {

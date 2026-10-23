@@ -3,10 +3,9 @@
 // whichever is drawn on top covering the other.
 import assert from 'node:assert';
 import { test } from 'vitest';
-import { $, WING_SIDE, WING_UP, caster, wing3d } from '../src/scene/scene';
-import { clickZone, holdAnchor, hoverZone, tapZone, zoneAt } from '../src/scene/card';
+import { WING_SIDE, WING_UP, caster, wing3d } from '../src/scene/scene';
+import { clickZone, holdAnchor, hoverZone, zoneAt } from '../src/scene/card';
 import { mothZones } from '../src/scene/frame';
-import { live } from '../src/scene/live';
 
 const circle = (x, y, r) => ({ x, y, r, off: false });
 
@@ -35,23 +34,6 @@ test('shift+click runs an area\'s snooze menu, a plain click runs its click acti
   assert.deepStrictEqual(calls, ['click']);
   clickZone(zone, true);
   assert.deepStrictEqual(calls, ['click', 'snooze']);
-});
-
-test('a tap shows a moth\'s card without running its click, and tapping the same moth again puts it away', () => {
-  const calls = [], card = $('card');
-  live.hovered = null;
-  const moth = {}, other = {};
-  const zone = hoverZone(() => moth, () => calls.push('click')), zone2 = hoverZone(() => other, () => calls.push('click'));
-  card.classList.add('show');
-  tapZone(zone);
-  assert.strictEqual(live.hovered, moth, 'first tap shows its card');
-  tapZone(zone2);
-  assert.strictEqual(live.hovered, other, 'tapping another moth moves the card to it');
-  assert.ok(card.classList.contains('show'), 'which is still showing');
-  tapZone(zone2);
-  assert.strictEqual(live.hovered, null, 'the same moth again dismisses');
-  assert.ok(!card.classList.contains('show'), 'and puts the card away');
-  assert.deepStrictEqual(calls, [], 'and no tap ran a click action');
 });
 
 test('landed moths 20 apart (r 32) still split at their midpoint', () => {

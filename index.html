@@ -276,9 +276,9 @@
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity var(--fade); max-width: 300px;
     background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3); color: var(--ink);
     font-size: var(--text-sm); line-height: var(--leading); box-shadow: var(--shadow-lg); backdrop-filter: var(--blur-glass); }
-  #card.show { opacity: 1; pointer-events: auto; cursor: pointer; } /* clicking a stale PR's or a ghost's card opens it, like clicking its moth */
-  #card.show:has(h3 .open) { cursor: default; } /* a session's opens from its header */
-  #card.show.compact { pointer-events: none; width: 300px; box-sizing: border-box; } /* a session's hover card is a tooltip: the pointer passes through to the scene; as wide as the expanded card (its max-width) */
+  #card.show { opacity: 1; pointer-events: auto; }
+  #card.show.compact { pointer-events: none; } /* a hover card is a tooltip: the pointer passes through to the scene */
+  #card { width: 300px; box-sizing: border-box; } /* every kind of card (moth, ghost, wisp), compact or expanded, is as wide as its max-width */
   #card .gist { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; color: var(--ink-soft); }
   :is(#card, .starCard, #dock) h3 { margin: 0 0 var(--space-1); font-size: var(--text-md); color: var(--ink-strong); display: flex; gap: var(--space-2); align-items: flex-start; }
   /* Every control on the card is an outer button or link that fills its zone: the padding around it, out to the card's
