@@ -29,6 +29,16 @@ test('the text sleeps in a window too small to read it, and wakes when it grows'
   assert.strictEqual(vi.getTimerCount(), 1, 'a 458 px drum starts it');
 });
 
+test('the ink canvas is really hidden on a lantern with no paper', async () => {
+  stubCanvas2d();
+  const p = await load(2);
+  const ink = document.getElementById('pagesInk');
+  const shown = () => { p.tickPages(); return getComputedStyle(ink).display; };
+  assert.notStrictEqual(shown(), 'none', 'a paper lantern shows it');
+  document.getElementById('pages').remove(); // the candle draws no paper, so there is no #pages
+  assert.strictEqual(shown(), 'none', 'the candle hides it');
+});
+
 test('turning the text off takes the ink out in the intro\'s time, then stops the timer; on again brings it back at once', async () => {
   stubCanvas2d();
   const p = await load(2);

@@ -58,6 +58,7 @@
      end of the swing, and the scrollbar narrowed the scene, so fitView refitted it and the whole screen jumped. */
   #scene { position: relative; min-height: 0; overflow: clip; -webkit-user-select: none; user-select: none; }
   #scene > * { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #scene > [hidden] { display: none; } /* the rule above would otherwise beat the hidden attribute (pages.ts hides the ink canvas on lanterns with no paper) */
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
      so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (StatusLine.vue) */
   footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
