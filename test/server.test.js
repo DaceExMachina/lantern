@@ -39,7 +39,7 @@ async function serve(t, files = {}, prep = () => {}, extra = {}) {
   prep(home);
   // Port 0: the server takes whichever port is free and says which once it's listening, so no other process can take
   // it first and a slow start only takes longer.
-  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'),
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin'), LANTERN_TAILSCALE: path.join(home, 'no-bin/tailscale'), // not the real Tailscale
     TZ: Intl.DateTimeFormat().resolvedOptions().timeZone, ...extra }; // days are local, so the server reads them in our zone
   const child = spawn(BIN, [], { env, stdio: ['ignore', 'pipe', 'ignore'] });
   t.after(() => child.kill());
@@ -2322,9 +2322,9 @@ test('a request addressed to any host but the server\'s own loopback address is 
 // A text/plain POST is one any web page can send without a preflight, so /event only takes JSON, as the hooks send it.
 test('/event takes only JSON, so a cross-site page can\'t forge sessions', async t => {
   const base = await serve(t), event = id => JSON.stringify({ session_id: id, hook_event_name: 'Stop', cwd: '/work', last_assistant_message: 'Done.' });
-  const send = (id, type) => fetch(base + '/event', { method: 'POST', headers: type ? { 'Content-Type': type } : {}, body: event(id) });
+  const send = (id, type) => fetch(base + '/event', { method: 'POST', headers: type ? { 'Content-Type': type } : {}, body: type ? event(id) : Buffer.from(event(id)) }); // a Buffer body has no content type of its own
   assert.strictEqual((await send(UUID(1), 'text/plain')).status, 415);
-  assert.strictEqual((await send(UUID(2), '')).status, 415);
+  assert.strictEqual((await send(UUID(2))).status, 415);
   assert.strictEqual((await send(UUID(3), 'application/json')).status, 200);
   await until(async () => (await snapshot(base)).sessions.some(x => x.id === UUID(3)), 'the JSON event to land');
   assert.deepStrictEqual((await snapshot(base)).sessions.map(x => x.id), [UUID(3)]);
@@ -2350,8 +2350,29 @@ test('focusing a VS Code session opens its folder only when the cwd is an existi
   await focus(1, good);
   assert.ok(log().includes(`-b com.example.code ${good}`), `the real folder is opened: ${log()}`);
   const before = log();
-  for (const [n, cwd] of [[2, 'ssh://evil.example/x'], [3, '-a/Applications/Calculator.app'], [4, path.join(home, 'file.txt')], [5, '/no/such/folder']]) {
+  for (const [n, cwd] of [[2, 'ssh://evil.example/x'], [3, '-a/Applications/Calculator.app'], [4, path.join(home, 'file.txt')], [5, '/no/such/folder'], [6, 'test/fixtures']]) {
     await focus(n, cwd);
-    assert.ok(!log().slice(before.length).includes(cwd), `${cwd} reached open: ${log()}`);
+    assert.ok(!log().slice(before.length).split('\n').includes(`-b com.example.code ${cwd}`), `${cwd} reached open: ${log()}`); // a relative folder exists from the server's own working directory
   }
+});
+
+// Tailscale serve proxies the tailnet name to the server and passes the visitor's Host on, with no port or :443. That name is
+// asked of the Tailscale CLI (stubbed here) when a Host doesn't match, and no more than once in a while.
+test('this Mac\'s own tailnet name is let in, found at runtime, and a flood of foreign Hosts asks Tailscale only once', async t => {
+  const stub = path.join(tmp, 'tailscale-stub'), calls = path.join(tmp, 'tailscale-calls');
+  fs.writeFileSync(stub, `#!/bin/sh\necho x >> "${calls}"\necho '{"Self":{"DNSName":"Mac-1.tail1234.ts.net."}}'\n`, { mode: 0o755 });
+  const base = await serve(t, {}, () => {}, { LANTERN_TAILSCALE: stub });
+  const asked = () => fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8').split('\n').length - 1 : 0;
+  assert.strictEqual(asked(), 0, 'nothing is asked at startup');
+  for (const host of ['mac-1.tail1234.ts.net', 'mac-1.tail1234.ts.net:443', 'MAC-1.tail1234.ts.net']) assert.strictEqual(await sendAs(base, host, '/stats'), 200, host);
+  for (let i = 0; i < 20; i++) for (const host of ['evil.example', 'other.tail1234.ts.net', 'mac-1.tail1234.ts.net:7717', 'xmac-1.tail1234.ts.net']) assert.strictEqual(await sendAs(base, host, '/events'), 403, host);
+  assert.strictEqual(asked(), 1, 'Tailscale was asked once, not per request');
+});
+
+test('without Tailscale answering, only the loopback address is let in', async t => {
+  const stub = path.join(tmp, 'tailscale-down');
+  fs.writeFileSync(stub, '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+  const base = await serve(t, {}, () => {}, { LANTERN_TAILSCALE: stub });
+  assert.strictEqual(await sendAs(base, 'mac-1.tail1234.ts.net', '/stats'), 403);
+  assert.strictEqual(await sendAs(base, new URL(base).host, '/stats'), 200);
 });

@@ -216,3 +216,14 @@ extension LanternServer {
         }
     }
 }
+
+/// This Mac's tailnet DNS name (lowercased, no trailing dot), from the Tailscale CLI; nil when Tailscale isn't installed or running.
+/// LANTERN_TAILSCALE names another CLI, which the tests use.
+func tailnetDNSName() -> String? {
+    let app = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    let cli = ProcessInfo.processInfo.environment["LANTERN_TAILSCALE"] ?? (FileManager.default.isExecutableFile(atPath: app) ? app : "tailscale")
+    let r = run(cli, ["status", "--json"], timeout: 5)
+    guard r.ok, let me = (parse(Data(r.out.utf8)) as? JSON)?["Self"] as? JSON, let name = me["DNSName"] as? String else { return nil }
+    let trimmed = name.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    return trimmed.isEmpty ? nil : trimmed
+}

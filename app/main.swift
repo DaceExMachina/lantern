@@ -112,12 +112,15 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     func webView(_ web: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { return decisionHandler(.cancel) }
         if url.host == home.host && url.port == home.port { return decisionHandler(.allow) }
-        if LanternServer.opensInBrowser(url, mainFrame: action.targetFrame?.isMainFrame != false) { NSWorkspace.shared.open(url) }
+        if action.targetFrame?.isMainFrame != false { openInBrowser(url) }
         decisionHandler(.cancel)
     }
 
+    // Only web pages leave the app: no file:, ssh:, smb: or custom-scheme links.
+    func openInBrowser(_ url: URL) { if ["http", "https"].contains(url.scheme?.lowercased() ?? "") { NSWorkspace.shared.open(url) } }
+
     func webView(_ web: WKWebView, createWebViewWith config: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = action.request.url, LanternServer.opensInBrowser(url, mainFrame: true) { NSWorkspace.shared.open(url) } // target="_blank" links
+        if let url = action.request.url { openInBrowser(url) } // target="_blank" links
         return nil
     }
 
