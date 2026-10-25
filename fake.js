@@ -7,7 +7,7 @@ if (PORT === 7717 && !process.argv.includes('--live')) {
   process.exit(1);
 }
 const send = (session_id, hook_event_name, extra = {}) =>
-  fetch(`http://127.0.0.1:${PORT}/event`, { method: 'POST', body: JSON.stringify({ session_id, hook_event_name, cwd: `/Users/demo/${session_id}`, ...extra }) });
+  fetch(`http://127.0.0.1:${PORT}/event`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ session_id, hook_event_name, cwd: `/Users/demo/${session_id}`, ...extra }) });
 const wait = s => new Promise(r => setTimeout(r, s * 1000));
 
 /** @type {[string, number, (() => Promise<unknown>)?][]} */

@@ -2297,3 +2297,61 @@ test('Stop counts a Monitor the session started (its launch carries taskId)', as
   const s = (await snapshot(base)).sessions.find(x => x.id === id);
   assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'paused', note: 'Waiting on 1 background task', tasks: ['CI results'] });
 });
+
+// A page on a domain that rebinds to 127.0.0.1 is same-origin with the server, so it could read the sessions and press every
+// button. Only requests addressed to the server's own loopback host and port are answered.
+const sendAs = (base, host, url, { method = 'GET', headers = {}, body } = {}) => new Promise((done, fail) => {
+  const { hostname, port } = new URL(base);
+  const req = http.request({ hostname, port, path: url, method, headers: { ...headers, host } }, res => { res.resume(); res.destroy(); done(res.statusCode); }); // /events never ends
+  req.on('error', fail).end(body);
+});
+
+test('a request addressed to any host but the server\'s own loopback address is refused', async t => {
+  const base = await serve(t), port = new URL(base).port;
+  const snooze = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' };
+  for (const host of ['evil.example:' + port, 'evil.example', '127.0.0.1', '127.0.0.1:1', 'localhost.evil.example:' + port]) {
+    assert.strictEqual(await sendAs(base, host, '/events'), 403, `/events as ${host}`);
+    assert.strictEqual(await sendAs(base, host, '/snooze', snooze), 403, `/snooze as ${host}`);
+  }
+  for (const host of ['127.0.0.1:' + port, 'localhost:' + port, 'LOCALHOST:' + port]) {
+    assert.strictEqual(await sendAs(base, host, '/events'), 200, `/events as ${host}`);
+    assert.notStrictEqual(await sendAs(base, host, '/snooze', snooze), 403, `/snooze as ${host}`);
+  }
+});
+
+// A text/plain POST is one any web page can send without a preflight, so /event only takes JSON, as the hooks send it.
+test('/event takes only JSON, so a cross-site page can\'t forge sessions', async t => {
+  const base = await serve(t), event = id => JSON.stringify({ session_id: id, hook_event_name: 'Stop', cwd: '/work', last_assistant_message: 'Done.' });
+  const send = (id, type) => fetch(base + '/event', { method: 'POST', headers: type ? { 'Content-Type': type } : {}, body: event(id) });
+  assert.strictEqual((await send(UUID(1), 'text/plain')).status, 415);
+  assert.strictEqual((await send(UUID(2), '')).status, 415);
+  assert.strictEqual((await send(UUID(3), 'application/json')).status, 200);
+  await until(async () => (await snapshot(base)).sessions.some(x => x.id === UUID(3)), 'the JSON event to land');
+  assert.deepStrictEqual((await snapshot(base)).sessions.map(x => x.id), [UUID(3)]);
+});
+
+// A VS Code session's cwd is event data. Only a folder that exists reaches `open`; a URL or an option never does.
+test('focusing a VS Code session opens its folder only when the cwd is an existing directory', async t => {
+  let home;
+  const base = await serve(t, { 'no-bin/open': '#!/bin/sh\necho "$@" >> "$HOME/open.log"\n' }, h => {
+    home = h;
+    fs.chmodSync(path.join(home, 'no-bin/open'), 0o755);
+    fs.mkdirSync(path.join(home, 'project'));
+    fs.writeFileSync(path.join(home, 'file.txt'), '');
+  });
+  const log = () => fs.existsSync(path.join(home, 'open.log')) ? fs.readFileSync(path.join(home, 'open.log'), 'utf8') : '';
+  const focus = async (n, cwd) => {
+    await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(process.pid), 'x-term-program': 'vscode', 'x-term-app': 'com.example.code' },
+      body: JSON.stringify({ session_id: UUID(n), hook_event_name: 'Stop', cwd, last_assistant_message: 'Done.' }) });
+    await until(async () => (await snapshot(base)).sessions.find(x => x.id === UUID(n) && x.cwd === cwd), `session ${n} to land`);
+    await post(base, '/focus', { id: UUID(n) });
+  };
+  const good = path.join(home, 'project');
+  await focus(1, good);
+  assert.ok(log().includes(`-b com.example.code ${good}`), `the real folder is opened: ${log()}`);
+  const before = log();
+  for (const [n, cwd] of [[2, 'ssh://evil.example/x'], [3, '-a/Applications/Calculator.app'], [4, path.join(home, 'file.txt')], [5, '/no/such/folder']]) {
+    await focus(n, cwd);
+    assert.ok(!log().slice(before.length).includes(cwd), `${cwd} reached open: ${log()}`);
+  }
+});

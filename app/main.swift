@@ -110,13 +110,14 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 
     // Links leave the app for your browser; only the Lantern page itself loads in here.
     func webView(_ web: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = action.request.url, url.host != home.host || url.port != home.port else { return decisionHandler(.allow) }
-        NSWorkspace.shared.open(url)
+        guard let url = action.request.url else { return decisionHandler(.cancel) }
+        if url.host == home.host && url.port == home.port { return decisionHandler(.allow) }
+        if LanternServer.opensInBrowser(url, mainFrame: action.targetFrame?.isMainFrame != false) { NSWorkspace.shared.open(url) }
         decisionHandler(.cancel)
     }
 
     func webView(_ web: WKWebView, createWebViewWith config: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = action.request.url { NSWorkspace.shared.open(url) } // target="_blank" links
+        if let url = action.request.url, LanternServer.opensInBrowser(url, mainFrame: true) { NSWorkspace.shared.open(url) } // target="_blank" links
         return nil
     }
 

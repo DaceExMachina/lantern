@@ -125,3 +125,4 @@ Lantern keeps its settings in `settings.json` in `~/Library/Application Support/
 - **GitHub status is github.com only.** A session owns a PR when it ran `gh pr create` in Bash, so PRs opened through an MCP tool or the website aren't linked to a session.
 - **Resuming a ghost moth's session opens iTerm2**, whatever terminal you use.
 - **The card reads English.** Any sentence ending in "?" counts as a question (a full-width "？" doesn't), and the `**You:**` and `**Blocker:**` footer lines are matched in English.
+- **Local processes are trusted.** The server listens on 127.0.0.1 only and answers only requests addressed to that host, but it has no auth token, so any process running as you on your Mac can send it events and press its buttons. That's fine on a single-user Mac.

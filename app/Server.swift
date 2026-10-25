@@ -880,7 +880,7 @@ final class LanternServer {
         }
     }
     func respond(_ c: NWConnection, _ status: Int, _ type: String? = nil, _ body: Data = Data(), headers: String = "") {
-        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"][status] ?? ""
+        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 415: "Unsupported Media Type", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"][status] ?? ""
         var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\n" + headers
         if let type { head += "Content-Type: \(type)\r\n" }
         if status != 204 && status != 304 { head += "Content-Length: \(body.count)\r\n" }
@@ -908,13 +908,20 @@ final class LanternServer {
         respond(c, 200, type, data, headers: headers)
     }
 
+    /// Whether a link leaves the app for the browser: only a web page, and only from the page itself, never a subframe.
+    static func opensInBrowser(_ url: URL, mainFrame: Bool) -> Bool { mainFrame && ["http", "https"].contains(url.scheme?.lowercased() ?? "") }
+
     func route(_ req: Request, _ c: NWConnection) {
+        // A page on a domain that rebinds to 127.0.0.1 would be same-origin with this server, so only our own address is answered.
+        let at = listener?.port?.rawValue ?? port
+        guard ["127.0.0.1:\(at)", "localhost:\(at)"].contains(req.headers["host"]?.lowercased() ?? "") else { return respond(c, 403) }
         let post = req.method == "POST"
         // The endpoints that change things only take a JSON POST, which other websites can't send here without a CORS
         // preflight we never answer.
         let json = post && req.headers["content-type"] == "application/json"
         let body = parse(req.body) as? JSON
         if post && req.url == "/event" {
+            guard json else { return respond(c, 415) }
             guard var e = body else { return respond(c, 200) }
             e["iterm"] = req.headers["x-iterm-session"]; e["pid"] = req.headers["x-claude-pid"]
             e["term"] = req.headers["x-term-program"]; e["app"] = req.headers["x-term-app"]
