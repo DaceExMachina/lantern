@@ -37,6 +37,10 @@ test('the ink canvas is really hidden on a lantern with no paper', async () => {
   assert.notStrictEqual(shown(), 'none', 'a paper lantern shows it');
   document.getElementById('pages').remove(); // the candle draws no paper, so there is no #pages
   assert.strictEqual(shown(), 'none', 'the candle hides it');
+  assert.strictEqual(vi.getTimerCount(), 0, 'and the timer stops');
+  assert.strictEqual(ink.width, 0, 'and the canvas holds no pixels');
+  p.wakePages(); // a paper lantern is picked again
+  assert.strictEqual(vi.getTimerCount(), 1, 'the timer runs again');
 });
 
 test('turning the text off takes the ink out in the intro\'s time, then stops the timer; on again brings it back at once', async () => {

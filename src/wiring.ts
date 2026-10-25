@@ -10,7 +10,7 @@ import { showPencil } from './scene/pencil';
 import './scene/github'; // its dev toggle
 import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
 import { fitView, frame } from './scene/frame';
-import { setLanternText } from './scene/pages';
+import { setLanternText, wakePages } from './scene/pages';
 import { clickZone, enterZone, expandCard, hideCard, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
@@ -36,7 +36,7 @@ es.onmessage = e => { const text: unknown = e.data; if (typeof text === 'string'
 listen('settings', t => {
   const st = parseSettings(parseJson(t));
   const key = PINNED || st.style;
-  if (key && isStyleKey(key) && STYLES[key] !== style) applyStyle(key);
+  if (key && isStyleKey(key) && STYLES[key] !== style) { applyStyle(key); wakePages(); }
   const quietStarted = live.recapSeen !== null && !quiet() && (st.quietUntil || 0) > Date.now(); // not on the first settings: a reload in quiet hours
   live.quietUntil = st.quietUntil || 0;
   if (isTime(st.quietEnd)) live.quietEnd = st.quietEnd;

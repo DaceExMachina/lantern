@@ -300,7 +300,7 @@ export function tickPages() {
   const root = pagesG(), d = style.surface, out = ink();
   if (!out) return;
   out.hidden = !root || !d;
-  if (!root || !d) return; // not a paper lantern
+  if (!root || !d) return sleepPages(); // not a paper lantern: drop the words and stop; wiring.ts wakes us when one is picked
   if (!legible()) return sleepPages(); // a lantern picked in a window too small to read it
   if (paper !== d) { forget(); paper = d; } // another lantern: a fresh set laid out for its paper
   const now = performance.now();
@@ -344,8 +344,9 @@ function inkOpacity() {
 
 function stopPages() { clearInterval(pagesTimer); clearInterval(introTimer); pagesTimer = introTimer = undefined; }
 // Starts the timer when there's something to show and room to read it, priming a fresh set (as on load: a full paper,
-// coming up quickly) if it had been put to sleep. Called on load, on resize, and when the words are turned on.
-function wakePages() {
+// coming up quickly) if it had been put to sleep. Called on load, on resize, when the words are turned on, and when a
+// lantern is picked (wiring.ts).
+export function wakePages() {
   if (pagesTimer || lanternText === 'off' || !legible()) return;
   pagesTimer = setInterval(tickPages, 250);
 }
