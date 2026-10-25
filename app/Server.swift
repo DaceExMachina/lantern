@@ -213,6 +213,8 @@ final class LanternServer {
     var screenLocked = { (CGSessionCopyCurrentDictionary() as? [String: Any])?["CGSSessionScreenIsLocked"] as? Bool == true }
     var broadcastDue = false, sentReviews = "[]", sentStale = "[]" // see broadcast()
     var listener: NWListener?
+    var tailnetName: String? // this Mac's name on the tailnet, once Tailscale has told us
+    var tailnetAsked = 0.0 // when we last asked, in ms
     var started = false
     var pageMtime = 0.0
     // The event log (Stats.swift), and what it last saw, so it only records changes.
@@ -880,7 +882,7 @@ final class LanternServer {
         }
     }
     func respond(_ c: NWConnection, _ status: Int, _ type: String? = nil, _ body: Data = Data(), headers: String = "") {
-        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 404: "Not Found", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"][status] ?? ""
+        let reason = [200: "OK", 204: "No Content", 304: "Not Modified", 400: "Bad Request", 403: "Forbidden", 404: "Not Found", 415: "Unsupported Media Type", 500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"][status] ?? ""
         var head = "HTTP/1.1 \(status) \(reason)\r\nConnection: close\r\n" + headers
         if let type { head += "Content-Type: \(type)\r\n" }
         if status != 204 && status != 304 { head += "Content-Length: \(body.count)\r\n" }
@@ -908,13 +910,38 @@ final class LanternServer {
         respond(c, 200, type, data, headers: headers)
     }
 
+    /// The Host values this server answers: its own loopback address, and this Mac's tailnet name when Tailscale serve
+    /// proxies to it (which passes the visitor's Host on, with no port or :443).
+    func hostAllowed(_ host: String) -> Bool {
+        let at = listener?.port?.rawValue ?? port
+        return ["127.0.0.1:\(at)", "localhost:\(at)"].contains(host) || tailnetName.map { [$0, $0 + ":443"].contains(host) } ?? false
+    }
+
+    // A page on a domain that rebinds to 127.0.0.1 would be same-origin with this server, so only our own addresses are answered.
+    // The tailnet name is asked of Tailscale when a Host doesn't match (it may have started after us), at most every 30 seconds
+    // so a flood of foreign Hosts can't spawn a process each. Headers like X-Forwarded-Host aren't trusted: a page can set any.
     func route(_ req: Request, _ c: NWConnection) {
+        let host = req.headers["host"]?.lowercased() ?? ""
+        if hostAllowed(host) { return dispatch(req, c) }
+        guard now() - tailnetAsked > 30_000 else { return respond(c, 403) }
+        tailnetAsked = now()
+        DispatchQueue.global().async {
+            let name = tailnetDNSName()
+            DispatchQueue.main.async {
+                if let name { self.tailnetName = name }
+                if self.hostAllowed(host) { self.dispatch(req, c) } else { self.respond(c, 403) }
+            }
+        }
+    }
+
+    func dispatch(_ req: Request, _ c: NWConnection) {
         let post = req.method == "POST"
         // The endpoints that change things only take a JSON POST, which other websites can't send here without a CORS
         // preflight we never answer.
         let json = post && req.headers["content-type"] == "application/json"
         let body = parse(req.body) as? JSON
         if post && req.url == "/event" {
+            guard json else { return respond(c, 415) }
             guard var e = body else { return respond(c, 200) }
             e["iterm"] = req.headers["x-iterm-session"]; e["pid"] = req.headers["x-claude-pid"]
             e["term"] = req.headers["x-term-program"]; e["app"] = req.headers["x-term-app"]

@@ -40,7 +40,7 @@ const free = net.createServer().listen(0, '127.0.0.1', () => {
     const query = process.argv.slice(2).map(a => a.replace(/^\?/, '')).join('&');
     const ready = () => fetch(`http://127.0.0.1:${port}/stats`).then(async () => {
       const { createServer } = await import('vite');
-      const vite = await createServer({ root: ROOT, server: { host: '127.0.0.1', port: 0, proxy: { [SERVER_ROUTES]: `http://127.0.0.1:${port}` } } });
+      const vite = await createServer({ root: ROOT, server: { host: '127.0.0.1', port: 0, proxy: { [SERVER_ROUTES]: { target: `http://127.0.0.1:${port}`, changeOrigin: true } } } });
       await vite.listen();
       console.log(`Lantern preview at ${vite.resolvedUrls?.local[0]}${query ? '?' + query : ''} (Ctrl-C stops it)`);
     }, () => setTimeout(ready, 100));

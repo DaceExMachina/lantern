@@ -129,7 +129,10 @@ func focusElsewhere(_ s: JSON) -> Bool {
     case "WezTerm": // its CLI sits next to the app's binary
         if truthy(s["pane"]), let bundle, run(bundle + "/Contents/MacOS/wezterm", ["cli", "activate-pane", "--pane-id", str(s["pane"])]).ok { return activate() }
     case "vscode": // VS Code and its forks bring the window that has this folder open forward (or open one)
-        if !app.isEmpty && truthy(s["cwd"]) { return open(["-b", app, str(s["cwd"])]) }
+        // cwd is event data, so only a folder that exists goes to `open` (not a URL, and not an option)
+        var isDir: ObjCBool = false
+        let cwd = str(s["cwd"])
+        if !app.isEmpty && cwd.hasPrefix("/") && FileManager.default.fileExists(atPath: cwd, isDirectory: &isDir) && isDir.boolValue { return open(["-b", app, cwd]) }
     default: // kitty only takes remote commands when its kitty.conf allows them (allow_remote_control, listen_on)
         if truthy(s["kitty"]) && truthy(s["pane"]), let bundle,
            run(bundle + "/Contents/MacOS/kitten", ["@", "--to", str(s["kitty"]), "focus-window", "--match", "id:" + str(s["pane"])]).ok { return activate() }
@@ -212,4 +215,15 @@ extension LanternServer {
             }
         }
     }
+}
+
+/// This Mac's tailnet DNS name (lowercased, no trailing dot), from the Tailscale CLI; nil when Tailscale isn't installed or running.
+/// LANTERN_TAILSCALE names another CLI, which the tests use.
+func tailnetDNSName() -> String? {
+    let app = "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    let cli = ProcessInfo.processInfo.environment["LANTERN_TAILSCALE"] ?? (FileManager.default.isExecutableFile(atPath: app) ? app : "tailscale")
+    let r = run(cli, ["status", "--json"], timeout: 5)
+    guard r.ok, let me = (parse(Data(r.out.utf8)) as? JSON)?["Self"] as? JSON, let name = me["DNSName"] as? String else { return nil }
+    let trimmed = name.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    return trimmed.isEmpty ? nil : trimmed
 }
