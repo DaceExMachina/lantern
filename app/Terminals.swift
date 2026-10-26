@@ -8,10 +8,11 @@ func claudePids() -> [String] {
 }
 
 /// The transcript Claude Code says a running `claude` writes, if it says (sessions/<pid>.json) and it's there yet, and
-/// whether it says that session is mid-turn: its own `status`, "busy" or "idle" (nil for anything else, or none).
+/// whether it says that session is mid-turn: its own `status`, "busy" or "idle" (nil for anything else, or none). "shell" is
+/// idle with a background shell task still running, so `shell` says no turn is running while leaving `busy` unknown: work is pending.
 /// The record has to be that process's own: it names when the process started (procStart, in UTC and the C locale), and a pid that was reused
 /// after the process ended leaves the old record behind, so a record whose start differs from the running process's is stale.
-func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
+func sessionFile(_ pid: String) -> (file: String, busy: Bool?, shell: Bool)? {
     guard let (dir, d) = CLAUDE_DIRS.lazy.compactMap({ dir in FileManager.default.contents(atPath: "\(dir)/sessions/\(pid).json").map { (dir, $0) } }).first, let j = parse(d) as? JSON,
           let id = j["sessionId"] as? String, UUID_RE.test(id), let cwd = j["cwd"] as? String else { return nil }
     // (a record without procStart, from an older Claude Code, can't be checked and is taken as written)
@@ -19,7 +20,7 @@ func sessionFile(_ pid: String) -> (file: String, busy: Bool?)? {
     // the folder that knows this process is where it writes; elsewhere may hold a stale copy
     let mine = "\(dir)/projects/\(cwd.projectName)/\(id).jsonl"
     let f = FileManager.default.fileExists(atPath: mine) ? mine : sessionPath(cwd.projectName, id) + ".jsonl"
-    return FileManager.default.fileExists(atPath: f) ? (f, ["busy": true, "idle": false][str(j["status"])]) : nil
+    return FileManager.default.fileExists(atPath: f) ? (f, ["busy": true, "idle": false][str(j["status"])], str(j["status"]) == "shell") : nil
 }
 
 /// Running processes grouped by the transcript they write: one session can run in several (the Claude app's and a terminal

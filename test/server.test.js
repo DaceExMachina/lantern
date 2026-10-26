@@ -519,6 +519,10 @@ test('a manual /compact while agents run leaves the session paused on them (the 
   assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 5 agents']);
   await hook('SessionStart', { source: 'compact' });
   assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 5 agents']);
+  // "shell" is Claude Code idle with a background shell task running: no turn, but work is still pending, so it stays paused
+  fs.writeFileSync(path.join(home, `.claude/sessions/${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: id, cwd: '/Users/user/work/project', status: 'shell' }));
+  await hook('SessionStart', { source: 'compact' });
+  assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 5 agents']);
   // a later turn whose Stop never reached the lantern, then a compaction: Claude Code's status says idle (no turn, nothing
   // pending), which is definitive, so the check lands it rather than leaving it working
   await hook('UserPromptSubmit', { prompt: 'ok resume' });
@@ -532,7 +536,7 @@ test('a manual /compact while agents run leaves the session paused on them (the 
 // (LANTERN_STATUS_LAG_SECONDS) and lands it; while the status says busy (a turn, or a /compact still running) it leaves it.
 // The transcript only has to exist, since the status file points at it (it's the real desktop interrupt tail from
 // test/fixtures/desktop-turns.jsonl, which only seeding reads).
-test('a working session lands once Claude Code says idle and the hooks have gone quiet: an Esc interrupt, a cancelled /compact', async t => {
+test('a working session lands once Claude Code says idle (or shell) and the hooks have gone quiet: an Esc interrupt, a cancelled /compact', async t => {
   const tails = {}; let name;
   for (const line of fs.readFileSync(path.join(__dirname, 'fixtures/desktop-turns.jsonl'), 'utf8').trim().split('\n')) {
     const j = JSON.parse(line);
@@ -554,6 +558,14 @@ test('a working session lands once Claude Code says idle and the hooks have gone
   await wait(500); // five sweeps, inside the lag
   assert.strictEqual(await state(), 'working', 'within the lag a Stop may still be on its way');
   await until(async () => await state() === 'idle', 'the sweep to land the interrupted turn');
+  // the same Esc with a background shell task running (a preview server, say): Claude Code's status is "shell", idle plus
+  // that task, not "idle", and it lands the same way
+  setStatus(home, 'busy');
+  await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'go again' });
+  await wait(2500);
+  assert.strictEqual(await state(), 'working');
+  setStatus(home, 'shell');
+  await until(async () => await state() === 'idle', 'the sweep to land an interrupt with a background shell running');
   // a /compact cancelled before it reported back: the same look lands it
   setStatus(home, 'busy');
   await hook({ hook_event_name: 'PreCompact', trigger: 'manual' });
