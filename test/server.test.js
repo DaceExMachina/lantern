@@ -566,6 +566,19 @@ test('a working session lands once Claude Code says idle (or shell) and the hook
   assert.strictEqual(await state(), 'working');
   setStatus(home, 'shell');
   await until(async () => await state() === 'idle', 'the sweep to land an interrupt with a background shell running');
+  // a turn that ended paused on a background agent, then a new prompt and an Esc: "shell" means no turn, but the agent is
+  // still working, so it goes back to waiting on it rather than dropping to idle
+  await hook({ hook_event_name: 'SubagentStart', agent_id: 'a1', agent_type: 'opus-audit' });
+  await hook({ hook_event_name: 'Stop', last_assistant_message: 'Auditing.', background_tasks: [{ id: 'a1', type: 'subagent', status: 'running', description: 'Audit', agent_type: 'opus-audit' }] });
+  const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return [s.state, s.note]; };
+  assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 1 agent']);
+  setStatus(home, 'busy');
+  await hook({ hook_event_name: 'UserPromptSubmit', prompt: 'and?' });
+  await wait(2500);
+  assert.strictEqual(await state(), 'working');
+  setStatus(home, 'shell');
+  await until(async () => (await state()) !== 'working', 'the sweep to land the interrupted turn');
+  assert.deepStrictEqual(await shown(), ['paused', 'Waiting on 1 agent']);
   // a /compact cancelled before it reported back: the same look lands it
   setStatus(home, 'busy');
   await hook({ hook_event_name: 'PreCompact', trigger: 'manual' });

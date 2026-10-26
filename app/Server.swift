@@ -657,8 +657,10 @@ final class LanternServer {
     /// background work still waits on it, and an automatic compaction leaves the turn it ran inside as it was.
     func check(_ s: inout JSON) {
         if str(s["turn"]) == "compacting" { if truthy(s["awaits"]) { s["turn"] = "ended" } else { s["turn"] = "idle"; s["note"] = "" } }
-        // a shell task still running ("shell") ends a turn that Esc cut short, but its pending work stays pending
-        if str(s["turn"]) == "running" && claudeIdle(s, shell: true) || truthy(s["awaits"]) && claudeIdle(s) { s["turn"] = "idle"; s["awaits"] = false }
+        // Claude Code idle: nothing is pending. "shell" (idle, a background shell task still running) ends a turn that Esc cut
+        // short too, but whatever the last Stop handed over to is still pending: it goes back to waiting on that.
+        if (str(s["turn"]) == "running" || truthy(s["awaits"])) && claudeIdle(s) { s["turn"] = "idle"; s["awaits"] = false }
+        else if str(s["turn"]) == "running" && claudeIdle(s, shell: true) { s["turn"] = truthy(s["awaits"]) ? "ended" : "idle" }
     }
     /// Whether Claude Code says the session is idle: no turn running and nothing pending. Every live process it runs in that
     /// says anything has to say so (one busy in a terminal while the app's sits idle is busy; a status it doesn't recognise
