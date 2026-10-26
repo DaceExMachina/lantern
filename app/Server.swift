@@ -657,16 +657,20 @@ final class LanternServer {
     /// background work still waits on it, and an automatic compaction leaves the turn it ran inside as it was.
     func check(_ s: inout JSON) {
         if str(s["turn"]) == "compacting" { if truthy(s["awaits"]) { s["turn"] = "ended" } else { s["turn"] = "idle"; s["note"] = "" } }
-        if claudeIdle(s), str(s["turn"]) == "running" || truthy(s["awaits"]) { s["turn"] = "idle"; s["awaits"] = false }
+        // Claude Code idle: nothing is pending. "shell" (idle, a background shell task still running) ends a turn that Esc cut
+        // short too, but whatever the last Stop handed over to is still pending: it goes back to waiting on that.
+        if (str(s["turn"]) == "running" || truthy(s["awaits"])) && claudeIdle(s) { s["turn"] = "idle"; s["awaits"] = false }
+        else if str(s["turn"]) == "running" && claudeIdle(s, shell: true) { s["turn"] = truthy(s["awaits"]) ? "ended" : "idle" }
     }
     /// Whether Claude Code says the session is idle: no turn running and nothing pending. Every live process it runs in that
     /// says anything has to say so (one busy in a terminal while the app's sits idle is busy; a status it doesn't recognise
     /// says nothing either way, as in bySession). Only status files of processes still running, and that name this
-    /// session, count: an ended process leaves its last status behind, and a pid can be reused.
-    func claudeIdle(_ s: JSON) -> Bool {
+    /// session, count: an ended process leaves its last status behind, and a pid can be reused. "shell" (idle, with a
+    /// background shell task running) counts only with `shell`: no turn is running, but something is still pending.
+    func claudeIdle(_ s: JSON, shell: Bool = false) -> Bool {
         let statuses = (s["pids"] as? [Int] ?? []).filter { kill(pid_t($0), 0) == 0 || errno == EPERM }
             .compactMap { sessionFile(String($0)) }.filter { $0.file.hasSuffix("/\(str(s["id"])).jsonl") }
-        let known = statuses.compactMap { $0.busy }
+        let known = statuses.compactMap { shell && $0.shell ? false : $0.busy }
         return !known.isEmpty && known.allSatisfy { !$0 }
     }
 
@@ -711,7 +715,7 @@ final class LanternServer {
         for (id, var s) in sessions.items {
             // A turn can end with no Stop (an Esc interrupt, a /compact cancelled before it reported back). Once Claude Code
             // says idle and the hooks have been quiet past their usual lag, look.
-            if str(s["state"]) == "working" && t - ((s["last"] as? Double) ?? 0) > STATUS_LAG_MS && claudeIdle(s) { check(&s) }
+            if str(s["state"]) == "working" && t - ((s["last"] as? Double) ?? 0) > STATUS_LAG_MS && claudeIdle(s, shell: true) { check(&s) }
             if derive(&s, id) { sessions[id] = s; changed = true }
         }
         if changed { broadcast() }
