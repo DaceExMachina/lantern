@@ -165,11 +165,11 @@ test('a chip under the pointer puts its PR\'s title in its section\'s header, as
   setSessions(session({ github: TEN }));
   await pins({ id: 's1', chips: true });
   const header = () => text(find($('dock'), 'ph')[0]);
-  assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
+  assert.strictEqual(header(), 'PRs · r · 1 ready · 2 in review · 8 drafts');
   fire(find($('dock'), 'chips')[0].children[1], 'pointerenter'); await nextTick();
   assert.strictEqual(header(), 'PR 4 title');
   fire(find($('dock'), 'chips')[0].children[1], 'pointerleave'); await nextTick();
-  assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
+  assert.strictEqual(header(), 'PRs · r · 1 ready · 2 in review · 8 drafts');
 });
 
 test('the closed sidebar is inert: out of the tab order and the accessibility tree, with nothing pinned or under 800px', async () => {

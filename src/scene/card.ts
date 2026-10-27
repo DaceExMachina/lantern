@@ -120,6 +120,11 @@ export function prSummary(prs: PR[]) {
   for (const p of prs) n.set(p.need, (n.get(p.need) || 0) + 1);
   return [...n].sort(([a], [b]) => rank(a) - rank(b)).map(([k, c]) => `${c} ${k === 'changes' && c === 1 ? 'change requested' : SHORT[k] || k}${k === 'draft' && c > 1 ? 's' : ''}`).join(' · ');
 }
+// A PR's repo from its url (github.com/owner/name/pull/n): the short name to show, the full owner/name for a tooltip.
+export function repoOf(url: string) {
+  const full = new URL(url).pathname.split('/').slice(1, 3).join('/');
+  return { full, name: full.split('/')[1] ?? full };
+}
 // A PR's title where a card doesn't already show it in full: an overflow link past the cap (a bare number), or a list row
 // whose title is cut short. It's the badges' tooltip (#prTip, outside the redrawn rows so a redraw leaves it be), shown
 // while hovered or focused and placed as a badge's is (tipSpot).

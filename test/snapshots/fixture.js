@@ -42,7 +42,7 @@
   const MIN = 60000, Q = new URLSearchParams(location.search);
   // the page's names, looked up in its modules when called (src/main.ts puts them on window once they've loaded)
   const page = new Proxy({}, { get: (_, k) => Object.values(window.lanternModules).find(m => k in m)?.[k] });
-  const pr = (n, need) => ({ url: `https://github.com/acme/app/pull/${n}`, need, label: `app#${n}`, title: `PR ${n}: ${need} change` });
+  const pr = (n, need, repo = 'app') => ({ url: `https://github.com/acme/${repo}/pull/${n}`, need, label: `${repo}#${n}`, title: `PR ${n}: ${need} change` });
   const words = i => [`The lantern hangs over the desk and every session is a moth around it, number ${i}.`,
     'When one of them needs an answer it lands on the paper and waits there quietly until somebody looks.'];
   // phase 0 at the start, phase 1 later: a PR merged, a snooze made permanent, an idle session gone
@@ -54,7 +54,7 @@
         subagents: [{ id: 'a1', type: 'opus-supervisor', description: 'Supervisor', activity: 'Reading' }, { id: 'a2', type: 'Explore', description: 'Search' }],
         github: [pr(1, 'ready'), pr(2, 'failing'), pr(3, 'changes'), pr(4, 'draft'), pr(5, 'waiting')] }),
       s('sess-bravo', { state: 'waiting', waitingSince: now - 20 * MIN, note: 'Needs approval', prose: words(2), // waited 15+ min: restless, hops
-        github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
+        github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes', 'lantern-pr')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
       s('sess-charlie', { state: 'waiting', snoozed: true, forGood: !!phase, waitingSince: now - 3 * MIN, subagents: [{ id: 'c1', type: 'Explore', description: 'Agent' }] }),
       s('sess-delta', { state: 'working', parent: 'sess-alpha', activity: 'Side work' }), // a satellite
       s('sess-golf', { state: 'waiting', parent: 'sess-bravo', waitingSince: now - 2 * MIN }), // a satellite waiting: paused

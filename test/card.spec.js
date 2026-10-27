@@ -59,20 +59,20 @@ const show = async s => {
   return $('card');
 };
 const now = Date.now();
-const pr = (n, need) => ({ url: `https://github.com/o/r/pull/${n}`, label: `#${n}`, need, title: `PR ${n} title` });
+const pr = (n, need, repo = 'r') => ({ url: `https://github.com/o/${repo}/pull/${n}`, label: `#${n}`, need, title: `PR ${n} title` });
 const session = o => ({ id: 's1', cwd: '/w/proj', title: 'proj', state: 'waiting', started: now - 3600e3, last: now - 60e3, subagents: [], github: [], ...o });
 const TEN = [pr(1, 'draft'), pr(2, 'ready'), pr(3, 'draft'), pr(4, 'waiting'), pr(5, 'waiting'), pr(6, 'draft'), pr(7, 'draft'), pr(8, 'draft'), pr(9, 'draft'), pr(10, 'draft'), pr(11, 'draft')];
 const fire = (el, type, init = {}) => el.dispatchEvent(Object.assign(new Event(type), init));
 
 test('a PR with feedback waiting ranks below changes requested and above ready, and says so', async () => {
   const card = await show(session({ github: [pr(1, 'ready'), pr(2, 'feedback'), pr(3, 'changes')] }));
-  assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · 1 change requested · 1 feedback waiting · 1 ready');
+  assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · r · 1 change requested · 1 feedback waiting · 1 ready');
 });
 
 test('the PR header sums them up, and a hovered chip puts its title there until the pointer leaves', async () => {
   const card = await show(session({ github: TEN }));
   const [ph] = find(card, 'ph');
-  assert.strictEqual(text(ph), 'PRs · 1 ready · 2 in review · 8 drafts');
+  assert.strictEqual(text(ph), 'PRs · r · 1 ready · 2 in review · 8 drafts');
   const chips = [...find(card, 'chips')[0].children];
   assert.strictEqual(chips.length, 11, 'more than three PRs start as chips');
   assert.deepStrictEqual(chips.slice(0, 3).map(text), ['#2', '#4', '#5'], 'worst first: ready, then in review, then drafts');
@@ -81,7 +81,7 @@ test('the PR header sums them up, and a hovered chip puts its title there until 
   assert.strictEqual(header(), 'PR 4 title');
   assert.strictEqual(header(), text(find(await show(session({ github: TEN })), 'ph')[0]), 'and keeps it through a redraw');
   fire(find(card, 'chips')[0].children[1], 'pointerleave'); await nextTick();
-  assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
+  assert.strictEqual(header(), 'PRs · r · 1 ready · 2 in review · 8 drafts');
 });
 
 test('an open list shows the worst four, failing and changes requested first, then the rest as links', async () => {
@@ -285,8 +285,8 @@ test('every control is an outer button or link that fills its zone, around an in
 
 test('one PR with changes requested reads singular, and two shell commands with the same description open separately', async () => {
   const card = await show(session({ github: [pr(3, 'ready'), pr(4, 'changes')] }));
-  assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · 1 change requested · 1 ready');
-  assert.strictEqual(text(find(await show(session({ github: [pr(1, 'changes'), pr(2, 'changes')] })), 'ph')[0]), 'PRs · 2 changes requested');
+  assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · r · 1 change requested · 1 ready');
+  assert.strictEqual(text(find(await show(session({ github: [pr(1, 'changes'), pr(2, 'changes')] })), 'ph')[0]), 'PRs · r · 2 changes requested');
   const s = session({ state: 'paused', tasks: ['npm test', 'npm test'] }), rows = async () => find(await show(s), 'agent');
   (await rows())[1].click();
   assert.deepStrictEqual((await rows()).map(r => r.className), ['agent', 'agent open'], 'only the one clicked');
@@ -415,4 +415,18 @@ test('hovering a ghost or a wisp shows a compact card with a hint that names its
   assert.ok(!text(card).includes('Made by'));
   card = await hoverStale(wisp);
   assert.deepStrictEqual(hint(card), [], 'and expanded, no hint');
+});
+
+test('PRs in one repo name it after "PRs"; across repos chips split into a section per repo and rows name theirs after the dot', async () => {
+  const mixed = [pr(1, 'ready', 'api'), pr(2, 'draft', 'extension'), pr(3, 'feedback', 'api')];
+  settings({ prList: { s1: false } });
+  const chips = await show(session({ github: mixed }));
+  assert.deepStrictEqual(find(chips, 'ph').map(text), ['PRs · api · 1 feedback waiting · 1 ready', 'extension · 1 draft'], 'a section per repo, the first headed PRs');
+  assert.deepStrictEqual(find(chips, 'ph').map(h => h.title), ['o/api', 'o/extension'], 'the owner is in the tooltip');
+  assert.strictEqual(find(chips, 'tog').length, 1, 'one toggle');
+  settings({ prList: { s1: true } });
+  const rows = await show(session({ github: mixed }));
+  assert.deepStrictEqual(find(rows, 'ph').map(text), ['PRs · 1 feedback waiting · 1 ready · 1 draft'], 'one header, no repo');
+  assert.deepStrictEqual(find(rows, 'repo').map(text), ['api', 'api', 'extension']);
+  assert.strictEqual(find(await show(session({ github: [pr(1, 'ready', 'api'), pr(2, 'draft', 'api')] })), 'repo').length, 0, 'a single repo is in the header only');
 });

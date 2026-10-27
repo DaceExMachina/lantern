@@ -378,6 +378,7 @@
   :is(#card, #dock) .pr2 .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#card, #dock) .pr2 .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
   :is(#card, #dock) .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; } /* like an agent's time */
+  :is(#card, #dock) .pr2 .me .repo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :is(#card, #dock) .pr2 .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
   :is(#card, #dock) .more { font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
   #card button.more { display: block; width: 100%; } /* the agents' "n more": its zone is the band's width */
