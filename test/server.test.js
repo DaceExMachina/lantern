@@ -2401,3 +2401,32 @@ test('without Tailscale answering, only the loopback address is let in', async t
   assert.strictEqual(await sendAs(base, 'mac-1.tail1234.ts.net', '/stats'), 403);
   assert.strictEqual(await sendAs(base, new URL(base).host, '/stats'), 200);
 });
+
+// The now playing helper (app/helper/NowPlayingHelper.swift) is a library /usr/bin/perl loads; a fake one stands in here.
+test('now playing: the helper\'s item and cover reach the page once each, and the widget\'s buttons reach the helper', async t => {
+  const lib = path.join(tmp, 'now-playing-fake.dylib');
+  execFileSync('swiftc', ['-parse-as-library', '-emit-library', '-o', lib, 'test/server/now-playing-fake.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
+  const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: lib });
+  const events = [];
+  const req = http.get(base + '/events', res => {
+    let text = '';
+    res.on('data', chunk => {
+      text += chunk;
+      const blocks = text.split('\n\n');
+      text = blocks.pop();
+      for (const block of blocks) {
+        const event = block.match(/^event: (.+)$/m)?.[1];
+        if (event?.startsWith('nowPlaying')) events.push([event, block.match(/^data: (.*)$/m)?.[1]]);
+      }
+    });
+  });
+  req.on('error', () => {});
+  t.after(() => req.destroy());
+  const items = () => events.filter(e => e[0] === 'nowPlaying').map(e => JSON.parse(e[1]));
+  await until(() => items().at(-1)?.playing === true, 'the item to arrive');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'toggle' })).status, 204);
+  await until(() => items().at(-1)?.playing === false, 'the toggle to reach the helper and come back');
+  assert.deepStrictEqual(items().filter(Boolean).map(i => i.playing), [true, false], 'each change goes out once');
+  assert.deepStrictEqual(events.filter(e => e[0] === 'nowPlayingArt').map(e => JSON.parse(e[1])).filter(Boolean), ['data:image/png;base64,AAAA'], 'the cover goes out once, not again with a pause');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'rm -rf' })).status, 400);
+});

@@ -16,6 +16,8 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns -o "$OUT/Contents/Resources/Lantern.icns" build/Lantern.iconset
 swiftc -O -target "$(uname -m)-apple-macos13" -framework AppKit -framework WebKit -o "$OUT/Contents/MacOS/Lantern" *.swift
+# the now playing helper, which the server has /usr/bin/perl load (NowPlaying.swift)
+swiftc -O -target "$(uname -m)-apple-macos13" -parse-as-library -emit-library -o "$OUT/Contents/MacOS/NowPlaying.dylib" helper/NowPlayingHelper.swift
 codesign --force --sign - "$OUT"
 mkdir -p "$DEST"
 rm -rf "$DEST/Lantern.app" # also replaces a Safari "Add to Dock" Lantern, which lives at the same path

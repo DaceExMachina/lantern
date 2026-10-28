@@ -77,6 +77,10 @@ export interface GitHub { accounts: { login: string; error: string }[]; signIn: 
 export const isGitHub = (x: unknown): x is GitHub => isRecord(x)
   && arrayOf((a: unknown): a is GitHub['accounts'][number] => isRecord(a) && isString(a['login']) && isString(a['error']))(x['accounts'])
   && (x['signIn'] === null || isRecord(x['signIn']) && isString(x['signIn']['url']) && isString(x['signIn']['code']));
+/** What's playing on this Mac, from any app (app/NowPlaying.swift). Its cover comes on its own, as nowPlayingArt. */
+export interface NowPlaying { title: string; artist: string; app: string; playing: boolean }
+export const isNowPlaying = (x: unknown): x is NowPlaying => isRecord(x)
+  && isString(x['title']) && isString(x['artist']) && isString(x['app']) && isBoolean(x['playing']);
 
 // ---- settings.json, as the settings event sends it
 /** A session pinned to the sidebar, with whether its PRs show as chips. */

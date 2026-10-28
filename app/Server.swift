@@ -227,6 +227,7 @@ final class LanternServer {
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh
     var buried = Set<String>() // the stale list the log last saw, by url
+    var nowPlaying = "null", nowPlayingArt = "", nowPlayingInput: FileHandle? // what's playing and its cover as the pages last got them, and the helper's stdin (NowPlaying.swift)
 
     init(port: UInt16, data: String, web: String) {
         self.port = port
@@ -365,6 +366,7 @@ final class LanternServer {
         stats.award(warmGoal: warmGoal)
         seed()
         loadAccounts()
+        startNowPlaying()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
         if let mirror { follow(mirror) } else { // a preview's sessions come from the app; its own poll is enough for its PR lists
             listenLanternPR()
@@ -1125,6 +1127,12 @@ final class LanternServer {
             settingsChanged()
             return respond(c, 204)
         }
+        // The now playing widget's buttons, passed on to the helper (NowPlaying.swift).
+        if json && req.url == "/now-playing" {
+            guard let command = body?["command"] as? String, ["toggle", "next", "previous"].contains(command) else { return respond(c, 400) }
+            guard let input = nowPlayingInput else { return respond(c, 404) }
+            return respond(c, (try? input.write(contentsOf: Data((command + "\n").utf8))) != nil ? 204 : 404)
+        }
         if req.url == "/events" {
             clients[ObjectIdentifier(c)] = c
             c.stateUpdateHandler = { state in
@@ -1132,7 +1140,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\nevent: nowPlayingArt\ndata: \(jsonText(nowPlayingArt))\n\nevent: nowPlaying\ndata: \(nowPlaying)\n\ndata: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()

@@ -36,5 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Lantern.app compiles
         run: swiftc -typecheck app/*.swift
+      - name: The now playing helper compiles
+        run: swiftc -typecheck -parse-as-library app/helper/NowPlayingHelper.swift
       - name: The screensaver compiles
         run: swiftc -typecheck screensaver/LanternView.swift

@@ -114,6 +114,12 @@ The moon in the footer snoozes everything on every display until 8am, or the tim
 
 To have quiet come on by itself every night, switch "quiet from" on in the settings menu and pick a time. It works with no window open, since the app does it. It ends at "quiet until", or when you click the moon if that's off. If quiet is already on by then, it stays as it is, and if you end it early, it stays off until the next night.
 
+## Now playing
+
+When an app on your Mac is playing something (Spotify, Music, a video in a browser, a podcast), a small strip sits at the bottom left, just above the footer: the cover, the title, the artist and the app, with previous, play or pause, and next. It stays while that app has something paused, so you can play it again, and goes when nothing is up. It reads the same Now Playing information as Control Center's media widget, with no permission prompts.
+
+It gets there by an unofficial route: macOS only shares that information with Apple's own programs, so the app has the Mac's built-in `perl` load a small helper. A macOS update could close that route. If it does, the strip just never shows. To see it without playing anything, open the page with `?fakeplaying` (or the dev panel's "now playing" under Demo); its buttons then only change the made-up song.
+
 ## The app
 
 The installer puts `Lantern.app` in `~/Applications`. It's a plain window around the page, with the moth as its Dock icon and a badge counting the sessions that need you. It remembers where you left its window, and links open in your default browser. Drag it to your Dock to keep it there.
