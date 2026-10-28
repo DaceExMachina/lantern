@@ -269,7 +269,7 @@
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
   .moth { pointer-events: none; }
-  :is(#card, .starCard, #dock) .agents { margin-top: var(--space-1-5); color: var(--ink-dim); font-size: var(--text-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  :is(#card, .starCard, #dock) .agents { margin-top: var(--space-1-5); color: var(--ink-dim); font-size: var(--text-xs); }
   :is(#card, .starCard, #dock) .pr { display: flex; align-items: baseline; gap: 0 var(--space-1); white-space: nowrap; }
   :is(#card, .starCard, #dock) .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
   :is(#card, .starCard, #dock) .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
@@ -324,7 +324,7 @@
   #card .hint { margin-top: var(--space-0-5); color: var(--ink-faint); font-size: var(--text-xs); }
   :is(#card, #dock) .tray { margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--surface-tray); border-top: 1px solid var(--line-soft); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
   :is(#card, #dock) .tray .foot { margin-top: var(--space-1-5); }
-  :is(#card, #dock) .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  :is(#card, #dock) .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); }
   :is(#card, #dock) .head .r { text-transform: none; letter-spacing: 0; }
   :is(#card, #dock) .tray > :not(:first-child):is(.head, .phead) { margin-top: var(--space-3); }
   /* the agents' own band, tinted cool and edge to edge across the tray, as in the mockups' agent tray */
@@ -355,7 +355,7 @@
   :is(#card, #dock) .phead { display: flex; gap: var(--space-1-5); align-items: center; color: var(--ink-dim); }
   :is(#card, #dock) .ph { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#card, #dock) .ph .sum { font-size: var(--text-xs); }
-  :is(#card, #dock) .ph b { font-weight: var(--weight-regular); letter-spacing: var(--tracking-label); text-transform: uppercase; }
+  :is(#card, #dock) .ph b { font-weight: var(--weight-regular); }
   :is(#card, #dock) .ph.title { color: var(--ink-strong); }
   /* the toggle's zone is the rest of the PR header row after the summary, its full height and out to the tray's edge,
      with the icon at its right end */
