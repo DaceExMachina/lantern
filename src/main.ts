@@ -24,8 +24,8 @@ createApp(DevPanel).mount(document.body.appendChild(document.createElement('div'
 createApp(SettingsMenu).use(pinia).mount('#menu');
 createApp(SessionCard).use(pinia).mount('#card'); // the scene shows, hides and places #card (src/scene/card.ts)
 createApp(PinnedDock).use(pinia).mount('#dock .stack');
-createApp(StatusLine).use(pinia).mount('#statusSlot');
-createApp(NowPlaying).use(pinia).mount('#nowPlayingSlot'); // display: contents; the widget places itself above the footer // display: contents, so the line is the footer's own grid item
+createApp(StatusLine).use(pinia).mount('#statusSlot'); // display: contents, so the line is the footer's own grid item
+createApp(NowPlaying).use(pinia).mount('#nowPlayingSlot'); // display: contents; the widget places itself above the footer
 const store = useLanternStore(pinia);
 // the scene's side of the store: copied over after a sync and when the card's target changes, never per frame
 chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.now = Date.now(); };

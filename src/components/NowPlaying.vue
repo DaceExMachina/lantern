@@ -11,8 +11,7 @@ import type { NowPlaying } from '../types';
 
 const store = useLanternStore();
 const FAKE: NowPlaying = { title: 'Idyll of Sorrow', artist: 'ASC', app: 'Spotify', playing: true };
-const fake = shallowRef<NowPlaying | null>(null);
-fake.value = devToggle('Demo', 'fakeplaying', 'now playing', false, 'A made-up song in the now playing widget, whose buttons only change it here', v => { fake.value = v ? FAKE : null; }) ? FAKE : null;
+const fake = shallowRef<NowPlaying | null>(devToggle('Demo', 'fakeplaying', 'now playing', false, 'A made-up song in the now playing widget, whose buttons only change it here', v => { fake.value = v ? FAKE : null; }) ? FAKE : null);
 const item = computed(() => fake.value ?? store.nowPlaying);
 const art = computed(() => fake.value ? '/icon.png' : store.nowPlayingArt);
 const by = computed(() => [item.value?.artist, item.value?.app].filter(Boolean).join(' · '));

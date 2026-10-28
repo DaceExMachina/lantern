@@ -227,7 +227,8 @@ final class LanternServer {
     var ownedPRs: [String: (need: String, session: String)] = [:]
     var strays: Int? // open PRs of mine that no session owns, as of the last refresh
     var buried = Set<String>() // the stale list the log last saw, by url
-    var nowPlaying = "null", nowPlayingArt = "", nowPlayingInput: FileHandle? // what's playing and its cover as the pages last got them, and the helper's stdin (NowPlaying.swift)
+    var nowPlaying = "null", nowPlayingArt = "" // what's playing and its cover, as the pages last got them (NowPlaying.swift)
+    var nowPlayingHelper: (process: Process, input: FileHandle)? // the helper running now, and its stdin
 
     init(port: UInt16, data: String, web: String) {
         self.port = port
@@ -1130,7 +1131,7 @@ final class LanternServer {
         // The now playing widget's buttons, passed on to the helper (NowPlaying.swift).
         if json && req.url == "/now-playing" {
             guard let command = body?["command"] as? String, ["toggle", "next", "previous"].contains(command) else { return respond(c, 400) }
-            guard let input = nowPlayingInput else { return respond(c, 404) }
+            guard let input = nowPlayingHelper?.input else { return respond(c, 404) }
             return respond(c, (try? input.write(contentsOf: Data((command + "\n").utf8))) != nil ? 204 : 404)
         }
         if req.url == "/events" {

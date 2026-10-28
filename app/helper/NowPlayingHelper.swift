@@ -84,6 +84,7 @@ func emit() {
             if let c = COMMANDS[line] { _ = sendCommand(c, nil) }
         }
     }
+    DispatchQueue.global().async { while getppid() != 1 { sleep(5) }; exit(0) } // the server died without closing stdin: don't linger
     emit()
     CFRunLoopRun()
 }
