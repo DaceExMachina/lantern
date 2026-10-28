@@ -417,16 +417,19 @@ test('hovering a ghost or a wisp shows a compact card with a hint that names its
   assert.deepStrictEqual(hint(card), [], 'and expanded, no hint');
 });
 
-test('PRs in one repo name it after "PRs"; across repos chips split into a section per repo and rows name theirs after the dot', async () => {
+test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the total sits over a section per repo, in chips and rows', async () => {
   const mixed = [pr(1, 'ready', 'api'), pr(2, 'draft', 'extension'), pr(3, 'feedback', 'api')];
-  settings({ prList: { s1: false } });
-  const chips = await show(session({ github: mixed }));
-  assert.deepStrictEqual(find(chips, 'ph').map(text), ['PRs · api · 1 feedback waiting · 1 ready', 'extension · 1 draft'], 'a section per repo, the first headed PRs');
-  assert.deepStrictEqual(find(chips, 'ph').map(h => h.title), ['o/api', 'o/extension'], 'the owner is in the tooltip');
-  assert.strictEqual(find(chips, 'tog').length, 1, 'one toggle');
-  settings({ prList: { s1: true } });
-  const rows = await show(session({ github: mixed }));
-  assert.deepStrictEqual(find(rows, 'ph').map(text), ['PRs · 1 feedback waiting · 1 ready · 1 draft'], 'one header, no repo');
-  assert.deepStrictEqual(find(rows, 'repo').map(text), ['api', 'api', 'extension']);
-  assert.strictEqual(find(await show(session({ github: [pr(1, 'ready', 'api'), pr(2, 'draft', 'api')] })), 'repo').length, 0, 'a single repo is in the header only');
+  for (const listed of [false, true]) {
+    settings({ prList: { s1: listed } });
+    const card = await show(session({ github: mixed }));
+    assert.deepStrictEqual(find(card, 'phead').map(text), ['PRs3', 'api · 1 feedback waiting · 1 ready', 'extension · 1 draft'], `a heading with the total, then a section per repo (listed ${listed})`);
+    assert.deepStrictEqual(find(card, 'ph').map(h => h.title), ['', 'o/api', 'o/extension'], 'the owner is in the tooltip');
+    assert.strictEqual(find(card, 'tog').length, 1, 'one toggle, on the heading');
+    assert.strictEqual(find(find(card, 'phead')[0], 'tog').length, 1);
+    assert.strictEqual(find(card, 'repo').length, 0, 'rows leave the repo to their section');
+  }
+  const rows = find(await show(session({ github: mixed })), 'tray')[0].children;
+  assert.deepStrictEqual([...rows].map(r => r.className.split(' ')[0]), ['phead', 'phead', 'pr2', 'pr2', 'phead', 'pr2', 'foot'], 'rows sit under their own repo');
+  const one = await show(session({ github: [pr(1, 'ready', 'api'), pr(2, 'draft', 'api')] }));
+  assert.deepStrictEqual(find(one, 'phead').map(text), ['PRs · api · 1 ready · 1 draft'], 'a single repo is baked into the one heading');
 });

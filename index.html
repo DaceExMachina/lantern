@@ -356,6 +356,10 @@
   :is(#card, #dock) .ph { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#card, #dock) .ph .sum { font-size: var(--text-xs); }
   :is(#card, #dock) .ph b { font-weight: var(--weight-regular); }
+  /* several repos: the "PRs" heading, bright like the agents' with the total beside the toggle at the right, tight over the first repo's section */
+  :is(#card, #dock) .phead.top { color: var(--ink); }
+  :is(#card, #dock) .phead.top .n { margin-right: var(--space-1-5); font-size: var(--text-xs); color: var(--ink-dim); }
+  :is(#card, #dock) .tray > .phead.top + .phead { margin-top: var(--space-1); }
   :is(#card, #dock) .ph.title { color: var(--ink-strong); }
   /* the toggle's zone is the rest of the PR header row after the summary, its full height and out to the tray's edge,
      with the icon at its right end */
@@ -378,7 +382,6 @@
   :is(#card, #dock) .pr2 .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#card, #dock) .pr2 .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
   :is(#card, #dock) .pr2 .me .t { margin-left: auto; font-family: var(--font-mono); font-variant-numeric: tabular-nums; } /* like an agent's time */
-  :is(#card, #dock) .pr2 .me .repo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :is(#card, #dock) .pr2 .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
   :is(#card, #dock) .more { font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
   #card button.more { display: block; width: 100%; } /* the agents' "n more": its zone is the band's width */

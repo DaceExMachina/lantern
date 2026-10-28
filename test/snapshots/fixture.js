@@ -54,7 +54,7 @@
         subagents: [{ id: 'a1', type: 'opus-supervisor', description: 'Supervisor', activity: 'Reading' }, { id: 'a2', type: 'Explore', description: 'Search' }],
         github: [pr(1, 'ready'), pr(2, 'failing'), pr(3, 'changes'), pr(4, 'draft'), pr(5, 'waiting')] }),
       s('sess-bravo', { state: 'waiting', waitingSince: now - 20 * MIN, note: 'Needs approval', prose: words(2), // waited 15+ min: restless, hops
-        github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes', 'lantern-pr')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
+        github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes'), pr(9, 'draft', 'lantern-pr')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
       s('sess-charlie', { state: 'waiting', snoozed: true, forGood: !!phase, waitingSince: now - 3 * MIN, subagents: [{ id: 'c1', type: 'Explore', description: 'Agent' }] }),
       s('sess-delta', { state: 'working', parent: 'sess-alpha', activity: 'Side work' }), // a satellite
       s('sess-golf', { state: 'waiting', parent: 'sess-bravo', waitingSince: now - 2 * MIN }), // a satellite waiting: paused
@@ -122,6 +122,7 @@
     async () => { await page.openRecap(6); }, snap('recap'), () => { page.$('recap').hidePopover(); },
     () => { page.enterZone(page.live.moths.get('sess-alpha').zone); }, run(0.1), snap('card-hover'),
     expand('sess-alpha'), snap('card'), () => { page.hideCard(); },
+    expand('sess-bravo'), snap('card-multi'), () => { page.hideCard(); }, // PRs in two repos
     () => { page.toggleDevPanel(); }, snap('dev'),
     // last, because it changes settings the scenes above rely on: the menu with other settings, accounts connected, the home-grown
     // switches flipped and times of day with a single-digit hour (which the time inputs need padded)
