@@ -137,7 +137,7 @@ test('no pin and no sidebar under 800px wide, in the iTerm panel or the screensa
   assert.deepStrictEqual(docked(), ['proj'], 'and the remembered pin docks again');
 });
 
-test('each pinned section\'s PRs toggle to chips on their own, kept with the pin, apart from the card\'s', async () => {
+test('each pinned section\'s PRs toggle to chips on their own, kept with the pin, and the card has none', async () => {
   const a = session({ github: TEN }), b = session({ id: 's2', title: 'bravo', github: TEN });
   setSessions(a, b);
   await pins({ id: 's1' }, { id: 's2' });
@@ -148,10 +148,8 @@ test('each pinned section\'s PRs toggle to chips on their own, kept with the pin
   tog.click(); await nextTick();
   assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'only that section turns to chips');
   assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { pinned: [{ id: 's1', chips: true }, { id: 's2' }] }]), 'kept with its pin');
-  assert.deepStrictEqual([find(await show(a), 'chips').length, find(await show(a), 'pr2').length], [1, 0], 'the card keeps its own rule (chips past three PRs)');
-  assert.strictEqual(store.settings.prList, undefined, 'and the card\'s setting is untouched');
-  store.settings = parseSettings({ ...store.settings, prList: { s2: false } }); await nextTick();
-  assert.deepStrictEqual(listed(), [[0, 1], [11, 0]], 'nor does the card\'s setting reach the sidebar');
+  const card = await show(a);
+  assert.deepStrictEqual([find(card, 'chips').length, find(card, 'pr2').length, find(card, 'tog').length], [1, 0, 0], 'the card is always chips, with no toggle');
   find(sections()[0], 'tog')[0].click(); await nextTick();
   assert.deepStrictEqual(listed(), [[11, 0], [11, 0]], 'and back');
   // another window, from the server's settings
@@ -161,15 +159,40 @@ test('each pinned section\'s PRs toggle to chips on their own, kept with the pin
   assert.deepStrictEqual(sections().map(sec => [find(sec, 'pr2').length, find(sec, 'chips').length]), [[11, 0], [0, 1]]);
 });
 
-test('a chip under the pointer puts its PR\'s title in its section\'s header, as on the card', async () => {
+test('a chip or a cut-short row puts its PR\'s title in the tooltip, and the header stays put', async () => {
+  const tip = $('prTip');
   setSessions(session({ github: TEN }));
   await pins({ id: 's1', chips: true });
   const header = () => text(find($('dock'), 'ph')[0]);
-  assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
   fire(find($('dock'), 'chips')[0].children[1], 'pointerenter'); await nextTick();
-  assert.strictEqual(header(), 'PR 4 title');
-  fire(find($('dock'), 'chips')[0].children[1], 'pointerleave'); await nextTick();
-  assert.strictEqual(header(), 'PRs · 1 ready · 2 in review · 8 drafts');
+  assert.deepStrictEqual([text(tip), tip.className, header()], ['PR 4 title', 'badgeTip show', 'PRs · r · 1 ready · 2 in review · 8 drafts']);
+  fire(find($('dock'), 'chips')[0].children[1], 'pointerleave');
+  assert.strictEqual(tip.className, 'badgeTip');
+  await pins({ id: 's1' });
+  const [row] = find($('dock'), 'pr2'), [ti] = find(row, 'ti');
+  const width = (scroll, client) => { for (const [k, v] of [['scrollWidth', scroll], ['clientWidth', client]]) Object.defineProperty(ti, k, { value: v, configurable: true }); };
+  width(150, 190);
+  fire(row, 'pointerenter');
+  assert.strictEqual(tip.className, 'badgeTip', 'a row that fits: no tip');
+  width(400, 190);
+  fire(row, 'pointerenter');
+  assert.deepStrictEqual([text(tip), tip.className], [text(ti), 'badgeTip show'], 'cut short: its full title');
+});
+
+test('a listed PR shows how long it has been open, and across repos a heading with the total sits over a section per repo', async () => {
+  setSessions(session({ github: [{ ...pr(1, 'ready'), createdAt: new Date(now - 3 * 86400e3 - 60e3).toISOString() }, pr(2, 'draft')] }));
+  await pins({ id: 's1' });
+  assert.deepStrictEqual(find($('dock'), 'me').map(l => l.childNodes[l.childNodes.length - 1].className), ['t', undefined], 'only with a createdAt');
+  assert.strictEqual(text(find($('dock'), 'me')[0].lastChild), '3d');
+  const mixed = [{ ...pr(1, 'ready'), url: 'https://github.com/o/api/pull/1' }, { ...pr(2, 'draft'), url: 'https://github.com/o/extension/pull/2' }, { ...pr(3, 'feedback'), url: 'https://github.com/o/api/pull/3' }];
+  setSessions(session({ github: mixed }));
+  for (const chips of [false, true]) {
+    await pins({ id: 's1', chips });
+    const dock = $('dock');
+    assert.deepStrictEqual(find(dock, 'phead').map(text), ['PRs3', 'api · 1 feedback waiting · 1 ready', 'extension · 1 draft'], `chips ${chips}`);
+    assert.strictEqual(find(dock, 'tog').length, 1, 'one toggle, on the heading');
+    assert.deepStrictEqual([...find(dock, 'tray')[0].children].map(r => r.className.split(' ')[0]), chips ? ['phead', 'phead', 'chips', 'phead', 'chips', 'foot'] : ['phead', 'phead', 'pr2', 'pr2', 'phead', 'pr2', 'foot']);
+  }
 });
 
 test('the closed sidebar is inert: out of the tab order and the accessibility tree, with nothing pinned or under 800px', async () => {

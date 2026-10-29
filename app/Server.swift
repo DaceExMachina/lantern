@@ -238,6 +238,7 @@ final class LanternServer {
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
         if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
+        settings["prList"] = nil // the card's old per-session PR list setting, dropped with the card's list view (goes from the file at the next save)
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_CONFIG_DIR = (dir as NSString).expandingTildeInPath }
         EXTRA_CLAUDE_DIRS += (settings["claudeDirs"] as? [String]) ?? []
         CLAUDE_DIRS = claudeDirs()
@@ -1095,15 +1096,6 @@ final class LanternServer {
                 if let on = j["quietEndOn"] as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() {
                     settings["quietEndOn"] = on.boolValue; ok = true
                     if ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now() { settings["quietUntil"] = quietEndsAt() }
-                }
-                // whether a session's card lists its PRs (true) or shows them as chips, so every window agrees; only live
-                // sessions are kept
-                if let list = j["prList"] as? JSON {
-                    var kept = (settings["prList"] as? JSON ?? [:]).filter { sessions[$0.key] != nil }
-                    for (id, v) in list where sessions[id] != nil {
-                        if let on = v as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() { kept[id] = on.boolValue; ok = true }
-                    }
-                    settings["prList"] = kept
                 }
                 // the sessions pinned to the sidebar, in the order they were pinned, so every window shows the same: the whole
                 // list each time, each `{ id, chips }` (chips: its PRs as chips rather than listed). Each one is a live session

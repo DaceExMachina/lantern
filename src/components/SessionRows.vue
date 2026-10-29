@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A session on the hover card, or (dock) in the pinned sidebar. Hovered (compact), just the header, one line of what it's
-// doing or wants, a count of its work, and a hint at the moth's clicks. Otherwise in full: the whole prompt, agents open, every PR listed until
-// that pin's own toggle (kept with the pin) turns them into chips. The header opens the session (shift-click snoozes, as on its moth), its
+// doing or wants, a count of its work, and a hint at the moth's clicks. Otherwise in full: the whole prompt, agents open, in the sidebar every PR listed until
+// that pin's own toggle (kept with the pin) turns them into chips; the card only ever shows chips. The header opens the session (shift-click snoozes, as on its moth), its
 // pill cycles the snooze as a right-click on the moth does, and its pin pins it to the sidebar; the header stays put and the
 // body below scrolls when the card would be taller than the window. The top of the body is what it wants from me (a state
 // line only where it says more than the pill, its questions, its "You:" message as a quote), then the work in its tray:
@@ -10,8 +10,7 @@
 // edges) and an inner .face that's the visible pill or hover, the size it always was (index.html). Each keeps its element
 // through a re-render (stable keys, no swapping a control out), since WebKit drops a click whose pressed button is replaced.
 import { computed, reactive, ref } from 'vue';
-import { AGENT_CAP, PR_CAP, cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, project, running, sideRow, stateLine } from '../scene/card';
-import { post } from '../scene/scene';
+import { AGENT_CAP, cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, project, running, sideRow, stateLine } from '../scene/card';
 import { useLanternStore } from '../stores/lantern';
 import type { Session } from '../types';
 import AgentRow from './AgentRow.vue';
@@ -40,15 +39,9 @@ const counts = computed(() => {
   return [run.value.count, n(side.value.length, 'side session'), n(props.s.github?.length ?? 0, 'PR')].filter(Boolean).join(' · ');
 });
 const toggleAgent = (id: string) => { if (!openAgents.delete(id)) openAgents.add(id); };
-// The PRs are listed or chips, per session, kept in the server's settings (prList) so every window agrees; until it's used,
-// three PRs or fewer are listed. A toggle shows at once, then the settings event confirms it.
-const listed = computed(() => props.dock ? !pin.value?.chips : store.settings.prList?.[props.s.id] ?? (props.s.github?.length ?? 0) <= 3);
-function toggleList() {
-  if (props.dock) { store.setPins(store.pinned.map(p => p.id === props.s.id ? { ...p, chips: listed.value } : p)); return; }
-  const prList = { ...store.settings.prList, [props.s.id]: !listed.value };
-  store.settings = { ...store.settings, prList };
-  post('/settings', { prList: { [props.s.id]: prList[props.s.id] } });
-}
+// In the sidebar the PRs are listed or chips, per pin; the card only shows chips (listed stays undefined: no toggle).
+const listed = computed(() => props.dock ? !pin.value?.chips : undefined);
+const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id ? { ...p, chips: !p.chips } : p));
 </script>
 
 <template>
@@ -68,7 +61,7 @@ function toggleList() {
     <div v-if="run.rows.length || side.length || s.github?.length" class="tray">
       <div v-if="run.rows.length" class="agentZone"><div class="head">Running<span class="r">{{ run.count }}</span></div><AgentRow v-for="r in agents" :key="r.id" :row="r" :now :open="dock || openAgents.has(r.id)" :plain="dock" @toggle="toggleAgent(r.id)" /><button v-if="agents.length < run.rows.length" class="more" @click="allAgents = true"><span class="face">{{ `${run.rows.length - agents.length} more` }}</span></button></div>
       <template v-if="side.length"><div class="head">Side sessions<span class="r">{{ side.length }}</span></div><AgentRow v-for="o in side" :key="o.id" :row="sideRow(o)" :now :open="dock || openAgents.has(o.id)" :plain="dock" @toggle="toggleAgent(o.id)" /></template>
-      <PrBlock v-if="s.github?.length" :prs="s.github" :listed :now :cap="dock ? Infinity : PR_CAP" @toggle="toggleList" />
+      <PrBlock v-if="s.github?.length" :prs="s.github" :listed :now @toggle="toggleList" />
       <div class="foot">{{ footLine(s, now) }}</div>
     </div>
     <div v-else class="foot">{{ footLine(s, now) }}</div>

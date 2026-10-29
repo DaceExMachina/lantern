@@ -9,7 +9,7 @@ import type { Agent, CardAt, Hovered, PR, Session, Zone } from '../types';
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
 export const project = (s: Session) => (s.cwd ?? '').split('/').filter(Boolean).pop() || '(unknown)';
 // Where a floating tip goes beside `el`, in window px: centred above it, or below when there's no room, and kept 8px
-// inside the window. A badge's tip and an overflow PR's both use it.
+// inside the window. A badge's tip and a PR chip's or cut-short row's both use it.
 export function tipSpot(tip: HTMLElement, el: Element) {
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
   const min = Math.max(8, titlebar());
@@ -107,11 +107,9 @@ export const stepOf = (activity: string) => activity.replace(TAG, '');
 export const footLine = (s: Session, now: number) => `${project(s)} · ${short(now - (s.started ?? now))} old · active ${short(now - (s.last ?? now))} ago`;
 
 // The session's PRs, worst first, under a header that sums them up ("PRs · 1 ready · 2 in review · 8 drafts"). Either
-// chips coloured by state, each putting its title in the header while hovered, or two-line rows (title; dot, number,
-// state) capped at the worst PR_CAP so the card still fits beside its moth.
+// chips coloured by state (its title in #prTip while hovered), or in the sidebar two-line rows (title; dot, number, state).
 const ORDER = ['failing', 'changes', 'feedback', 'ready', 'waiting', 'draft', 'merged', 'closed'];
 const SHORT: Record<string, string | undefined> = { ...NEED, ready: 'ready', failing: 'failing' };
-export const PR_CAP = 4;
 export const AGENT_CAP = 5; // the expanded card's agents, past which a "more" button lists the rest
 const rank = (need: string) => (ORDER.indexOf(need) + 1) || ORDER.length + 1;
 export const worstFirst = (prs: PR[]) => [...prs].sort((a, b) => rank(a.need) - rank(b.need));
@@ -120,7 +118,12 @@ export function prSummary(prs: PR[]) {
   for (const p of prs) n.set(p.need, (n.get(p.need) || 0) + 1);
   return [...n].sort(([a], [b]) => rank(a) - rank(b)).map(([k, c]) => `${c} ${k === 'changes' && c === 1 ? 'change requested' : SHORT[k] || k}${k === 'draft' && c > 1 ? 's' : ''}`).join(' · ');
 }
-// A PR's title where a card doesn't already show it in full: an overflow link past the cap (a bare number), or a list row
+// A PR's repo from its url (github.com/owner/name/pull/n): the short name to show, the full owner/name for a tooltip.
+export function repoOf(url: string) {
+  const full = new URL(url).pathname.split('/').slice(1, 3).join('/');
+  return { full, name: full.split('/')[1] ?? full };
+}
+// A PR's title where a card doesn't already show it in full: a chip (a bare number), or a list row
 // whose title is cut short. It's the badges' tooltip (#prTip, outside the redrawn rows so a redraw leaves it be), shown
 // while hovered or focused and placed as a badge's is (tipSpot).
 let tipFor: Element | null = null; // the link #prTip was shown for

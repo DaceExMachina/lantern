@@ -42,7 +42,7 @@
   const MIN = 60000, Q = new URLSearchParams(location.search);
   // the page's names, looked up in its modules when called (src/main.ts puts them on window once they've loaded)
   const page = new Proxy({}, { get: (_, k) => Object.values(window.lanternModules).find(m => k in m)?.[k] });
-  const pr = (n, need) => ({ url: `https://github.com/acme/app/pull/${n}`, need, label: `app#${n}`, title: `PR ${n}: ${need} change` });
+  const pr = (n, need, repo = 'app') => ({ url: `https://github.com/acme/${repo}/pull/${n}`, need, label: `${repo}#${n}`, title: `PR ${n}: ${need} change` });
   const words = i => [`The lantern hangs over the desk and every session is a moth around it, number ${i}.`,
     'When one of them needs an answer it lands on the paper and waits there quietly until somebody looks.'];
   // phase 0 at the start, phase 1 later: a PR merged, a snooze made permanent, an idle session gone
@@ -54,7 +54,7 @@
         subagents: [{ id: 'a1', type: 'opus-supervisor', description: 'Supervisor', activity: 'Reading' }, { id: 'a2', type: 'Explore', description: 'Search' }],
         github: [pr(1, 'ready'), pr(2, 'failing'), pr(3, 'changes'), pr(4, 'draft'), pr(5, 'waiting')] }),
       s('sess-bravo', { state: 'waiting', waitingSince: now - 20 * MIN, note: 'Needs approval', prose: words(2), // waited 15+ min: restless, hops
-        github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
+        github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes'), pr(9, 'draft', 'lantern-pr')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
       s('sess-charlie', { state: 'waiting', snoozed: true, forGood: !!phase, waitingSince: now - 3 * MIN, subagents: [{ id: 'c1', type: 'Explore', description: 'Agent' }] }),
       s('sess-delta', { state: 'working', parent: 'sess-alpha', activity: 'Side work' }), // a satellite
       s('sess-golf', { state: 'waiting', parent: 'sess-bravo', waitingSince: now - 2 * MIN }), // a satellite waiting: paused
@@ -135,6 +135,7 @@
     async () => { await page.openRecap(6); }, snap('recap'), () => { page.$('recap').hidePopover(); },
     () => { page.enterZone(page.live.moths.get('sess-alpha').zone); }, run(0.1), snap('card-hover'),
     expand('sess-alpha'), snap('card'), () => { page.hideCard(); },
+    expand('sess-bravo'), snap('card-multi'), () => { page.hideCard(); }, // PRs in two repos
     () => { page.toggleDevPanel(); }, snap('dev'),
     // last, because it changes settings the scenes above rely on: the menu with other settings, accounts connected, the home-grown
     // switches flipped and times of day with a single-digit hour (which the time inputs need padded)
@@ -145,23 +146,17 @@
       page.$('menu').showPopover();
     }, snap('menu-alt'),
   ];
-  // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): the PR toggle's is the rest of its header row (its top
-  // and bottom right corners and just left of its icon), and each corner of the header's buttons, an agent row and a PR
-  // row lands on that control, the header's out to the card's own corners.
+  // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
+  // lands on that control, the header's out to the card's own corners.
   const hits = () => {
-    const card = page.$('card'), row = card.querySelector('.phead').getBoundingClientRect(), tog = card.querySelector('.tog'), icon = tog.querySelector('svg').getBoundingClientRect();
+    const card = page.$('card');
     const probe = (el, what, points) => { for (const [where, x, y] of points) if (document.elementFromPoint(x, y)?.closest('a, button') !== el) errs.push(`${what}'s hit area misses its ${where}`); };
-    probe(tog, 'the PR toggle', [['row\'s top-right corner', row.right - 1, row.top + 1], ['row\'s bottom-right corner', row.right - 1, row.bottom - 1], ['left of its icon', icon.left - 4, icon.top + icon.height / 2]]);
     const c = card.getBoundingClientRect();
     probe(card.querySelector('h3 .open'), 'the header\'s open button', [['card\'s top-left corner', c.left + 3, c.top + 3]]);
     probe(card.querySelector('h3 .chip'), 'the status pill', [['card\'s top-right corner', c.right - 3, c.top + 3]]);
-    // a row's zone runs out to the edges of the band or tray it sits in, and the gap below it is half its own
-    for (const [sel, what] of [['.agent', 'an agent row'], ['a.pr2', 'a PR row']]) {
-      const el = card.querySelector(sel), face = el.querySelector('.face').getBoundingClientRect(), edge = el.closest('.tray').getBoundingClientRect();
-      probe(el, what, [['tray\'s left edge', edge.left + 1, face.top + 2], ['tray\'s right edge', edge.right - 1, face.top + 2]]);
-    }
-    const [one, two] = [...card.querySelectorAll('a.pr2 .face')].map(f => f.getBoundingClientRect()), between = document.elementFromPoint(one.left + 10, (one.bottom + two.top) / 2);
-    if (!between?.closest('a.pr2')) errs.push('the gap between two PR rows belongs to neither');
+    // a row's zone runs out to the edges of the band or tray it sits in
+    const el = card.querySelector('.agent'), face = el.querySelector('.face').getBoundingClientRect(), edge = el.closest('.tray').getBoundingClientRect();
+    probe(el, 'an agent row', [['tray\'s left edge', edge.left + 1, face.top + 2], ['tray\'s right edge', edge.right - 1, face.top + 2]]);
   };
   // With the sidebar docked, the scene has the rest of the window, and fitView has followed it (each frame,
   // since the window itself didn't resize): the viewBox has the scene's shape, the background canvas its size, and a
@@ -233,19 +228,13 @@
         await redraw();
         if (document.elementFromPoint(x, y) !== under || !under.isConnected) fail('a redraw swapped the element under the pointer, which loses its hover');
       },
-      () => { tog = q('.tog'); tog.scrollIntoView({ block: 'nearest' }); open = tog.getAttribute('aria-expanded'); return `down ${mid(tog).join(' ')}`; },
-      async () => { await redraw(); return `up ${mid(tog).join(' ')}`; }, // a re-render lands between press and release
-      () => {
-        if (q('.tog') !== tog) fail('a re-render mid-press replaced the PR toggle, so WebKit drops the click');
-        if (q('.tog').getAttribute('aria-expanded') === open) fail('a press on the PR toggle across a redraw didn\'t toggle');
-      },
-      async () => { // the PRs are listed now: an overflow link's tip, after a redraw, sits beside the link on screen
+      async () => { // a chip's tip, after a redraw, sits beside the chip on screen
         await redraw();
-        const ov = q('.ov'), tip = page.$('prTip');
-        ov.scrollIntoView({ block: 'nearest' }); ov.focus();
-        const a = ov.getBoundingClientRect(), t = tip.getBoundingClientRect();
-        if (!tip.matches('.show') || Math.abs(t.bottom + 8 - a.top) > 1 && Math.abs(t.top - 8 - a.bottom) > 1) fail(`the tip is at ${t.top}-${t.bottom}, its link at ${a.top}-${a.bottom}`);
-        ov.blur();
+        const chip = q('.chips a'), tip = page.$('prTip');
+        chip.scrollIntoView({ block: 'nearest' }); chip.focus();
+        const a = chip.getBoundingClientRect(), t = tip.getBoundingClientRect();
+        if (!tip.matches('.show') || Math.abs(t.bottom + 8 - a.top) > 1 && Math.abs(t.top - 8 - a.bottom) > 1) fail(`the tip is at ${t.top}-${t.bottom}, its chip at ${a.top}-${a.bottom}`);
+        chip.blur();
       },
       async () => { // an agent ends while a later one has focus: the focused row is still that agent's, and it all matches a fresh card
         row = [...page.$('card').querySelectorAll('.agent')].find(r => r.textContent.includes('Agent 2')); row.focus();
@@ -255,12 +244,12 @@
         row.blur();
         if (!await freshCard()) fail('after an agent ended, the patched card differs from a fresh one');
       },
-      async () => { // a PR above the focused one re-ranks below it, which moves the focused row
-        const rows = [...page.$('card').querySelectorAll('a.pr2')], focused = rows[1], url = focused?.href, above = rows[0].href;
-        if (!focused) return fail('no listed PRs to focus');
+      async () => { // a PR above the focused one re-ranks below it, which moves the focused chip
+        const rows = [...page.$('card').querySelectorAll('.chips a')], focused = rows[1], url = focused?.href, above = rows[0].href;
+        if (!focused) return fail('no PR chips to focus');
         focused.focus();
         big.github = big.github.map(p => p.url === above ? { ...p, need: 'changes' } : p); await redraw();
-        if (page.$('card').querySelectorAll('a.pr2')[0].href !== url) return fail('the re-rank didn\'t move the focused row up');
+        if (page.$('card').querySelectorAll('.chips a')[0].href !== url) return fail('the re-rank didn\'t move the focused chip up');
         if (document.activeElement?.href !== url) fail(`focus went to ${document.activeElement?.href || document.activeElement?.className} when a PR re-ranked`);
         focused.blur();
         if (!await freshCard()) fail('after a PR re-ranked, the patched card differs from a fresh one');
