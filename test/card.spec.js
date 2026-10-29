@@ -193,10 +193,6 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
   assert.strictEqual((await pill({})).getAttribute('aria-label'), 'needs you: snooze');
 });
 
-test('no PR chip carries a native "#n" title', async () => {
-  assert.deepStrictEqual(anchors(await show(session({ github: TEN }))).map(a => a.title).filter(Boolean), []);
-});
-
 test('an agent with no tag or model is two lines (job beside the dot), and a shell command has "shell" in the model\'s place', async () => {
   const card = await show(session({ state: 'working', tasks: ['npm run preview'], subagents: [
     { id: 'a', description: 'Tagged', model: 'Opus 5.5', activity: '[t] Step', started: now - 1e3, last: now },

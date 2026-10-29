@@ -9,7 +9,7 @@ import type { Agent, CardAt, Hovered, PR, Session, Zone } from '../types';
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
 export const project = (s: Session) => (s.cwd ?? '').split('/').filter(Boolean).pop() || '(unknown)';
 // Where a floating tip goes beside `el`, in window px: centred above it, or below when there's no room, and kept 8px
-// inside the window. A badge's tip and an overflow PR's both use it.
+// inside the window. A badge's tip and a PR chip's or cut-short row's both use it.
 export function tipSpot(tip: HTMLElement, el: Element) {
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
   const min = Math.max(8, titlebar());

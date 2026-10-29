@@ -357,6 +357,7 @@
   :is(#card, #dock) .ph b.prs { color: var(--ink); } /* the "PRs" word, bright with one repo or several */
   /* several repos: the "PRs" heading with the total beside the toggle at the right, tight over the first repo's section */
   :is(#card, #dock) .phead.top .n { margin-right: var(--space-1-5); font-size: var(--text-xs); color: var(--ink-dim); }
+  :is(#card, #dock) .phead.top > .n { margin: 0 0 0 auto; } /* the card has no toggle to push it: at the right edge, like the counts below */
   :is(#card, #dock) .tray > .phead.top + .phead { margin-top: var(--space-1); }
   /* the toggle's zone is the rest of the PR header row after the summary, its full height and out to the tray's edge,
      with the icon at its right end */

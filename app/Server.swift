@@ -236,6 +236,7 @@ final class LanternServer {
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
         if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
+        settings["prList"] = nil // the card's old per-session PR list setting, dropped with the card's list view (goes from the file at the next save)
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_CONFIG_DIR = (dir as NSString).expandingTildeInPath }
         EXTRA_CLAUDE_DIRS += (settings["claudeDirs"] as? [String]) ?? []
         CLAUDE_DIRS = claudeDirs()
