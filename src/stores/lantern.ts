@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { post } from '../scene/scene';
 import { parseSettings } from '../types';
-import type { GitHub, Hovered, Pin, Review, Session, Settings, Stats } from '../types';
+import type { GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, Stats } from '../types';
 
 // No pinning where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
@@ -24,6 +24,8 @@ export const useLanternStore = defineStore('lantern', () => {
   const github = shallowRef<GitHub>({ accounts: [], signIn: null });
   const stats = shallowRef<Stats | null>(null);
   const statsFailed = ref(false);
+  const nowPlaying = shallowRef<NowPlaying | null>(null); // what's playing on this Mac, and its cover (a data URL, or "")
+  const nowPlayingArt = ref('');
   // ---- the pinned sidebar
   // The pins are a setting, so every window agrees and they survive a restart; one shows at once and the settings event confirms it.
   const pinned = computed(() => settings.value.pinned ?? []);
@@ -48,5 +50,5 @@ export const useLanternStore = defineStore('lantern', () => {
   // the card's pin and the sidebar's: pins or unpins a session, newest at the bottom
   const togglePin = (id: string) => setPins(pinned.value.some(p => p.id === id) ? pinned.value.filter(p => p.id !== id) : [...pinned.value, { id }]);
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
-  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, now, settings, reviews, link, github, stats, statsFailed, recap };
+  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, now, settings, reviews, link, github, stats, statsFailed, recap, nowPlaying, nowPlayingArt };
 });

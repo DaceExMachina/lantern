@@ -5,7 +5,7 @@
   "bin": { "claude-lantern": "install.js" },
   "files": [
     "install.js", "dist/", "fake.js",
-    "iterm/lantern.py", "app/build.sh", "app/Info.plist", "app/*.swift",
+    "iterm/lantern.py", "app/build.sh", "app/Info.plist", "app/*.swift", "app/helper/",
     "screensaver/build.sh", "screensaver/Info.plist", "screensaver/LanternView.swift"
   ],
   "os": ["darwin"],
