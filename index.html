@@ -356,8 +356,8 @@
   :is(#card, #dock) .ph { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#card, #dock) .ph .sum { font-size: var(--text-xs); }
   :is(#card, #dock) .ph b { font-weight: var(--weight-regular); }
-  /* several repos: the "PRs" heading, bright like the agents' with the total beside the toggle at the right, tight over the first repo's section */
-  :is(#card, #dock) .phead.top { color: var(--ink); }
+  :is(#card, #dock) .ph b.prs { color: var(--ink); } /* the "PRs" word, bright with one repo or several */
+  /* several repos: the "PRs" heading with the total beside the toggle at the right, tight over the first repo's section */
   :is(#card, #dock) .phead.top .n { margin-right: var(--space-1-5); font-size: var(--text-xs); color: var(--ink-dim); }
   :is(#card, #dock) .tray > .phead.top + .phead { margin-top: var(--space-1); }
   :is(#card, #dock) .ph.title { color: var(--ink-strong); }
