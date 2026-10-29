@@ -1128,9 +1128,10 @@ final class LanternServer {
             settingsChanged()
             return respond(c, 204)
         }
-        // The now playing widget's buttons, passed on to the helper (NowPlaying.swift).
+        // The now playing widget's buttons, passed on to the helper ("open" is ours: the app playing, to the front) (NowPlaying.swift).
         if json && req.url == "/now-playing" {
-            guard let command = body?["command"] as? String, ["toggle", "next", "previous"].contains(command) else { return respond(c, 400) }
+            guard let command = body?["command"] as? String, ["toggle", "next", "previous", "open"].contains(command) else { return respond(c, 400) }
+            if command == "open" { return respond(c, openNowPlayingApp() ? 204 : 404) } // the page's own, not the helper's
             guard let input = nowPlayingHelper?.input else { return respond(c, 404) }
             return respond(c, (try? input.write(contentsOf: Data((command + "\n").utf8))) != nil ? 204 : 404)
         }

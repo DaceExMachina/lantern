@@ -9,7 +9,7 @@ import { useLanternStore } from '../src/stores/lantern';
 
 let app, store, fetch;
 const widget = () => document.getElementById('nowPlaying');
-const SONG = { title: 'Idyll of Sorrow', artist: 'ASC', app: 'Spotify', playing: true };
+const SONG = { title: 'Idyll of Sorrow', artist: 'ASC', app: 'Spotify', bundle: 'com.spotify.client', playing: true };
 beforeEach(() => {
   fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve());
   const pinia = createPinia();
@@ -38,4 +38,13 @@ test('each button posts its command to /now-playing', async () => {
   for (const b of widget().querySelectorAll('button')) b.click();
   assert.deepStrictEqual(fetch.mock.calls.map(([url, o]) => [url, JSON.parse(o.body).command]),
     [['/now-playing', 'previous'], ['/now-playing', 'toggle'], ['/now-playing', 'next']]);
+});
+
+test('the cover and the words open the app that is playing, only when the server knows which it is', async () => {
+  store.nowPlayingArt = 'data:image/jpeg;base64,AAAA'; store.nowPlaying = SONG; await nextTick();
+  widget().querySelector('.art').click(); widget().querySelector('.what').click();
+  assert.deepStrictEqual(fetch.mock.calls.map(([url, o]) => [url, JSON.parse(o.body).command]), [['/now-playing', 'open'], ['/now-playing', 'open']]);
+  store.nowPlaying = { ...SONG, bundle: '' }; await nextTick();
+  assert.strictEqual(widget().querySelector('.what').classList.contains('opens'), false, 'no known app: no pointer');
+  assert.strictEqual(widget().querySelector('.art').classList.contains('opens'), false);
 });

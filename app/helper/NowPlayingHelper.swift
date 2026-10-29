@@ -6,7 +6,7 @@
 // The trick is ungive/mediaremote-adapter's (BSD-3-Clause, https://github.com/ungive/mediaremote-adapter); this is our own
 // small version of it. It's unofficial, so a macOS update may close it: then it hears nothing and the widget never shows.
 //
-// Out, on stdout, a line each time something changes: "item " and the item as JSON ({ title, artist, app, playing }) or
+// Out, on stdout, a line each time something changes: "item " and the item as JSON ({ title, artist, app, bundle, playing }; bundle is the app's bundle identifier, or "") or
 // null, and "art " and its cover (a data URL, or nothing) when that changes.
 // In, on stdin: one command a line, "toggle", "next" or "previous". When stdin closes (the server has gone) it exits.
 import AppKit
@@ -23,6 +23,13 @@ let getClient = mr("MRMediaRemoteGetNowPlayingClient", (@convention(c) (Dispatch
 let sendCommand = mr("MRMediaRemoteSendCommand", (@convention(c) (Int32, NSDictionary?) -> Bool).self)
 let register = mr("MRMediaRemoteRegisterForNowPlayingNotifications", (@convention(c) (DispatchQueue) -> Void).self)
 let COMMANDS: [String: Int32] = ["toggle": 2, "next": 4, "previous": 5] // MRCommand: kMRTogglePlayPause, kMRNextTrack, kMRPreviousTrack
+
+// The app's bundle identifier, for the server to bring it to the front: a browser's media comes from a helper process,
+// whose parent is the browser, so the parent's wins; "" when MediaRemote doesn't say.
+func appBundle(_ client: NSObject?) -> String {
+    for key in ["parentApplicationBundleIdentifier", "bundleIdentifier"] { if let id = client?.value(forKey: key) as? String, !id.isEmpty { return id } }
+    return ""
+}
 
 // The app's name: the client's own, else its parent app's (a browser's media comes from a helper process).
 func appName(_ client: NSObject?) -> String {
@@ -57,7 +64,7 @@ func emit() {
                     let artist = info["kMRMediaRemoteNowPlayingInfoArtist"] as? String ?? "", track = "\(title)\n\(artist)"
                     if art.track != track { art = (track, "") }
                     if art.url.isEmpty, let data = info["kMRMediaRemoteNowPlayingInfoArtworkData"] as? Data, !data.isEmpty { art.url = thumbnail(data) }
-                    item = ["title": title, "artist": artist, "app": appName(client), "playing": playing]
+                    item = ["title": title, "artist": artist, "app": appName(client), "bundle": appBundle(client), "playing": playing]
                 } else { art = ("", "") }
                 if art.url != sentArt { sentArt = art.url; say("art " + art.url) }
                 guard let json = try? JSONSerialization.data(withJSONObject: item, options: [.fragmentsAllowed, .sortedKeys]) else { return }

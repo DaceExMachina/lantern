@@ -2440,6 +2440,16 @@ test('now playing: the helper\'s item and cover reach the page once each, and th
   assert.strictEqual((await post(base, '/now-playing', { command: 'rm -rf' })).status, 400);
 });
 
+// "open" brings the playing app to the front by its bundle id. Nothing here may pull focus, so these are the cases that find no app.
+test('now playing: open fails when the helper gives no app, or one this Mac does not have', async t => {
+  for (const bundle of ['', 'com.lantern.no-such-app']) {
+    const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_BUNDLE: bundle });
+    const events = nowPlayingEvents(t, base);
+    await until(() => events.some(e => e[0] === 'nowPlaying' && JSON.parse(e[1])?.bundle === bundle), 'the item to arrive');
+    assert.strictEqual((await post(base, '/now-playing', { command: 'open' })).status, 404, `bundle "${bundle}"`);
+  }
+});
+
 // Nothing ignores SIGPIPE in the server, so a write to a helper that stopped reading must fail, not kill it.
 test('now playing: a button pressed while the helper has stopped listening fails, and the server lives on', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_NOW_PLAYING: 'deaf' });
