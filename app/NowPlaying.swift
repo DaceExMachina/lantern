@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 // What's playing on this Mac, for the page's now playing widget, and its buttons. The helper (app/helper/NowPlayingHelper.swift)
@@ -46,6 +47,14 @@ extension LanternServer {
         nowPlayingHelper = (p, input.fileHandleForWriting)
         guard (try? p.run()) != nil else { nowPlayingHelper = nil; return print("now playing helper won't start") }
         _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) // a write after it died fails, rather than killing the server
+    }
+    // Click on the cover or the words: bring the app that's playing to the front, by its bundle identifier from the helper.
+    // Launch Services does it, so no Accessibility or Automation prompt. False when we don't know the app or can't find it.
+    func openNowPlayingApp() -> Bool {
+        guard let bundle = (parse(Data(nowPlaying.utf8)) as? [String: Any])?["bundle"] as? String, !bundle.isEmpty,
+              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundle) else { return false }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in } // activates by default
+        return true
     }
     // The helper says so on every change, the same item over and over as its time moves; only a difference goes out.
     func setNowPlaying(_ json: String) {

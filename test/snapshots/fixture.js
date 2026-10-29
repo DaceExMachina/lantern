@@ -119,7 +119,7 @@
     // the now playing widget above the footer, with a cover; its buttons' hit areas run its full height and meet
     async () => {
       emit('nowPlayingArt', 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path fill="#F7913F" d="M0 0h2v2H0z"/><path fill="#7A63F0" d="M0 0h1v1H0zM1 1h1v1H1z"/></svg>'));
-      emit('nowPlaying', { title: 'Idyll of Sorrow, an extended mix that runs long', artist: 'ASC', app: 'Spotify', playing: true });
+      emit('nowPlaying', { title: 'Idyll of Sorrow, an extended mix that runs long', artist: 'ASC', app: 'Spotify', bundle: 'com.spotify.client', playing: true });
       await Promise.resolve(); await page.$('nowPlaying').querySelector('img').decode();
       const w = page.$('nowPlaying').getBoundingClientRect();
       for (const b of page.$('nowPlaying').querySelectorAll('button')) {
