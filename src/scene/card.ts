@@ -107,11 +107,9 @@ export const stepOf = (activity: string) => activity.replace(TAG, '');
 export const footLine = (s: Session, now: number) => `${project(s)} · ${short(now - (s.started ?? now))} old · active ${short(now - (s.last ?? now))} ago`;
 
 // The session's PRs, worst first, under a header that sums them up ("PRs · 1 ready · 2 in review · 8 drafts"). Either
-// chips coloured by state, each putting its title in the header while hovered, or two-line rows (title; dot, number,
-// state) capped at the worst PR_CAP so the card still fits beside its moth.
+// chips coloured by state (its title in #prTip while hovered), or in the sidebar two-line rows (title; dot, number, state).
 const ORDER = ['failing', 'changes', 'feedback', 'ready', 'waiting', 'draft', 'merged', 'closed'];
 const SHORT: Record<string, string | undefined> = { ...NEED, ready: 'ready', failing: 'failing' };
-export const PR_CAP = 4;
 export const AGENT_CAP = 5; // the expanded card's agents, past which a "more" button lists the rest
 const rank = (need: string) => (ORDER.indexOf(need) + 1) || ORDER.length + 1;
 export const worstFirst = (prs: PR[]) => [...prs].sort((a, b) => rank(a.need) - rank(b.need));
@@ -125,7 +123,7 @@ export function repoOf(url: string) {
   const full = new URL(url).pathname.split('/').slice(1, 3).join('/');
   return { full, name: full.split('/')[1] ?? full };
 }
-// A PR's title where a card doesn't already show it in full: an overflow link past the cap (a bare number), or a list row
+// A PR's title where a card doesn't already show it in full: a chip (a bare number), or a list row
 // whose title is cut short. It's the badges' tooltip (#prTip, outside the redrawn rows so a redraw leaves it be), shown
 // while hovered or focused and placed as a badge's is (tipSpot).
 let tipFor: Element | null = null; // the link #prTip was shown for

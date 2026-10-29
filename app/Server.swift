@@ -1093,15 +1093,6 @@ final class LanternServer {
                     settings["quietEndOn"] = on.boolValue; ok = true
                     if ((settings["quietUntil"] as? NSNumber)?.doubleValue ?? 0) > now() { settings["quietUntil"] = quietEndsAt() }
                 }
-                // whether a session's card lists its PRs (true) or shows them as chips, so every window agrees; only live
-                // sessions are kept
-                if let list = j["prList"] as? JSON {
-                    var kept = (settings["prList"] as? JSON ?? [:]).filter { sessions[$0.key] != nil }
-                    for (id, v) in list where sessions[id] != nil {
-                        if let on = v as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() { kept[id] = on.boolValue; ok = true }
-                    }
-                    settings["prList"] = kept
-                }
                 // the sessions pinned to the sidebar, in the order they were pinned, so every window shows the same: the whole
                 // list each time, each `{ id, chips }` (chips: its PRs as chips rather than listed). Each one is a live session
                 // or one already pinned, which stays after it ends (the sidebar dims it) until it's unpinned.

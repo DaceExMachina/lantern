@@ -13,7 +13,6 @@ const opt = <T>(is: (x: unknown) => x is T) => (x: unknown): x is T | null | und
 const isStrings = arrayOf(isString);
 const optString = opt(isString), optNumber = opt(isNumber), optBoolean = opt(isBoolean);
 const isNumberRecord = (x: unknown): x is Record<string, number> => isRecord(x) && Object.values(x).every(isNumber);
-const isBooleanRecord = (x: unknown): x is Record<string, boolean> => isRecord(x) && Object.values(x).every(isBoolean);
 
 /** JSON.parse that hands back `unknown`, for a guard or parser to narrow. */
 export const parseJson = (text: string): unknown => JSON.parse(text);
@@ -87,18 +86,18 @@ export interface Settings {
   style?: string | undefined; ribbon?: string | undefined; lanternText?: string | undefined; quietUntil?: number | undefined;
   quietEnd?: string | undefined; quietEndOn?: boolean | undefined; quietFrom?: string | undefined; dayStart?: string | undefined;
   supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined;
-  prList?: Record<string, boolean> | undefined; pinned?: Pin[] | undefined;
+  pinned?: Pin[] | undefined;
 }
 export function parseSettings(x: unknown): Settings {
   const o = isRecord(x) ? x : {};
   const str = (k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
   const bool = (k: string) => { const v = o[k]; return isBoolean(v) ? v : undefined; };
-  const quietUntil = o['quietUntil'], prList = o['prList'], pinned = o['pinned'];
+  const quietUntil = o['quietUntil'], pinned = o['pinned'];
   return {
     style: str('style'), ribbon: str('ribbon'), lanternText: str('lanternText'), quietUntil: isNumber(quietUntil) ? quietUntil : undefined,
     quietEnd: str('quietEnd'), quietEndOn: bool('quietEndOn'), quietFrom: str('quietFrom'), dayStart: str('dayStart'),
     supervisorPattern: str('supervisorPattern'), recapSeen: str('recapSeen'), github: bool('github'), stale: bool('stale'),
-    prList: isBooleanRecord(prList) ? prList : undefined, pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined,
+    pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined,
   };
 }
 

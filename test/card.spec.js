@@ -1,6 +1,5 @@
 // The moth's hover card (src/components/SessionCard.vue, mounted in index.html's real #card as src/main.ts does): the PR
-// header that sums the PRs up and names a hovered chip, the list capped at the worst few, the per-session toggle from the
-// server's settings, the agent rows (job, time, model, a tag chip only for a tagged step), times that tick, and controls
+// header that sums the PRs up and the chips with their title tooltip (never rows or a toggle, those are the sidebar's), the agent rows (job, time, model, a tag chip only for a tagged step), times that tick, and controls
 // that keep their elements through a re-render. (The pinned sidebar is test/pinned-dock.spec.js's; test/morph.test.js
 // checks both in WebKit.)
 import assert from 'node:assert';
@@ -14,7 +13,6 @@ import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
 import { enterZone, expandCard, hideCard, hoverZone } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
-import { parseSettings } from '../src/types';
 
 const text = n => n.textContent;
 const find = (n, cls) => [...n.querySelectorAll('.' + cls)];
@@ -33,8 +31,6 @@ const mount = () => {
   app = createApp(SessionCard).use(pinia);
   app.mount($('card'));
 };
-// the server's settings for every window: which sessions list their PRs (wiring.ts and events.ts hear them)
-const settings = o => { store.settings = parseSettings(o); };
 const reset = () => {
   live.hovered = null; live.moths = new Map();
   setSessions();
@@ -69,59 +65,32 @@ test('a PR with feedback waiting ranks below changes requested and above ready, 
   assert.strictEqual(text(find(card, 'ph')[0]), 'PRs · r · 1 change requested · 1 feedback waiting · 1 ready');
 });
 
-test('the PR header sums them up, and a hovered chip puts its title there until the pointer leaves', async () => {
-  const card = await show(session({ github: TEN }));
-  const [ph] = find(card, 'ph');
-  assert.strictEqual(text(ph), 'PRs · r · 1 ready · 2 in review · 8 drafts');
-  const chips = [...find(card, 'chips')[0].children];
-  assert.strictEqual(chips.length, 11, 'more than three PRs start as chips');
-  assert.deepStrictEqual(chips.slice(0, 3).map(text), ['#2', '#4', '#5'], 'worst first: ready, then in review, then drafts');
+test('the PR header sums them up and stays put; a hovered or focused chip shows its title in the tooltip', async () => {
+  const tip = $('prTip'), card = await show(session({ github: TEN }));
   const header = () => text(find(card, 'ph')[0]);
-  fire(chips[1], 'pointerenter'); await nextTick();
-  assert.strictEqual(header(), 'PR 4 title');
-  assert.strictEqual(header(), text(find(await show(session({ github: TEN })), 'ph')[0]), 'and keeps it through a redraw');
-  fire(find(card, 'chips')[0].children[1], 'pointerleave'); await nextTick();
   assert.strictEqual(header(), 'PRs · r · 1 ready · 2 in review · 8 drafts');
-});
-
-test('an open list shows the worst four, failing and changes requested first, then the rest as links', async () => {
-  const tip = $('prTip'), prs = [pr(1, 'draft'), pr(2, 'waiting'), pr(3, 'changes'), pr(4, 'ready'), pr(5, 'failing'), pr(6, 'draft')];
-  settings({ prList: { s1: true } });
-  const card = await show(session({ github: prs }));
-  assert.deepStrictEqual(find(card, 'pr2').map(a => a.href), [5, 3, 4, 2].map(n => pr(n).url));
-  const [more] = find(card, 'more');
-  assert.strictEqual(text(more), '2 more: #1#6', 'the commas are drawn after each link (CSS), so the links touch');
-  const overflow = anchors(more);
-  assert.strictEqual(overflow[1].hasAttribute('title'), false, 'no native title over the tip');
+  const chips = [...find(card, 'chips')[0].children];
+  assert.strictEqual(chips.length, 11, 'every PR is a chip, however many');
+  assert.deepStrictEqual(chips.slice(0, 3).map(text), ['#2', '#4', '#5'], 'worst first: ready, then in review, then drafts');
+  assert.strictEqual(chips[1].hasAttribute('title'), false, 'no native title over the tip');
+  fire(chips[1], 'pointerenter'); await nextTick();
+  assert.deepStrictEqual([text(tip), tip.className], ['PR 4 title', 'badgeTip show'], 'the badges\' tooltip');
+  assert.strictEqual(header(), 'PRs · r · 1 ready · 2 in review · 8 drafts', 'the header is left alone');
+  fire(chips[1], 'pointerleave');
+  assert.strictEqual(tip.className, 'badgeTip', 'leaving hides it');
   // near the window's right edge: the tip keeps 8px inside it
-  vi.spyOn(overflow[1], 'getBoundingClientRect').mockReturnValue({ left: 1400, right: 1420, top: 300, bottom: 315, width: 20 });
-  fire(overflow[1], 'focus');
-  assert.deepStrictEqual([tip.style.left, tip.style.top], [`${1440 - 240 - 8}px`, `${300 - 40 - 8}px`], 'keyboard focus shows it, clamped');
-  fire(overflow[1], 'blur');
+  vi.spyOn(chips[2], 'getBoundingClientRect').mockReturnValue({ left: 1400, right: 1420, top: 300, bottom: 315, width: 20 });
+  fire(chips[2], 'focus');
+  assert.deepStrictEqual([text(tip), tip.style.left, tip.style.top], ['PR 5 title', `${1440 - 240 - 8}px`, `${300 - 40 - 8}px`], 'keyboard focus shows it, clamped');
+  fire(chips[2], 'blur');
   assert.strictEqual(tip.className, 'badgeTip', 'blur hides it');
-  fire(overflow[1], 'pointerenter');
-  assert.deepStrictEqual([text(tip), tip.className], ['PR 6 title', 'badgeTip show'], 'hovering one past the cap shows its title in the badges\' tooltip');
-  fire(overflow[1], 'pointerleave');
-  assert.strictEqual(tip.className, 'badgeTip', 'and leaving hides it');
-  assert.strictEqual(find(card, 'chips').length, 0);
-  settings({});
-  assert.strictEqual(find(await show(session({ github: prs.slice(0, 3) })), 'pr2').length, 3, 'three or fewer are listed until toggled');
 });
 
-test('the toggle flips the session\'s view, tells the server, and the server\'s settings decide what every window shows', async () => {
-  const card = await show(session({ github: TEN }));
-  const [tog] = find(card, 'tog');
-  assert.strictEqual(tog.getAttribute('aria-label'), 'List PRs with their titles');
-  assert.strictEqual(tog.title, 'List PRs with their titles', 'a tooltip too');
-  assert.strictEqual(text(tog), '', 'an icon, no text');
-  tog.click(); // a button, which the card's own click handler leaves alone (wiring.ts)
-  assert.strictEqual(JSON.stringify(posts), JSON.stringify([['/settings', { prList: { s1: true } }]]));
-  assert.strictEqual(find(await show(session({ github: TEN })), 'pr2').length, 4, 'now listed');
-  // another window gets the setting from the server (events.ts: store.settings)
-  reset();
-  settings({ prList: { s1: true, s2: false } });
-  assert.strictEqual(find(await show(session({ github: TEN })), 'pr2').length, 4);
-  assert.strictEqual(find(await show(session({ id: 's2', github: [pr(1, 'ready')] })), 'pr2').length, 0, 's2 chose chips with one PR');
+test('the card shows chips only: no rows and no toggle, whatever the number of PRs', async () => {
+  for (const github of [[pr(1, 'ready')], TEN]) {
+    const card = await show(session({ github }));
+    assert.deepStrictEqual([find(card, 'pr2').length, find(card, 'tog').length, find(card, 'more').length, find(card, 'chips')[0].children.length], [0, 0, 0, github.length]);
+  }
 });
 
 test('an agent is three lines: dot, tag chip only when its step has one, model and time; its job; its step', async () => {
@@ -209,14 +178,6 @@ test('agents sit in a band of their own in the tray, apart from the side session
   assert.deepStrictEqual(find(zone, 'phead'), [], 'the PRs are outside it');
 });
 
-test('a listed PR shows how long it has been open, at the end of its second line', async () => {
-  settings({ prList: { s1: true } });
-  const card = await show(session({ github: [{ ...pr(1, 'ready'), createdAt: new Date(now - 3 * 86400e3 - 60e3).toISOString() }, pr(2, 'draft')] }));
-  const lines = find(card, 'me');
-  assert.deepStrictEqual(lines.map(l => l.childNodes[l.childNodes.length - 1].className), ['t', undefined], 'only with a createdAt');
-  assert.strictEqual(text(lines[0].lastChild), '3d');
-});
-
 test('the status pill does what a right-click on the moth does (snooze, sleep, wake), and doesn\'t open the session', async () => {
   const calls = [], m = { key: 's1' }, snoozes = [];
   m.zone = hoverZone(() => m, () => calls.push('open'), 48);
@@ -232,24 +193,8 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
   assert.strictEqual((await pill({})).getAttribute('aria-label'), 'needs you: snooze');
 });
 
-test('no PR link shows a native "#n" title; a list row shows its title in the tip only when it is cut short', async () => {
-  const tip = $('prTip');
-  const titles = card => anchors(card).map(a => a.title);
-  assert.deepStrictEqual(titles(await show(session({ github: TEN }))).filter(Boolean), [], 'chips');
-  settings({ prList: { s1: true } });
-  const card = await show(session({ github: TEN }));
-  assert.deepStrictEqual(titles(card).filter(Boolean), [], 'list rows and overflow links');
-  const [row] = find(card, 'pr2'), [ti] = find(row, 'ti');
-  vi.spyOn(row, 'getBoundingClientRect').mockReturnValue({ left: 10, right: 200, top: 300, bottom: 330, width: 190 });
-  const width = (scroll, client) => { for (const [k, v] of [['scrollWidth', scroll], ['clientWidth', client]]) Object.defineProperty(ti, k, { value: v, configurable: true }); };
-  width(150, 190);
-  fire(row, 'pointerenter');
-  assert.strictEqual(tip.className, 'badgeTip', 'it fits: no tip');
-  width(400, 190);
-  fire(row, 'pointerenter');
-  assert.deepStrictEqual([text(tip), tip.className], [text(ti), 'badgeTip show'], 'cut short: its full title');
-  fire(row, 'pointerleave');
-  assert.strictEqual(tip.className, 'badgeTip');
+test('no PR chip carries a native "#n" title', async () => {
+  assert.deepStrictEqual(anchors(await show(session({ github: TEN }))).map(a => a.title).filter(Boolean), []);
 });
 
 test('an agent with no tag or model is two lines (job beside the dot), and a shell command has "shell" in the model\'s place', async () => {
@@ -274,13 +219,11 @@ test('a shell command shows how long it has run, from the session\'s taskStarted
 });
 
 test('every control is an outer button or link that fills its zone, around an inner face that\'s the visible part', async () => {
-  const faced = card => [...find(card, 'open'), ...find(card, 'chip'), ...find(card, 'agent'), ...anchors(card).filter(n => /pr2|ov|^$/.test(n.className) && n.href)]
+  const faced = card => [...find(card, 'open'), ...find(card, 'chip'), ...find(card, 'agent'), ...anchors(card).filter(n => /^$/.test(n.className) && n.href)]
     .map(n => [n.localName, n.children.length, n.children[0]?.className?.split(' ')[0]]);
   const s = session({ state: 'working', subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: TEN });
-  assert.ok(faced(await show(s)).every(([, n, c]) => n === 1 && c === 'face'), 'header, pill, agent, chips');
-  settings({ prList: { s1: true } });
-  const listed = faced(await show(s));
-  assert.ok(listed.length > 6 && listed.every(([, n, c]) => n === 1 && c === 'face'), 'list rows and overflow links');
+  const controls = faced(await show(s));
+  assert.ok(controls.length > 12 && controls.every(([, n, c]) => n === 1 && c === 'face'), 'header, pill, agent, chips');
 });
 
 test('one PR with changes requested reads singular, and two shell commands with the same description open separately', async () => {
@@ -309,14 +252,12 @@ test('a re-render between press and release keeps every control\'s element', asy
   const s = session({ state: 'working', activity: 'Step 1', subagents: [{ id: 'a', description: 'Build', started: now, last: now }], github: TEN });
   const card = await show(s);
   const controls = () => [...card.querySelectorAll('button, a')];
-  const before = controls(), tog = find(card, 'tog')[0];
-  assert.ok(before.length > 10 && tog, `the open button, pill, pin, agent, toggle and chips: ${before.length}`);
-  fire(tog, 'pointerdown');
+  const before = controls(), pill = find(card, 'chip')[0];
+  assert.ok(before.length > 10 && pill, `the open button, pill, pin, agent and chips: ${before.length}`);
+  fire(pill, 'pointerdown');
   await show({ ...s, activity: 'Step 2', last: now + 1e3 }); // the next snapshot from the server lands mid-press
   assert.strictEqual(text(find(card, 'state')[0]), 'Step 2', 'it re-rendered');
   assert.ok(controls().every((c, i) => c === before[i]) && controls().length === before.length, 'each control is the element it was');
-  tog.click(); await nextTick();
-  assert.strictEqual(find(card, 'pr2').length, 4, 'and the release toggles the list');
 });
 
 // hovered, not clicked: the compact card for `s`
@@ -417,19 +358,13 @@ test('hovering a ghost or a wisp shows a compact card with a hint that names its
   assert.deepStrictEqual(hint(card), [], 'and expanded, no hint');
 });
 
-test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the total sits over a section per repo, in chips and rows', async () => {
+test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the total sits over a section per repo', async () => {
   const mixed = [pr(1, 'ready', 'api'), pr(2, 'draft', 'extension'), pr(3, 'feedback', 'api')];
-  for (const listed of [false, true]) {
-    settings({ prList: { s1: listed } });
-    const card = await show(session({ github: mixed }));
-    assert.deepStrictEqual(find(card, 'phead').map(text), ['PRs3', 'api · 1 feedback waiting · 1 ready', 'extension · 1 draft'], `a heading with the total, then a section per repo (listed ${listed})`);
-    assert.deepStrictEqual(find(card, 'ph').map(h => h.title), ['', 'o/api', 'o/extension'], 'the owner is in the tooltip');
-    assert.strictEqual(find(card, 'tog').length, 1, 'one toggle, on the heading');
-    assert.strictEqual(find(find(card, 'phead')[0], 'tog').length, 1);
-    assert.strictEqual(find(card, 'repo').length, 0, 'rows leave the repo to their section');
-  }
-  const rows = find(await show(session({ github: mixed })), 'tray')[0].children;
-  assert.deepStrictEqual([...rows].map(r => r.className.split(' ')[0]), ['phead', 'phead', 'pr2', 'pr2', 'phead', 'pr2', 'foot'], 'rows sit under their own repo');
+  const card = await show(session({ github: mixed }));
+  assert.deepStrictEqual(find(card, 'phead').map(text), ['PRs3', 'api · 1 feedback waiting · 1 ready', 'extension · 1 draft'], 'a heading with the total, then a section per repo');
+  assert.deepStrictEqual(find(card, 'ph').map(h => h.title), ['', 'o/api', 'o/extension'], 'the owner is in the tooltip');
+  assert.strictEqual(find(card, 'tog').length, 0, 'no toggle on the card');
+  assert.deepStrictEqual([...find(card, 'tray')[0].children].map(r => r.className.split(' ')[0]), ['phead', 'phead', 'chips', 'phead', 'chips', 'foot'], 'chips sit under their own repo');
   const one = await show(session({ github: [pr(1, 'ready', 'api'), pr(2, 'draft', 'api')] }));
   assert.deepStrictEqual(find(one, 'phead').map(text), ['PRs · api · 1 ready · 1 draft'], 'a single repo is baked into the one heading');
 });

@@ -1983,41 +1983,6 @@ test('the pid file only ever stops this checkout\'s vite, and only a stopping se
   assert.strictEqual(fs.readFileSync(recorded, 'utf8'), '999999');
 });
 
-// Whether a session's card lists its PRs or shows chips is a shared setting, so every window shows the same.
-const settingsStream = base => {
-  const seen = [];
-  const req = http.get(base + '/events', res => {
-    let text = '';
-    res.on('data', chunk => {
-      text += chunk;
-      const parts = text.split('\n\n'); text = parts.pop();
-      for (const b of parts) if (b.startsWith('event: settings')) seen.push(JSON.parse(b.match(/^data: (.*)$/m)[1]));
-    });
-  });
-  return { seen, close: () => req.destroy() };
-};
-test('the PR list toggle is kept per session in the settings, reaches every open window, and outlasts a reconnect', async t => {
-  let home;
-  const base = await serve(t, {}, h => home = h);
-  for (const id of ['s1', 's2']) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
-  const one = settingsStream(base), two = settingsStream(base);
-  t.after(() => { one.close(); two.close(); });
-  await until(() => one.seen.length && two.seen.length, 'both windows to get the settings');
-  assert.strictEqual((await post(base, '/settings', { prList: { s1: true } })).status, 204);
-  assert.strictEqual((await post(base, '/settings', { prList: { s2: false } })).status, 204);
-  const want = { s1: true, s2: false }, same = v => { try { assert.deepStrictEqual(v, want); return true; } catch { return false; } }; // in any key order
-  for (const w of [one, two]) await until(() => same(w.seen.at(-1).prList), 'each window to get both sessions\' toggles');
-  assert.deepStrictEqual((await snapshot(base)).settings.prList, want, 'a window opened later');
-  const saved = () => { try { return JSON.parse(fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8')).prList; } catch { return null; } };
-  await until(() => same(saved()), 'the settings file to be saved'); // written off the main queue
-  assert.strictEqual((await post(base, '/settings', { prList: { nobody: true } })).status, 400, 'an unknown session is refused');
-  assert.strictEqual((await post(base, '/settings', { prList: { s1: 1 } })).status, 400, 'so is a value that isn\'t true or false');
-  // an ended session's toggle goes with the next change
-  await post(base, '/event', { session_id: 's1', hook_event_name: 'SessionEnd', cwd: '/w' });
-  assert.strictEqual((await post(base, '/settings', { prList: { s2: true } })).status, 204);
-  await until(async () => JSON.stringify((await snapshot(base)).settings.prList) === '{"s2":true}', 'the ended session\'s toggle to go');
-});
-
 // The sessions pinned to the sidebar are a shared setting too: a list in the order they were pinned, each `{ id, chips }`
 // with a live session's id or one already pinned (kept after it ends, so the sidebar can dim it), saved, and read back
 // after a restart, where a pin whose session didn't come back goes (no window can show it or unpin it).
