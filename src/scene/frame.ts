@@ -979,7 +979,7 @@ export function threadEnds(m: SessionMoth): [Point, Point] {
 }
 // The slow sway of a line's bow: it swings to both sides of straight, out to the `bow` share of its length, each moth on
 // its own phase. Lines are a non-crossing fan, so only the share is dialed.
-export let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.12, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
+export let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.24, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
 // A busy lantern bows gentler: full up to 4 moths, easing down to half by 12 (m.bowK follows it, so a session joining doesn't jump)
 const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...live.moths.values()].filter(o => !(o.parentId === undefined && o.satellite) && !o.leaving).length - 4) / 8));
 export const bowed = (ax: number, ay: number, bx: number, by: number, m: { bowK?: number, phase: number }, s: number, k: number) => {

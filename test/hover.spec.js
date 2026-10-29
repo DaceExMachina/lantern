@@ -4,7 +4,7 @@
 import assert from 'node:assert';
 import { test } from 'vitest';
 import { WING_SIDE, WING_UP, caster, wing3d } from '../src/scene/scene';
-import { clickZone, holdAnchor, hoverZone, zoneAt } from '../src/scene/card';
+import { clickZone, pinAnchor, hoverZone, zoneAt } from '../src/scene/card';
 import { mothZones } from '../src/scene/frame';
 
 const circle = (x, y, r) => ({ x, y, r, off: false });
@@ -52,12 +52,11 @@ test('a landed moth\'s area is centred on its drawn body, so a point on the lowe
   assert.strictEqual(zoneAt([upper.zone, lower.zone], 298, 62), upper.zone, 'and the upper moth keeps its own');
 });
 
-test('a card holds its anchor through small moves of its moth, and takes a new one once the moth is well away or another area', () => {
+test('a card is pinned where it opened, however far its moth moves, until another area takes it', () => {
   const zone = {}, other = {};
-  const at = (z, x, y) => { const a = holdAnchor(z, x, y); return [a.x, a.y]; };
+  const at = (z, x, y) => { const a = pinAnchor(z, x, y, 20); return [a.x, a.y]; };
   assert.deepStrictEqual(at(zone, 100, 100), [100, 100], 'the first spot is taken');
   assert.deepStrictEqual(at(zone, 115, 90), [100, 100], 'a hop or resettle nearby changes nothing');
-  assert.deepStrictEqual(at(zone, 100, 130), [100, 100], 'still held a little short of the threshold');
-  assert.deepStrictEqual(at(zone, 100, 145), [100, 145], 'well away takes a new anchor');
+  assert.deepStrictEqual(at(zone, 400, 500), [100, 100], 'nor does the moth flying far away');
   assert.deepStrictEqual(at(other, 101, 146), [101, 146], 'another area takes its own at once');
 });

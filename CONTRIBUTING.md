@@ -23,6 +23,7 @@ Claude Code's hooks send every session event to a small server inside Lantern.ap
 | `app/Transcripts.swift` | Reading hook payloads and transcripts, and rebuilding sessions from them. |
 | `app/Terminals.swift` | Finding a session's terminal tab and bringing it to the front. |
 | `app/GitHub.swift` | GitHub status: PRs, accounts and sign-in. |
+| `app/NowPlaying.swift`, `app/helper/` | What's playing on the Mac, for the now playing widget. The helper is a library `/usr/bin/perl` loads (macOS only answers Apple-signed processes about it), built beside the server as `NowPlaying.dylib`. |
 | `app/Stats.swift` | The event log behind the stats panel. Its schema is described at the top of the file. |
 | `app/main.swift` | The app's window, Dock badge and login item. |
 | `screensaver/`, `iterm/` | The screensaver and the iTerm2 toolbelt panel. Both show the page served by the app. |

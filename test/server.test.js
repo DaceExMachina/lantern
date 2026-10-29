@@ -2366,3 +2366,67 @@ test('without Tailscale answering, only the loopback address is let in', async t
   assert.strictEqual(await sendAs(base, 'mac-1.tail1234.ts.net', '/stats'), 403);
   assert.strictEqual(await sendAs(base, new URL(base).host, '/stats'), 200);
 });
+
+// The now playing helper (app/helper/NowPlayingHelper.swift) is a library /usr/bin/perl loads; a fake one stands in here.
+const fakeHelper = () => {
+  const lib = path.join(tmp, 'now-playing-fake.dylib');
+  if (!fs.existsSync(lib)) execFileSync('swiftc', ['-parse-as-library', '-emit-library', '-o', lib, 'test/server/now-playing-fake.swift'], { cwd: ROOT, stdio: ['ignore', 'ignore', 'inherit'] });
+  return lib;
+};
+// The page's now playing events, as they arrive: [event, data] pairs.
+const nowPlayingEvents = (t, base) => {
+  const events = [];
+  const req = http.get(base + '/events', res => {
+    let text = '';
+    res.on('data', chunk => {
+      text += chunk;
+      const blocks = text.split('\n\n');
+      text = blocks.pop();
+      for (const block of blocks) {
+        const event = block.match(/^event: (.+)$/m)?.[1];
+        if (event?.startsWith('nowPlaying')) events.push([event, block.match(/^data: (.*)$/m)?.[1]]);
+      }
+    });
+  });
+  req.on('error', () => {});
+  t.after(() => req.destroy());
+  return events;
+};
+
+test('now playing: the helper\'s item and cover reach the page once each, and the widget\'s buttons reach the helper', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper() });
+  const events = nowPlayingEvents(t, base);
+  const items = () => events.filter(e => e[0] === 'nowPlaying').map(e => JSON.parse(e[1]));
+  await until(() => items().at(-1)?.playing === true, 'the item to arrive');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'toggle' })).status, 204);
+  await until(() => items().at(-1)?.playing === false, 'the toggle to reach the helper and come back');
+  assert.deepStrictEqual(items().filter(Boolean).map(i => i.playing), [true, false], 'each change goes out once');
+  assert.deepStrictEqual(events.filter(e => e[0] === 'nowPlayingArt').map(e => JSON.parse(e[1])).filter(Boolean), ['data:image/png;base64,AAAA'], 'the cover goes out once, not again with a pause');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'rm -rf' })).status, 400);
+});
+
+// "open" brings the playing app to the front by its bundle id. Nothing here may pull focus, so these are the cases that find no app.
+test('now playing: open fails when the helper gives no app, or one this Mac does not have', async t => {
+  for (const bundle of ['', 'com.lantern.no-such-app']) {
+    const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_BUNDLE: bundle });
+    const events = nowPlayingEvents(t, base);
+    await until(() => events.some(e => e[0] === 'nowPlaying' && JSON.parse(e[1])?.bundle === bundle), 'the item to arrive');
+    assert.strictEqual((await post(base, '/now-playing', { command: 'open' })).status, 404, `bundle "${bundle}"`);
+  }
+});
+
+// Nothing ignores SIGPIPE in the server, so a write to a helper that stopped reading must fail, not kill it.
+test('now playing: a button pressed while the helper has stopped listening fails, and the server lives on', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_NOW_PLAYING: 'deaf' });
+  const events = nowPlayingEvents(t, base);
+  await until(() => events.some(e => e[0] === 'nowPlaying' && e[1] !== 'null'), 'the helper to be up');
+  const r = await post(base, '/now-playing', { command: 'toggle' }).catch(e => e);
+  assert.strictEqual(r.status, 404, `the press fails: ${r}`);
+  assert.strictEqual((await fetch(base + '/stats').catch(e => e)).status, 200, 'and the server still answers');
+});
+
+test('now playing: a helper that can\'t start is tried again after a growing pause, not every time at once', async t => {
+  await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_NOW_PLAYING: 'fail' });
+  const tries = await until(() => { const m = [...t.output().matchAll(/trying again in (\d+) s/g)].map(x => +x[1]); return m.length >= 3 && m; }, 'three tries');
+  assert.deepStrictEqual(tries.slice(0, 3), [1, 2, 4]);
+});

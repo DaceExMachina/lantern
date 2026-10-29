@@ -37,7 +37,7 @@ The scene stretches to fill any window shape, wide, tall or square, and the lant
 
 Hover a session's moth for a quick card: its name and status, one line of what it's doing or asking, and a count of its agents and PRs. It's a tooltip, gone a moment after the pointer leaves the moth.
 
-Click the moth for its full card, which stays open until you click somewhere else, press Escape, or keep the pointer away from it and its moth for two seconds. Click the moth again to put it away. The top says what it needs from you: its questions, and its "You:" line (from a `**You:**` status footer, or else the last paragraph of its final message). Below, under Running, are its agents and the shell commands it left going, then its PRs as chips, or as a list with the arrow. Click an agent to read it in full. Past five agents, click "more" for the rest. The hover area stays put while the moth wanders, so the card holds still while you read.
+Click the moth for its full card, which stays open until you click somewhere else, press Escape, or keep the pointer away from it and its moth for two seconds. Click the moth again to put it away. The top says what it needs from you: its questions, and its "You:" line (from a `**You:**` status footer, or else the last paragraph of its final message). Below, under Running, are its agents and the shell commands it left going, then its PRs as chips, or as a list with the arrow. Click an agent to read it in full. Past five agents, click "more" for the rest. The card stays exactly where it opened, however the moth wanders or the lantern sways, until you put it away.
 
 Double-click the moth, or click the card's header, to open the session. Click the card's status to snooze it. Ghost moths and wisps work the same way: hover for a quick card, click for the full one, double-click to act (see Fireflies and stale PRs).
 
@@ -113,6 +113,12 @@ The daily recap opens by itself when quiet hours start. If you miss that, it sho
 The moon in the footer snoozes everything on every display until 8am, or the time in "quiet until" in the settings menu. Switch "quiet until" off and quiet lasts until you click the moon again. Either way, click it to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
 
 To have quiet come on by itself every night, switch "quiet from" on in the settings menu and pick a time. It works with no window open, since the app does it. It ends at "quiet until", or when you click the moon if that's off. If quiet is already on by then, it stays as it is, and if you end it early, it stays off until the next night.
+
+## Now playing
+
+When an app on your Mac is playing something (Spotify, Music, a video in a browser, a podcast), a small strip sits at the bottom left, just above the footer: the cover, the title, the artist and the app, with previous, play or pause, and next. It stays while that app has something paused, so you can play it again, and goes when nothing is up. It reads the same Now Playing information as Control Center's media widget, with no permission prompts.
+
+It gets there by an unofficial route: macOS only shares that information with Apple's own programs, so the app has the Mac's built-in `perl` load a small helper. A macOS update could close that route. If it does, the strip just never shows. To see it without playing anything, open the page with `?fakeplaying` (or the dev panel's "now playing" under Demo); its buttons then only change the made-up song.
 
 ## The app
 

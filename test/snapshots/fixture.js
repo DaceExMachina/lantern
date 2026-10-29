@@ -116,6 +116,19 @@
   const expand = id => async () => { page.hideCard(); page.expandCard(page.live.moths.get(id).zone); await Promise.resolve(); page.placeCard(); };
   // the chrome scenes: each panel opened over the barrel in turn, then closed (a function, as run() adds to LAST)
   const chrome = () => [
+    // the now playing widget above the footer, with a cover; its buttons' hit areas run its full height and meet
+    async () => {
+      emit('nowPlayingArt', 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><path fill="#F7913F" d="M0 0h2v2H0z"/><path fill="#7A63F0" d="M0 0h1v1H0zM1 1h1v1H1z"/></svg>'));
+      emit('nowPlaying', { title: 'Idyll of Sorrow, an extended mix that runs long', artist: 'ASC', app: 'Spotify', bundle: 'com.spotify.client', playing: true });
+      await Promise.resolve(); await page.$('nowPlaying').querySelector('img').decode();
+      const w = page.$('nowPlaying').getBoundingClientRect();
+      for (const b of page.$('nowPlaying').querySelectorAll('button')) {
+        const r = b.getBoundingClientRect();
+        for (const [where, x, y] of [['top', r.left + 1, w.top + 2], ['bottom', r.right - 1, w.bottom - 2]])
+          if (document.elementFromPoint(x, y)?.closest('button') !== b) errs.push(`now playing's ${b.ariaLabel} misses the widget's ${where}`);
+      }
+      if (Math.round(page.$('nowPlaying').lastElementChild.getBoundingClientRect().right) !== Math.round(w.right) - 1) errs.push('now playing\'s last button stops short of its right edge');
+    }, snap('playing'), () => { emit('nowPlaying', null); },
     () => { page.$('menu').showPopover(); page.$('help').open = true; }, snap('menu'),
     () => { emit('github', { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
     async () => { page.$('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { page.$('stats').hidePopover(); },
