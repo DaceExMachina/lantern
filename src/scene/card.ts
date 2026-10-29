@@ -138,13 +138,12 @@ export function dropTip() { if (!tipFor?.isConnected) hidePrTip(); }
 // whether a list row's title is cut short
 export const cutShort = (el: Element) => { const t = el.querySelector('.ti'); return !!t && t.scrollWidth > t.clientWidth; };
 
-// The card holds where it opened while its moth shimmies about (hops, resettling, the lantern's sway): it keeps the
-// anchor it first took and only takes a new one when the area has moved CARD_HOLD or more away, or is a different area.
-// Then it eases over to the new spot instead of snapping, so it reads as following rather than shaking.
-const CARD_HOLD = 40;
-let held: { zone: Zone, x: number, y: number } | null = null, shown: { x: number, y: number } | null = null; // the anchor in screen px, and where the card is now on its way there
-export function holdAnchor(zone: Zone, x: number, y: number) {
-  if (!held || held.zone !== zone || Math.hypot(x - held.x, y - held.y) >= CARD_HOLD) held = { zone, x, y };
+// The card is pinned where it opened: it takes its anchor (the area's screen position and clearance) when it's first placed
+// for an area and keeps it, whatever its moth does (flies, takes a new home, the lantern's sway) until it's hidden or another
+// area's card replaces it. Only the viewport clamp below follows a resize.
+let held: { zone: Zone, x: number, y: number, gap: number } | null = null, shown: { x: number, y: number } | null = null; // the anchor in screen px, and where the card last sat
+export function pinAnchor(zone: Zone, x: number, y: number, gap: number) {
+  if (held?.zone !== zone) held = { zone, x, y, gap };
   return held;
 }
 export function placeCard() {
@@ -154,15 +153,14 @@ export function placeCard() {
   const zone = 'session' in h && h.cardAt === 'flies' && h.flyZone ? h.flyZone : h.zone; // beside whichever area was hovered
   pt.x = zone.x; pt.y = zone.y;
   const p = pt.matrixTransform(ctm), c = $('card');
-  const gap = zone.r * ctm.a * 0.7; // clear of the hover area, which covers the moth
   // it stays above the footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits there
   const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - 16)}px`;
   if (c.style.maxHeight !== most) c.style.maxHeight = most;
-  const a = holdAnchor(zone, p.x, p.y);
+  const a = pinAnchor(zone, p.x, p.y, zone.r * ctm.a * 0.7), gap = a.gap; // clear of the hover area, which covers the moth
   const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   // while the pointer is on it (opening an agent, say), it stays put rather than flipping above its moth, moving up only
   // as far as it must to stay on screen
   const to = { x: Math.max(8, x), y: Math.max(8, titlebar(), Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
-  shown = shown ? { x: shown.x + (to.x - shown.x) * 0.2, y: shown.y + (to.y - shown.y) * 0.2 } : to; // a new card starts in place
-  c.style.transform = `translate(${shown.x}px, ${shown.y}px)`;
+  shown = to;
+  c.style.transform = `translate(${to.x}px, ${to.y}px)`;
 }
