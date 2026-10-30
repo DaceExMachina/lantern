@@ -135,6 +135,8 @@ final class Re {
 let RESUME_MS = 45_000.0 // how long a ghost's resume gets to show up as a live session before the ghost flies back (stale.ts RESUME_S)
 let UUID_RE = Re("^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$", .caseInsensitive)
 let PR_CREATE = Re("\\bgh\\s+pr\\s+create\\b")
+// A `lantern-pr watch` a session keeps running is a standing listener for its PRs, not work a turn handed over (Stop).
+let PR_WATCH = Re("(^|[/\\s])lantern-pr\\s+watch\\b")
 let PR_URL = Re("https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+")
 
 /// An insertion-ordered map, like a JS Map: setting an existing key keeps its place.
@@ -596,6 +598,7 @@ final class LanternServer {
             for t in e["background_tasks"] as? [JSON] ?? [] where !truthy(t["status"]) || str(t["status"]) == "running" {
                 let tid = str(t["id"])
                 if str(t["type"]) == "subagent" { awaited.append(tid); continue } // awaitedAgents() keeps the ones still alive
+                if PR_WATCH.test(str(t["command"])) { continue }
                 // when it started, from the transcript line that started it, so a restart doesn't make an old server fresh
                 guard let at = starts[tid] else { continue }
                 since[tid] = at

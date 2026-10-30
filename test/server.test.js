@@ -532,19 +532,37 @@ test('Stop ignores a finished subagent and the shell task it started (the 7791 z
 // Dace's lantern session (Oct 30, 03:56Z), from its real transcript (test/fixtures/stale-watch, text redacted): a
 // `lantern-pr watch` it started at 22:58Z ran on in the background, so every Stop after it listed that task. The demo turn
 // that ended at 03:56:34Z, its four agents done, rested as "idle" ("1 background task open for 297m"), as if nothing
-// needed Dace. A handover gone stale (no fresh task, no agent heard from lately) is a finished turn: it waits on him.
-test('a turn whose only open work is a stale background task waits on me as a finished turn (the stale lantern-pr watch)', async t => {
+// needed Dace. A handover gone stale (no fresh task, no agent heard from lately) is a finished turn, and a watch isn't
+// open work at all (see the next test), so this one is a plain finished turn.
+test('a turn ending with its four agents done and only its lantern-pr watch open is a plain finished turn (the demo\'s last Stop)', async t => {
   const id = 'c0223694-dbd3-47d3-99d4-c889a060f541', file = `.claude/projects/-Users-user/${id}.jsonl`;
   let home;
   const base = await serve(t, { [file]: fs.readFileSync(path.join(__dirname, 'fixtures/stale-watch/main.jsonl'), 'utf8') }, h => home = h);
   const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/Users/user', transcript_path: path.join(home, file), ...more });
-  const WATCH = { id: 'b9gw2x073', type: 'shell', status: 'running', description: 'Restart the PR watch', command: '~/.local/bin/lantern-pr watch' };
+  const WATCH = { id: 'b9gw2x073', type: 'shell', status: 'running', description: 'Restart the PR watch', command: '~/.local/bin/lantern-pr watch --owner c0223694-dbd3-47d3-99d4-c889a060f541' };
   const DONE = ['a857dddfc67d73b0d', 'a24a93805b473cfe5', 'ae988fa6692044881', 'a6a46cc334a4450fa'].map(a => ({ id: a, type: 'subagent', status: 'completed', description: 'Demo agent', agent_type: 'haiku-lookup' }));
   await hook('UserPromptSubmit', { prompt: 'Another Claude session sent a message' });
   await hook('Stop', { last_assistant_message: 'The demo is over and all four moths have landed.', background_tasks: [WATCH, ...DONE] });
   const s = (await snapshot(base)).sessions.find(x => x.id === id);
   assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks, waiting: s.waitingSince > 0 },
-    { state: 'waiting', note: 'Finished its turn (1 background task still running)', tasks: ['Restart the PR watch'], waiting: true });
+    { state: 'waiting', note: 'Finished its turn', tasks: [], waiting: true });
+});
+
+// The same session restarts its `lantern-pr watch` each time it exits, so the watch is nearly always fresh, and every turn
+// it ended read as paused ("Waiting on 1 background task") with its moth in the air while it waited on Dace. A watch is a
+// standing listener for the session's PRs, not work the turn handed over: it doesn't count, fresh or not. Matched on the
+// command the Stop lists, so a dev server started a moment ago still keeps its session paused.
+test('a fresh lantern-pr watch isn\'t open work: a turn ending with only that running is a finished turn', async t => {
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('bw1'), started('b1')]) }, h => home = h);
+  const watch = { id: 'bw1', type: 'shell', status: 'running', description: 'Restart the PR watch', command: '~/.local/bin/lantern-pr watch --owner s1' };
+  await post(base, '/event', stopWith(home, watch));
+  const s = await s1(base);
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'waiting', note: 'Finished its turn', tasks: [] });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'and a preview' });
+  await post(base, '/event', stopWith(home, watch, SERVER));
+  const both = await s1(base);
+  assert.deepStrictEqual({ state: both.state, note: both.note, tasks: both.tasks }, { state: 'paused', note: 'Waiting on 1 background task', tasks: ['preview server'] });
 });
 
 // Dace's jwt session (Oct 20, 21:03Z), from its real transcript (test/fixtures/jwt, text redacted): a turn ended with
