@@ -13,14 +13,33 @@ let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 let GH_WEB = ProcessInfo.processInfo.environment["LANTERN_GITHUB_WEB"] ?? "https://github.com", GH_API = ProcessInfo.processInfo.environment["LANTERN_GITHUB_API"] ?? "https://api.github.com"
 let SECURITY = ProcessInfo.processInfo.environment["LANTERN_SECURITY"] ?? "/usr/bin/security"
 let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }"
-func prQuery(_ fields: String) -> String {
-    """
+// GitHub's GraphQL gives up after about 10 seconds and `mine` with all its fields takes longer than that past ~50 PRs, so `mine`
+// comes a page at a time: the first query also carries reviews and closed, the rest only the next page of `mine`.
+let MINE_PAGE = 25
+func prQuery(_ fields: String, after: String? = nil) -> String {
+    let mine = "mine: search(query: \"is:pr is:open archived:false author:@me\", type: ISSUE, first: \(MINE_PAGE)\(after.map { ", after: \"\($0)\"" } ?? "")) { pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { \(fields) } } }"
+    if after != nil { return "query { \(mine) }" }
+    return """
     query {
       reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { \(fields) } } }
-      mine: search(query: "is:pr is:open archived:false author:@me", type: ISSUE, first: 100) { nodes { ... on PullRequest { \(fields) } } }
+      \(mine)
       closed: search(query: "is:pr is:closed archived:false author:@me sort:updated-desc", type: ISSUE, first: 30) { nodes { ... on PullRequest { url state } } }
     }
     """
+}
+// Asks for every page of `mine` and returns the first answer with all the pages' PRs in it, or nil if the first has no `mine` (a
+// token without checks access) or a later one fails (a blip, so the caller keeps what it had). ponytail: 20 pages (500 PRs) at most.
+func allPages(_ fields: String, _ ask: (String) -> JSON?) -> JSON? {
+    guard var d = ask(prQuery(fields)), var mine = d["mine"] as? JSON else { return nil }
+    var nodes = mine["nodes"] as? [JSON] ?? []
+    for _ in 1..<20 {
+        guard let info = mine["pageInfo"] as? JSON, truthy(info["hasNextPage"]), let cursor = info["endCursor"] as? String else { break }
+        guard let next = ask(prQuery(fields, after: cursor))?["mine"] as? JSON else { return nil }
+        nodes += next["nodes"] as? [JSON] ?? []
+        mine = next
+    }
+    d["mine"] = ["nodes": nodes]
+    return d
 }
 // Feedback is waiting while the last word after the newest commit belongs to a reviewer: the newest review or page comment
 // since (bots skipped, since they comment on every push) is from someone but the author and isn't an approval. A push, the
@@ -77,9 +96,8 @@ func git(_ cwd: String, _ args: [String]) -> String? {
 // gh prints the response even when the query partly fails; a token without checks access fails the whole thing, so
 // that one is asked again without checks
 func ghGraphql(_ cwd: String) -> JSON? {
-    let data = { (q: String) in (parse(Data(run(GH, ["api", "graphql", "-f", "query=\(q)"], cwd: cwd, timeout: 20).out.utf8)) as? JSON)?["data"] as? JSON }
-    if let d = data(prQuery(PR_GQL)), d["mine"] != nil { return d }
-    return data(prQuery(Re(" commits\\(.*$").replace(PR_GQL, "")))
+    let data = { (q: String) -> JSON? in (parse(Data(run(GH, ["api", "graphql", "-f", "query=\(q)"], cwd: cwd, timeout: 20).out.utf8)) as? JSON)?["data"] as? JSON }
+    return allPages(PR_GQL, data) ?? allPages(Re(" commits\\(.*$").replace(PR_GQL, ""), data)
 }
 // Through gh, which GitHub account a folder gets can depend on where it is (a wrapper that picks a token by the
 // top folder under home, say: ~/work for one account, ~/projects for another). So the PR query runs once per top folder
@@ -151,19 +169,22 @@ extension LanternServer {
             let queries: [() -> JSON?] = tokens.isEmpty
                 ? folders.map { f in { ghGraphql(f.cwd) } }
                 : tokens.map { login, account in {
-                    let ask = { (c: JSON) in fetch(GH_API + "/graphql", method: "POST", headers: ["Authorization": "Bearer \(str(c["token"]))", "User-Agent": "lantern-pr"], body: ["query": prQuery(PR_GQL)]) }
-                    let c = account
-                    var r = ask(c)
-                    if r.status == 401 { // expired or revoked: refresh once and ask again
-                        switch self.renew(login, c) {
-                        case .renewed(let new): r = ask(new)
-                        case .offline: return nil // can't tell yet, so it's a blip
-                        case .rejected: break
+                    var c = account
+                    let ask = { (q: String) -> (status: Int, json: JSON?) in fetch(GH_API + "/graphql", method: "POST", headers: ["Authorization": "Bearer \(str(c["token"]))", "User-Agent": "lantern-pr"], body: ["query": q]) }
+                    var expired = false
+                    let data = allPages(PR_GQL) { q in
+                        var r = ask(q)
+                        if r.status == 401 { // expired or revoked: refresh once and ask again
+                            switch self.renew(login, c) {
+                            case .renewed(let new): c = new; r = ask(q)
+                            case .offline: return nil // can't tell yet, so it's a blip
+                            case .rejected: break
+                            }
                         }
+                        if r.status == 401 { expired = true } // reconnect
+                        return r.json?["data"] as? JSON
                     }
-                    if r.status == 401 { DispatchQueue.main.sync { errors[login] = "expired" }; return nil } // reconnect
-                    let data = r.json?["data"] as? JSON
-                    if data != nil { DispatchQueue.main.sync { errors[login] = "" } }
+                    if expired { DispatchQueue.main.sync { errors[login] = "expired" } } else if data != nil { DispatchQueue.main.sync { errors[login] = "" } }
                     return data
                 } }
             var results = [JSON?](repeating: nil, count: queries.count)

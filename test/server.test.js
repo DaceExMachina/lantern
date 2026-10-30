@@ -1404,6 +1404,25 @@ test("a reviewer's last word since the newest commit makes feedback; a bot, the 
   assert.deepStrictEqual(cases.map((_, i) => need[prUrl(i + 1)]), cases.map(c => c[0]));
 });
 
+// GitHub's GraphQL times out on a big `mine`, so it is asked a page at a time: a stand-in gh that holds the first PR on a first
+// page (with a cursor) and the second only on the page asked for with that cursor. Both must show up.
+test('mine is paged: PRs on the second page show too', async t => {
+  const { gh, repo } = ghRepo([]);
+  const dir = path.dirname(gh), page = (nodes, next) => JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { pageInfo: { hasNextPage: next, endCursor: next ? 'c1' : null }, nodes } } });
+  fs.writeFileSync(path.join(dir, 'p1.json'), page([prNode(1, iso(Date.now()))], true));
+  fs.writeFileSync(path.join(dir, 'p2.json'), page([prNode(2, iso(Date.now()))], false));
+  fs.writeFileSync(gh, `#!/bin/sh\ncase "$*" in *'after: "c1"'*) exec /bin/cat '${dir}/p2.json';; *) exec /bin/cat '${dir}/p1.json';; esac\n`, { mode: 0o755 });
+  const id = UUID(9), file = `.claude/projects/-work-9/${id}.jsonl`, made = n => [
+    { type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `toolu_${n}`, name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: `toolu_${n}`, content: prUrl(n) + '\n' }] } }];
+  let home = '';
+  const base = await serve(t, { [file]: jsonl([user('Fix it'), ...made(1), ...made(2)]) }, h => home = h, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: repo, transcript_path: path.join(home, file), prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const found = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.github?.length === 2), 'both pages to show');
+  assert.deepStrictEqual(found.github.map(p => p.url).sort(), [prUrl(1), prUrl(2)]);
+});
+
 // GitHub sometimes answers the query with exit 0 and every list empty. That must not wipe the PRs: the last good answer holds
 // until it ages out (LANTERN_GH_KEEP_SECONDS), and then a really empty account shows empty.
 test('an empty GitHub answer after a good one keeps the PRs until the kept answer ages out', async t => {
