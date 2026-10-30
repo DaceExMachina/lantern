@@ -344,15 +344,20 @@ func lineTime(_ line: JSON) -> Double? {
 /// (the same stamp taskStart gives, so the freshness rule treats a seeded task like a Stop-listed one). A launch is
 /// a `launchedTask` line; it ends with a task-notification
 /// that has a `<status>` (a Monitor's event notices don't), or a TaskStop's result. A task a subagent started is in the
-/// subagent's transcript, so never here.
+/// subagent's transcript, so never here. A `lantern-pr watch` isn't open work (PR_WATCH): its launch answers a Bash call
+/// whose command is one.
 /// ponytail: only the tail is read; a launch before it is long past TASK_FRESH_MS in any case that matters.
 func openTasks(_ lines: [String]) -> [String: Double] {
-    var open: [String: Double] = [:]
+    var open: [String: Double] = [:], watches = Set<String>()
     let ended = Re("<task-id>([A-Za-z0-9_-]+)</task-id>")
     for line in lines {
         if line.contains("<status>"), let id = ended.match(line)?[1] { open[id] = nil; continue }
+        if line.contains("lantern-pr"), let j = parse(Data(line.utf8)) as? JSON, let content = (j["message"] as? JSON)?["content"] as? [JSON] {
+            for c in content where str(c["type"]) == "tool_use" && PR_WATCH.test(str((c["input"] as? JSON)?["command"])) { watches.insert(str(c["id"])) }
+        }
         guard line.contains("\"toolUseResult\""), let j = parse(Data(line.utf8)) as? JSON, let r = j["toolUseResult"] as? JSON else { continue }
-        if let id = launchedTask(j), let at = lineTime(j) { open[id] = at }
+        let call = ((j["message"] as? JSON)?["content"] as? [JSON])?.first.map { str($0["tool_use_id"]) }
+        if let id = launchedTask(j), let at = lineTime(j), !watches.contains(call ?? "") { open[id] = at }
         if str(r["message"]).hasPrefix("Successfully stopped task"), let id = r["task_id"] as? String { open[id] = nil }
     }
     return open

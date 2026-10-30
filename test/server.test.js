@@ -2328,7 +2328,9 @@ test('a refused GitHub refresh token is not reconnect when another Lantern saved
 // Dace's PR-watch session (Oct 22, 7fd92067): a turn ended while its own background shell (bk0eb85kg, launched with
 // run_in_background) still ran, then Lantern restarted. Seeding only counted agents, so it came back landed instead of paused
 // on the shell. The launch is a tool result with toolUseResult.backgroundTaskId (a Monitor's is taskId); it ends with a
-// task-notification carrying a <status> (a Monitor's event notices have none) or a TaskStop.
+// task-notification carrying a <status> (a Monitor's event notices have none) or a TaskStop. bk0eb85kg was itself a
+// `lantern-pr watch`, which since Oct 30 isn't open work (prWatch), so that session now seeds as a finished turn; `running`
+// stands for any other shell.
 test('a seeded session waiting on its own background shell is paused, not landed (the PR-watch restart)', async t => {
   const at = minutes => new Date(Date.now() - minutes * 60 * 1000).toISOString();
   const launch = (task, minutes, key = 'backgroundTaskId') => ({ type: 'user', cwd: '/work', timestamp: at(minutes), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: `Command running in background with ID: ${task}.` }] }, toolUseResult: { stdout: '', interrupted: false, [key]: task } });
@@ -2340,12 +2342,14 @@ test('a seeded session waiting on its own background shell is paused, not landed
     stopped: watching(launch('bk0eb85kg', 5), { type: 'user', cwd: '/work', toolUseResult: { message: 'Successfully stopped task: bk0eb85kg (gh pr checks)', task_id: 'bk0eb85kg' } }),
     old: watching(launch('bk0eb85kg', 31)),
     monitor: watching(launch('bmon', 5, 'taskId'), notice('bmon', '<summary>Monitor event: "CI"</summary>\n<event>unit|success</event>')),
+    // a `lantern-pr watch` isn't open work, fresh or not: the launch answers the Bash call that ran it
+    prWatch: watching({ type: 'assistant', cwd: '/work', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: '~/.local/bin/lantern-pr watch --owner x', run_in_background: true } }] } }, launch('bw1', 5)),
   };
   const names = Object.keys(cases);
   const base = await serve(t, Object.assign({}, ...names.map((n, i) => transcript(UUID(i), cases[n]))));
   const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === names.length && s; }, 'every transcript to be seeded');
   assert.deepStrictEqual(Object.fromEntries(names.map((n, i) => [n, sessions.find(s => s.id === UUID(i)).state])),
-    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'waiting', monitor: 'paused' }); // old: open but past TASK_FRESH_MS, so it's a finished turn
+    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'waiting', monitor: 'paused', prWatch: 'waiting' }); // old: open but past TASK_FRESH_MS, so it's a finished turn
   assert.strictEqual(sessions.find(s => s.id === UUID(0)).note, 'Waiting on 1 background task');
 });
 
