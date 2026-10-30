@@ -398,7 +398,7 @@ final class LanternServer {
             var out = s
             for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
-            out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
+            out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 }.filter { $0.key != "inTool" } }
             return out
         })
     }
@@ -564,6 +564,9 @@ final class LanternServer {
                 a["type"] = or(e["agent_type"], a["type"])
                 if ev == "PreToolUse" { a["activity"] = describe(e["tool_name"] as? String, e["tool_input"] as? JSON ?? [:]) }
                 a["last"] = now()
+                // a tool call still running (npm test, a CI watch) moves neither its hooks nor its transcript, but the agent is
+                // busy: until its next event it counts as heard from now (derive)
+                a["inTool"] = ev == "PreToolUse" ? true : nil
                 agents[id]![aid] = a
             }
             // Background agents keep working after the turn ends, so their activity mustn't clear "needs you". Them asking for me still counts.
@@ -697,7 +700,7 @@ final class LanternServer {
         case "idle": s["state"] = "idle"
         case "ended" where truthy(s["awaits"]):
             let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
-            let heard = awaitedAgents(s, id).compactMap { $0["last"] as? Double }.max() ?? 0
+            let heard = awaitedAgents(s, id).compactMap { truthy($0["inTool"]) ? t : $0["last"] as? Double }.max() ?? 0
             let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS, work = openWork(s, id)
             s["state"] = busy ? "paused" : "waiting"
             s["note"] = busy ? "Waiting on \(work)" : "Finished its turn" + (work.isEmpty ? "" : " (\(work) still running)")
@@ -757,7 +760,7 @@ final class LanternServer {
             was.title = title
             let waiting = str(s["state"]) == "waiting" && !reportsBack(s) // a side session reporting back isn't waiting on Dace
             if waiting != was.waiting {
-                if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project], at: t) } else { stats.end("waiting", id, ["how": "answered"], at: t) }
+                if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project], at: t) } else { stats.end("waiting", id, ["how": str(s["state"]) == "paused" ? "resumed" : "answered"], at: t) } // resumed: an agent woke it, not me
                 was.waiting = waiting
                 was.snoozed = nil
             }

@@ -181,6 +181,7 @@ const stopWith = (home, ...tasks) => ({ session_id: 's1', hook_event_name: 'Stop
 const SERVER = { id: 'b1', type: 'shell', status: 'running', description: 'preview server', command: 'npm run preview' };
 const s1 = async base => (await snapshot(base)).sessions.find(s => s.id === 's1');
 const agentTool = { session_id: 's1', hook_event_name: 'PreToolUse', cwd: '/w', agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: { file_path: '/w/x.js' } };
+const agentDone = { ...agentTool, hook_event_name: 'PostToolUse' }; // its tool returned: until its next event it's quiet
 
 test('a background agent that keeps firing hook events keeps its session working, waits on me once quiet, and wakes again', async t => {
   let home;
@@ -192,10 +193,47 @@ test('a background agent that keeps firing hook events keeps its session working
     await post(base, '/event', agentTool);
     assert.strictEqual((await s1(base)).state, 'paused');
   }
+  await post(base, '/event', agentDone);
   const quiet = await until(async () => { const s = await s1(base); return s.state === 'waiting' && s; }, 'the quiet session to wait on me');
   assert.strictEqual(quiet.note, 'Finished its turn (1 agent still running)');
   await post(base, '/event', agentTool);
   await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
+});
+
+// Claude Code's "idle, waiting for input" nudge comes about a minute into any wait, a quiet handover's included. It's not
+// a new thing to answer, so it leaves the handover as it was, and the agent firing again still wakes it. That wake isn't
+// Dace answering the wait, so the stats log ends it as resumed, out of the answer times.
+test('an idle nudge on a quiet handover keeps it a finished turn the agent can still wake, and the wake isn\'t an answer', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, bg(1, 0.3));
+  const waits = () => JSON.parse(execFileSync('sqlite3', ['-json', path.join(home, 'data/stats.sqlite'),
+    "SELECT ended IS NOT NULL AS ended, json_extract(data, '$.how') AS how FROM spans WHERE session = 's1' AND kind = 'waiting'"], { encoding: 'utf8' }) || '[]');
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(base, '/event', agentTool);
+  await post(base, '/event', agentDone);
+  await post(base, '/event', stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
+  await until(async () => (await s1(base)).state === 'waiting', 'the quiet handover to wait on me');
+  await until(() => waits().length, 'the wait to be logged'); // the log looks on the next broadcast
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'Notification', cwd: '/w', notification_type: 'idle_prompt', message: 'Claude is waiting' });
+  const nudged = await s1(base);
+  assert.deepStrictEqual({ state: nudged.state, note: nudged.note }, { state: 'waiting', note: 'Finished its turn (1 agent still running)' });
+  await post(base, '/event', agentTool);
+  await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
+  assert.deepStrictEqual(await until(() => waits()[0].ended && waits(), 'the wait to end in the log'), [{ ended: 1, how: 'resumed' }]);
+});
+
+// An agent inside one long tool call (npm test, a CI watch) fires nothing and writes nothing until it returns, however
+// long that takes. It's busy, so its session stays paused on it rather than landing as a false alarm.
+test('an agent in the middle of a long tool call keeps its session paused past the agent freshness', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, bg(0.5, 0.3));
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(base, '/event', { ...agentTool, tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  await post(base, '/event', stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
+  await wait(1500); // three times the agent freshness, a sweep every 0.1s
+  assert.deepStrictEqual((await s1(base)).state, 'paused');
+  await post(base, '/event', { ...agentDone, tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  await until(async () => (await s1(base)).state === 'waiting', 'the agent going quiet after its tool returns');
 });
 
 // A subagent whose SubagentStop never came is dropped once it's been quiet past LANTERN_AGENT_EXPIRE_SECONDS, even in a
