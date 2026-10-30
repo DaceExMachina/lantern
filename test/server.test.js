@@ -170,7 +170,7 @@ test('a turn\'s plain sentences become its prose, consecutive ones joined into r
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
 // Background tasks: a session waiting on them counts as working while a task is younger than LANTERN_TASK_FRESH_SECONDS
-// or an agent was heard from within LANTERN_AGENT_FRESH_SECONDS; past both it rests (idle, open but quiet), flipped by
+// or an agent was heard from within LANTERN_AGENT_FRESH_SECONDS; past both it's a finished turn waiting on me, flipped by
 // the sweep (every LANTERN_SWEEP_SECONDS) with no new event.
 const bg = (agentFresh, taskFresh) => ({ LANTERN_AGENT_FRESH_SECONDS: String(agentFresh), LANTERN_TASK_FRESH_SECONDS: String(taskFresh), LANTERN_SWEEP_SECONDS: '0.1' });
 // A task only counts when the session itself started it: the tool result carrying its backgroundTaskId is in the
@@ -182,7 +182,7 @@ const SERVER = { id: 'b1', type: 'shell', status: 'running', description: 'previ
 const s1 = async base => (await snapshot(base)).sessions.find(s => s.id === 's1');
 const agentTool = { session_id: 's1', hook_event_name: 'PreToolUse', cwd: '/w', agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: { file_path: '/w/x.js' } };
 
-test('a background agent that keeps firing hook events keeps its session working, rests once quiet, and wakes again', async t => {
+test('a background agent that keeps firing hook events keeps its session working, waits on me once quiet, and wakes again', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, bg(1, 0.3));
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
@@ -192,8 +192,8 @@ test('a background agent that keeps firing hook events keeps its session working
     await post(base, '/event', agentTool);
     assert.strictEqual((await s1(base)).state, 'paused');
   }
-  const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the quiet session to rest');
-  assert.match(quiet.note, /^1 agent open for \d+m$/);
+  const quiet = await until(async () => { const s = await s1(base); return s.state === 'waiting' && s; }, 'the quiet session to wait on me');
+  assert.strictEqual(quiet.note, 'Finished its turn (1 agent still running)');
   await post(base, '/event', agentTool);
   await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
 });
@@ -301,7 +301,7 @@ test('a hooked agent with no transcript stays while it was just heard from, then
 // stopped (SIGSTOP) past the agent's freshness while the agent goes on writing, as a busy machine can stall it. Reads take
 // 0.3s here (LANTERN_READ_DELAY_SECONDS, three sweeps), so some are always out when it stops: those finish with times from
 // before the stall, older than LANTERN_AGENT_CHECK_SECONDS, and must be read again. And the first sweep after must read
-// before it decides. Either way, the session would rest for a while its agent works.
+// before it decides. Either way, the session would wait on me for a while its agent works.
 test('an agent known only from its transcript keeps its session paused while it keeps writing, across a stalled server', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, { ...bg(3, 0.1), LANTERN_AGENT_CHECK_SECONDS: '1.5', LANTERN_READ_DELAY_SECONDS: '0.3' });
@@ -426,17 +426,17 @@ test('a background task\'s start reaches the page with its description, and goes
   await until(async () => (await s1(base)).taskStarted === undefined, 'it to go with the tasks');
 });
 
-test('a background task open past the threshold with no agent activity rests after the sweep, and stays old across turns', async t => {
+test('a background task open past the threshold with no agent activity waits on me after the sweep, and stays old across turns', async t => {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h, bg(0.1, 0.5));
   await post(base, '/event', stopWith(home, SERVER));
   assert.strictEqual((await until(() => s1(base), 'the session')).state, 'paused');
-  const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the session to rest with no new event');
-  assert.match(quiet.note, /^1 background task open for \d+m$/);
-  // the same server still open at the next turn's end: it's as old as when it started, so the session rests at once
+  const quiet = await until(async () => { const s = await s1(base); return s.state === 'waiting' && s; }, 'the session to wait on me with no new event');
+  assert.strictEqual(quiet.note, 'Finished its turn (1 background task still running)');
+  // the same server still open at the next turn's end: it's as old as when it started, so the session waits on me at once
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'more' });
   await post(base, '/event', stopWith(home, SERVER));
-  assert.strictEqual((await s1(base)).state, 'idle');
+  assert.strictEqual((await s1(base)).state, 'waiting');
 });
 
 // A task the session's transcript didn't start is decided once: its start line is written before any Stop lists it, so a
@@ -454,12 +454,12 @@ test('a background task the transcript didn\'t start is looked up once, not at e
 
 // A task's age comes from the line in the transcript that started it, not from when this lantern first saw it, so a
 // restart (a fresh server) doesn't make a two-hour-old dev server fresh again.
-test('a background task the transcript says started two hours ago rests at its first Stop on a fresh server', async t => {
+test('a background task the transcript says started two hours ago waits on me at its first Stop on a fresh server', async t => {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1', Date.now() - 2 * 3600 * 1000)]) }, h => home = h, bg(0.1, 30 * 60));
   await post(base, '/event', stopWith(home, SERVER));
   const s = await s1(base);
-  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'idle', note: '1 background task open for 120m', tasks: ['preview server'] });
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'waiting', note: 'Finished its turn (1 background task still running)', tasks: ['preview server'] });
 });
 
 // Dace's 7791 zombie (Oct 20), from his real transcripts (test/fixtures/zombie, text redacted): subagent a3dc4fce41f0fcc8e
@@ -484,11 +484,29 @@ test('Stop ignores a finished subagent and the shell task it started (the 7791 z
   await hook('Stop', { last_assistant_message: 'It was the leftover server.', background_tasks: ZOMBIES });
   const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return { state: s.state, note: s.note, tasks: s.tasks }; };
   assert.deepStrictEqual(await shown(), { state: 'waiting', note: 'Finished its turn', tasks: [] });
-  // the session's own merge job still open: started hours ago per its transcript line, so it rests at once
+  // the session's own merge job still open: started hours ago per its transcript line, so it waits on me at once
   await hook('UserPromptSubmit', { prompt: 'and the merge?' });
   await hook('Stop', { last_assistant_message: 'Merging in the background.', background_tasks: [...ZOMBIES, { id: 'bo1p24jsb', type: 'shell', status: 'running', description: 'Merge it', command: 'gh pr merge' }] });
   const merge = await shown();
-  assert.deepStrictEqual({ ...merge, note: merge.note.replace(/\d+m$/, 'Nm') }, { state: 'idle', note: '1 background task open for Nm', tasks: ['Merge it'] });
+  assert.deepStrictEqual(merge, { state: 'waiting', note: 'Finished its turn (1 background task still running)', tasks: ['Merge it'] });
+});
+
+// Dace's lantern session (Oct 30, 03:56Z), from its real transcript (test/fixtures/stale-watch, text redacted): a
+// `lantern-pr watch` it started at 22:58Z ran on in the background, so every Stop after it listed that task. The demo turn
+// that ended at 03:56:34Z, its four agents done, rested as "idle" ("1 background task open for 297m"), as if nothing
+// needed Dace. A handover gone stale (no fresh task, no agent heard from lately) is a finished turn: it waits on him.
+test('a turn whose only open work is a stale background task waits on me as a finished turn (the stale lantern-pr watch)', async t => {
+  const id = 'c0223694-dbd3-47d3-99d4-c889a060f541', file = `.claude/projects/-Users-user/${id}.jsonl`;
+  let home;
+  const base = await serve(t, { [file]: fs.readFileSync(path.join(__dirname, 'fixtures/stale-watch/main.jsonl'), 'utf8') }, h => home = h);
+  const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/Users/user', transcript_path: path.join(home, file), ...more });
+  const WATCH = { id: 'b9gw2x073', type: 'shell', status: 'running', description: 'Restart the PR watch', command: '~/.local/bin/lantern-pr watch' };
+  const DONE = ['a857dddfc67d73b0d', 'a24a93805b473cfe5', 'ae988fa6692044881', 'a6a46cc334a4450fa'].map(a => ({ id: a, type: 'subagent', status: 'completed', description: 'Demo agent', agent_type: 'haiku-lookup' }));
+  await hook('UserPromptSubmit', { prompt: 'Another Claude session sent a message' });
+  await hook('Stop', { last_assistant_message: 'The demo is over and all four moths have landed.', background_tasks: [WATCH, ...DONE] });
+  const s = (await snapshot(base)).sessions.find(x => x.id === id);
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks, waiting: s.waitingSince > 0 },
+    { state: 'waiting', note: 'Finished its turn (1 background task still running)', tasks: ['Restart the PR watch'], waiting: true });
 });
 
 // Dace's jwt session (Oct 20, 21:03Z), from its real transcript (test/fixtures/jwt, text redacted): a turn ended with
@@ -2271,7 +2289,7 @@ test('a seeded session waiting on its own background shell is paused, not landed
   const base = await serve(t, Object.assign({}, ...names.map((n, i) => transcript(UUID(i), cases[n]))));
   const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === names.length && s; }, 'every transcript to be seeded');
   assert.deepStrictEqual(Object.fromEntries(names.map((n, i) => [n, sessions.find(s => s.id === UUID(i)).state])),
-    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'idle', monitor: 'paused' }); // old: open but past TASK_FRESH_MS, so it rests
+    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'waiting', monitor: 'paused' }); // old: open but past TASK_FRESH_MS, so it's a finished turn
   assert.strictEqual(sessions.find(s => s.id === UUID(0)).note, 'Waiting on 1 background task');
 });
 

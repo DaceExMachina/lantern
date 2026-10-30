@@ -19,7 +19,7 @@ Each big moth is a session. It keeps its own patch of the dark, trails a thread 
 
 Side sessions orbit their parent. When the Claude desktop app starts one session from another, the new one flies as a slightly smaller, untethered satellite around its parent's moth. While the parent is alive, the side session reports to it instead of to you. So when it finishes, it keeps orbiting, its card says "reported back", and it never turns the lantern violet. The parent's card lists its side sessions alongside its agents.
 
-When a session needs you, its moth lands on the lantern, folds its wings and turns indigo, and the flame, paper and glow all shift to violet. A session that's only waiting on its own background agents stays in the air. If it also asked you something, it lands.
+When a session needs you, its moth lands on the lantern, folds its wings and turns indigo, and the flame, paper and glow all shift to violet. A session that's only waiting on its own background agents stays in the air. Once that work goes quiet (no agent heard from for five minutes, no background task younger than half an hour), it lands like any finished turn. If it also asked you something, it lands.
 
 Landed moths get fidgety. Now and then one takes a slow breath, opening its wings and closing them again. After 15 minutes it gets restless and sometimes hops off the paper.
 

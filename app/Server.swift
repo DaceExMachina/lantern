@@ -11,7 +11,7 @@ let WAITING_EXPIRE_MS = 3.0 * 60 * 60 * 1000 // ...unless it's waiting on me, wh
 let SEED_RECENT_MS = 15.0 * 60 * 1000 // on startup, also bring back any session whose transcript moved this recently
 let TITLE_EVERY_MS = 15.0 * 1000
 // A session waiting on background tasks counts as working while one is younger than this, or one of its agents was heard
-// from this recently; past both, it's left open but quiet (a dev server, a stuck agent) and rests like an idle one.
+// from this recently; past both (a dev server, a stuck agent, a long `lantern-pr watch`), it's a finished turn waiting on me.
 let TASK_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_TASK_FRESH_SECONDS"] ?? "") ?? 30 * 60) * 1000
 let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_FRESH_SECONDS"] ?? "") ?? 5 * 60) * 1000
 // An agent whose transcript hasn't moved this long is assumed gone (its SubagentStop never came), finished or not.
@@ -396,7 +396,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "resting", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 } }
             return out
@@ -635,8 +635,9 @@ final class LanternServer {
         case "Notification":
             // the idle nudge proves it's back at its prompt, so a /compact that never reported back is over: settle it first
             if str(s["turn"]) == "compacting" && str(e["notification_type"]) == "idle_prompt" { check(&s); if truthy(s["awaits"]) { break } }
-            // the "idle, waiting for input" nudge also fires while a session waits on its agents; that one doesn't count
-            if str(e["notification_type"]) == "idle_prompt" && (str(s["state"]) == "paused" || truthy(s["resting"])) { break }
+            // the "idle, waiting for input" nudge also fires while a session waits on its background work; that one doesn't
+            // count, so an agent that wakes up again still brings it back to paused
+            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && truthy(s["awaits"]) { break }
             if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["turn"] = "blocked"; s["note"] = or(e["message"], s["note"]) }
         default: // UserPromptSubmit, PreToolUse, PostToolUse: the session is moving, so it no longer needs me
             s["turn"] = "running"
@@ -686,12 +687,11 @@ final class LanternServer {
 
     /// A session's state, worked out in one place from what the events recorded: `turn` (running; ended, with `awaits`
     /// when it handed over to background work; blocked on me; or idle at the prompt). A turn that handed over is paused
-    /// (working) while a task is fresh or an agent was heard from lately, and otherwise rests as idle, open but quiet.
+    /// (working) while a task is fresh or an agent was heard from lately, and otherwise waits on me as a finished turn.
     /// Runs after every event and on the sweep; says if what the page shows changed.
     /// The only place `state` is set; fix state bugs here or in check() with a fixture test (CONTRIBUTING.md, "Fixing a session-state bug").
     @discardableResult func derive(_ s: inout JSON, _ id: String) -> Bool {
         let before = (str(s["state"]), str(s["note"]))
-        s["resting"] = nil
         switch str(s["turn"]) {
         case "running", "compacting": s["state"] = "working"
         case "idle": s["state"] = "idle"
@@ -699,10 +699,8 @@ final class LanternServer {
             let t = now(), since = s["taskSince"] as? [String: Double] ?? [:]
             let heard = awaitedAgents(s, id).compactMap { $0["last"] as? Double }.max() ?? 0
             let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS, work = openWork(s, id)
-            s["state"] = busy ? "paused" : "idle"
-            if !busy { s["resting"] = true }
-            s["note"] = busy ? "Waiting on \(work)" : work.isEmpty ? "Its background work finished"
-                : "\(work) open for \(Int((t - max(since.values.min() ?? t, heard)) / 60000))m" // since the oldest started, or an agent last spoke
+            s["state"] = busy ? "paused" : "waiting"
+            s["note"] = busy ? "Waiting on \(work)" : "Finished its turn" + (work.isEmpty ? "" : " (\(work) still running)")
         default: s["state"] = "waiting" // a turn that ended without handing over, or one blocked on me (a permission, a question)
         }
         // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
