@@ -170,7 +170,7 @@ test('a turn\'s plain sentences become its prose, consecutive ones joined into r
 test('posting quietUntil without a style keeps the lantern style', t => replay(t, 'quiet-keeps-style'));
 
 // Background tasks: a session waiting on them counts as working while a task is younger than LANTERN_TASK_FRESH_SECONDS
-// or an agent was heard from within LANTERN_AGENT_FRESH_SECONDS; past both it rests (idle, open but quiet), flipped by
+// or an agent was heard from within LANTERN_AGENT_FRESH_SECONDS; past both it's a finished turn waiting on me, flipped by
 // the sweep (every LANTERN_SWEEP_SECONDS) with no new event.
 const bg = (agentFresh, taskFresh) => ({ LANTERN_AGENT_FRESH_SECONDS: String(agentFresh), LANTERN_TASK_FRESH_SECONDS: String(taskFresh), LANTERN_SWEEP_SECONDS: '0.1' });
 // A task only counts when the session itself started it: the tool result carrying its backgroundTaskId is in the
@@ -181,8 +181,9 @@ const stopWith = (home, ...tasks) => ({ session_id: 's1', hook_event_name: 'Stop
 const SERVER = { id: 'b1', type: 'shell', status: 'running', description: 'preview server', command: 'npm run preview' };
 const s1 = async base => (await snapshot(base)).sessions.find(s => s.id === 's1');
 const agentTool = { session_id: 's1', hook_event_name: 'PreToolUse', cwd: '/w', agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: { file_path: '/w/x.js' } };
+const agentDone = { ...agentTool, hook_event_name: 'PostToolUse' }; // its tool returned: until its next event it's quiet
 
-test('a background agent that keeps firing hook events keeps its session working, rests once quiet, and wakes again', async t => {
+test('a background agent that keeps firing hook events keeps its session working, waits on me once quiet, and wakes again', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, bg(1, 0.3));
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
@@ -192,10 +193,47 @@ test('a background agent that keeps firing hook events keeps its session working
     await post(base, '/event', agentTool);
     assert.strictEqual((await s1(base)).state, 'paused');
   }
-  const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the quiet session to rest');
-  assert.match(quiet.note, /^1 agent open for \d+m$/);
+  await post(base, '/event', agentDone);
+  const quiet = await until(async () => { const s = await s1(base); return s.state === 'waiting' && s; }, 'the quiet session to wait on me');
+  assert.strictEqual(quiet.note, 'Finished its turn (1 agent still running)');
   await post(base, '/event', agentTool);
   await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
+});
+
+// Claude Code's "idle, waiting for input" nudge comes about a minute into any wait, a quiet handover's included. It's not
+// a new thing to answer, so it leaves the handover as it was, and the agent firing again still wakes it. That wake isn't
+// Dace answering the wait, so the stats log ends it as resumed, out of the answer times.
+test('an idle nudge on a quiet handover keeps it a finished turn the agent can still wake, and the wake isn\'t an answer', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, bg(1, 0.3));
+  const waits = () => JSON.parse(execFileSync('sqlite3', ['-json', path.join(home, 'data/stats.sqlite'),
+    "SELECT ended IS NOT NULL AS ended, json_extract(data, '$.how') AS how FROM spans WHERE session = 's1' AND kind = 'waiting'"], { encoding: 'utf8' }) || '[]');
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(base, '/event', agentTool);
+  await post(base, '/event', agentDone);
+  await post(base, '/event', stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
+  await until(async () => (await s1(base)).state === 'waiting', 'the quiet handover to wait on me');
+  await until(() => waits().length, 'the wait to be logged'); // the log looks on the next broadcast
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'Notification', cwd: '/w', notification_type: 'idle_prompt', message: 'Claude is waiting' });
+  const nudged = await s1(base);
+  assert.deepStrictEqual({ state: nudged.state, note: nudged.note }, { state: 'waiting', note: 'Finished its turn (1 agent still running)' });
+  await post(base, '/event', agentTool);
+  await until(async () => (await s1(base)).state === 'paused', 'the agent firing again to wake it');
+  assert.deepStrictEqual(await until(() => waits()[0].ended && waits(), 'the wait to end in the log'), [{ ended: 1, how: 'resumed' }]);
+});
+
+// An agent inside one long tool call (npm test, a CI watch) fires nothing and writes nothing until it returns, however
+// long that takes. It's busy, so its session stays paused on it rather than landing as a false alarm.
+test('an agent in the middle of a long tool call keeps its session paused past the agent freshness', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, bg(0.5, 0.3));
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(base, '/event', { ...agentTool, tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  await post(base, '/event', stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it', agent_type: 'sonnet-implement' }));
+  await wait(1500); // three times the agent freshness, a sweep every 0.1s
+  assert.deepStrictEqual((await s1(base)).state, 'paused');
+  await post(base, '/event', { ...agentDone, tool_name: 'Bash', tool_input: { command: 'npm test' } });
+  await until(async () => (await s1(base)).state === 'waiting', 'the agent going quiet after its tool returns');
 });
 
 // A subagent whose SubagentStop never came is dropped once it's been quiet past LANTERN_AGENT_EXPIRE_SECONDS, even in a
@@ -301,7 +339,7 @@ test('a hooked agent with no transcript stays while it was just heard from, then
 // stopped (SIGSTOP) past the agent's freshness while the agent goes on writing, as a busy machine can stall it. Reads take
 // 0.3s here (LANTERN_READ_DELAY_SECONDS, three sweeps), so some are always out when it stops: those finish with times from
 // before the stall, older than LANTERN_AGENT_CHECK_SECONDS, and must be read again. And the first sweep after must read
-// before it decides. Either way, the session would rest for a while its agent works.
+// before it decides. Either way, the session would wait on me for a while its agent works.
 test('an agent known only from its transcript keeps its session paused while it keeps writing, across a stalled server', async t => {
   let home;
   const base = await serve(t, {}, h => home = h, { ...bg(3, 0.1), LANTERN_AGENT_CHECK_SECONDS: '1.5', LANTERN_READ_DELAY_SECONDS: '0.3' });
@@ -426,17 +464,17 @@ test('a background task\'s start reaches the page with its description, and goes
   await until(async () => (await s1(base)).taskStarted === undefined, 'it to go with the tasks');
 });
 
-test('a background task open past the threshold with no agent activity rests after the sweep, and stays old across turns', async t => {
+test('a background task open past the threshold with no agent activity waits on me after the sweep, and stays old across turns', async t => {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h, bg(0.1, 0.5));
   await post(base, '/event', stopWith(home, SERVER));
   assert.strictEqual((await until(() => s1(base), 'the session')).state, 'paused');
-  const quiet = await until(async () => { const s = await s1(base); return s.state === 'idle' && s; }, 'the session to rest with no new event');
-  assert.match(quiet.note, /^1 background task open for \d+m$/);
-  // the same server still open at the next turn's end: it's as old as when it started, so the session rests at once
+  const quiet = await until(async () => { const s = await s1(base); return s.state === 'waiting' && s; }, 'the session to wait on me with no new event');
+  assert.strictEqual(quiet.note, 'Finished its turn (1 background task still running)');
+  // the same server still open at the next turn's end: it's as old as when it started, so the session waits on me at once
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'more' });
   await post(base, '/event', stopWith(home, SERVER));
-  assert.strictEqual((await s1(base)).state, 'idle');
+  assert.strictEqual((await s1(base)).state, 'waiting');
 });
 
 // A task the session's transcript didn't start is decided once: its start line is written before any Stop lists it, so a
@@ -454,12 +492,12 @@ test('a background task the transcript didn\'t start is looked up once, not at e
 
 // A task's age comes from the line in the transcript that started it, not from when this lantern first saw it, so a
 // restart (a fresh server) doesn't make a two-hour-old dev server fresh again.
-test('a background task the transcript says started two hours ago rests at its first Stop on a fresh server', async t => {
+test('a background task the transcript says started two hours ago waits on me at its first Stop on a fresh server', async t => {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1', Date.now() - 2 * 3600 * 1000)]) }, h => home = h, bg(0.1, 30 * 60));
   await post(base, '/event', stopWith(home, SERVER));
   const s = await s1(base);
-  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'idle', note: '1 background task open for 120m', tasks: ['preview server'] });
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'waiting', note: 'Finished its turn (1 background task still running)', tasks: ['preview server'] });
 });
 
 // Dace's 7791 zombie (Oct 20), from his real transcripts (test/fixtures/zombie, text redacted): subagent a3dc4fce41f0fcc8e
@@ -484,11 +522,47 @@ test('Stop ignores a finished subagent and the shell task it started (the 7791 z
   await hook('Stop', { last_assistant_message: 'It was the leftover server.', background_tasks: ZOMBIES });
   const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return { state: s.state, note: s.note, tasks: s.tasks }; };
   assert.deepStrictEqual(await shown(), { state: 'waiting', note: 'Finished its turn', tasks: [] });
-  // the session's own merge job still open: started hours ago per its transcript line, so it rests at once
+  // the session's own merge job still open: started hours ago per its transcript line, so it waits on me at once
   await hook('UserPromptSubmit', { prompt: 'and the merge?' });
   await hook('Stop', { last_assistant_message: 'Merging in the background.', background_tasks: [...ZOMBIES, { id: 'bo1p24jsb', type: 'shell', status: 'running', description: 'Merge it', command: 'gh pr merge' }] });
   const merge = await shown();
-  assert.deepStrictEqual({ ...merge, note: merge.note.replace(/\d+m$/, 'Nm') }, { state: 'idle', note: '1 background task open for Nm', tasks: ['Merge it'] });
+  assert.deepStrictEqual(merge, { state: 'waiting', note: 'Finished its turn (1 background task still running)', tasks: ['Merge it'] });
+});
+
+// Dace's lantern session (Oct 30, 03:56Z), from its real transcript (test/fixtures/stale-watch, text redacted): a
+// `lantern-pr watch` it started at 22:58Z ran on in the background, so every Stop after it listed that task. The demo turn
+// that ended at 03:56:34Z, its four agents done, rested as "idle" ("1 background task open for 297m"), as if nothing
+// needed Dace. A handover gone stale (no fresh task, no agent heard from lately) is a finished turn, and a watch isn't
+// open work at all (see the next test), so this one is a plain finished turn.
+test('a turn ending with its four agents done and only its lantern-pr watch open is a plain finished turn (the demo\'s last Stop)', async t => {
+  const id = 'c0223694-dbd3-47d3-99d4-c889a060f541', file = `.claude/projects/-Users-user/${id}.jsonl`;
+  let home;
+  const base = await serve(t, { [file]: fs.readFileSync(path.join(__dirname, 'fixtures/stale-watch/main.jsonl'), 'utf8') }, h => home = h);
+  const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/Users/user', transcript_path: path.join(home, file), ...more });
+  const WATCH = { id: 'b9gw2x073', type: 'shell', status: 'running', description: 'Restart the PR watch', command: '~/.local/bin/lantern-pr watch --owner c0223694-dbd3-47d3-99d4-c889a060f541' };
+  const DONE = ['a857dddfc67d73b0d', 'a24a93805b473cfe5', 'ae988fa6692044881', 'a6a46cc334a4450fa'].map(a => ({ id: a, type: 'subagent', status: 'completed', description: 'Demo agent', agent_type: 'haiku-lookup' }));
+  await hook('UserPromptSubmit', { prompt: 'Another Claude session sent a message' });
+  await hook('Stop', { last_assistant_message: 'The demo is over and all four moths have landed.', background_tasks: [WATCH, ...DONE] });
+  const s = (await snapshot(base)).sessions.find(x => x.id === id);
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks, waiting: s.waitingSince > 0 },
+    { state: 'waiting', note: 'Finished its turn', tasks: [], waiting: true });
+});
+
+// The same session restarts its `lantern-pr watch` each time it exits, so the watch is nearly always fresh, and every turn
+// it ended read as paused ("Waiting on 1 background task") with its moth in the air while it waited on Dace. A watch is a
+// standing listener for the session's PRs, not work the turn handed over: it doesn't count, fresh or not. Matched on the
+// command the Stop lists, so a dev server started a moment ago still keeps its session paused.
+test('a fresh lantern-pr watch isn\'t open work: a turn ending with only that running is a finished turn', async t => {
+  let home;
+  const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('bw1'), started('b1')]) }, h => home = h);
+  const watch = { id: 'bw1', type: 'shell', status: 'running', description: 'Restart the PR watch', command: '~/.local/bin/lantern-pr watch --owner s1' };
+  await post(base, '/event', stopWith(home, watch));
+  const s = await s1(base);
+  assert.deepStrictEqual({ state: s.state, note: s.note, tasks: s.tasks }, { state: 'waiting', note: 'Finished its turn', tasks: [] });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'and a preview' });
+  await post(base, '/event', stopWith(home, watch, SERVER));
+  const both = await s1(base);
+  assert.deepStrictEqual({ state: both.state, note: both.note, tasks: both.tasks }, { state: 'paused', note: 'Waiting on 1 background task', tasks: ['preview server'] });
 });
 
 // Dace's jwt session (Oct 20, 21:03Z), from its real transcript (test/fixtures/jwt, text redacted): a turn ended with
@@ -2273,7 +2347,9 @@ test('a refused GitHub refresh token is not reconnect when another Lantern saved
 // Dace's PR-watch session (Oct 22, 7fd92067): a turn ended while its own background shell (bk0eb85kg, launched with
 // run_in_background) still ran, then Lantern restarted. Seeding only counted agents, so it came back landed instead of paused
 // on the shell. The launch is a tool result with toolUseResult.backgroundTaskId (a Monitor's is taskId); it ends with a
-// task-notification carrying a <status> (a Monitor's event notices have none) or a TaskStop.
+// task-notification carrying a <status> (a Monitor's event notices have none) or a TaskStop. bk0eb85kg was itself a
+// `lantern-pr watch`, which since Oct 30 isn't open work (prWatch), so that session now seeds as a finished turn; `running`
+// stands for any other shell.
 test('a seeded session waiting on its own background shell is paused, not landed (the PR-watch restart)', async t => {
   const at = minutes => new Date(Date.now() - minutes * 60 * 1000).toISOString();
   const launch = (task, minutes, key = 'backgroundTaskId') => ({ type: 'user', cwd: '/work', timestamp: at(minutes), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: `Command running in background with ID: ${task}.` }] }, toolUseResult: { stdout: '', interrupted: false, [key]: task } });
@@ -2285,12 +2361,14 @@ test('a seeded session waiting on its own background shell is paused, not landed
     stopped: watching(launch('bk0eb85kg', 5), { type: 'user', cwd: '/work', toolUseResult: { message: 'Successfully stopped task: bk0eb85kg (gh pr checks)', task_id: 'bk0eb85kg' } }),
     old: watching(launch('bk0eb85kg', 31)),
     monitor: watching(launch('bmon', 5, 'taskId'), notice('bmon', '<summary>Monitor event: "CI"</summary>\n<event>unit|success</event>')),
+    // a `lantern-pr watch` isn't open work, fresh or not: the launch answers the Bash call that ran it
+    prWatch: watching({ type: 'assistant', cwd: '/work', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: '~/.local/bin/lantern-pr watch --owner x', run_in_background: true } }] } }, launch('bw1', 5)),
   };
   const names = Object.keys(cases);
   const base = await serve(t, Object.assign({}, ...names.map((n, i) => transcript(UUID(i), cases[n]))));
   const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length === names.length && s; }, 'every transcript to be seeded');
   assert.deepStrictEqual(Object.fromEntries(names.map((n, i) => [n, sessions.find(s => s.id === UUID(i)).state])),
-    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'idle', monitor: 'paused' }); // old: open but past TASK_FRESH_MS, so it rests
+    { running: 'paused', completed: 'waiting', stopped: 'waiting', old: 'waiting', monitor: 'paused', prWatch: 'waiting' }); // old: open but past TASK_FRESH_MS, so it's a finished turn
   assert.strictEqual(sessions.find(s => s.id === UUID(0)).note, 'Waiting on 1 background task');
 });
 
