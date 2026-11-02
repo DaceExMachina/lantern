@@ -231,10 +231,10 @@ func lastTurn(file: String) -> Turn {
     for kb in [256, 2048, 16384] { if let turn = lastTurn(tail(file, kb * 1024)) { return turn } }
     return Turn(done: true, idle: true) // none anywhere: a live turn always leaves a recent line, so it's at its prompt, and the hooks correct it
 }
-/// Claude Code writes a cost-state line as its process exits, and a `claude --resume` of the session writes after it, so a
-/// transcript that ends on one is a session no process runs any more.
+/// Claude Code writes a cost-state line as its process exits, so a transcript that ends on one is usually closed. A
+/// `--resume` that hasn't written yet still ends on it, so callers trust a known pid over this.
 func exited(_ file: String) -> Bool {
-    tail(file, 64 * 1024).last { !$0.isEmpty }.map { str((parse(Data($0.utf8)) as? JSON)?["type"]) == "cost-state" } ?? false
+    tail(file, 4 * 1024).last { !$0.isEmpty }.map { str((parse(Data($0.utf8)) as? JSON)?["type"]) == "cost-state" } ?? false
 }
 func transcripts(_ dir: String) -> [String] {
     ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).filter { $0.hasSuffix(".jsonl") }.sorted().map { dir + "/" + $0 }
@@ -475,11 +475,12 @@ extension LanternServer {
     /// transcript says it closed (exited), which reap() can only time out.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
     func reconcile(retried: Bool = false, then: @escaping () -> Void) {
-        struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double }
+        struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double, pidless: Bool }
         let looks = sessions.items.compactMap { id, s -> Look? in
             guard let project = s["project"] as? String else { return nil }
             return Look(id: id, dir: sessionPath(project, id), had: Set(agents[id]?.keys ?? []),
-                        modelled: Set(agents[id]?.items.filter { truthy($0.1["model"]) }.map(\.0) ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0)
+                        modelled: Set(agents[id]?.items.filter { truthy($0.1["model"]) }.map(\.0) ?? []), title: s["title"], titleSeen: (s["titleSeen"] as? Double) ?? 0,
+                        pidless: (s["pids"] as? [Int] ?? []).isEmpty)
         }
         guard !looks.isEmpty else { return then() }
         let started = now()
@@ -490,7 +491,7 @@ extension LanternServer {
                 let mine = app.first { $0.cli == l.id }
                 let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0, mine?.mtime ?? 0)
                 let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
-                return (l.id, l.had, liveSubagents(l.dir, modelled: l.modelled), written, title, exited(l.dir + ".jsonl"))
+                return (l.id, l.had, liveSubagents(l.dir, modelled: l.modelled), written, title, l.pidless && exited(l.dir + ".jsonl"))
             }
             if READ_DELAY_SECONDS > 0 { Thread.sleep(forTimeInterval: READ_DELAY_SECONDS) }
             DispatchQueue.main.async {
