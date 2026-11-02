@@ -565,6 +565,24 @@ test('a fresh lantern-pr watch isn\'t open work: a turn ending with only that ru
   assert.deepStrictEqual({ state: both.state, note: both.note, tasks: both.tasks }, { state: 'paused', note: 'Waiting on 1 background task', tasks: ['preview server'] });
 });
 
+// Dace's jwt session (Nov 2, 18:44Z), from its real transcript (test/fixtures/jwt-watch, text redacted): its watch exited
+// with a merge, it restarted `lantern-pr watch --owner <its id>` (bare, on PATH) and ended the turn after closing the
+// ticket, with nothing else open. The app (main, before #234) showed it paused, "Waiting on 1 background task". Shifted so
+// the restarted watch is ten minutes old, well inside TASK_FRESH_MS: it's a finished turn when seeded and on its Stop.
+test('jwt\'s restarted lantern-pr watch leaves its finished turn waiting, seeded and on its Stop', async t => {
+  const id = '61917df1-4b2c-4e20-b413-cc6c479afa20', file = `.claude/projects/-Users-user-work-extension/${id}.jsonl`;
+  const text = fs.readFileSync(path.join(__dirname, 'fixtures/jwt-watch/main.jsonl'), 'utf8');
+  const shift = Date.now() - 10 * 60 * 1000 - Date.parse('2026-11-02T18:44:40.988Z'); // the watch's launch
+  let home;
+  const base = await serve(t, { [file]: text.replace(/"timestamp":"([^"]+)"/g, (_, at) => `"timestamp":"${new Date(Date.parse(at) + shift).toISOString()}"`) }, h => home = h);
+  const shown = async () => { const s = (await snapshot(base)).sessions.find(x => x.id === id); return s && { state: s.state, note: s.note }; };
+  assert.deepStrictEqual(await until(shown, 'jwt to be seeded'), { state: 'waiting', note: 'Finished its turn, waiting for you' });
+  const hook = (hook_event_name, more = {}) => post(base, '/event', { session_id: id, hook_event_name, cwd: '/Users/user/work/extension', transcript_path: path.join(home, file), ...more });
+  await hook('UserPromptSubmit', { prompt: 'Another Claude session sent a message' });
+  await hook('Stop', { last_assistant_message: 'PRO-1 is done.', background_tasks: [{ id: 'b11tuchz2', type: 'shell', status: 'running', description: 'Restart the PR watcher for owned PRs', command: `lantern-pr watch --owner ${id}` }] });
+  assert.deepStrictEqual(await shown(), { state: 'waiting', note: 'Finished its turn' });
+});
+
 // Dace's jwt session (Oct 20, 21:03Z), from its real transcript (test/fixtures/jwt, text redacted): a turn ended with
 // background agents still running (turn_duration's pendingBackgroundAgentCount 6; the compaction's task_status lines name
 // five running), then he ran /compact. PostCompact (manual) and the SessionStart (source compact) after every compaction
