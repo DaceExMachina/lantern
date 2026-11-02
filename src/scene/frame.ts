@@ -984,7 +984,7 @@ export let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.2
 const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...live.moths.values()].filter(o => !(o.parentId === undefined && o.satellite) && !o.leaving).length - 4) / 8));
 export const bowed = (ax: number, ay: number, bx: number, by: number, m: { bowK?: number, phase: number }, s: number, k: number) => {
   k *= m.bowK ?? crowd();
-  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * Math.sin(s * 0.8 + m.phase);
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * Math.sin(s * 0.2 + m.phase);
   return `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${(ax + dx / 2 - dy / len * bow).toFixed(1)} ${(ay + dy / 2 + dx / len * bow).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;
 };
 // Each session moth's thread (threadEnds). Satellites fly untethered.
