@@ -82,8 +82,18 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         window.makeKeyAndOrderFront(nil)
         // The saved frame is the windowed one (in full screen the frame is the whole display), so full screen is remembered
         // separately. The saved frame puts the window back on its display first; full screen then takes over that display.
-        if UserDefaults.standard.bool(forKey: "fullScreen") { DispatchQueue.main.async { self.window.toggleFullScreen(nil) } }
+        restoreFullScreen = UserDefaults.standard.bool(forKey: "fullScreen")
         web.load(URLRequest(url: home))
+    }
+
+    // Full screen is a Space of its own, and entering one switches its display to it, which brings Lantern to the front. So it
+    // waits until Lantern is brought forward: at once for a Dock or Spotlight launch, and for a background relaunch (`open -g`)
+    // not until you click it, so a relaunch leaves your focus where it was.
+    var restoreFullScreen = false
+    func applicationDidBecomeActive(_ note: Notification) {
+        guard restoreFullScreen, let window else { return }
+        restoreFullScreen = false
+        window.toggleFullScreen(nil)
     }
 
     // Save the real frame before full screen replaces it, so leaving full screen (or relaunching) lands back where the window was.
