@@ -273,7 +273,8 @@ func findOwners(_ urls: [String]) -> [String: Any] {
 }
 
 // PRs a session created, read back from its transcript and its subagents' (a restart forgets the live ones).
-// ponytail: reads every transcript in full (memory-mapped); read only the tails if startup drags.
+// ponytail: reads every transcript in full (memory-mapped): seconds for an orchestrator with gigabytes of subagents, so
+// it runs after the sessions are out (loadCreated), never on their way in.
 // Each Bash call that ran `gh pr create`, and the PR URL in that call's own output:
 func createdPRs(_ file: String, _ dir: String) -> [String] {
     var calls = Set<String>(), urls: [String] = []
@@ -435,7 +436,6 @@ func seedSession(_ file: String, live: Bool, busy: Bool? = nil, words: Bool) -> 
     if turn.done, let text = turn.text, !text.isEmpty { s["forYou"] = forYou(text) }
     // everything it said in the transcript's tail, not just the last turn, so the pages have words straight after a restart
     if words, case let said = transcriptProse(lines), !said.isEmpty { s["prose"] = Array(said.suffix(10)) }
-    s["created"] = createdPRs(file, dir)
     let agents = liveSubagents(dir)
     let tasks = openTasks(lines)
     s["taskSince"] = tasks
@@ -592,28 +592,51 @@ extension LanternServer {
                     self.owners = cache["owners"] as? JSON ?? [:]
                     for (id, _) in self.sessions.items { if let g = (cache["bySession"] as? JSON)?[id] { self.sessions[id]!["github"] = g } }
                 }
+                self.broadcast()
                 // give the titles a moment to load, then find each seeded session's iTerm tab so it's clickable right away
+                // (loadCreated refreshes GitHub once their PRs are read back)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                    self.findItermTabs(self.sessions.items.filter { !truthy($0.1["iterm"]) }.map(\.0)) {
-                        self.broadcast()
-                        self.refreshGitHub()
-                    }
+                    self.findItermTabs(self.sessions.items.filter { !truthy($0.1["iterm"]) }.map(\.0)) { self.broadcast() }
                 }
             }
         }
     }
 
     /// Sessions rebuilt from disk join the live ones, unless hooks brought them back first.
+    /// Its title and the PRs it created are read in after (loadTitle, loadCreated), so the sessions go out without waiting.
     func add(_ seeded: [(JSON, Ordered<JSON>)]) {
+        var added: [(String, String)] = []
         for (s, a) in seeded {
             let id = str(s["id"])
             if sessions[id] != nil { continue }
             var s = s
+            s["createdPending"] = true
             agents[id] = a
             derive(&s, id)
             sessions[id] = s
             self.seeded.insert(id)
-            loadTitle(id, sessionPath(str(s["project"]), id))
+            let dir = sessionPath(str(s["project"]), id)
+            loadTitle(id, dir)
+            added.append((id, dir))
+        }
+        loadCreated(added) // with none, still the startup refresh
+    }
+
+    /// Reads back the PRs these sessions created (createdPRs) off the main queue, merges them with any a hook added
+    /// meanwhile, and then refreshes GitHub. Until then refreshes leave the sessions out (createdPending), so they don't
+    /// look like they own none of them.
+    func loadCreated(_ sessions: [(id: String, dir: String)]) {
+        DispatchQueue.global().async {
+            let found = sessions.map { ($0.id, createdPRs($0.dir + ".jsonl", $0.dir)) }
+            DispatchQueue.main.async {
+                for (id, made) in found where self.sessions[id] != nil {
+                    let created = self.sessions[id]!["created"] as? [String] ?? [], all = created + made.filter { !created.contains($0) }
+                    if !all.isEmpty { self.sessions[id]!["created"] = all }
+                    self.sessions[id]!["createdPending"] = nil
+                }
+                self.broadcast()
+                self.refreshGitHub()
+            }
         }
     }
 
@@ -643,11 +666,8 @@ extension LanternServer {
                 if self.sessions.count == before { return }
                 print("Adopted \(self.sessions.count - before) running session(s) the hooks missed")
                 self.broadcast()
-                // then, as at startup, its iTerm tab so it's clickable, and its PRs
-                self.findItermTabs(found.map { str($0.0["id"]) }.filter { self.sessions[$0] != nil && !truthy(self.sessions[$0]!["iterm"]) }) {
-                    self.broadcast()
-                    self.refreshGitHub()
-                }
+                // then, as at startup, its iTerm tab so it's clickable (loadCreated refreshes its PRs)
+                self.findItermTabs(found.map { str($0.0["id"]) }.filter { self.sessions[$0] != nil && !truthy(self.sessions[$0]!["iterm"]) }) { self.broadcast() }
             }
         }
     }

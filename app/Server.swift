@@ -523,21 +523,8 @@ final class LanternServer {
         let dir = sessionDir(e["transcript_path"])
         if let dir { s["project"] = ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent }
         // A session the hooks bring in (a resume, or a restart where its hooks beat seeding) reads back the PRs it created,
-        // as seeding does. Until then refreshes leave it out, so it doesn't look like it owns none of them.
-        if joining, let dir {
-            s["createdPending"] = true
-            DispatchQueue.global().async {
-                let made = createdPRs(dir + ".jsonl", dir)
-                DispatchQueue.main.async {
-                    guard var s = self.sessions[id] else { return }
-                    let created = s["created"] as? [String] ?? [], all = created + made.filter { !created.contains($0) }
-                    if !all.isEmpty { s["created"] = all }
-                    s["createdPending"] = nil
-                    self.sessions[id] = s
-                    if !made.isEmpty { self.refreshGitHub() }
-                }
-            }
-        }
+        // as seeding does (loadCreated)
+        if joining, let dir { s["createdPending"] = true; loadCreated([(id, dir)]) }
         if let dir, now() - ((s["titleRead"] as? Double) ?? 0) > TITLE_EVERY_MS {
             s["titleRead"] = now()
             loadTitle(id, dir)

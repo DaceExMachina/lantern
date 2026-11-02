@@ -3,7 +3,6 @@
     "expect": {
       "sessions": [
         {
-          "created": [],
           "cwd": "/work",
           "forYou": {
             "prs": [],
@@ -22,7 +21,6 @@
           "waitingSince": "<time>"
         },
         {
-          "created": [],
           "cwd": "/work",
           "id": "00000002-0000-4000-8000-000000000000",
           "last": "<time>",

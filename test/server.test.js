@@ -1315,6 +1315,21 @@ test('stats: a refresh that goes out while a joining session reads its PRs back 
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });
 
+// Reading back the PRs a session created can take seconds (an orchestrator's subagents run to gigabytes, many of them
+// quoting `gh pr create` in briefs), and moths took 7 to 13 seconds to appear after a launch while seeding waited on it.
+// Seeded sessions go out first and their PRs follow. A long transcript full of `gh pr create` mentions keeps the read going.
+test('seeded sessions go out before the PRs they created are read back, and those follow', async t => {
+  const id = UUID(8), talk = JSON.stringify(answer('Then gh pr create opens it.')) + '\n';
+  const made = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --draft --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(1) + '\n' }] } }];
+  // made early in the session, so the read has to go through the whole transcript to find it
+  const base = await serve(t, { [`.claude/projects/-work/${id}.jsonl`]: jsonl([user('Fix it'), ...made]) + talk.repeat(200000) + jsonl([answer('Done.')]) });
+  const first = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id), 'the transcript to be seeded', 60000);
+  assert.strictEqual(first.created, undefined, 'the session went out before its PRs were read back');
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.created), 'its PRs to be read back', 60000);
+  assert.deepStrictEqual(s.created, [prUrl(1)]);
+});
+
 // A session that joins while a refresh is out (adopted, say) isn't in that refresh's answer. Until one looks at it, it
 // keeps the PRs it owned rather than dropping them as strays. Here s2 works outside any git repo, so no refresh ever looks
 // at it, while s1 in the repo makes the refreshes run.

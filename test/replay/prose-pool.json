@@ -7,7 +7,6 @@
       ],
       "sessions": [
         {
-          "created": [],
           "cwd": "/work",
           "forYou": {
             "prs": [],
@@ -29,7 +28,6 @@
           "waitingSince": "<time>"
         },
         {
-          "created": [],
           "cwd": "/work",
           "forYou": {
             "prs": [],
