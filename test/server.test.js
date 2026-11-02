@@ -731,6 +731,9 @@ const watch = command => ({ background_tasks: [{ ...SERVER, description: 'Watch 
 const AGENT = ev('PreToolUse', { agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: {} });
 const AGENT_TASK = { background_tasks: [{ id: 'a1', type: 'subagent', status: 'running', description: 'Audit it' }] };
 const NUDGE = ev('Notification', { notification_type: 'idle_prompt', message: 'Claude is waiting' });
+// a permission's prompt notification, 6 s on if the dialog is still open: Notification hooks never carry agent_id, an agent's included
+const NOTE_PERM = ev('Notification', { notification_type: 'permission_prompt', message: 'Claude needs your permission' });
+const AGENT_ASKS = { ...AGENT, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, AGENT_DONE = { ...AGENT, hook_event_name: 'PostToolUse', tool_name: 'Bash' };
 const STATE_TABLE = [
   ['a prompt', [UPS], 'working', ''],
   ['a tool call', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} })], 'working', ''],
@@ -782,13 +785,17 @@ const STATE_TABLE = [
   ['a question in a dialog', [UPS, ev('Notification', { notification_type: 'elicitation_dialog', message: 'Pick one' })], 'waiting', 'Pick one'],
   ['an idle nudge after a manual compact', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), NUDGE], 'waiting', 'Claude is waiting'],
   ['an idle nudge after a lost manual compact', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), NUDGE], 'waiting', 'Claude is waiting'],
+  // an agent working again after it asked for me means I answered: the session goes back to what it was doing
+  ['a subagent working again after its permission was granted, mid-turn', [UPS, AGENT_ASKS, AGENT_DONE], 'working', ''],
+  ['a background agent working again after its permission was granted', [UPS, AGENT, { ...STOP, ...AGENT_TASK }, AGENT_ASKS, AGENT_DONE], 'paused', 'Waiting on 1 agent'],
+  ['a subagent\'s permission and its prompt, then it works again', [UPS, AGENT_ASKS, NOTE_PERM, AGENT_DONE], 'working', ''],
+  // only its own wait: the main thread asking stays asked, whichever came first
+  ['a subagent working while the main thread waits on a permission', [UPS, AGENT, ev('PermissionRequest', { tool_name: 'Bash' }), AGENT_DONE], 'waiting', 'Wants permission to use Bash'],
+  ['a subagent granted while the main thread waits on its own permission', [UPS, ev('PermissionRequest', { tool_name: 'Edit' }), AGENT_ASKS, AGENT_DONE], 'waiting', 'Wants permission to use Edit'],
+  ['a subagent granted, then the main thread asks', [UPS, AGENT_ASKS, ev('PermissionRequest', { tool_name: 'Edit' }), AGENT_DONE], 'waiting', 'Wants permission to use Edit'],
 ];
 // Rows where what the session shows now looks wrong: each says what it should show, and runs as a todo until it's fixed.
 const SUSPECTED = [
-  // an agent's events never touch its session's turn (they return early in handle()), so once one asked for permission
-  // the session reads blocked on me until the main thread moves again, however long the agent runs on after I said yes
-  ['a subagent working again after its permission was granted, mid-turn', [UPS, { ...AGENT, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, { ...AGENT, hook_event_name: 'PostToolUse', tool_name: 'Bash' }], 'working', ''],
-  ['a background agent working again after its permission was granted', [UPS, AGENT, { ...STOP, ...AGENT_TASK }, { ...AGENT, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, { ...AGENT, hook_event_name: 'PostToolUse', tool_name: 'Bash' }], 'paused', 'Waiting on 1 agent'],
 ];
 async function stateRows(t, rows) {
   let home;
