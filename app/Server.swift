@@ -400,7 +400,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 }.filter { $0.key != "inTool" } }
             return out
@@ -560,8 +560,12 @@ final class LanternServer {
                 a["inTool"] = ev == "PreToolUse" ? true : nil
                 agents[id]![aid] = a
             }
-            // Background agents keep working after the turn ends, so their activity mustn't clear "needs you". Them asking for me still counts.
-            if ev != "PermissionRequest" && ev != "Notification" { return }
+            // Background agents keep working after the turn ends, so their activity mustn't clear "needs you". Them asking for me
+            // still counts, and an agent working again after it asked means I answered: the session goes back to what it was doing.
+            if ev != "PermissionRequest" && ev != "Notification" {
+                if str(s["turn"]) == "blocked", let asked = s["agentAsked"] as? JSON, str(asked["agent"]) == aid { s["turn"] = asked["turn"]; s["note"] = asked["note"]; s["agentAsked"] = nil }
+                return
+            }
         }
 
         // Hooks are posted async, so a turn's Stop can land after the next prompt has started (a queued message starts 50 ms
@@ -625,6 +629,12 @@ final class LanternServer {
             s["activity"] = ""
             check(&s)
         case "PermissionRequest":
+            // An agent asking keeps what the session was doing before, so that agent's next event can put it back; the main
+            // thread asking drops it, so no agent clears a wait that isn't its own. Only PermissionRequest says who asked: a
+            // Notification never carries agent_id (an agent's permission prompt included), so notifications leave it alone.
+            // ponytail: one agent's ask at a time; a second agent asking before the first is answered saves the first one's
+            // wait, which then stays until the main thread moves. Keep one record per agent if that turns up.
+            s["agentAsked"] = truthy(e["agent_id"]) ? ["agent": str(e["agent_id"]), "turn": s["turn"] ?? "", "note": s["note"] ?? ""] : nil
             s["turn"] = "blocked"
             s["note"] = "Wants permission to use \(truthy(e["tool_name"]) ? str(e["tool_name"]) : "a tool")"
         case "Notification":
