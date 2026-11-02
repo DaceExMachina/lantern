@@ -2210,6 +2210,26 @@ test('the watcher stops with the server, and a watcher an earlier run left behin
   await until(() => !alive(mine), 'the watcher to stop with the server');
   assert.ok(!fs.existsSync(recorded), 'the pid file is gone');
 });
+// The app runs the server as its child, so quitting or crashing the app must not leave a server holding the port: the server
+// notices its parent go and stops as it does on SIGTERM, closing the event log's open spans.
+test('the server stops cleanly when whoever started it goes, however it went', async t => {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-')), db = path.join(home, 'data/stats.sqlite');
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin') };
+  // a parent that can die without a word: a shell that starts the server and waits
+  const parent = spawn('/bin/sh', ['-c', `"${BIN}" & echo "pid $!"; wait`], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+  t.after(() => parent.kill('SIGKILL'));
+  let out = '';
+  parent.stdout.on('data', chunk => out += chunk);
+  const pid = Number(await until(() => out.match(/^pid (\d+)$/m)?.[1], 'the server\'s pid'));
+  t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  const base = await until(() => out.match(/^Lantern lit at (\S+)$/m)?.[1], 'the server to start');
+  const open = () => execFileSync('sqlite3', [db, "SELECT count(*) FROM spans WHERE kind = 'server' AND ended IS NULL"], { encoding: 'utf8' }).trim();
+  await until(() => fs.existsSync(db) && open() === '1', 'the server span to open');
+  parent.kill('SIGKILL');
+  await until(() => !alive(pid), 'the server to stop with its parent', 10000);
+  assert.strictEqual(execFileSync('sqlite3', [db, "SELECT json_extract(data, '$.how') FROM spans WHERE kind = 'server'"], { encoding: 'utf8' }).trim(), 'shutdown');
+  await assert.rejects(fetch(base + '/stats'), 'nothing answers on its port');
+});
 test('the pid file only ever stops this checkout\'s vite, and only a stopping server\'s own pid is removed from it', async t => {
   const web = fakeVite(true, true, true), other = fakeVite(true, true, true), fake = `${fakeNode()}/node`;
   const recorded = path.join(web, 'node_modules/.lantern-vite.pid');

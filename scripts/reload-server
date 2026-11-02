@@ -1,0 +1,18 @@
+#!/bin/sh
+# Deploys a server change (app/*.swift other than main.swift) to the running Lantern.app without touching its window, its
+# full-screen Space or your focus: rebuilds the app in place, then stops only the server, which the app starts again from the
+# new build, and the page reconnects by itself. The window's own code (app/main.swift) only changes with a full relaunch.
+# LANTERN_APP: a copy of the app other than ~/Applications/Lantern.app.
+set -e
+cd "$(dirname "$0")/.."
+APP=${LANTERN_APP:-"$HOME/Applications/Lantern.app"}
+BIN="$APP/Contents/MacOS/Lantern"
+WINDOW=$(pgrep -fx "$BIN") || { echo "Lantern isn't running, so there's nothing to reload: open it" >&2; exit 1; }
+OPENED=$(LC_ALL=C date -j -f "%a %b %d %T %Y" "$(LC_ALL=C ps -o lstart= -p "$WINDOW" | xargs)" +%s)
+if [ "$(stat -f %m app/main.swift)" -gt "$OPENED" ]; then
+  echo "app/main.swift changed since Lantern opened, so this needs a full relaunch: app/build.sh, quit Lantern, then open -g \"$APP\"" >&2
+  exit 1
+fi
+app/build.sh "$(dirname "$APP")"
+pkill -P "$WINDOW" -f -- --server || true # its own server, whatever path it was started by
+echo "Restarted the server; the window stays as it is"

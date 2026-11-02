@@ -80,7 +80,13 @@ LANTERN_PORT=7718 node fake.js
 
 ## Changing the server or the app
 
-After changing anything in `app/`, rebuild and reinstall the app, then quit Lantern and reopen it:
+The server runs as the app's child: the same executable started with `--server`, which the app starts again whenever it exits. So a server change (any of `app/*.swift` other than `main.swift`) goes live without touching the window, its full-screen Space or your focus:
+
+```bash
+scripts/reload-server
+```
+
+It rebuilds and reinstalls the app, then stops only the server; the app starts the new one and reloads the page. A change to the window itself (`app/main.swift`) needs the app reopened, which the script tells you: rebuild and reinstall, then quit Lantern and reopen it:
 
 ```bash
 sh app/build.sh

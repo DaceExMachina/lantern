@@ -1,5 +1,7 @@
-// Lantern.app: the Lantern page in its own window, with a Dock icon and badge, and the Lantern server (Server.swift)
-// running inside it, so hooks reach it as long as the app is open.
+// Lantern.app: the Lantern page in its own window, with a Dock icon and badge, and the Lantern server (Server.swift) as its
+// child, so hooks reach it as long as the app is open. The child is this same executable run with --server, so it has the
+// app's identity (and its permissions); stopping just the server deploys a rebuilt one without touching the window
+// (scripts/reload-server).
 import AppKit
 import ServiceManagement
 import WebKit
@@ -16,26 +18,20 @@ let saved = FileManager.default.contents(atPath: data + "/settings.json").flatMa
 let port = env["LANTERN_PORT"] ?? (saved?["port"] as? NSNumber)?.stringValue ?? "7717"
 let home = URL(string: "http://127.0.0.1:\(port)/?app")!
 
+// Settings live in Application Support, since an app can't write inside itself. The page comes from the app, or, when the
+// installer ran from a git checkout, from that checkout, so edits to index.html go live.
+if CommandLine.arguments.contains("--server") {
+    let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
+    LanternServer(port: UInt16(port) ?? 7717, data: data, web: checkout ?? Bundle.main.resourcePath!).serve(build: true)
+}
+
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var strip: DragStrip!
-    var server: LanternServer!
-    var term: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        // Settings live in Application Support, since an app can't write inside itself. The page comes from the app,
-        // or, when the installer ran from a git checkout, from that checkout, so edits to index.html go live.
-        let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
-        server = LanternServer(port: UInt16(port) ?? 7717, data: data, web: checkout ?? Bundle.main.resourcePath!)
-        server.start()
-        server.buildChrome()
-        // SIGTERM (a relaunch, install.js) quits properly, which stops the vite watcher and closes the event log. If the main
-        // thread is wedged, it leaves anyway after 3 s.
-        signal(SIGTERM, SIG_IGN)
-        term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
-        term?.setEventHandler { DispatchQueue.main.async { NSApp.terminate(nil) }; DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) } }
-        term?.resume()
+        runServer()
         // Hooks need the server even with no window open, so an installed copy opens at login. That's offered once;
         // turning it off in System Settings > General > Login Items sticks.
         if !UserDefaults.standard.bool(forKey: "loginItemOffered"), Bundle.main.bundlePath.contains("/Applications/") {
@@ -105,7 +101,23 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     func windowDidEnterFullScreen(_ note: Notification) { UserDefaults.standard.set(true, forKey: "fullScreen") }
     func windowDidExitFullScreen(_ note: Notification) { UserDefaults.standard.set(false, forKey: "fullScreen") }
 
-    func applicationWillTerminate(_ note: Notification) { server.stopBuilding(); server.stats.shutdown() } // close the event log's open spans
+    // The server comes back whenever it exits, from the executable on disk now, so after a rebuild it's the new one. A server
+    // that can't start must not spin: it comes back after a growing pause, and one that ran for half a minute starts the pause
+    // over. The page then loads again: its own reconnect runs on timers that WebKit holds back while the window is hidden, so it
+    // could wait for a look, and a failed load keeps the old page on screen and tries again (below). The app needs nothing on
+    // the way out: the server notices the app going and stops itself (serve in Server.swift).
+    func runServer(pause: Double = 0.25) {
+        let p = Process(), began = Date()
+        p.executableURL = Bundle.main.executableURL
+        p.arguments = ["--server"]
+        let again = {
+            let wait = Date().timeIntervalSince(began) > 30 ? 0.25 : pause
+            print("the server exited; starting it again in \(wait) s")
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.runServer(pause: min(wait * 2, 60)); self.reload(nil) }
+        }
+        p.terminationHandler = { _ in DispatchQueue.main.async(execute: again) }
+        do { try p.run() } catch { print("the server won't start: \(error)"); again() }
+    }
 
     // The server lives as long as the app, so closing the window keeps both running. Clicking the Dock icon brings it back.
     func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows: Bool) -> Bool {

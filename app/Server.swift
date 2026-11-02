@@ -273,6 +273,26 @@ final class LanternServer {
     }
     func retry() { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.start() } }
 
+    // Runs the server for good: as the app's child (main.swift), a preview or a test. It stops on SIGTERM or when whoever started
+    // it goes (the app quitting or crashing), so nothing is left holding the port; either way it stops the vite watcher and
+    // closes the event log's open spans first, and if the main thread is wedged it leaves anyway after 3 s.
+    // build: keep dist/ built, which only the app's server does.
+    func serve(build: Bool) -> Never {
+        start()
+        if build { buildChrome() }
+        let stop = {
+            DispatchQueue.main.async { self.stopBuilding(); self.stats.shutdown(); exit(0) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) }
+        }
+        signal(SIGTERM, SIG_IGN)
+        let watches: [DispatchSourceProtocol] = [DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global()),
+                                                 DispatchSource.makeProcessSource(identifier: getppid(), eventMask: .exit, queue: .global())]
+        for w in watches { w.setEventHandler(handler: stop); w.resume() }
+        if getppid() == 1 { stop() } // the parent went before it was watched
+        withExtendedLifetime(watches) { RunLoop.main.run() }
+        exit(0)
+    }
+
     // Claude Code's hooks only reach the live app, so sessions a preview found itself would never change. It shows the
     // app's instead, each time the app sends them. When the stream ends (the app quitting, say) it keeps the last ones
     // and tries again every two seconds; a new stream starts with the app's current list.
