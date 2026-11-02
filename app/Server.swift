@@ -523,7 +523,7 @@ final class LanternServer {
         let dir = sessionDir(e["transcript_path"])
         if let dir { s["project"] = ((dir as NSString).deletingLastPathComponent as NSString).lastPathComponent }
         // A session the hooks bring in (a resume, or a restart where its hooks beat seeding) reads back the PRs it created,
-        // as seeding does (loadCreated)
+        // as seeding does (loadCreated).
         if joining, let dir { s["createdPending"] = true; loadCreated([(id, dir)]) }
         if let dir, now() - ((s["titleRead"] as? Double) ?? 0) > TITLE_EVERY_MS {
             s["titleRead"] = now()

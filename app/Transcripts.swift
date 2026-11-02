@@ -577,7 +577,7 @@ extension LanternServer {
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
-                self.add(seeded)
+                if self.add(seeded) == 0 { self.refreshGitHub() } // none to read back, so none to refresh it after
                 if !mirroring {
                     print("Seeded \(self.sessions.count) session(s) from disk"); self.dropEndedPins()
                     for id in self.settings["snoozed"] as? [String] ?? [] where self.sessions[id] != nil { self.sessions[id]!["snoozed"] = true }
@@ -604,7 +604,7 @@ extension LanternServer {
 
     /// Sessions rebuilt from disk join the live ones, unless hooks brought them back first.
     /// Its title and the PRs it created are read in after (loadTitle, loadCreated), so the sessions go out without waiting.
-    func add(_ seeded: [(JSON, Ordered<JSON>)]) {
+    @discardableResult func add(_ seeded: [(JSON, Ordered<JSON>)]) -> Int {
         var added: [(String, String)] = []
         for (s, a) in seeded {
             let id = str(s["id"])
@@ -619,15 +619,16 @@ extension LanternServer {
             loadTitle(id, dir)
             added.append((id, dir))
         }
-        loadCreated(added) // with none, still the startup refresh
+        if !added.isEmpty { loadCreated(added) }
+        return added.count
     }
 
     /// Reads back the PRs these sessions created (createdPRs) off the main queue, merges them with any a hook added
     /// meanwhile, and then refreshes GitHub. Until then refreshes leave the sessions out (createdPending), so they don't
     /// look like they own none of them.
-    func loadCreated(_ sessions: [(id: String, dir: String)]) {
+    func loadCreated(_ batch: [(id: String, dir: String)]) {
         DispatchQueue.global().async {
-            let found = sessions.map { ($0.id, createdPRs($0.dir + ".jsonl", $0.dir)) }
+            let found = batch.map { ($0.id, createdPRs($0.dir + ".jsonl", $0.dir)) }
             DispatchQueue.main.async {
                 for (id, made) in found where self.sessions[id] != nil {
                     let created = self.sessions[id]!["created"] as? [String] ?? [], all = created + made.filter { !created.contains($0) }
