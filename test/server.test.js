@@ -788,7 +788,7 @@ const AFTER_TURN = {
   'an attachment': [{ type: 'attachment', attachment: { type: 'hook_success' } }, { type: 'attachment', attachment: { type: 'queued_command' } }],
   'system notes': [{ type: 'system', subtype: 'stop_hook_summary' }, { type: 'system', subtype: 'away_summary', content: 'You were fixing it.' },
     { type: 'system', subtype: 'informational' }, { type: 'system', subtype: 'api_error' }],
-  'bookkeeping': ['file-history-snapshot', 'ai-title', 'pr-link', 'last-prompt', 'permission-mode', 'mode', 'queue-operation', 'cost-state'].map(type => ({ type })),
+  'bookkeeping': ['file-history-snapshot', 'ai-title', 'pr-link', 'cost-state', 'last-prompt', 'permission-mode', 'mode', 'queue-operation'].map(type => ({ type })), // (one ending on cost-state has closed: see the closed-tab test)
   'a kind Claude Code adds later': [{ type: 'something-new', message: { content: 'hello' } }],
 };
 test('a transcript ending on lines that aren\'t a turn seeds from the last turn: waiting after a finished one, working mid-turn', async t => {
@@ -917,6 +917,47 @@ test('a sessions record whose process start differs from the running pid\'s is s
   });
   const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.some(x => x.id === b) && s; }, 'the verified session to be seeded');
   assert.deepStrictEqual(sessions.map(x => x.id), [b]);
+});
+
+// Dace's closed tabs (Nov 2): he closed three Claude Code tabs a minute before Lantern relaunched. Each process wrote its
+// exit lines (last-prompt, then cost-state) as it went, which made the transcript recent, so the recent-transcript pass
+// seeded all three with no process and they hung about as waiting moths until the 20 minute timeout.
+// test/fixtures/closed-tab has the shape of the tail they all ended on (made-up ids, times and text). A transcript that ends on cost-state is
+// closed: it isn't seeded, and one with no process that closes while the lantern runs goes on the next sweep. One that
+// was resumed (its process writes after the cost-state) and one still running stay, though no process is tied to them
+// (no ps here, so none is).
+const CLOSED = UUID(9), CLOSED_TAIL = fs.readFileSync(path.join(__dirname, 'fixtures/closed-tab', `${CLOSED}.jsonl`), 'utf8');
+const EXIT_LINES = CLOSED_TAIL.split('\n').filter(Boolean).slice(-2).join('\n') + '\n'; // last-prompt, then cost-state
+test('a restart doesn\'t seed a session that closed just before it, and does seed one resumed since', async t => {
+  const resumed = UUID(1), running = UUID(2);
+  const base = await serve(t, {
+    [`.claude/projects/-work/${CLOSED}.jsonl`]: CLOSED_TAIL,
+    [`.claude/projects/-work/${resumed}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]) + EXIT_LINES + jsonl([{ type: 'last-prompt' }, { type: 'file-history-snapshot' }]),
+    [`.claude/projects/-work/${running}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]),
+  }); // the default sweep (30 s) doesn't run in this test, so only seeding decides
+  const sessions = await until(async () => { const s = (await snapshot(base)).sessions; return s.length > 0 && s; }, 'the recent transcripts to be seeded'); // all at once
+  assert.deepStrictEqual(sessions.map(s => s.id).sort(), [resumed, running]);
+});
+
+// A session whose process is known is left to reap(): a `claude --resume` that hasn't written yet, or a second process of
+// one session, still runs behind a transcript ending on cost-state.
+test('a session with no process known goes on the next sweep once its transcript says it closed; one still running, or with a live process, stays', async t => {
+  const running = UUID(2), closing = UUID(3), resuming = UUID(4);
+  let home;
+  const base = await serve(t, {
+    [`.claude/projects/-work/${running}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]),
+    [`.claude/projects/-work/${closing}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]),
+    [`.claude/projects/-work/${resuming}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]) + EXIT_LINES,
+  }, h => home = h, { LANTERN_SWEEP_SECONDS: '0.1' });
+  const ids = async () => (await snapshot(base)).sessions.map(s => s.id).sort();
+  await until(async () => (await ids()).length === 2, 'the two open ones to be seeded');
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(process.pid) }, // a live pid: this test's own
+    body: JSON.stringify({ session_id: resuming, hook_event_name: 'SessionStart', source: 'resume', cwd: '/work', transcript_path: path.join(home, `.claude/projects/-work/${resuming}.jsonl`) }) });
+  await until(async () => (await ids()).includes(resuming), 'the resumed session to land');
+  fs.appendFileSync(path.join(home, `.claude/projects/-work/${closing}.jsonl`), EXIT_LINES); // its tab closes
+  await until(async () => !(await ids()).includes(closing), 'the closed session to go');
+  await wait(300); // a few more sweeps
+  assert.deepStrictEqual(await ids(), [running, resuming]);
 });
 
 // One tab holds one session: a session starting in a tab replaces the one that was there, when that one has no process left.

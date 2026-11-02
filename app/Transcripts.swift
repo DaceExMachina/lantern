@@ -231,6 +231,11 @@ func lastTurn(file: String) -> Turn {
     for kb in [256, 2048, 16384] { if let turn = lastTurn(tail(file, kb * 1024)) { return turn } }
     return Turn(done: true, idle: true) // none anywhere: a live turn always leaves a recent line, so it's at its prompt, and the hooks correct it
 }
+/// Claude Code writes a cost-state line as its process exits, and a `claude --resume` of the session writes after it, so a
+/// transcript that ends on one is a session no process runs any more.
+func exited(_ file: String) -> Bool {
+    tail(file, 64 * 1024).last { !$0.isEmpty }.map { str((parse(Data($0.utf8)) as? JSON)?["type"]) == "cost-state" } ?? false
+}
 func transcripts(_ dir: String) -> [String] {
     ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).filter { $0.hasSuffix(".jsonl") }.sorted().map { dir + "/" + $0 }
 }
@@ -461,7 +466,8 @@ extension LanternServer {
     /// sweep; reads happen off the main queue, and `then` runs on the main queue once they've landed. Today it covers
     /// subagents: each session's are rebuilt from one rule (alive while their transcript is unfinished and recent, or a
     /// hook was just heard), whatever the session's state, since background agents run on while it waits on me. A lost
-    /// SubagentStop, a restart and a quiet agent all come out right.
+    /// SubagentStop, a restart and a quiet agent all come out right. It also ends a session with no process known whose
+    /// transcript says it closed (exited), which reap() can only time out.
     /// New "state we infer from events but can verify on disk" checks belong here, not scattered through sweep().
     func reconcile(retried: Bool = false, then: @escaping () -> Void) {
         struct Look { let id: String, dir: String, had: Set<String>, modelled: Set<String>, title: Any?, titleSeen: Double }
@@ -474,17 +480,19 @@ extension LanternServer {
         let started = now()
         DispatchQueue.global().async {
             let app = appSessions() // the Claude app keeps the title it shows in its own file for the session
-            let results = looks.map { l -> (String, Set<String>, Ordered<JSON>, Double, Any?) in
+            let results = looks.map { l -> (String, Set<String>, Ordered<JSON>, Double, Any?, Bool) in
                 // a rename fires no hook, so re-read the title when a file it lives in has been written since we last looked
                 let mine = app.first { $0.cli == l.id }
                 let written = max(fileTimes(l.dir + "/custom-title.json")?.mtime ?? 0, fileTimes(l.dir + ".jsonl")?.mtime ?? 0, mine?.mtime ?? 0)
                 let title: Any? = written > l.titleSeen ? (mine?.title.flatMap { $0.isEmpty ? nil : $0 } ?? readTitle(l.dir, l.title)) : l.title
-                return (l.id, l.had, liveSubagents(l.dir, modelled: l.modelled), written, title)
+                return (l.id, l.had, liveSubagents(l.dir, modelled: l.modelled), written, title, exited(l.dir + ".jsonl"))
             }
             if READ_DELAY_SECONDS > 0 { Thread.sleep(forTimeInterval: READ_DELAY_SECONDS) }
             DispatchQueue.main.async {
                 var changed = false
-                for (id, had, live, written, title) in results where self.sessions[id] != nil {
+                for (id, had, live, written, title, exited) in results where self.sessions[id] != nil {
+                    // reap() ends a session by its processes; one with none known ends when its transcript says it closed
+                    if exited && (self.sessions[id]!["pids"] as? [Int] ?? []).isEmpty { self.sessions[id] = nil; self.agents[id] = nil; changed = true; continue }
                     self.sessions[id]!["titleSeen"] = written
                     if str(self.sessions[id]!["title"]) != str(title) { self.sessions[id]!["title"] = title; changed = true }
                     // One rule for an agent being alive: its transcript says so (liveSubagents), or a hook was heard from it
@@ -573,7 +581,7 @@ extension LanternServer {
             if !mirroring {
                 for (f, pids, busy) in liveTranscripts() { take(f, true, pids, busy) }
                 if !PROJECT_ROOTS.contains(where: { FileManager.default.fileExists(atPath: $0) }) { print("seeding failed: no \(PROJECT_ROOTS.joined(separator: ", "))") }
-                for f in newestCopies(allTranscripts()) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS { take(f, false, [], nil) }
+                for f in newestCopies(allTranscripts()) where now() - (fileTimes(f)?.mtime ?? 0) < SEED_RECENT_MS && !exited(f) { take(f, false, [], nil) } // closing writes to it too
             }
             let cache = FileManager.default.contents(atPath: self.githubCache).flatMap(parse) as? JSON
             DispatchQueue.main.async {
