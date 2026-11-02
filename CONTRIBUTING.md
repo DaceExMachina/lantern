@@ -112,7 +112,8 @@ A session's state is decided in one place. Handlers and seeding only record fact
 2. Write a test that replays the fixture and fails on the current code.
 3. Fix it by recording a new fact or by changing `derive()` or `check()`. Never set `state` in a handler. `test/state-writes.test.js` fails if you do.
 4. Mutation-check the test: break the line the fix guards, confirm the test fails, then put it back.
-5. Get an independent audit before you merge.
+5. Add the case to [`test/STATES.md`](test/STATES.md), the table of every case that decides what a session shows, or correct the row that was wrong. A case made of hook events alone is a row of `STATE_TABLE` in `test/server.test.js`. A row the code gets wrong but you aren't fixing yet goes in `SUSPECTED` there, as a todo with what it should show.
+6. Get an independent audit before you merge.
 
 The zombie and jwt tests in `test/server.test.js` (fixtures in `test/fixtures/zombie` and `test/fixtures/jwt`) are the model.
 

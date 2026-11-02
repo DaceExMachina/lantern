@@ -6,8 +6,10 @@ import Foundation
 import Network
 import CoreGraphics
 
-let EXPIRE_MS = 20.0 * 60 * 1000 // a session silent this long is assumed dead (killed terminal, no SessionEnd)
-let WAITING_EXPIRE_MS = 3.0 * 60 * 60 * 1000 // ...unless it's waiting on me, which can quietly take a while
+// A session with no known process, silent this long, is assumed dead (killed terminal, no SessionEnd)...
+let EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_EXPIRE_SECONDS"] ?? "") ?? 20 * 60) * 1000
+// ...unless it's waiting on me, which can quietly take a while
+let WAITING_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_WAITING_EXPIRE_SECONDS"] ?? "") ?? 3 * 60 * 60) * 1000
 let SEED_RECENT_MS = 15.0 * 60 * 1000 // on startup, also bring back any session whose transcript moved this recently
 let TITLE_EVERY_MS = 15.0 * 1000
 // A session waiting on background tasks counts as working while one is younger than this, or one of its agents was heard

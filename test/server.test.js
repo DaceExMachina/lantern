@@ -334,6 +334,19 @@ test('a hooked agent with no transcript stays while it was just heard from, then
   await until(async () => (await agentIds(base)).length === 0, 'the agent to go once the check window passes');
 });
 
+// The turn handed over to an agent, and the agent is dropped (quiet past the check with no transcript; a lost SubagentStop
+// looks the same): nothing is left open, so it's a finished turn waiting on me.
+test('a turn whose awaited agent is dropped is a finished turn waiting on me', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h, agentEnv(600));
+  await agentFire(base, home, { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await agentFire(base, home, agentTool);
+  await agentFire(base, home, stopWith(home, { id: 'a1', type: 'subagent', status: 'running', description: 'Audit it' }));
+  assert.deepStrictEqual((({ state, note }) => [state, note])(await s1(base)), ['paused', 'Waiting on 1 agent']);
+  const s = await until(async () => { const x = await s1(base); return x.subagents.length === 0 && x; }, 'the agent to be dropped');
+  assert.deepStrictEqual([s.state, s.note], ['waiting', 'Finished its turn']);
+});
+
 // An agent found from its transcript (no hooks since a restart) keeps its session paused while it writes: each sweep takes
 // the transcript's latest time as when it was last heard from, read before the sweep judges the session. The server is
 // stopped (SIGSTOP) past the agent's freshness while the agent goes on writing, as a busy machine can stall it. Reads take
@@ -706,12 +719,18 @@ test('an ended process\'s leftover idle status doesn\'t land a session still run
 });
 
 // Every way a run of hook events leaves a session's state, note and waitingSince, as one table: the events in order, then
-// what the page shows. Each row runs as its own session on one server.
+// what the page shows. Each row runs as its own session on one server. test/STATES.md lists these rows beside every other
+// case that decides what a session shows (time, processes, restarts), and test/states.test.js keeps the two in step.
 const ev = (hook_event_name, more = {}) => ({ hook_event_name, cwd: '/w', ...more });
 const STOP = ev('Stop', { last_assistant_message: 'Done.' }), ASK = ev('Stop', { last_assistant_message: 'Should I merge it?' });
 // the table's server points transcript_path at a transcript that started b1
 const TASK = { background_tasks: [SERVER], transcript_path: '' }, UPS = ev('UserPromptSubmit', { prompt: 'go' });
 const P1 = '6af18942-63c0-492b-b1ed-970d71ebe4ad', P2 = '77b5c98f-e092-40dd-8a2d-be5f73cbd3c3';
+const watch = command => ({ background_tasks: [{ ...SERVER, description: 'Watch the PR', command }], transcript_path: '' });
+// an agent the session handed over to: its hook puts it in the agents map, and the Stop lists it as running
+const AGENT = ev('PreToolUse', { agent_id: 'a1', agent_type: 'sonnet-implement', tool_name: 'Read', tool_input: {} });
+const AGENT_TASK = { background_tasks: [{ id: 'a1', type: 'subagent', status: 'running', description: 'Audit it' }] };
+const NUDGE = ev('Notification', { notification_type: 'idle_prompt', message: 'Claude is waiting' });
 const STATE_TABLE = [
   ['a prompt', [UPS], 'working', ''],
   ['a tool call', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} })], 'working', ''],
@@ -753,15 +772,34 @@ const STATE_TABLE = [
   ['a Stop with no prompt_id after a prompt with one', [{ ...UPS, prompt_id: P1 }, STOP], 'waiting', 'Finished its turn'],
   ['a Stop with no prompt seen (a restart mid-turn)', [ev('PreToolUse', { tool_name: 'Read', tool_input: {} }), { ...STOP, prompt_id: P1 }], 'waiting', 'Finished its turn'],
   ['an automatic compact after a turn', [UPS, STOP, ev('PreCompact', { trigger: 'auto' }), ev('PostCompact', { trigger: 'auto' })], 'waiting', 'Finished its turn'],
+  ['a turn ending with an agent running', [UPS, AGENT, { ...STOP, ...AGENT_TASK }], 'paused', 'Waiting on 1 agent'],
+  ['a question with an agent running', [UPS, AGENT, { ...ASK, ...AGENT_TASK }], 'waiting', 'Asks: Should I merge it? (1 agent still running)'],
+  ['a Stop listing an agent that already finished', [UPS, { ...STOP, ...AGENT_TASK }], 'waiting', 'Finished its turn'],
+  ['a Stop listing a task the session didn\'t start', [UPS, { ...STOP, background_tasks: [{ ...SERVER, id: 'b9' }], transcript_path: '' }], 'waiting', 'Finished its turn'],
+  ['a turn ending with a lantern-pr watch running', [UPS, { ...STOP, ...watch('lantern-pr watch --owner x') }], 'waiting', 'Finished its turn'],
+  ['a turn ending with a lantern-pr watch run by its full path', [UPS, { ...STOP, ...watch('/Users/me/.local/bin/lantern-pr watch --owner x') }], 'waiting', 'Finished its turn'],
+  ['a subagent asking for permission', [UPS, { ...AGENT, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }], 'waiting', 'Wants permission to use Bash'],
+  ['a question in a dialog', [UPS, ev('Notification', { notification_type: 'elicitation_dialog', message: 'Pick one' })], 'waiting', 'Pick one'],
+  ['an idle nudge after a manual compact', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), ev('PostCompact', { trigger: 'manual' }), NUDGE], 'waiting', 'Claude is waiting'],
+  ['an idle nudge after a lost manual compact', [UPS, STOP, ev('PreCompact', { trigger: 'manual' }), NUDGE], 'waiting', 'Claude is waiting'],
 ];
-test('the state table: what each run of hook events leaves a session showing', async t => {
+// Rows where what the session shows now looks wrong: each says what it should show, and runs as a todo until it's fixed.
+const SUSPECTED = [
+  // an agent's events never touch its session's turn (they return early in handle()), so once one asked for permission
+  // the session reads blocked on me until the main thread moves again, however long the agent runs on after I said yes
+  ['a subagent working again after its permission was granted, mid-turn', [UPS, { ...AGENT, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, { ...AGENT, hook_event_name: 'PostToolUse', tool_name: 'Bash' }], 'working', ''],
+  ['a background agent working again after its permission was granted', [UPS, AGENT, { ...STOP, ...AGENT_TASK }, { ...AGENT, hook_event_name: 'PermissionRequest', tool_name: 'Bash' }, { ...AGENT, hook_event_name: 'PostToolUse', tool_name: 'Bash' }], 'paused', 'Waiting on 1 agent'],
+];
+async function stateRows(t, rows) {
   let home;
   const base = await serve(t, { [S1_TRANSCRIPT]: jsonl([started('b1')]) }, h => home = h);
-  for (const [name, events] of STATE_TABLE) for (const e of events) await post(base, '/event', { ...e, session_id: name, ...('transcript_path' in e ? { transcript_path: path.join(home, S1_TRANSCRIPT) } : {}) });
+  for (const [name, events] of rows) for (const e of events) await post(base, '/event', { ...e, session_id: name, ...('transcript_path' in e ? { transcript_path: path.join(home, S1_TRANSCRIPT) } : {}) });
   const sessions = (await snapshot(base)).sessions;
-  const got = STATE_TABLE.map(([name]) => { const s = sessions.find(x => x.id === name); return [name, s.state, s.note, s.state === 'waiting' ? s.waitingSince > 0 : s.waitingSince]; });
-  assert.deepStrictEqual(got, STATE_TABLE.map(([name, , state, note]) => [name, state, note, state === 'waiting' ? true : 0]));
-});
+  const got = rows.map(([name]) => { const s = sessions.find(x => x.id === name); return [name, s.state, s.note, s.state === 'waiting' ? s.waitingSince > 0 : s.waitingSince]; });
+  assert.deepStrictEqual(got, rows.map(([name, , state, note]) => [name, state, note, state === 'waiting' ? true : 0]));
+}
+test('the state table: what each run of hook events leaves a session showing', t => stateRows(t, STATE_TABLE));
+for (const row of SUSPECTED) test.todo(`the state table, suspected bug: ${row[0]}`, t => stateRows(t, [row]));
 
 // What an open page receives after its first load: the SSE blocks sent while `during(blocks)` runs, then 600ms more (the
 // quiet that "nothing else was sent" assertions need; anything that must arrive waits for it inside `during`).
@@ -950,6 +988,41 @@ test('a side session with a live parent points at it', t => replay(t, 'seed-side
   ...appSession('local_parent', UUID(3)),
   ...appSession('local_child', UUID(4), 'local_parent'),
 }));
+
+test('a side session whose parent ended stops pointing at it', async t => {
+  const base = await serve(t, {
+    ...transcript(UUID(3), [user('Plan the release'), answer('Started a side session.'), turnEnd]),
+    ...transcript(UUID(4), [user('Write the changelog'), answer('Done.'), turnEnd]),
+    ...appSession('local_parent', UUID(3)), ...appSession('local_child', UUID(4), 'local_parent'),
+  }, () => {}, { LANTERN_SWEEP_SECONDS: '0.1' });
+  const child = async () => (await snapshot(base)).sessions.find(s => s.id === UUID(4));
+  await until(async () => (await child())?.parent === UUID(3), 'the side session to point at its parent');
+  await post(base, '/event', { session_id: UUID(3), hook_event_name: 'SessionEnd', cwd: '/work' });
+  const s = await until(async () => { const x = await child(); return !x.parent && x; }, 'the link to go with the parent');
+  assert.strictEqual(s.state, 'waiting');
+});
+
+// With no process known (hooks that carry no pid, or seeded from a transcript alone), only time ends a session: quiet past
+// LANTERN_EXPIRE_SECONDS it goes, unless the hooks left it waiting on me, which gets LANTERN_WAITING_EXPIRE_SECONDS. A
+// seeded one hasn't proved it's alive, so it gets the short limit even while waiting.
+test('a session with no known process goes once quiet past the expiry, or the longer one while a hook left it waiting', async t => {
+  const seeded = UUID(1), env = waiting => ({ LANTERN_EXPIRE_SECONDS: '3', LANTERN_WAITING_EXPIRE_SECONDS: String(waiting), LANTERN_SWEEP_SECONDS: '0.1' });
+  const ids = async base => (await snapshot(base)).sessions.map(s => s.id).sort();
+  const stop = { session_id: 'waiting', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' };
+  const base = await serve(t, transcript(seeded, [user('Fix it'), answer('Fixed.'), turnEnd]), () => {}, env(600));
+  await until(async () => (await ids(base)).includes(seeded), 'the transcript to be seeded');
+  await post(base, '/event', { session_id: 'working', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  await post(base, '/event', { session_id: 'idle', hook_event_name: 'SessionStart', cwd: '/w', source: 'startup' });
+  await post(base, '/event', stop);
+  assert.strictEqual((await snapshot(base)).sessions.find(s => s.id === 'waiting').state, 'waiting');
+  await until(async () => (await ids(base)).join() === 'waiting', 'all but the hooked waiting session to go');
+  await wait(1500); // well past the short expiry: still there
+  assert.deepStrictEqual(await ids(base), ['waiting']);
+  // and past the waiting expiry it goes too
+  const short = await serve(t, {}, () => {}, env(1));
+  await post(short, '/event', stop);
+  await until(async () => (await ids(short)).length === 0, 'the waiting session to go past the waiting expiry');
+});
 
 // A terminal `claude` that's been quiet for a day is still there after a restart, and stays: it's seeded with its process
 // (from Claude Code's sessions/<pid>.json), so the sweep keeps it until that process ends instead of timing it out.
