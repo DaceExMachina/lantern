@@ -123,10 +123,33 @@ test('a hovered row shows its tip docked above the menu; leaving, or closing the
 test('every option\'s tip follows its row, and the controls point at them', () => {
   const w = open({});
   const tips = w.findAll('.tip');
-  expect(tips.length).toBe(8);
+  expect(tips.length).toBe(10);
   for (const t of tips) {
     const prev = t.element.previousElementSibling;
     expect(prev.matches('.tip'), t.attributes('id')).toBe(false);
     expect(prev.querySelector(`[aria-describedby="${t.attributes('id')}"]`) ?? (prev.getAttribute('aria-describedby') === t.attributes('id') ? prev : null), t.attributes('id')).not.toBeNull();
   }
+});
+
+// the switch is one component (src/components/ToggleSwitch.vue); every on/off row in the menu uses it
+test('every on/off row is a switch: a native checkbox with role=switch, the row\'s label its click area', async () => {
+  const w = open({ nowPlaying: false });
+  const rows = ['notify me', 'show stale PRs', 'show session text', 'now playing', 'review requests'].map(t => row(w, t));
+  for (const r of rows) {
+    expect(r.classes(), r.text()).toContain('toggle');
+    const input = r.find('input');
+    expect([input.attributes('type'), input.attributes('role')], r.text()).toEqual(['checkbox', 'switch']);
+  }
+  expect(w.findAll('input[type=checkbox]:not([role=switch])').length, 'no plain checkbox left in the menu').toBe(0);
+  expect(w.findAll('input[role=switch]').length).toBe(5);
+  expect(row(w, 'now playing').find('input').element.checked).toBe(false);
+  expect(row(w, 'review requests').find('input').element.checked, 'on unless the server says false').toBe(true);
+});
+
+test('the now playing and review requests switches post their setting', async () => {
+  const w = open({});
+  await row(w, 'now playing').find('input').setValue(false);
+  await row(w, 'review requests').find('input').setValue(false);
+  await row(w, 'review requests').find('input').setValue(true);
+  expect(posts).toEqual([['/settings', { nowPlaying: false }], ['/settings', { reviews: false }], ['/settings', { reviews: true }]]);
 });

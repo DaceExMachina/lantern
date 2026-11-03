@@ -76,6 +76,8 @@ Ghost moths drift behind the wisps: pale, nearly see-through moths for the old s
 
 Stale PRs need GitHub status, and "show stale PRs" in the settings menu hides them.
 
+The fireflies circling the lantern itself, and the reviews button at the footer's left, are PRs waiting on your review. Switch "review requests" off in the settings menu to hide them. Lantern then stops asking GitHub for them too.
+
 ## Session text on the paper
 
 On the book-page barrel and the round chōchin, paragraphs your sessions wrote wrap round the paper like print on a drum or a globe. They squeeze as they turn toward the sides and vanish round the back, on the rows between the wires. On the chōchin they also squash toward the top and bottom, where the paper curves away. A new one fades in every twenty seconds or so and lingers for about a minute, overlapping the others. Some are printed on the inside, mirrored. They read best near the flame.
@@ -118,7 +120,7 @@ To have quiet come on by itself every night, switch "quiet from" on in the setti
 
 When an app on your Mac is playing something (Spotify, Music, a video in a browser, a podcast), a small strip sits at the bottom left, just above the footer: the cover, the title, the artist and the app, with previous, play or pause, and next. It stays while that app has something paused, so you can play it again, and goes when nothing is up. It reads the same Now Playing information as Control Center's media widget, with no permission prompts.
 
-It gets there by an unofficial route: macOS only shares that information with Apple's own programs, so the app has the Mac's built-in `perl` load a small helper. A macOS update could close that route. If it does, the strip just never shows. To see it without playing anything, open the page with `?fakeplaying` (or the dev panel's "now playing" under Demo); its buttons then only change the made-up song.
+It gets there by an unofficial route: macOS only shares that information with Apple's own programs, so the app has the Mac's built-in `perl` load a small helper. A macOS update could close that route. If it does, the strip just never shows. Switch "now playing" off in the settings menu and the strip goes, and Lantern stops asking your Mac what's playing until you switch it back on. To see it without playing anything, open the page with `?fakeplaying` (or the dev panel's "now playing" under Demo); its buttons then only change the made-up song.
 
 ## The app
 

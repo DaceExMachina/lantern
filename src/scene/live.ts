@@ -9,7 +9,7 @@ interface Leaf { e: Element; x: number; y: number; k: number; low: number; deg: 
 
 interface Live {
   raw: Session[]; reviews: Review[]; stalePRs: StalePR[]; recentProse: string[]; pagesData: boolean; firstName: string;
-  quietUntil: number; quietEnd: string; quietEndOn: boolean; dayStart: string; supervisor: RegExp; staleOn: boolean;
+  quietUntil: number; quietEnd: string; quietEndOn: boolean; dayStart: string; supervisor: RegExp; staleOn: boolean; reviewsOn: boolean;
   recapSeen: string | null;
   moths: Map<string, Moth>; hovered: Hovered | null; expanded: boolean; hideTimer: ReturnType<typeof setTimeout> | undefined;
   tally: Stats['tally']; pinnedBadge: string | null; cdLeaves: Leaf[] | null; farWall: HTMLCanvasElement | null;
@@ -29,6 +29,7 @@ export const live: Live = {
   quietUntil: 0, quietEnd: '08:00', quietEndOn: true, dayStart: '00:00',
   supervisor: /supervisor|orchestrat/i, // which agent types count as supervisors (medium moths)
   staleOn: true, // whether stale PRs show
+  reviewsOn: true, // whether the review requests show as fireflies round the lamp
   recapSeen: null, // the last day (yyyy-MM-dd) a recap opened by itself, once settings say (recap.ts)
   // ---- the scene's own
   moths: new Map(), // key -> moth (state.ts sync)

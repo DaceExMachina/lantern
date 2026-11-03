@@ -13,6 +13,7 @@ import { useLanternStore } from '../stores/lantern';
 import { hhmm, isTime, timeLabel } from '../types';
 import type { Style } from '../types';
 import GitHubPanel from './GitHubPanel.vue';
+import ToggleSwitch from './ToggleSwitch.vue';
 
 const store = useLanternStore();
 const settings = computed(() => store.settings);
@@ -37,8 +38,7 @@ const switches = computed(() => [
     text: 'Sets when quiet hours end and moths can call you again. Switch it off and quiet lasts until you press the moon.' },
 ]);
 
-const checked = (e: Event) => e.target instanceof HTMLInputElement && e.target.checked;
-const onNotify = (e: Event) => { notify.value = checked(e); setNotifying(notify.value); };
+const onNotify = (on: boolean) => { notify.value = on; setNotifying(on); };
 const postTime = (key: string, e: Event) => { if (e.target instanceof HTMLInputElement && e.target.value) post('/settings', { [key]: e.target.value }); };
 const pick = (e: Event) => { if (e.target instanceof HTMLSelectElement) post('/settings', { style: e.target.value }); };
 
@@ -60,17 +60,22 @@ const hideTip = (e: Event) => showTip(e, false);
 const onToggle = (e: Event) => { if ('newState' in e && e.newState === 'closed') showTip(e, false); };
 const events: [string, (e: Event) => void][] = [['pointerover', showTip], ['focusin', showTip], ['pointerleave', hideTip], ['focusout', hideTip], ['toggle', onToggle]];
 // the events fire on the popover, which is the first row's parent
-onMounted(() => { menu = first.value?.parentElement ?? null; for (const [type, f] of events) menu?.addEventListener(type, f); });
+onMounted(() => { menu = first.value?.$el.parentElement ?? null; for (const [type, f] of events) menu?.addEventListener(type, f); });
 onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListener(type, f); });
 </script>
 
 <template>
-  <label ref="first" class="notify"><input type="checkbox" aria-describedby="tip-notify" :checked="notify" @change="onNotify"> notify me when a session needs me</label>
+  <ToggleSwitch ref="first" class="notify" :checked="notify" describedby="tip-notify" @change="onNotify">notify me when a session needs me</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications.</span>
-  <label><input type="checkbox" aria-describedby="tip-stale" :checked="settings.stale !== false" @change="post('/settings', { stale: checked($event) })"> show stale PRs</label>
+  <ToggleSwitch :checked="settings.stale !== false" describedby="tip-stale" @change="on => post('/settings', { stale: on })">show stale PRs</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns and nobody has touched for a week, as pale wisps drifting low in the scene. It needs GitHub status.</span>
-  <label :class="{ unavailable: !style.surface }"><input type="checkbox" aria-describedby="tip-text" :checked="settings.lanternText !== 'off'" :disabled="!style.surface" @change="post('/settings', { lanternText: checked($event) ? 'sessions' : 'off' })"> show session text</label>
+  <ToggleSwitch :class="{ unavailable: !style.surface }" :checked="settings.lanternText !== 'off'" :disabled="!style.surface" describedby="tip-text" @change="on => post('/settings', { lanternText: on ? 'sessions' : 'off' })">show session text</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-text">Prints lines your sessions wrote onto the lantern's paper, fading in and out. Only the barrel and the round chōchin have paper, so it's greyed out on the Moroccan and the candle.</span>
+  <ToggleSwitch :checked="settings.nowPlaying !== false" describedby="tip-playing" @change="on => post('/settings', { nowPlaying: on })">now playing</ToggleSwitch>
+  <span class="tip" role="tooltip" id="tip-playing">Shows what's playing on this Mac, with previous, play or pause and next, above the footer. Switched off, Lantern stops asking your Mac what's playing.</span>
+  <ToggleSwitch :checked="settings.reviews !== false" describedby="tip-reviews" @change="on => post('/settings', { reviews: on })">review requests</ToggleSwitch>
+  <span class="tip" role="tooltip" id="tip-reviews">Shows the PRs waiting on your review as fireflies round the lantern, and the reviews button at the footer's left. Switched off, Lantern stops asking GitHub for them. It needs GitHub status.</span>
+  <!-- System stats: the cpu-mem branch adds its ToggleSwitch row and tip here -->
   <label><select id="style" aria-label="Lantern style" aria-describedby="tip-style" :value="styleKey" @change="pick"><option v-for="(st, key) in STYLES" :key="key" :value="key">{{ st.name }}</option></select></label>
   <span class="tip" role="tooltip" id="tip-style">Picks the lantern for every window, the iTerm2 panel and the screensaver. Choose from the barrel, the round chōchin, the brass Moroccan and the pillar candle. Some of the options here only work on certain lanterns.</span>
   <div class="ribbon" :class="{ unavailable: !style.ribbon }"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour" aria-describedby="tip-ribbon"><button v-for="([name, [front]]) in Object.entries(RIBBONS)" :key="name" :title="name" :aria-label="`${name} ribbon`" :aria-pressed="name === ribbon" :disabled="!style.ribbon" :style="{ '--c': front }" @click="post('/settings', { ribbon: name })"></button></span></div>

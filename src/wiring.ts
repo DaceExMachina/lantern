@@ -49,6 +49,7 @@ listen('settings', t => {
   try { if (st.supervisorPattern) live.supervisor = new RegExp(st.supervisorPattern, 'i'); } catch { console.warn('supervisorPattern in settings.json is not a valid regular expression'); }
   live.recapSeen = [live.recapSeen || '', st.recapSeen || ''].sort().pop() ?? ''; maybeRecap(quietStarted); // the later of ours and the server's
   live.staleOn = st.stale !== false;
+  live.reviewsOn = st.reviews !== false;
   sync();
 });
 setInterval(sync, 60 * 1000); // notice when quiet hours end, even with nothing else happening

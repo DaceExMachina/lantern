@@ -6,6 +6,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import NowPlaying from '../src/components/NowPlaying.vue';
 import { useLanternStore } from '../src/stores/lantern';
+import { parseSettings } from '../src/types';
 
 let app, store, fetch;
 const widget = () => document.getElementById('nowPlaying');
@@ -47,4 +48,13 @@ test('the cover and the words open the app that is playing, only when the server
   store.nowPlaying = { ...SONG, bundle: '' }; await nextTick();
   assert.strictEqual(widget().querySelector('.what').classList.contains('opens'), false, 'no known app: no pointer');
   assert.strictEqual(widget().querySelector('.art').classList.contains('opens'), false);
+});
+
+test('with now playing switched off in the settings the widget is gone, and back when it is on again', async () => {
+  store.nowPlaying = SONG; await nextTick();
+  assert.ok(widget(), 'on by default');
+  store.settings = parseSettings({ nowPlaying: false }); await nextTick();
+  assert.ok(!widget(), 'switched off: gone'); // not strictEqual on the element: printing one in a failure hangs happy-dom
+  store.settings = parseSettings({ nowPlaying: true }); await nextTick();
+  assert.ok(widget());
 });

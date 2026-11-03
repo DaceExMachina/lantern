@@ -2795,3 +2795,58 @@ test('now playing: a helper that can\'t start is tried again after a growing pau
   const tries = await until(() => { const m = [...t.output().matchAll(/trying again in (\d+) s/g)].map(x => +x[1]); return m.length >= 3 && m; }, 'three tries');
   assert.deepStrictEqual(tries.slice(0, 3), [1, 2, 4]);
 });
+
+// The now playing widget and the review requests can each be switched off in the settings, and cost nothing while off: no helper
+// process, no review searches.
+test('settings: nowPlaying and reviews take booleans, are saved, and refuse anything else', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  assert.strictEqual((await snapshot(base)).settings.nowPlaying, undefined, 'on by default');
+  assert.strictEqual((await post(base, '/settings', { nowPlaying: false, reviews: false })).status, 204);
+  const { settings } = await snapshot(base);
+  assert.deepStrictEqual([settings.nowPlaying, settings.reviews], [false, false]);
+  await until(() => JSON.parse(fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8')).reviews === false, 'settings.json to be saved');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8')).nowPlaying, false);
+  for (const bad of [{ nowPlaying: 'no' }, { reviews: 0 }, { reviews: null }]) assert.strictEqual((await post(base, '/settings', bad)).status, 400, JSON.stringify(bad));
+  assert.deepStrictEqual([(await snapshot(base)).settings.nowPlaying, (await snapshot(base)).settings.reviews], [false, false], 'unchanged');
+});
+
+test('now playing: switched off, the helper is not running; switched on, it is', async t => {
+  const lib = path.join(tmp, `now-playing-off-${process.pid}.dylib`); // its own copy, so the process list names this test's helper alone
+  fs.copyFileSync(fakeHelper(), lib);
+  const running = () => { try { execFileSync('pgrep', ['-f', lib]); return true; } catch { return false; } };
+  const base = await serve(t, { 'data/settings.json': '{"nowPlaying": false}' }, () => {}, { LANTERN_NOW_PLAYING: lib });
+  const events = nowPlayingEvents(t, base);
+  const items = () => events.filter(e => e[0] === 'nowPlaying' && e[1] !== 'null');
+  await new Promise(r => setTimeout(r, 1500)); // long enough for a helper started at launch to have spoken
+  assert.deepStrictEqual(items(), [], 'off at launch: nothing is asked of the Mac');
+  assert.strictEqual(running(), false, 'off at launch: no helper process');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'toggle' })).status, 404, 'and there is no helper to press a button on');
+  await post(base, '/settings', { nowPlaying: true });
+  await until(() => items().length, 'the helper to start and say what plays');
+  assert.strictEqual(running(), true, 'on: the helper process is up');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'toggle' })).status, 204);
+  await post(base, '/settings', { nowPlaying: false });
+  await until(() => events.findLast(e => e[0] === 'nowPlaying')?.[1] === 'null', 'the widget to go');
+  await until(() => !running(), 'the helper process to exit');
+  const seen = events.length;
+  await new Promise(r => setTimeout(r, 2500)); // past the retry pause a killed helper would be restarted after
+  assert.strictEqual(events.length, seen, 'switched off, it stays stopped');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'toggle' })).status, 404);
+});
+
+test('reviews: switched off, the review searches are not asked and the list is empty; switched on, they come back', async t => {
+  const { gh, repo, queries: log } = ghRequests({ dace: [prNode(1, iso(Date.now()))] });
+  const queries = () => fs.existsSync(path.join(path.dirname(gh), 'queries.log')) ? log() : ''; // the log starts with the first query
+  const base = await serve(t, { 'data/settings.json': '{"githubLogin": "dace", "reviews": false}' }, () => {}, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  await until(() => queries().includes('author:@me'), 'a refresh');
+  assert.doesNotMatch(queries(), /user-review-requested|reviewed-by/, 'no review search is asked');
+  assert.deepStrictEqual((await snapshot(base)).reviews ?? [], []);
+  await post(base, '/settings', { reviews: true });
+  await until(async () => (await snapshot(base)).reviews?.length === 1, 'the request to come back');
+  assert.match(queries(), /user-review-requested:dace/);
+  await post(base, '/settings', { reviews: false });
+  await until(async () => ((await snapshot(base)).reviews ?? []).length === 0, 'the list to empty');
+});

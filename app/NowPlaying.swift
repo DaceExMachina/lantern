@@ -9,6 +9,7 @@ let PERL_HOST = #"use DynaLoader; my $h = DynaLoader::dl_load_file($ARGV[0]) or 
 
 extension LanternServer {
     func startNowPlaying(pause: Double = 1) {
+        guard isOn("nowPlaying"), nowPlayingHelper == nil else { return } // off, or already up (a retry pending when it was switched off and on)
         let lib = ProcessInfo.processInfo.environment["LANTERN_NOW_PLAYING"]
             ?? Bundle.main.executableURL!.deletingLastPathComponent().appendingPathComponent("NowPlaying.dylib").path
         guard FileManager.default.fileExists(atPath: lib) else { return }
@@ -47,6 +48,13 @@ extension LanternServer {
         nowPlayingHelper = (p, input.fileHandleForWriting)
         guard (try? p.run()) != nil else { nowPlayingHelper = nil; return print("now playing helper won't start") }
         _ = fcntl(input.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1) // a write after it died fails, rather than killing the server
+    }
+    // Switched off: the helper goes (its termination handler sees it's no longer ours and doesn't restart it) and the widget with it.
+    func stopNowPlaying() {
+        let helper = nowPlayingHelper
+        nowPlayingHelper = nil
+        helper?.process.terminate()
+        setNowPlaying("null"); setNowPlaying(art: "")
     }
     // Click on the cover or the words: bring the app that's playing to the front, by its bundle identifier from the helper.
     // False when we don't know the app or can't find it.
