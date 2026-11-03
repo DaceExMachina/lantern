@@ -1,7 +1,7 @@
 // Fireflies: one per PR, swarming around their moth's home.
 
 import { live } from './live';
-import { CX, VIEW, nth, roof } from './scene';
+import { CX, VIEW, nth, roof, stretch } from './scene';
 import type { Box } from './scene';
 import { devButton, devSlider } from '../dev';
 import { GUST, hash, hex, mix, seeded } from './lanterns';
@@ -53,9 +53,9 @@ export function offBoard(reviews: Review[], sessions: Session[]) {
 // out-and-back breathing. The moths' swarms don't vary (swarm's `vary` is left out).
 export interface Vary { spread: number; speed: Point }
 export const lampVary: Vary = {
-  spread: devSlider('Fireflies', 'lampspread', 'lamp spread', 0, 1.5, 0.05, 1, 'How differently the review fireflies around the lamp fly: orbit distance, squash, lean and how far they loop out and back (0 is all alike)', v => { lampVary.spread = v; }),
-  speed: [devSlider('Fireflies', 'lampslow', 'lamp slowest', 0.05, 1.5, 0.05, 0.12, 'The lazy end of the review fireflies\' speeds, in radians a second', v => { lampVary.speed[0] = v; }),
-    devSlider('Fireflies', 'lampfast', 'lamp fastest', 0.05, 1.5, 0.05, 0.8, 'The quick end of the review fireflies\' speeds, in radians a second', v => { lampVary.speed[1] = v; })],
+  spread: devSlider('Fireflies', 'lampspread', 'lamp spread', 0, 1.5, 0.05, 1.5, 'How differently the review fireflies around the lamp fly (orbit distance, squash, lean, how far they loop out and back) in a wide window; narrower ones scale it down to 40% (0 is all alike)', v => { lampVary.spread = v; }),
+  speed: [devSlider('Fireflies', 'lampslow', 'lamp slowest', 0.05, 1.5, 0.05, 0.05, 'The lazy end of the review fireflies\' speeds, in radians a second', v => { lampVary.speed[0] = v; }),
+    devSlider('Fireflies', 'lampfast', 'lamp fastest', 0.05, 1.5, 0.05, 0.65, 'The quick end of the review fireflies\' speeds, in radians a second', v => { lampVary.speed[1] = v; })],
 };
 // How a firefly comes and goes. Everything runs off the wall clock from when the server saw the change (a PR's `seen`
 // and `since`, in ms), along a path seeded by its URL, so every window plays it at the same moment the same way:
@@ -69,6 +69,7 @@ export const lampVary: Vary = {
 //   from when this window noticed, since the server has no time for that.
 // One flying off is removed only once it and its bloom are wholly outside the window.
 const ARRIVE = 2; // seconds to fly in
+const AVOID = 120; // a lamp firefly is pushed off a moth's swarm within this, scene units, by up to 55
 const LEAVING = new Set(['merged', 'closed']);
 // A moth's PRs in the order its fireflies are kept (it shows at most 10): ones flying off first so a merge isn't cut, then
 // the ones that need me, then the rest. A merged or closed PR with no firefly of its own yet (`flies` has none) is dropped:
@@ -146,12 +147,14 @@ export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, 
     // a lamp firefly's own speed, orbit distance, squash, lean and breathing, from its draws and the live spread (a moth's: 0.7, none)
     let w = f.w, base = f.r, squash = 0.7, lean = 0, breath = 1;
     if (vary && f.u) {
-      const [u0, u1, u2, u3, u4] = f.u, mid = (rMin + rMax) / 2, half = (rMax - rMin) / 2 + 45 * vary.spread;
+      // the spread is the slider's in a window as wide as 16:9 (VIEW.kx 1.8) and 40% of it in a square or tall one
+      const sp = vary.spread * (0.4 + 0.6 * Math.min(1, Math.max(0, (VIEW.kx - 1) / 0.8)));
+      const [u0, u1, u2, u3, u4] = f.u, mid = (rMin + rMax) / 2, half = (rMax - rMin) / 2 + 45 * sp;
       w = Math.sign(f.w) * (vary.speed[0] + u0 * (vary.speed[1] - vary.speed[0]));
       base = Math.max(90, mid + (u1 * 2 - 1) * half);
-      squash = 0.7 + (u2 * 2 - 1) * 0.25 * vary.spread;
-      lean = (u3 * 2 - 1) * 0.6 * vary.spread;
-      breath = 1 + 0.2 * vary.spread * u4 * Math.sin(s * (0.15 + 0.3 * u2) + f.ph);
+      squash = Math.min(1, 0.7 + (u2 * 2 - 1) * 0.25 * sp);
+      lean = (u3 * 2 - 1) * 0.6 * sp;
+      breath = 1 + 0.2 * sp * u4 * Math.sin(s * (0.15 + 0.3 * u2) + f.ph);
     }
     const a = f.a + w * Math.min(s, f.leave ? f.leave.at / 1000 : s); // a leaving one stops circling where it was
     // the one a landed moth's thread is tied to (f.near) eases in to a small orbit near the cluster's middle, still moving
@@ -177,6 +180,11 @@ export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, 
     else {
       const [ox, oy, g, z] = leaveStep(f.leave.kind, t, f.leave.d, f.leave.start);
       x += ox; y += oy; glow *= g; size *= z;
+    }
+    if (vary && !f.leave) for (const m of live.moths.values()) { // a soft push off each moth's swarm (a little overlap now and then is fine)
+      if (m.parentId !== undefined || !m.home || !m.flies?.size) continue;
+      const [mx, my] = stretch(m.home), dx = x - mx, dy = y - my, d = Math.hypot(dx, dy) || 1;
+      if (d < AVOID) { const push = 55 * (1 - d / AVOID) ** 2 / d; x += dx * push; y += dy * push; }
     }
     if (!f.leave) y = Math.max(y, roof() + size); // under the app's drag strip, bloom and all; one leaving flies out past it
     f.x = x; f.y = y; f.size = size;

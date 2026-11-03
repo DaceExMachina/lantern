@@ -215,3 +215,18 @@ test('each lamp firefly flies its own way, stable per URL, while a moth\'s swarm
   const radii = [...lamp.values()].map(f => Math.hypot(f.x - 340, (f.y - 320) / 0.7)), plain = [...moth.values()].map(f => Math.hypot(f.x - 340, (f.y - 320) / 0.7));
   assert.ok(Math.max(...radii) - Math.min(...radii) > Math.max(...plain) - Math.min(...plain) - 1, 'a wider spread of distances');
 });
+
+test('a lamp firefly is pushed off a moth swarm, and its spread shrinks in a narrow window', () => {
+  const url = 'https://github.com/o/r/pull/9', want = new Map([[url, { need: 'waiting', seen: 0 }]]);
+  const at = vary => { const flies = new Map(); swarm(flies, want, [340, 320], [125, 170], 1 / 60, T0, vary); const f = flies.get(url); return [f.x, f.y, f]; };
+  openWindow(1, 1);
+  const [x, y, f] = at(lampVary), home = [x + 10, y], swarmMoth = { home, flies: new Map([['x', {}]]) };
+  live.moths.set('m', swarmMoth);
+  const [px, py] = at(lampVary);
+  live.moths.delete('m');
+  assert.ok(Math.hypot(px - home[0], py - home[1]) > 25, 'moved off the swarm it sat beside');
+  assert.ok(f.u, 'seeded');
+  openWindow(1, 1);
+  const narrow = at({ ...lampVary }), wide = (openWindow(1.8, 1), at({ ...lampVary }));
+  assert.notDeepStrictEqual(narrow.slice(0, 2), wide.slice(0, 2), 'the spread follows the window width');
+});
