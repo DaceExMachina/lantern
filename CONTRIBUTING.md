@@ -86,7 +86,7 @@ The server runs as the app's child: the same executable started with `--server`,
 scripts/reload-server
 ```
 
-It rebuilds and reinstalls the app, then stops only the server; the app starts the new one and reloads the page. A change to the window itself (`app/main.swift`) needs the app reopened, which the script tells you: rebuild and reinstall, then quit Lantern and reopen it:
+It rebuilds and reinstalls the app, then stops only the server; the app starts the new one and reloads the page. That covers the now playing helper (`app/helper/`) too, which the server starts. The window's own code (`app/main.swift`) and `app/Info.plist` only change when the app is reopened. The script refuses when the running window wasn't built from this `main.swift` (it's copied into the app to compare); after a change to `Info.plist`, reopen the app yourself. To reopen: rebuild and reinstall, then quit Lantern and open it again:
 
 ```bash
 sh app/build.sh

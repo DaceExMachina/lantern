@@ -2212,7 +2212,7 @@ test('the watcher stops with the server, and a watcher an earlier run left behin
 });
 // The app runs the server as its child, so quitting or crashing the app must not leave a server holding the port: the server
 // notices its parent go and stops as it does on SIGTERM, closing the event log's open spans.
-test('the server stops cleanly when whoever started it goes, however it went', async t => {
+test('the server stops cleanly when whoever started it is killed (SIGKILL), as when the app crashes', async t => {
   const home = fs.mkdtempSync(path.join(tmp, 'home-')), db = path.join(home, 'data/stats.sqlite');
   const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin') };
   // a parent that can die without a word: a shell that starts the server and waits
@@ -2684,6 +2684,17 @@ test('now playing: open fails when the helper gives no app, or one this Mac does
     await until(() => events.some(e => e[0] === 'nowPlaying' && JSON.parse(e[1])?.bundle === bundle), 'the item to arrive');
     assert.strictEqual((await post(base, '/now-playing', { command: 'open' })).status, 404, `bundle "${bundle}"`);
   }
+});
+
+// The app's server is a background process, which macOS won't let bring another app forward, so it asks the window to with
+// an `activate <app path>` line on its output (bringForward in Terminals.swift). The test server does the same with
+// LANTERN_HAND_ACTIVATION, so this finds a real app (Finder) and pulls no focus.
+test('now playing: open in the app\'s server asks the window to bring the playing app forward', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_BUNDLE: 'com.apple.finder', LANTERN_HAND_ACTIVATION: '1' });
+  const events = nowPlayingEvents(t, base);
+  await until(() => events.some(e => e[0] === 'nowPlaying' && JSON.parse(e[1])?.bundle === 'com.apple.finder'), 'the item to arrive');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'open' })).status, 204);
+  await until(() => /^activate \/.*\/Finder\.app$/m.test(t.output()), 'the activate line');
 });
 
 // Nothing ignores SIGPIPE in the server, so a write to a helper that stopped reading must fail, not kill it.

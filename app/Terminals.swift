@@ -1,5 +1,5 @@
 // Running `claude` processes and the apps around them: finding a session's terminal tab and bringing it to the front.
-import Foundation
+import AppKit
 
 /// pids of running `claude` processes: a terminal's, named plainly, and the Claude app's, named by a full path with spaces in it
 func claudePids() -> [String] {
@@ -91,6 +91,18 @@ func terminalBinary(_ pid: String) -> String? {
     return nil
 }
 
+/// Brings an app (a bundle id, or an app's path) to the front, through Launch Services, so no Accessibility or Automation prompt.
+/// macOS lets only the active app hand the front to another, and the app's server is a background child, so it hands the job to
+/// the window (main.swift), which is the active app when you click: one `activate <app path>` line on its output. A server on
+/// its own (a preview) does it itself. False when the app isn't on this Mac.
+var handActivation = false
+func bringForward(_ app: String) -> Bool {
+    guard let url = app.hasPrefix("/") ? URL(fileURLWithPath: app) : NSWorkspace.shared.urlForApplication(withBundleIdentifier: app),
+          FileManager.default.fileExists(atPath: url.path) else { return false }
+    if handActivation { print("activate " + url.path) } else { NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in } }
+    return true
+}
+
 /// Brings a session's terminal tab, or its session in the Claude app, to the front. iTerm2 is handled by the caller,
 /// which can look its tabs up. Falls back to just bringing the terminal app forward. Every value used here was checked
 /// against a pattern when it arrived, and none of them goes through a shell.
@@ -101,10 +113,10 @@ func focusElsewhere(_ s: JSON) -> Bool {
     // and opening it still brings the app forward). Sessions seeded at startup don't say where they run, so check those too.
     if app == "com.anthropic.claudefordesktop" || app.isEmpty && term.isEmpty,
        let local = appSessions().first(where: { $0.cli == str(s["id"]) })?.local, Re("^local_[A-Za-z0-9-]{1,64}$").test(local) {
-        return open(["claude://code/continue?session=" + local])
+        return open(["-g", "claude://code/continue?session=" + local]) && bringForward("com.anthropic.claudefordesktop")
     }
     let binary = terminalBinary(pid), bundle = binary.map { $0.components(separatedBy: "/Contents/MacOS/")[0] }
-    let activate = { !app.isEmpty ? open(["-b", app]) : bundle.map { open(["-a", $0]) } ?? false }
+    let activate = { bringForward(!app.isEmpty ? app : bundle ?? "") }
     switch term {
     case "Apple_Terminal": // Terminal.app finds the tab by its tty
         // Since Sierra, Terminal's tabs are native window tabs. `set index of w to 1` re-orders the tab group and can bring
@@ -120,20 +132,19 @@ func focusElsewhere(_ s: JSON) -> Bool {
                   if tty of t is "/dev/\(tty)" then
                     set frontmost of win to true
                     set selected tab of win to contents of t
-                    activate
                     return "ok"
                   end if
                 end repeat
               end repeat
             end tell
-            """], timeout: 30).out.trim == "ok" { return true }
+            """], timeout: 30).out.trim == "ok" { return bringForward("com.apple.Terminal") }
     case "WezTerm": // its CLI sits next to the app's binary
         if truthy(s["pane"]), let bundle, run(bundle + "/Contents/MacOS/wezterm", ["cli", "activate-pane", "--pane-id", str(s["pane"])]).ok { return activate() }
     case "vscode": // VS Code and its forks bring the window that has this folder open forward (or open one)
         // cwd is event data, so only a folder that exists goes to `open` (not a URL, and not an option)
         var isDir: ObjCBool = false
         let cwd = str(s["cwd"])
-        if !app.isEmpty && cwd.hasPrefix("/") && FileManager.default.fileExists(atPath: cwd, isDirectory: &isDir) && isDir.boolValue { return open(["-b", app, cwd]) }
+        if !app.isEmpty && cwd.hasPrefix("/") && FileManager.default.fileExists(atPath: cwd, isDirectory: &isDir) && isDir.boolValue { return open(["-g", "-b", app, cwd]) && activate() }
     default: // kitty only takes remote commands when its kitty.conf allows them (allow_remote_control, listen_on)
         if truthy(s["kitty"]) && truthy(s["pane"]), let bundle,
            run(bundle + "/Contents/MacOS/kitten", ["@", "--to", str(s["kitty"]), "focus-window", "--match", "id:" + str(s["pane"])]).ok { return activate() }

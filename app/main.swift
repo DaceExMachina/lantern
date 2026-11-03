@@ -20,18 +20,30 @@ let home = URL(string: "http://127.0.0.1:\(port)/?app")!
 
 // Settings live in Application Support, since an app can't write inside itself. The page comes from the app, or, when the
 // installer ran from a git checkout, from that checkout, so edits to index.html go live.
+let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
+let pageDir = checkout ?? Bundle.main.resourcePath!
 if CommandLine.arguments.contains("--server") {
-    let checkout = UserDefaults.standard.string(forKey: "pageDir").flatMap { FileManager.default.fileExists(atPath: $0 + "/index.html") ? $0 : nil }
-    LanternServer(port: UInt16(port) ?? 7717, data: data, web: checkout ?? Bundle.main.resourcePath!).serve(build: true)
+    setvbuf(stdout, nil, _IOLBF, 0) // a line at a time, so the window gets each `activate` line as it's said
+    handActivation = true
+    LanternServer(port: UInt16(port) ?? 7717, data: data, web: pageDir).serve()
 }
 
 final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, NSWindowDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var strip: DragStrip!
+    let watcher = ViteWatcher(web: pageDir)
+    var term: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ note: Notification) {
         runServer()
+        watcher.start()
+        // SIGTERM (install.js) quits properly, which stops the vite watcher; the server notices the app going and stops itself.
+        // If the main thread is wedged, it leaves anyway after 3 s.
+        signal(SIGTERM, SIG_IGN)
+        term = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .global())
+        term?.setEventHandler { DispatchQueue.main.async { NSApp.terminate(nil) }; DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) } }
+        term?.resume()
         // Hooks need the server even with no window open, so an installed copy opens at login. That's offered once;
         // turning it off in System Settings > General > Login Items sticks.
         if !UserDefaults.standard.bool(forKey: "loginItemOffered"), Bundle.main.bundlePath.contains("/Applications/") {
@@ -104,12 +116,30 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     // The server comes back whenever it exits, from the executable on disk now, so after a rebuild it's the new one. A server
     // that can't start must not spin: it comes back after a growing pause, and one that ran for half a minute starts the pause
     // over. The page then loads again: its own reconnect runs on timers that WebKit holds back while the window is hidden, so it
-    // could wait for a look, and a failed load keeps the old page on screen and tries again (below). The app needs nothing on
-    // the way out: the server notices the app going and stops itself (serve in Server.swift).
+    // could wait for a look, and a failed load keeps the old page on screen and tries again (below). The server notices the
+    // app going and stops itself (serve in Server.swift). Its output comes through here: an `activate <app path>` line is the
+    // server asking for an app to come to the front, which only the active app may do (bringForward in Terminals.swift);
+    // anything else is its log.
     func runServer(pause: Double = 0.25) {
-        let p = Process(), began = Date()
+        let p = Process(), began = Date(), out = Pipe()
         p.executableURL = Bundle.main.executableURL
         p.arguments = ["--server"]
+        p.standardOutput = out
+        var pending = Data()
+        out.fileHandleForReading.readabilityHandler = { h in
+            let chunk = h.availableData
+            if chunk.isEmpty { h.readabilityHandler = nil; return }
+            DispatchQueue.main.async {
+                pending += chunk
+                while let nl = pending.firstIndex(of: 10) {
+                    let line = String(decoding: pending[..<nl], as: UTF8.self)
+                    pending = pending[(nl + 1)...]
+                    if line.hasPrefix("activate /"), line.hasSuffix(".app") {
+                        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: String(line.dropFirst(9))), configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
+                    } else { print(line) }
+                }
+            }
+        }
         let again = {
             let wait = Date().timeIntervalSince(began) > 30 ? 0.25 : pause
             print("the server exited; starting it again in \(wait) s")
@@ -120,6 +150,8 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
     }
 
     // The server lives as long as the app, so closing the window keeps both running. Clicking the Dock icon brings it back.
+    func applicationWillTerminate(_ note: Notification) { watcher.stop() }
+
     func applicationShouldHandleReopen(_ app: NSApplication, hasVisibleWindows: Bool) -> Bool {
         if !hasVisibleWindows { window.makeKeyAndOrderFront(nil) }
         return true
@@ -148,6 +180,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
 
     // The server takes a moment to start, so keep trying until it answers.
     func webView(_ web: WKWebView, didFailProvisionalNavigation nav: WKNavigation!, withError error: Error) {
+        if (error as NSError).code == NSURLErrorCancelled { return } // a newer load took over, and it has its own retry
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { web.load(URLRequest(url: home)) }
     }
 

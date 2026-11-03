@@ -274,14 +274,14 @@ final class LanternServer {
     func retry() { DispatchQueue.main.asyncAfter(deadline: .now() + 5) { self.start() } }
 
     // Runs the server for good: as the app's child (main.swift), a preview or a test. It stops on SIGTERM or when whoever started
-    // it goes (the app quitting or crashing), so nothing is left holding the port; either way it stops the vite watcher and
+    // it goes (the app quitting or crashing), so nothing is left holding the port; either way it stops any vite watcher and
     // closes the event log's open spans first, and if the main thread is wedged it leaves anyway after 3 s.
-    // build: keep dist/ built, which only the app's server does.
-    func serve(build: Bool) -> Never {
+    // watcher: one to start now and stop on the way out (a test's; the app's window runs its own).
+    func serve(_ watcher: ViteWatcher? = nil) -> Never {
         start()
-        if build { buildChrome() }
+        watcher?.start()
         let stop = {
-            DispatchQueue.main.async { self.stopBuilding(); self.stats.shutdown(); exit(0) }
+            DispatchQueue.main.async { watcher?.stop(); self.stats.shutdown(); exit(0) }
             DispatchQueue.global().asyncAfter(deadline: .now() + 3) { exit(0) }
         }
         signal(SIGTERM, SIG_IGN)
@@ -330,58 +330,6 @@ final class LanternServer {
             sessions[id] = s; agents[id] = a
         }
         broadcast()
-    }
-
-    // Keeps dist/ built. A checkout with Vite installed gets `vite build --watch` as a child of the server, so a saved change
-    // rebuilds, pageVersion() notices and open windows reload. Only the app starts it (a preview or test server doesn't).
-    // Its pid is kept in node_modules, so a watcher an earlier run left behind (a crash, a kill) is stopped first: one per
-    // checkout. If it exits it comes back after a growing pause (a broken config must not spin); one that ran for half a
-    // minute starts the pause over. Its output joins the app's log. SIGTERM, which is how the app is relaunched, stops it too.
-    var vite: Process?, watching = false
-    var vitePid: String { web + "/node_modules/.lantern-vite.pid" }
-    func buildChrome() {
-        guard FileManager.default.isExecutableFile(atPath: web + "/node_modules/.bin/vite"),
-              ["js", "ts", "mjs", "mts"].contains(where: { FileManager.default.fileExists(atPath: web + "/vite.config." + $0) }) else { return }
-        watching = true
-        DispatchQueue.global().async { // asking the user's shell for node takes a moment
-            let vite = self.web + "/node_modules/.bin/vite"
-            if let old = (try? String(contentsOfFile: self.vitePid, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines), let pid = Int32(old),
-               run("/bin/ps", ["-p", old, "-o", "command="]).out.contains(vite) { kill(pid, SIGTERM) } // ours, not another project's vite on a reused pid
-            let node = self.nodeDir()
-            DispatchQueue.main.async { if node == nil { self.watching = false } else { self.runVite(node, pause: 1) } } // no node: said once, not retried
-        }
-    }
-    // Where node lives, for Vite's `#!/usr/bin/env node`: $LANTERN_NODE, else what the user's login shell finds, which covers
-    // nvm, Homebrew and the rest, since an app's own PATH has none of them.
-    func nodeDir() -> String? {
-        let env = ProcessInfo.processInfo.environment
-        let found = env["LANTERN_NODE"] ?? run(env["SHELL"] ?? "/bin/zsh", ["-ilc", "command -v node"], timeout: 5).out.split(separator: "\n").last.map(String.init)
-        guard let node = found, node.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: node) else { print("vite build --watch: can't find node (set LANTERN_NODE)"); return nil }
-        return (node as NSString).deletingLastPathComponent
-    }
-    func runVite(_ node: String?, pause: Double) {
-        guard watching else { return }
-        let p = Process(), began = Date(), env = ProcessInfo.processInfo.environment
-        p.executableURL = URL(fileURLWithPath: web + "/node_modules/.bin/vite")
-        p.arguments = ["build", "--watch"]
-        p.currentDirectoryURL = URL(fileURLWithPath: web)
-        p.environment = env.merging(["PATH": (node.map { $0 + ":" } ?? "") + (env["PATH"] ?? "/usr/bin:/bin")]) { $1 }
-        p.standardInput = FileHandle.nullDevice
-        p.terminationHandler = { [weak self] _ in DispatchQueue.main.async {
-            guard let self, self.vite === p else { return }
-            let wait = Date().timeIntervalSince(began) > 30 ? 1 : pause
-            print("vite build --watch exited; trying again in \(Int(wait)) s")
-            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.runVite(node, pause: min(wait * 2, 60)) }
-        } }
-        guard (try? p.run()) != nil else { return print("vite build --watch won't start") }
-        vite = p
-        try? "\(p.processIdentifier)".write(toFile: vitePid, atomically: true, encoding: .utf8)
-    }
-    func stopBuilding() {
-        watching = false
-        let p = vite; vite = nil; p?.terminate()
-        // the file may already be a newer app's, after a relaunch: only remove our own
-        if let p, (try? String(contentsOfFile: vitePid, encoding: .utf8)) == "\(p.processIdentifier)" { try? FileManager.default.removeItem(atPath: vitePid) }
     }
 
     func begin() {
@@ -996,7 +944,6 @@ final class LanternServer {
             DispatchQueue.global().async {
                 let r = run("osascript", ["-e", """
                     tell application "iTerm2"
-                      activate
                       if (count of windows) = 0 then
                         create window with default profile
                       else
@@ -1005,6 +952,7 @@ final class LanternServer {
                       tell current session of current window to write text "\(script)"
                     end tell
                     """], timeout: 30)
+                if r.ok { _ = bringForward("com.googlecode.iterm2") }
                 DispatchQueue.main.async { if !r.ok { self.resuming[id] = nil; self.broadcast() }; self.respond(c, r.ok ? 204 : 500) } // a failed one: the ghost comes back
             }
             return
@@ -1016,7 +964,7 @@ final class LanternServer {
                 DispatchQueue.global().async {
                     var ok = false
                     if let tab = tab as? String, UUID_RE.test(tab) {
-                        ok = run("osascript", ["-e", """
+                        let r = run("osascript", ["-e", """
                             tell application "iTerm2"
                               repeat with w in windows
                                 repeat with t in tabs of w
@@ -1025,14 +973,15 @@ final class LanternServer {
                                       select w
                                       tell t to select
                                       tell s to select
-                                      activate
-                                      return
+                                      return "ok"
                                     end if
                                   end repeat
                                 end repeat
                               end repeat
                             end tell
-                            """], timeout: 60).ok
+                            """], timeout: 60)
+                        ok = r.ok
+                        if r.out.trim == "ok" { _ = bringForward("com.googlecode.iterm2") }
                     }
                     if !ok { ok = focusElsewhere(s) }
                     if !ok { print("focus failed") }
@@ -1178,5 +1127,62 @@ final class LanternServer {
         let files = ["/icon.svg": "image/svg+xml", "/icon.png": "image/png", "/icon-indigo.svg": "image/svg+xml", "/icon-indigo.png": "image/png"]
         if let type = files[page] { return serveFile(c, req, page, type) }
         respond(c, 404)
+    }
+}
+
+// Keeps dist/ built. A checkout with Vite installed gets `vite build --watch`, so a saved change rebuilds, pageVersion()
+// notices and open windows reload. The app's window runs it (main.swift), since the window outlives a server restart, which
+// must not rebuild dist/ (and reload the page) for nothing; a test server runs it with LANTERN_BUILD, previews don't.
+// Its pid is kept in node_modules, so a watcher an earlier run left behind (a crash, a kill) is stopped first: one per
+// checkout. If it exits it comes back after a growing pause (a broken config must not spin); one that ran for half a
+// minute starts the pause over. Its output joins the app's log. Quitting the app stops it.
+final class ViteWatcher {
+    let web: String
+    var vite: Process?, watching = false
+    init(web: String) { self.web = web }
+    var vitePid: String { web + "/node_modules/.lantern-vite.pid" }
+    func start() {
+        guard FileManager.default.isExecutableFile(atPath: web + "/node_modules/.bin/vite"),
+              ["js", "ts", "mjs", "mts"].contains(where: { FileManager.default.fileExists(atPath: web + "/vite.config." + $0) }) else { return }
+        watching = true
+        DispatchQueue.global().async { // asking the user's shell for node takes a moment
+            let vite = self.web + "/node_modules/.bin/vite"
+            if let old = (try? String(contentsOfFile: self.vitePid, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines), let pid = Int32(old),
+               run("/bin/ps", ["-p", old, "-o", "command="]).out.contains(vite) { kill(pid, SIGTERM) } // ours, not another project's vite on a reused pid
+            let node = self.nodeDir()
+            DispatchQueue.main.async { if node == nil { self.watching = false } else { self.runVite(node, pause: 1) } } // no node: said once, not retried
+        }
+    }
+    // Where node lives, for Vite's `#!/usr/bin/env node`: $LANTERN_NODE, else what the user's login shell finds, which covers
+    // nvm, Homebrew and the rest, since an app's own PATH has none of them.
+    func nodeDir() -> String? {
+        let env = ProcessInfo.processInfo.environment
+        let found = env["LANTERN_NODE"] ?? run(env["SHELL"] ?? "/bin/zsh", ["-ilc", "command -v node"], timeout: 5).out.split(separator: "\n").last.map(String.init)
+        guard let node = found, node.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: node) else { print("vite build --watch: can't find node (set LANTERN_NODE)"); return nil }
+        return (node as NSString).deletingLastPathComponent
+    }
+    func runVite(_ node: String?, pause: Double) {
+        guard watching else { return }
+        let p = Process(), began = Date(), env = ProcessInfo.processInfo.environment
+        p.executableURL = URL(fileURLWithPath: web + "/node_modules/.bin/vite")
+        p.arguments = ["build", "--watch"]
+        p.currentDirectoryURL = URL(fileURLWithPath: web)
+        p.environment = env.merging(["PATH": (node.map { $0 + ":" } ?? "") + (env["PATH"] ?? "/usr/bin:/bin")]) { $1 }
+        p.standardInput = FileHandle.nullDevice
+        p.terminationHandler = { [weak self] _ in DispatchQueue.main.async {
+            guard let self, self.vite === p else { return }
+            let wait = Date().timeIntervalSince(began) > 30 ? 1 : pause
+            print("vite build --watch exited; trying again in \(Int(wait)) s")
+            DispatchQueue.main.asyncAfter(deadline: .now() + wait) { self.runVite(node, pause: min(wait * 2, 60)) }
+        } }
+        guard (try? p.run()) != nil else { return print("vite build --watch won't start") }
+        vite = p
+        try? "\(p.processIdentifier)".write(toFile: vitePid, atomically: true, encoding: .utf8)
+    }
+    func stop() {
+        watching = false
+        let p = vite; vite = nil; p?.terminate()
+        // the file may already be a newer app's, after a relaunch: only remove our own
+        if let p, (try? String(contentsOfFile: vitePid, encoding: .utf8)) == "\(p.processIdentifier)" { try? FileManager.default.removeItem(atPath: vitePid) }
     }
 }

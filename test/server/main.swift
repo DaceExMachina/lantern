@@ -8,4 +8,5 @@ let env = ProcessInfo.processInfo.environment
 let server = LanternServer(port: UInt16(env["LANTERN_PORT"]!)!, data: env["LANTERN_DATA"]!, web: env["LANTERN_WEB"]!)
 server.screenLocked = { false } // a locked screen pauses adoption, and whoever runs the tests may have stepped away
 server.mirror = env["LANTERN_MIRROR"].flatMap(URL.init(string:)) // npm run preview: the live app's sessions
-server.serve(build: env["LANTERN_BUILD"] != nil) // the app's server keeps dist/ built; previews don't
+handActivation = env["LANTERN_HAND_ACTIVATION"] != nil // as the app's server does: say it rather than do it
+server.serve(env["LANTERN_BUILD"] != nil ? ViteWatcher(web: env["LANTERN_WEB"]!) : nil) // as the app's window does; previews don't
