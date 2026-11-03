@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test } from 'vitest';
 import { createApp, nextTick } from 'vue';
+import NowPlaying from '../src/components/NowPlaying.vue';
 import ReviewsMenu from '../src/components/ReviewsMenu.vue';
 import { flyColour } from '../src/scene/fireflies';
 import { useLanternStore } from '../src/stores/lantern';
@@ -31,4 +32,26 @@ test('the button and the list are there only while a PR asks for my review, and 
   store.reviews = [];
   await nextTick();
   assert.ok(!button(), 'all reviewed: the button goes');
+});
+
+test('the now playing widget gives way while the dropdown is open', async () => {
+  const pinia = createPinia(), playing = createApp(NowPlaying).use(pinia);
+  app.unmount();
+  app = createApp(ReviewsMenu).use(pinia);
+  store = useLanternStore(pinia);
+  app.mount('#reviewsSlot'); playing.mount('#nowPlayingSlot');
+  store.nowPlaying = { title: 'Idyll of Sorrow', artist: 'ASC', app: 'Spotify', bundle: '', playing: true };
+  store.reviews = [{ url: 'https://github.com/o/app/pull/1', label: 'app#1', title: 'Fix it', need: 'waiting' }];
+  await nextTick();
+  const shown = () => !!document.getElementById('nowPlaying'), toggle = newState => { const e = new Event('toggle'); e.newState = newState; document.getElementById('reviews').dispatchEvent(e); return nextTick(); };
+  assert.ok(shown(), 'shown while the dropdown is shut');
+  await toggle('open');
+  assert.ok(!shown(), 'gone while it is open');
+  await toggle('closed');
+  assert.ok(shown(), 'back once it closes');
+  await toggle('open');
+  store.reviews = [];
+  await nextTick();
+  assert.ok(shown(), 'back when the list empties under an open dropdown');
+  playing.unmount();
 });
