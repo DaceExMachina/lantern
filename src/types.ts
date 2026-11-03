@@ -63,8 +63,8 @@ export const isSession = (x: unknown): x is Session => isRecord(x)
 
 // ---- the other events
 /** A PR waiting on my review. */
-export interface Review { url: string; label: string; title: string | null }
-export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']);
+export interface Review extends FlyState { url: string; label: string; title: string | null }
+export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']) && isString(x['need']);
 /** The old session that made a stale PR. */
 export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number; resuming?: Opt<number> }
 /** One of my PRs no session owns and nobody has touched for a week. */
@@ -218,9 +218,11 @@ export type Moth = SessionMoth | AgentMoth;
 export type CardAt = 'moth' | 'flies';
 /** A stale PR's wisp or a ghost moth, as a hover target (stale.ts). */
 export interface StaleTarget { stale: StalePR; zone: Zone }
+/** A review request's firefly around the lantern (frame.ts reviewZones). */
+export interface ReviewTarget { review: Review; zone: Zone }
 export interface GhostTarget { ghost: Ghost; zone: Zone }
 /** What a hover area shows the card for. */
-export type Hovered = SessionMoth | StaleTarget | GhostTarget;
+export type Hovered = SessionMoth | StaleTarget | GhostTarget | ReviewTarget;
 /** A hover area: a plain circle in scene units, hit-tested in JS (card.ts). */
 export interface Zone {
   x: number; y: number; r: number; off: boolean; readonly target: Hovered; onClick: () => void; cardAt?: CardAt | undefined; menu?: () => void;

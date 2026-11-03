@@ -65,7 +65,7 @@ test("with a standing lantern, no loose wisp's spot lands in the band its pedest
 // The wisps and ghost moths are light and shapes in the background shader (flyLights and ghostWings, drawn by
 // background.ts), hovered through plain circles (card.ts zones), so nothing in the scene's SVG moves for them.
 const BASE = Date.UTC(2026, 9, 20, 12);
-const NEEDS = ['ready', 'failing', 'draft', 'review', 'changes', 'quiet'];
+const NEEDS = ['ready', 'failing', 'draft', 'feedback', 'changes', 'quiet'];
 const stale = NEEDS.map((need, i) => ({ url: `https://github.com/o/r/pull/${i}`, label: `#${i}`, title: `PR ${i}`, need, updatedAt: new Date(BASE - (8 + i) * 864e5).toISOString(),
   owner: i < 2 ? { id: 'old-session', title: 'Old session', last: BASE - 9 * 864e5 } : undefined })); // the first two made by one old session
 

@@ -20,6 +20,7 @@ export const useLanternStore = defineStore('lantern', () => {
   setInterval(() => { now.value = Date.now(); }, 1000);
   const settings = shallowRef<Settings>(parseSettings({}));
   const reviews = shallowRef<Review[]>([]); // PRs waiting on my review (GitHub status on)
+  const reviewsOpen = ref(false); // whether the reviews dropdown is open (ReviewsMenu.vue), which the now playing widget gives way to
   const link = ref<'connecting' | 'up' | 'offline'>('connecting'); // the event stream, as the status line tells it
   const github = shallowRef<GitHub>({ accounts: [], signIn: null });
   const stats = shallowRef<Stats | null>(null);
@@ -50,5 +51,5 @@ export const useLanternStore = defineStore('lantern', () => {
   // the card's pin and the sidebar's: pins or unpins a session, newest at the bottom
   const togglePin = (id: string) => setPins(pinned.value.some(p => p.id === id) ? pinned.value.filter(p => p.id !== id) : [...pinned.value, { id }]);
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
-  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, now, settings, reviews, link, github, stats, statsFailed, recap, nowPlaying, nowPlayingArt };
+  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, now, settings, reviews, reviewsOpen, link, github, stats, statsFailed, recap, nowPlaying, nowPlayingArt };
 });

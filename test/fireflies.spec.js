@@ -6,8 +6,9 @@ import { mount } from '@vue/test-utils';
 import { afterEach, test, vi } from 'vitest';
 import DevPanel from '../src/components/DevPanel.vue';
 import { toggleDevPanel } from '../src/dev';
-import { BLEND, FLY, exitAt, flyLights, leaveStep, loopStart, swarm } from '../src/scene/fireflies';
-import { mothFireflies } from '../src/scene/frame';
+import { zoneAt, zones } from '../src/scene/card';
+import { BLEND, FLY, exitAt, flyLights, lanternFlies, leaveStep, loopStart, swarm } from '../src/scene/fireflies';
+import { mothFireflies, reviewZones } from '../src/scene/frame';
 import { hex } from '../src/scene/lanterns';
 import { live } from '../src/scene/live';
 import { VIEW } from '../src/scene/scene';
@@ -181,4 +182,20 @@ test('a session with more than 10 PRs: a merge nobody saw does not push a showin
   assert.strictEqual([...mm.flies.values()].filter(f => f.leave?.kind === 'gone').length, 0, 'none is pushed out');
   assert.strictEqual(mm.flies.get(`${URL}/9`).leave.kind, 'merged', 'the one that was showing merges');
   assert.strictEqual(mm.flies.has(`${URL}/12`), false, 'and the one nobody saw gets none');
+});
+
+test('a firefly circling the lantern for a review request is hovered for its PR, and goes with the request', () => {
+  const review = { url: URL, label: 'o/r#7', title: 'Fix it', need: 'failing', seen: 0 };
+  live.reviews = [review];
+  swarm(lanternFlies, new Map([[URL, review]]), [340, 320], [125, 170], 1 / 60, T0);
+  reviewZones();
+  const { x, y } = lanternFlies.get(URL), hit = zoneAt(zones, x, y);
+  assert.ok(hit, 'the area is on the firefly');
+  assert.strictEqual(hit.target.review, review);
+  assert.strictEqual(zoneAt(zones, x + 60, y), null, 'and only on it');
+  live.reviews = [];
+  for (const at of [10000, 13000]) swarm(lanternFlies, new Map(), [340, 320], [125, 170], 1 / 60, T0 + at); // it drifts off for 2.5s
+  assert.strictEqual(lanternFlies.size, 0);
+  reviewZones();
+  assert.strictEqual(zoneAt(zones, x, y), null, 'a review done leaves no area behind');
 });

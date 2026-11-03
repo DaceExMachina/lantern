@@ -27,7 +27,7 @@ const COUNT = Q.has('count') ? Math.min(1, Number(Q.get('count')) || 1) : 0.5;
 // The colours the badge's fireflies come in: half its own gold (not a PR colour), two fifths the orange of one with changes asked for,
 // and a sprinkle of the rest: sky blue (in review), green (ready), coral (failing) and yellow-green (waiting on you).
 const BADGE_GOLD = '#FFD27A';
-const FLASH_COLOURS: [number, string][] = [[0.5, BADGE_GOLD], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.review]];
+const FLASH_COLOURS: [number, string][] = [[0.5, BADGE_GOLD], [0.4, FLY.changes], [0.025, FLY.quiet], [0.025, FLY.ready], [0.025, FLY.failing], [0.025, FLY.mention]];
 const flashQueue: string[] = [];
 let flashing = false;
 

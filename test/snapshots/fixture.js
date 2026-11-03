@@ -305,7 +305,7 @@
     () => {
       catchScorch();
       emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
-      emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too' }]);
+      emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me', need: 'failing' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too', need: 'waiting' }]);
       emit('stale', stale(false));
       emit('prose', words(3));
       emit('message', sessionsAt(0));

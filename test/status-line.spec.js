@@ -65,7 +65,7 @@ test('a count keeps its element through a re-render, since WebKit drops a click 
   assert.strictEqual(status().querySelector('button.next'), button, 'and when the count changes');
 });
 
-test('quiet hours say so, until when, and the reviews link to GitHub', async () => {
+test('quiet hours say so, and until when', async () => {
   const until = Date.now() + 3600e3;
   store.settings = parseSettings({ quietUntil: until, quietEnd: '7:15' });
   await set([session('a')]);
@@ -75,12 +75,6 @@ test('quiet hours say so, until when, and the reviews link to GitHub', async () 
   store.settings = parseSettings({ quietUntil: 8.64e15 });
   await set([session('a')]);
   assert.strictEqual(line(), '1 session · 1 working · snoozed', 'with no end, no time');
-  store.settings = parseSettings({});
-  store.reviews = [{ url: 'u', label: 'app#1', title: 'Fix it' }, { url: 'v', label: 'app#2', title: null }];
-  await nextTick();
-  const a = status().querySelector('a.next');
-  assert.deepStrictEqual([a.textContent, a.href, a.title], ['2 reviews', 'https://github.com/pulls/review-requested', 'app#1 Fix it\napp#2 null']);
-  assert.strictEqual(line(), '1 session · 1 working · 2 reviews');
 });
 
 // The bug Dace shelved: the status's "warm for" went stale between the minute's syncs. It counts on with the store's clock.
