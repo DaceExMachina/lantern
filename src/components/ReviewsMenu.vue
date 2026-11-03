@@ -10,7 +10,7 @@ import { useLanternStore } from '../stores/lantern';
 import type { Review } from '../types';
 
 const store = useLanternStore();
-const rows = computed(() => worstFirst(store.reviews));
+const rows = computed(() => worstFirst(store.reviews.filter(r => r.need !== 'merged' && r.need !== 'closed'))); // one leaving (merged, closed or reviewed) is no longer asking
 // the dropdown's open state is the popover's own (toggle fires on any close: outside click, Escape, a link); it goes with the list
 watch(() => rows.value.length, n => { if (!n) store.reviewsOpen = false; });
 const tip = (e: Event, r: Review) => { const el = e.currentTarget; if (el instanceof HTMLElement && cutShort(el)) showPrTip(el, r.title); };
