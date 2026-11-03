@@ -6,7 +6,7 @@ import { devSlider, devToggle } from '../dev';
 import { COOL, FACET_TONES, GUST, HOP, LAG, MOTH_CALL, MOTH_IDLE, MOTH_SINGED, WARM, bakeCutouts, drawHang, fakeFlame, fakeLamp, flickerFollow, hash, mix, paperBounce, paperSoft, paperWind, perchAt, seeded, style, sway, tintFor, wobble } from './lanterns';
 import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
 import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background';
-import { FLY, byUrgency, lanternFlies, swarm } from './fireflies';
+import { FLY, byUrgency, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
 import { drawStale, settle } from './stale';
 import { hideCard, hoverZone, placeCard, zones } from './card';
 import type { Light } from './background';
@@ -171,7 +171,7 @@ export function frame(t: number) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) { swarm(lanternFlies, new Map(live.reviews.map(r => [r.url, r])), lightAt(), [125, 170], dt); reviewZones(); }
+  if (!AMBIENT) { swarm(lanternFlies, new Map(offBoard(live.reviews, live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); reviewZones(); }
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone

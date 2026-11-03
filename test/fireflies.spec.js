@@ -7,7 +7,7 @@ import { afterEach, test, vi } from 'vitest';
 import DevPanel from '../src/components/DevPanel.vue';
 import { toggleDevPanel } from '../src/dev';
 import { zoneAt, zones } from '../src/scene/card';
-import { BLEND, FLY, exitAt, flyLights, lanternFlies, leaveStep, loopStart, swarm } from '../src/scene/fireflies';
+import { BLEND, FLY, exitAt, flyLights, lampVary, lanternFlies, leaveStep, loopStart, offBoard, swarm } from '../src/scene/fireflies';
 import { mothFireflies, reviewZones } from '../src/scene/frame';
 import { hex } from '../src/scene/lanterns';
 import { live } from '../src/scene/live';
@@ -198,4 +198,20 @@ test('a firefly circling the lantern for a review request is hovered for its PR,
   assert.strictEqual(lanternFlies.size, 0);
   reviewZones();
   assert.strictEqual(zoneAt(zones, x, y), null, 'a review done leaves no area behind');
+});
+
+test('the lamp swarm leaves out reviews already flying on a moth, and brings one back when its session goes', () => {
+  const pr = n => ({ url: `https://github.com/o/r/pull/${n}`, label: `r#${n}`, title: null, need: 'waiting' }), reviews = [pr(1), pr(2)];
+  assert.deepStrictEqual(offBoard(reviews, [{ id: 's', state: 'working', subagents: [], github: [pr(1)] }]).map(r => r.url), [pr(2).url]);
+  assert.deepStrictEqual(offBoard(reviews, []).map(r => r.url), [pr(1).url, pr(2).url]);
+});
+
+test('each lamp firefly flies its own way, stable per URL, while a moth\'s swarm is unchanged by the variation', () => {
+  const want = new Map([1, 2, 3, 4, 5, 6].map(n => [`https://github.com/o/r/pull/${n}`, { need: 'waiting', seen: 0 }])), run = vary => { const flies = new Map(); swarm(flies, want, [340, 320], [125, 170], 1 / 60, T0, vary); return flies; };
+  const lamp = run(lampVary), again = run(lampVary), moth = run(), spread = f => new Set([...f.values()].map(x => x.u?.[1])).size;
+  assert.strictEqual(spread(lamp), 6, 'each has its own draws');
+  assert.deepStrictEqual([...lamp.values()].map(f => f.u), [...again.values()].map(f => f.u), 'the same on every run');
+  assert.ok([...moth.values()].every(f => !f.u), 'a moth\'s firefly has none');
+  const radii = [...lamp.values()].map(f => Math.hypot(f.x - 340, (f.y - 320) / 0.7)), plain = [...moth.values()].map(f => Math.hypot(f.x - 340, (f.y - 320) / 0.7));
+  assert.ok(Math.max(...radii) - Math.min(...radii) > Math.max(...plain) - Math.min(...plain) - 1, 'a wider spread of distances');
 });
