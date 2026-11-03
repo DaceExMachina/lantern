@@ -206,15 +206,17 @@ extension LanternServer {
             var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:]
             for data in answers {
                 for p in (data?["closed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { closed[str(p["url"])] = str(p["state"]) }
-                for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
-                    wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))"]
-                }
                 // reshape to gh's form so prNeed can read it: checks become one rollup state
-                for var p in (data?["mine"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
+                let shaped = { (p: JSON) -> JSON in
+                    var p = p
                     let rollup = ((((p["commits"] as? JSON)?["nodes"] as? [JSON])?.first?["commit"] as? JSON)?["statusCheckRollup"] as? JSON)?["state"]
                     p["statusCheckRollup"] = truthy(rollup) ? [["state": rollup!]] : [JSON]()
-                    all[str(p["url"])] = p
+                    return p
                 }
+                for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
+                    wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))", "need": prNeed(shaped(p))]
+                }
+                for p in (data?["mine"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { all[str(p["url"])] = shaped(p) }
             }
             let alone = { (cwd: String) in live.filter { $0.1 == cwd }.count == 1 }
             var github: [String: [JSON]] = [:]

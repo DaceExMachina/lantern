@@ -8,9 +8,9 @@ import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
 import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background';
 import { FLY, byUrgency, lanternFlies, swarm } from './fireflies';
 import { drawStale, settle } from './stale';
-import { hideCard, placeCard, zones } from './card';
+import { hideCard, hoverZone, placeCard, zones } from './card';
 import type { Light } from './background';
-import type { FlyState, Moth, Point, Scorch, SessionMoth, Style, Vec3 } from '../types';
+import type { FlyState, Moth, Point, ReviewTarget, Scorch, SessionMoth, Style, Vec3 } from '../types';
 import type { Wing } from './scene';
 
 // ---- animation ---------------------------------------------------------------
@@ -171,7 +171,7 @@ export function frame(t: number) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) swarm(lanternFlies, new Map(live.reviews.map(r => [r.url, { ...r, need: 'review' }])), lightAt(), [125, 170], dt);
+  if (!AMBIENT) { swarm(lanternFlies, new Map(live.reviews.map(r => [r.url, r])), lightAt(), [125, 170], dt); reviewZones(); }
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
@@ -809,6 +809,21 @@ export function mothFireflies(m: SessionMoth, dt: number, s: number) {
     put(m.flyLine, 'd', bowed(hx, hy, jx, jy, m, s, threadBow));
   }
   put(m.flyLine, 'opacity', tied ? 0.2 : 0);
+}
+
+// Each firefly circling the lantern for a review request has a hover area on it, showing the PR's card; a double click opens the PR.
+const reviewCards = new Map<string, ReviewTarget>();
+export function reviewZones() {
+  for (const [url, card] of reviewCards) if (!lanternFlies.has(url)) { zones.delete(card.zone); reviewCards.delete(url); }
+  for (const [url, f] of lanternFlies) {
+    const review = live.reviews.find(r => r.url === url);
+    let card = reviewCards.get(url);
+    if (!card && review) {
+      const target: ReviewTarget = { review, zone: hoverZone(() => target, () => { open(url, '_blank', 'noopener'); }, 20) };
+      reviewCards.set(url, card = target);
+    }
+    if (card) Object.assign(card.zone, { x: f.x, y: f.y, off: !!f.leave });
+  }
 }
 
 // The hover area sits on the moth's home, or on its landing spot with the lantern at rest, not on the moth, so it

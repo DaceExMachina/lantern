@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The hover card, inside #card: a session's (SessionRows, also for a stale PR whose session is known), an orphan stale PR's
-// or a ghost moth's. Each is compact on hover and full once a click expands it. The scene says what it's for
+// a review request's or a ghost moth's. Each is compact on hover and full once a click expands it. The scene says what it's for
 // (store.hovered, from src/scene/card.ts enterZone and hideCard), shows and hides #card, and places it every frame; this
 // only fills it. Relative times count from store.now, which ticks every second. Once hidden, the card keeps showing what it
 // last showed while it fades out; each time it opens it starts afresh (its agents closed, scrolled to the top).
@@ -46,6 +46,12 @@ onUpdated(() => {
 <template>
   <template v-if="shown">
     <SessionRows v-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" />
+    <template v-else-if="'review' in shown">
+      <h3><span class="title"><span class="face">{{ shown.review.label }}</span></span><span class="chip idle"><span class="face">review</span></span></h3>
+      <div :class="{ gist: !full }">{{ shown.review.title || '' }}</div>
+      <div :class="full ? 'dim' : 'foot counts'">Wants your review</div>
+      <div v-if="!full" class="hint">Click for details, double click to open PR</div>
+    </template>
     <template v-else-if="!ghost && 'stale' in shown">
       <h3><span class="title"><span class="face">{{ shown.stale.label }}</span></span><span class="chip idle"><span class="face">stale</span></span></h3>
       <div :class="{ gist: !full }">{{ shown.stale.title || '' }}</div>
