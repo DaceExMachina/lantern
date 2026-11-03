@@ -252,44 +252,57 @@
   #reviewsButton:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   #reviews { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); /* stops below the drag strip, like #stats and #recap; scrolls inside (.flyup's 52px is its bottom inset) */ left: var(--space-3); right: auto; width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
   /* the CPU and memory readout (src/components/UsageMenu.vue): fixed at the top left, below the drag strip, quiet until hovered; its dropdown opens under it */
-  #usageButton { all: unset; cursor: pointer; position: fixed; z-index: var(--z-tip); top: calc(max(var(--space-2), var(--titlebar)) + var(--space-1)); left: var(--space-3); max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #usageButton { all: unset; cursor: pointer; position: fixed; z-index: var(--z-tip); top: calc(max(var(--space-2), var(--titlebar)) + var(--space-1)); left: var(--space-3); max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
   #usageButton:hover, #usageButton[aria-expanded="true"] { color: var(--ink-dim); }
   #usageButton:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
-  #usageButton .meter { --m: var(--ink-dim); display: flex; align-items: center; gap: var(--space-1); }
-  #usageButton.warning .mem { --m: var(--accent-warm); } /* memory pressure colours the memory meter */
-  #usageButton.critical .mem { --m: var(--error-ink); }
+  #usageButton, #usage { --c-cpu: var(--pr-in-review); --c-mem: var(--pr-ready); } /* CPU is blue, memory green (or warm, then red, with memory pressure) wherever they appear; sessions' colours avoid both */
+  #usageButton.warning, #usage.warning { --c-mem: var(--accent-warm); }
+  #usageButton.critical, #usage.critical { --c-mem: var(--error-ink); }
+  #usageButton .meter { --m: var(--c-cpu); display: flex; align-items: center; gap: var(--space-1); }
+  #usageButton .mem { --m: var(--c-mem); }
+  #usageButton .txt { display: grid; line-height: 1.15; }
+  #usageButton .lbl { font-size: var(--text-xs); color: var(--ink-faint); }
+  #usageButton .v { text-align: right; color: var(--ink-soft); } /* a fixed width for the longest form, so nothing beside it shifts */
+  #usageButton .cpu .v { min-width: 4ch; }
+  #usageButton .mem .v { min-width: 7ch; }
   #usageButton .ring { width: var(--hud); height: var(--hud); flex: none; fill: none; stroke-width: 2; color: var(--m); }
   #usageButton .ring circle { stroke: var(--lantern-quiet); }
   #usageButton .ring .arc { stroke: var(--m); stroke-linecap: round; }
-  #usageButton .ico { width: var(--hud); height: var(--hud); flex: none; color: var(--m); }
-  #usageButton .bar { width: calc(var(--hud) * 2); height: 3px; border-radius: var(--radius-pill); background: var(--lantern-quiet); overflow: hidden; }
-  #usageButton .bar i { display: block; height: 100%; background: var(--m); }
   #usageButton .spark { flex: none; fill: none; stroke-width: 1; stroke-linejoin: round; }
   #usageButton .spark polyline { vector-effect: non-scaling-stroke; }
-  #usageButton .spark .c { stroke: var(--ink-dim); }
-  #usageButton .spark .m { stroke: var(--accent-violet-line); }
-  #usageButton.warning .spark .m { stroke: var(--accent-warm); }
-  #usageButton.critical .spark .m { stroke: var(--error-ink); }
+  #usageButton .spark .c { stroke: var(--c-cpu); }
+  #usageButton .spark .m { stroke: var(--c-mem); }
   @media (max-width: 480px) { #usageButton .spark { display: none; } }
-  #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--space-6)) auto auto var(--space-3); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); max-height: calc(100vh - 2 * var(--space-6) - var(--titlebar)); padding: var(--space-2) 0; gap: 0; }
+  #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--space-6) + var(--space-3)) auto auto var(--space-3); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); max-height: calc(100vh - 2 * var(--space-6) - var(--titlebar)); padding: var(--space-2) 0; gap: 0; }
   #usage h4 { margin: var(--space-2) var(--space-4) var(--space-1); font-size: var(--text-xs); font-weight: var(--weight-regular); color: var(--ink-dim); letter-spacing: var(--tracking-label); text-transform: uppercase; }
   #usage h4:first-child { margin-top: var(--space-1); }
+  #usage { --cols: var(--space-1-5) 1fr 6ch 7ch; } /* dot, name, CPU, memory: the headers and every row share these columns */
   #usage .ico { width: 12px; height: 12px; flex: none; vertical-align: -2px; margin-right: var(--space-1); color: var(--ink-dim); }
-  #usage .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; column-gap: var(--space-2); padding: var(--space-0-5) var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
+  #usage .row, #usage h4.cols { display: grid; grid-template-columns: var(--cols); align-items: center; column-gap: var(--space-2); padding: var(--space-0-5) var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
+  #usage h4.cols { padding: 0; margin-block: var(--space-2) var(--space-1); }
+  #usage h4.cols span:first-child { grid-column: 1 / 3; }
+  #usage .hd { display: grid; justify-items: end; font-size: var(--text-xs); letter-spacing: 0; text-transform: none; }
+  #usage .hd .ico { margin: 0; }
+  #usage .cpu .ico { color: var(--c-cpu); }
+  #usage .mem .ico { color: var(--c-mem); }
   #usage .row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #usage .row span:nth-of-type(2) { flex: none; color: var(--ink-soft); }
-  #usage .row span:nth-of-type(2) .ico:not(:first-child) { margin-left: var(--space-2); }
-  #usage .row span:first-of-type { flex: 1; }
-  #usage .dot { width: 6px; height: 6px; border-radius: var(--radius-pill); flex: none; }
-  #usage .bars { flex-basis: 100%; display: grid; gap: var(--space-0-5); padding: var(--space-0-5) 0 var(--space-1) calc(var(--space-1-5) + var(--space-2)); }
-  #usage .bars i { height: 2px; border-radius: var(--radius-pill); opacity: .85; }
-  #usage .bars i + i { opacity: .5; } /* the first bar is CPU, the second memory */
+  #usage .row.mac { display: flex; justify-content: space-between; }
+  #usage .row.mac span:first-child { flex: 1; min-width: 4ch; }
+  #usage .row.mac span + span { flex: none; min-width: 16ch; text-align: right; color: var(--ink-soft); }
+  #usage .dot { width: 6px; height: 6px; border-radius: var(--radius-pill); }
+  #usage .cell { display: grid; gap: var(--space-0-5); color: var(--ink-soft); }
+  #usage .cell b { font-weight: var(--weight-regular); text-align: right; }
+  #usage .cell i { height: 2px; border-radius: var(--radius-pill); }
   #usage .stack { display: flex; align-items: center; gap: var(--space-1); margin: var(--space-0-5) var(--space-4); }
   #usage .stack .ico { margin: 0; }
+  #usage .stack b { flex: none; width: 6ch; font-weight: var(--weight-regular); font-size: var(--text-xs); color: var(--ink-dim); }
+  #usage .stack span { outline: 1px solid; outline-offset: 1px; } /* framed in the metric's colour */
+  #usage .stack.cpu span { outline-color: var(--c-cpu); }
+  #usage .stack.mem span { outline-color: var(--c-mem); }
   #usage .stack span { flex: 1; display: flex; gap: var(--space-0-5); height: 6px; border-radius: var(--radius-pill); overflow: hidden; background: var(--lantern-quiet); }
   #usage .stack i { min-width: 0; }
-  #usage .row.warning span:nth-of-type(2) { color: var(--accent-warm-ink); }
-  #usage .row.critical span:nth-of-type(2) { color: var(--error-ink); }
+  #usage .row.mac.warning span + span { color: var(--accent-warm-ink); }
+  #usage .row.mac.critical span + span { color: var(--error-ink); }
   #reviews a { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
   #reviews a .face { display: block; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); }
   #reviews a:hover .face, #reviews a:focus-visible .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }

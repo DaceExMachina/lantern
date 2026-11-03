@@ -3,7 +3,6 @@
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { expect, test } from 'vitest';
-import { Q } from '../src/scene/scene';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
@@ -26,7 +25,7 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   expect(w.find('#usageButton').exists()).toBe(false);
   store.usage = usage;
   await w.vm.$nextTick();
-  expect(w.find('#usageButton').text()).toBe('42%12.0 GB'); // icons, not words, and nothing of Lantern's own
+  expect(w.find('#usageButton').text()).toBe('42%CPU12.0 GBMemory'); // icons first, with a small label under each number, and nothing of Lantern's own
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
   expect(w.findAll('#usage .row').map(r => r.text())).toEqual(['42%12.0 GB of 32.0 GB', '4 processes1%300 MB', 'busy56%2.0 GB', 'quiet one0%900 MB']); // busiest first, a session with no processes left out
   store.settings = { ...store.settings, systemStats: false };
@@ -44,16 +43,9 @@ test('the rings fill to the Mac\'s CPU and memory, and the dropdown splits each 
   expect(cpu[1]).toBeCloseTo(55.5 / 57.1 * 100, 0); // busy leads the sessions
   expect(mem.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 0); // memory fills the bar: the last piece is whatever the Mac uses beyond them
   expect(mem[3]).toBeCloseTo((12288 - 300 - 2048 - 900) / 12288 * 100, 0);
-  expect(w.findAll('#usage .row')[2].findAll('.bars i').map(i => i.element.style.width)).toEqual(['97.2%', '16.7%']); // busy's CPU and memory bars
-  w.unmount();
-});
-
-test('the bar variant draws bars instead of rings', async () => {
-  Q.set('hud', 'bar');
-  const { w } = await mounted();
-  Q.delete('hud');
-  expect(w.findAll('#usageButton .ring')).toHaveLength(0);
-  expect(w.findAll('#usageButton .bar i').map(i => i.element.style.width)).toEqual(['41.6%', '37.5%']);
+  expect(w.findAll('#usage .row')[2].findAll('.cell i').map(i => i.element.style.width)).toEqual(['97.2%', '16.7%']); // busy's CPU and memory bars
+  expect(w.findAll('#usage .row')[2].findAll('.cell i').map(i => i.attributes('title'))).toEqual(['busy · 56% CPU', 'busy · 2.0 GB']); // each bar and segment says whose it is
+  expect(w.findAll('#usage .stack')[1].findAll('span i')[1].attributes('title')).toBe('busy · 2.0 GB');
   w.unmount();
 });
 
