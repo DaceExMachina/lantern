@@ -1553,7 +1553,7 @@ test('reading back the PRs a session created doesn\'t hold every line it parsed'
   const base = await serve(t, { [`.claude/projects/-work/${id}.jsonl`]: jsonl([user('Fix it')]) + talk.repeat(10000) + jsonl([...made, answer('Done.')]) });
   const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.created), 'its PRs to be read back', 60000);
   assert.deepStrictEqual(s.created, [prUrl(1)]); // the read went all the way through
-  const [, n, unit] = execFileSync('footprint', [String(t.server.pid)], { encoding: 'utf8' }).match(/phys_footprint_peak: ([\d.]+) (KB|MB|GB)/);
+  const [, n, unit] = execFileSync('footprint', [String(t.server.pid)], { encoding: 'utf8', timeout: 10000 }).match(/phys_footprint_peak: ([\d.]+) (KB|MB|GB)/);
   const peak = n * { KB: 1 / 1024, MB: 1, GB: 1024 }[unit];
   assert.ok(peak < 50, `the server peaked at ${peak} MB reading 80 MB of transcript lines`);
 });
