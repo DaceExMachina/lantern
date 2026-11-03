@@ -1544,6 +1544,20 @@ test('seeded sessions go out before the PRs they created are read back, and thos
   assert.deepStrictEqual(s.created, [prUrl(1)]);
 });
 
+// Each line the PR read parses is let go as it moves on. The parser hands back autoreleased objects, and the read ran
+// as one block with no pool of its own, so it held every line until it finished: 950 MB at each launch of the app.
+test('reading back the PRs a session created doesn\'t hold every line it parsed', async t => {
+  const id = UUID(8), talk = JSON.stringify(answer('Then gh pr create opens it. ' + 'x'.repeat(8000))) + '\n';
+  const made = [{ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'gh pr create --fill' } }] } },
+    { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: prUrl(1) + '\n' }] } }];
+  const base = await serve(t, { [`.claude/projects/-work/${id}.jsonl`]: jsonl([user('Fix it')]) + talk.repeat(10000) + jsonl([...made, answer('Done.')]) });
+  const s = await until(async () => (await snapshot(base)).sessions.find(x => x.id === id && x.created), 'its PRs to be read back', 60000);
+  assert.deepStrictEqual(s.created, [prUrl(1)]); // the read went all the way through
+  const [, n, unit] = execFileSync('footprint', [String(t.server.pid)], { encoding: 'utf8' }).match(/phys_footprint_peak: ([\d.]+) (KB|MB|GB)/);
+  const peak = n * { KB: 1 / 1024, MB: 1, GB: 1024 }[unit];
+  assert.ok(peak < 50, `the server peaked at ${peak} MB reading 80 MB of transcript lines`);
+});
+
 // A session that joins while a refresh is out (adopted, say) isn't in that refresh's answer. Until one looks at it, it
 // keeps the PRs it owned rather than dropping them as strays. Here s2 works outside any git repo, so no refresh ever looks
 // at it, while s1 in the repo makes the refreshes run.

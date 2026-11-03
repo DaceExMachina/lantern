@@ -98,7 +98,9 @@ func jsonText(_ v: Any) -> String {
     (try? JSONSerialization.data(withJSONObject: v, options: [.fragmentsAllowed, .withoutEscapingSlashes]))
         .map { String(decoding: $0, as: UTF8.self) } ?? "null"
 }
-func parse(_ data: Data) -> Any? { try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) }
+// The reader autoreleases what it builds, and a GCD block drains its pool only when it ends: without a pool of its own,
+// a loop that parses thousands of transcript lines (createdPRs at startup) holds every one of them until it's done.
+func parse(_ data: Data) -> Any? { autoreleasepool { try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) } }
 
 extension String {
     /// JS .slice(0, n), which counts UTF-16 code units.
