@@ -1,6 +1,8 @@
 // The review requests in the footer (src/components/ReviewsMenu.vue, mounted in index.html's real #reviewsSlot as src/main.ts does):
 // a button with their count, only while some PR asks for my review, opening a list of them, each PR's link with its title and need.
 import assert from 'node:assert';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test } from 'vitest';
 import { createApp, nextTick } from 'vue';
@@ -37,6 +39,20 @@ test('the button and the list are there only while a PR asks for my review, and 
   assert.ok(!button(), 'all reviewed: the button goes');
 });
 
+test('a review already flying as a moth\'s firefly is left out of the list and its count', async () => {
+  const pr = n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need: 'waiting' });
+  store.reviews = [pr(1), pr(2)];
+  store.sessions = [{ id: 's', state: 'working', subagents: [], github: [pr(1)] }];
+  await nextTick();
+  assert.deepStrictEqual([button().textContent, rows().map(a => a.href)], ['1', [pr(2).url]]);
+  store.sessions = [{ id: 's', state: 'working', subagents: [], github: [pr(1), pr(2)] }];
+  await nextTick();
+  assert.ok(!button(), 'every request on the board: the button hides');
+  store.sessions = [];
+  await nextTick();
+  assert.strictEqual(button().textContent, '2', 'the session leaves: both are back');
+});
+
 test('the now playing widget gives way while the dropdown is open', async () => {
   const pinia = createPinia(), playing = createApp(NowPlaying).use(pinia);
   app.unmount();
@@ -57,4 +73,9 @@ test('the now playing widget gives way while the dropdown is open', async () => 
   await nextTick();
   assert.ok(shown(), 'back when the list empties under an open dropdown');
   playing.unmount();
+});
+
+test('the list is capped below the window drag strip, so it scrolls instead of running under the title bar', () => {
+  const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8').match(/^\s*#reviews \{[^}]*\}/m)?.[0];
+  assert.match(css, /max-height: calc\(100vh - 52px - max\(var\(--space-5\), var\(--titlebar\)\)\)/);
 });

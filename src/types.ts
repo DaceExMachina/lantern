@@ -171,9 +171,10 @@ export interface Style {
 /** How a firefly leaves: merged, closed or just gone, from when (ms), heading `d`, its merge's loop starting at `start` s. */
 interface Leave { kind: string; at: number; d: Point; start: number }
 /** A PR's firefly (fireflies.ts swarm): its seeded orbit, the PR, how it's leaving, and where it was drawn this frame. */
+/** Firefly: `u` is the lamp swarm's own five seeded draws (fireflies.ts Vary), which make its speed, orbit and wander. */
 export interface Firefly {
   a: number; r: number; w: number; ph: number; bend: number; tilt: number; side: number; p: FlyState; leave: Leave | null;
-  k: number; near?: boolean; col: string; x: number; y: number; size: number;
+  k: number; u?: [number, number, number, number, number]; near?: boolean; col: string; x: number; y: number; size: number;
 }
 
 // ---- the scene's moths and hover areas

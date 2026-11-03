@@ -1,11 +1,11 @@
 // Fireflies: one per PR, swarming around their moth's home.
 
 import { live } from './live';
-import { CX, VIEW, nth, roof } from './scene';
+import { CX, VIEW, nth, roof, stretch } from './scene';
 import type { Box } from './scene';
-import { devButton } from '../dev';
+import { devButton, devSlider } from '../dev';
 import { GUST, hash, hex, mix, seeded } from './lanterns';
-import type { Firefly, FlyState, Point, Vec3 } from '../types';
+import type { Firefly, FlyState, Point, Review, Session, Vec3 } from '../types';
 
 // ---- fireflies -----------------------------------------------------------------
 // One per PR, keyed by its URL. The colour says what it needs (swarm says how they come and go). Failing checks swell
@@ -42,6 +42,21 @@ export function bloomSprite(col: string, size: number) {
   return c;
 }
 export const lanternFlies = new Map<string, Firefly>(); // reviews requested from me hang around the lantern itself
+/** The review requests not already flying as a moth's firefly (a session's first ten PRs, as mothFireflies keeps them): the
+ * lamp's swarm and the footer's list both show just these, so they can't disagree. */
+export function offBoard(reviews: Review[], sessions: Session[]) {
+  const on = new Set(sessions.flatMap(s => byUrgency(s.github ?? [], undefined).slice(0, 10).map(p => p.url)));
+  return reviews.filter(r => !on.has(r.url));
+}
+// How much each lamp firefly differs from the next. Each has five draws seeded by its URL (Firefly.u); these set what they
+// become, live: its own speed between the two (rad/s), and how far `spread` takes its orbit's distance, squash, lean and
+// out-and-back breathing. The moths' swarms don't vary (swarm's `vary` is left out).
+export interface Vary { spread: number; speed: Point }
+export const lampVary: Vary = {
+  spread: devSlider('Fireflies', 'lampspread', 'lamp spread', 0, 1.5, 0.05, 1.5, 'How differently the review fireflies around the lamp fly (orbit distance, squash, lean, how far they loop out and back) in a wide window; narrower ones scale it down to 40% (0 is all alike)', v => { lampVary.spread = v; }),
+  speed: [devSlider('Fireflies', 'lampslow', 'lamp slowest', 0.05, 1.5, 0.05, 0.05, 'The lazy end of the review fireflies\' speeds, in radians a second', v => { lampVary.speed[0] = v; }),
+    devSlider('Fireflies', 'lampfast', 'lamp fastest', 0.05, 1.5, 0.05, 0.65, 'The quick end of the review fireflies\' speeds, in radians a second', v => { lampVary.speed[1] = v; })],
+};
 // How a firefly comes and goes. Everything runs off the wall clock from when the server saw the change (a PR's `seen`
 // and `since`, in ms), along a path seeded by its URL, so every window plays it at the same moment the same way:
 // - a new PR's flies in from the window's edge nearest its swarm (an entrance you can follow; sparking out of its moth
@@ -54,6 +69,7 @@ export const lanternFlies = new Map<string, Firefly>(); // reviews requested fro
 //   from when this window noticed, since the server has no time for that.
 // One flying off is removed only once it and its bloom are wholly outside the window.
 const ARRIVE = 2; // seconds to fly in
+const AVOID = 120; // a lamp firefly is pushed off a moth's swarm within this, scene units, by up to 55
 const LEAVING = new Set(['merged', 'closed']);
 // A moth's PRs in the order its fireflies are kept (it shows at most 10): ones flying off first so a merge isn't cut, then
 // the ones that need me, then the rest. A merged or closed PR with no firefly of its own yet (`flies` has none) is dropped:
@@ -107,13 +123,14 @@ export function loopStart(d: Point) {
 }
 // `want` maps each PR's URL to what the server says of it ({ need, seen, since, was }); `now` is the wall clock, in ms.
 // Its circling, wobble, wind and swell run off the wall clock too, so every window has each firefly in the same spot.
-export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, [cx, cy]: Point, [rMin, rMax]: Point, dt: number, now = Date.now()) {
+export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, [cx, cy]: Point, [rMin, rMax]: Point, dt: number, now = Date.now(), vary?: Vary) {
   const s = now / 1000;
   if (flyTry.size) { want = new Map(want); for (const [url, t] of flyTry) if (t.flies === flies) want.set(url, { ...want.get(url), ...t }); }
   for (const [url, p] of want) if (!flies.has(url) && !LEAVING.has(p.need)) {
     const rand = seeded(hash(url)); // the same firefly path in every window
     const f: Firefly = { a: rand() * 6.28, r: rMin + rand() * (rMax - rMin), w: (0.3 + rand() * 0.3) * (rand() < 0.5 ? -1 : 1), ph: rand() * 10,
       bend: (rand() - 0.5) * 140, tilt: (rand() - 0.5) * 0.7, side: rand() < 0.5 ? -1 : 1, p, leave: null, k: 1, col: FLY.quiet, x: 0, y: 0, size: 0 };
+    if (vary) f.u = [rand(), rand(), rand(), rand(), rand()]; // drawn after the rest, so a moth's path is what it was
     flies.set(url, f);
   }
   for (const [url, f] of flies) {
@@ -127,12 +144,25 @@ export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, 
     }
     const t = f.leave ? (now - f.leave.at) / 1000 : 0, gone = f.leave?.kind === 'gone';
     if (gone && t >= 2.5) { flies.delete(url); continue; }
-    const a = f.a + f.w * Math.min(s, f.leave ? f.leave.at / 1000 : s); // a leaving one stops circling where it was
+    // a lamp firefly's own speed, orbit distance, squash, lean and breathing, from its draws and the live spread (a moth's: 0.7, none)
+    let w = f.w, base = f.r, squash = 0.7, lean = 0, breath = 1;
+    if (vary && f.u) {
+      // the spread is the slider's in a window as wide as 16:9 (VIEW.kx 1.8) and 40% of it in a square or tall one
+      const sp = vary.spread * (0.4 + 0.6 * Math.min(1, Math.max(0, (VIEW.kx - 1) / 0.8)));
+      const [u0, u1, u2, u3, u4] = f.u, mid = (rMin + rMax) / 2, half = (rMax - rMin) / 2 + 45 * sp;
+      w = Math.sign(f.w) * (vary.speed[0] + u0 * (vary.speed[1] - vary.speed[0]));
+      base = Math.max(90, mid + (u1 * 2 - 1) * half);
+      squash = Math.min(1, 0.7 + (u2 * 2 - 1) * 0.25 * sp);
+      lean = (u3 * 2 - 1) * 0.6 * sp;
+      breath = 1 + 0.2 * sp * u4 * Math.sin(s * (0.15 + 0.3 * u2) + f.ph);
+    }
+    const a = f.a + w * Math.min(s, f.leave ? f.leave.at / 1000 : s); // a leaving one stops circling where it was
     // the one a landed moth's thread is tied to (f.near) eases in to a small orbit near the cluster's middle, still moving
     f.k += ((f.near ? 0.2 : 1) - f.k) * Math.min(1, dt * 1.5);
-    const r = (f.r + (gone ? 70 * t : 0)) * f.k;
+    const r = (base * breath + (gone ? 70 * t : 0)) * f.k;
     // the wind carries it about half as far as the dust, each a moment ahead of the next (lanterns.ts's GUST)
-    let x = cx + Math.cos(a) * r + Math.sin(s * 0.9 + f.ph) * 6 + GUST(s - 0.03 * f.ph) * 7, y = cy + Math.sin(a) * r * 0.7 + Math.cos(s * 1.3 + f.ph) * 5;
+    const ex = Math.cos(a) * r, ey = Math.sin(a) * r * squash; // the ellipse, then leaned
+    let x = cx + ex * Math.cos(lean) - ey * Math.sin(lean) + Math.sin(s * 0.9 + f.ph) * 6 + GUST(s - 0.03 * f.ph) * 7, y = cy + ex * Math.sin(lean) + ey * Math.cos(lean) + Math.cos(s * 1.3 + f.ph) * 5;
     const swell = fireflySwell(s, f.ph, f.p.need === 'failing' ? 2.6 : 1.1); // and the bloom widens as it swells
     let size = FIREFLY_BLOOM * (0.75 + 0.45 * swell), glow = 0.6 + 0.4 * swell;
     if (!f.leave) {
@@ -150,6 +180,11 @@ export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, 
     else {
       const [ox, oy, g, z] = leaveStep(f.leave.kind, t, f.leave.d, f.leave.start);
       x += ox; y += oy; glow *= g; size *= z;
+    }
+    if (vary && !f.leave) for (const m of live.moths.values()) { // a soft push off each moth's swarm (a little overlap now and then is fine)
+      if (m.parentId !== undefined || !m.home || !m.flies?.size) continue;
+      const [mx, my] = stretch(m.home), dx = x - mx, dy = y - my, d = Math.hypot(dx, dy) || 1;
+      if (d < AVOID) { const push = 55 * (1 - d / AVOID) ** 2 / d; x += dx * push; y += dy * push; }
     }
     if (!f.leave) y = Math.max(y, roof() + size); // under the app's drag strip, bloom and all; one leaving flies out past it
     f.x = x; f.y = y; f.size = size;
