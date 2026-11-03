@@ -156,6 +156,7 @@ In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F
 | Hover card | `--state-waiting-chip` the "needs you" pill · `--error-surface` and `--error-ink` the error pill · `--surface-tray` the tray of work under the card · `--agents-surface`, `--agents-line`, `--agents-ink`, `--agents-ink-dim` the running agents' band, and the "waiting on agents" pill |
 | PR needs | `--pr-ready`, `--pr-failing`, `--pr-changes`, `--pr-feedback` (the last word since the latest push is a reviewer's), `--pr-draft`, `--pr-in-review`, `--pr-mention` |
 | Spacing | `--space-0-5` 2px · `--space-1` 4px · `--space-1-5` 6px · `--space-2` 8px · `--space-3` 12px · `--space-4` 16px · `--space-5` 24px · `--space-6` 32px |
+| Controls | `--control-height` the settings menu's controls: the off \| on switch, the time input and the lantern picker |
 | Radius | `--radius-sm` 3px · `--radius-md` 6px controls · `--radius-lg` 10px panels and cards · `--radius-pill` |
 | Type | `--font-serif` (Georgia) · `--font-mono` · `--text-xs` 11px labels · `--text-sm` 12.5px panel text · `--text-md` 14px · `--text-lg` 16px values · `--text-xl` 20px · `--text-display` 40px · `--weight-regular` and `--weight-bold` (Georgia has no other faces) · `--leading` · `--tracking-label` |
 | Elevation and motion | `--shadow-lg` · `--rim` a swatch's pale rim · `--blur-glass` · `--z-tip`, `--z-flash`, `--z-overlay` · `--fade` · `--slide` the pinned sidebar opening · `--faded` the opacity of something unavailable or ended |

@@ -34,7 +34,7 @@
     /* spacing: one scale, 1 = 4px */
     --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
     /* radius */
-    --radius-sm: 3px; --radius-md: 6px; --radius-lg: 10px; --radius-pill: 99px;
+    --control-height: 26px; --radius-sm: 3px; --radius-md: 6px; --radius-lg: 10px; --radius-pill: 99px;
     /* type: Georgia has only a regular and a bold face, so 400 and 700 are the only weights */
     --font-serif: Georgia, 'Times New Roman', serif; --font-mono: ui-monospace, monospace;
     --text-xs: 11px; --text-sm: 12.5px; --text-md: 14px; --text-lg: 16px; --text-xl: 20px; --text-display: 40px;
@@ -99,7 +99,7 @@
   #menu .switch > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
   #menu .switch > label { display: flex; padding-left: var(--space-2); } /* the time's click area runs the row's full height too */
   #menu .switch input:disabled { opacity: var(--faded); }
-  #menu input[type=time], .pill button span { box-sizing: border-box; height: 26px; } /* the switch matches the input */
+  #menu :is(input[type=time], select), .pill button span { box-sizing: border-box; height: var(--control-height); } /* the switch and the lantern picker match the time input */
   #menu input[type=time] { width: 8.6em; } /* one width for every time, the widest value's, so their edges line up */
   .pill { display: flex; }
   .pill button { all: unset; cursor: pointer; display: flex; align-items: center; padding: 5px 0; }
