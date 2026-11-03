@@ -18,6 +18,10 @@ export function tipSpot(tip: HTMLElement, el: Element) {
 export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
+/** Memory in MB as a person reads it. */
+export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+/** A group of processes' CPU and memory, in a line. */
+export const usageText = (u: { cpu: number; mem: number }) => `${Math.round(u.cpu)}% CPU · ${memText(u.mem)}`;
 export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a

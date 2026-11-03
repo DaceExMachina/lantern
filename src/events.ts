@@ -1,6 +1,6 @@
 import { Q } from './scene/scene';
 import { useLanternStore } from './stores/lantern';
-import { fetchStats, isGitHub, isNowPlaying, isReview, parseJson, parseSettings } from './types';
+import { fetchStats, isGitHub, isNowPlaying, isReview, isUsage, parseJson, parseSettings } from './types';
 
 // The chrome's line to the server. The scene still opens its own EventSource (src/wiring.ts),
 // so for now there are two connections.
@@ -17,7 +17,8 @@ export function connect(store = useLanternStore()) {
   es.onerror = () => { store.link = 'offline'; };
   listen('reviews', t => { const v = parseJson(t); store.reviews = Array.isArray(v) ? v.filter(isReview) : []; });
   // ?style= previews one lantern, whatever the settings say (the scene does the same)
-  listen('settings', t => { up(); const settings = parseSettings(parseJson(t)); store.settings = { ...settings, style: Q.get('style') ?? settings.style }; });
+  listen('settings', t => { up(); const settings = parseSettings(parseJson(t)); store.settings = { ...settings, style: Q.get('style') ?? settings.style }; if (settings.systemStats === false) store.usage = null; });
+  listen('usage', t => { const v = parseJson(t); if (isUsage(v)) store.usage = v; });
   listen('github', t => { const github = parseJson(t); if (isGitHub(github)) store.github = github; });
   listen('nowPlaying', t => { const v = parseJson(t); store.nowPlaying = isNowPlaying(v) ? v : null; });
   listen('nowPlayingArt', t => { const v = parseJson(t); store.nowPlayingArt = typeof v === 'string' ? v : ''; }); // a data URL, or "" for none
