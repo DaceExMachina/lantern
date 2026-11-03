@@ -1607,6 +1607,22 @@ test('reviews: each PR asking for my review carries its need', async t => {
   assert.deepStrictEqual(reviews.map(r => [r.label, r.need]), [['r#1', 'failing'], ['r#2', 'draft'], ['r#3', 'waiting']]);
 });
 
+// A review request that ends leaves its firefly the way a PR's does: merged and closed as they say, one I reviewed (still open)
+// like a merge, and one withdrawn without my review just drops out.
+test('reviews: an ended request stays a minute with how it ended', async t => {
+  const { gh, repo } = ghRepo([]), answer = f => fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { mine: { nodes: [] }, closed: { nodes: [] }, ...f } }));
+  answer({ reviews: { nodes: [1, 2, 3, 4].map(n => prNode(n, iso(Date.now()))) } });
+  const base = await serve(t, {}, () => {}, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  await until(async () => (await snapshot(base)).reviews?.length === 4, 'a refresh to list the reviews');
+  // 1 merged without my review, 2 closed, 3 I reviewed and it is still open, 4 was withdrawn
+  answer({ reviews: { nodes: [] }, requestedClosed: { nodes: [{ url: prUrl(1), state: 'MERGED' }, { url: prUrl(2), state: 'CLOSED' }] }, reviewed: { nodes: [{ url: prUrl(3), state: 'OPEN' }] } });
+  await post(base, '/settings', { github: true });
+  const { reviews } = await until(async () => { const s = await snapshot(base); return s.reviews?.some(r => r.need === 'merged') && s; }, 'a refresh to see them end');
+  assert.deepStrictEqual(reviews.map(r => [r.label, r.need]).sort(), [['r#1', 'merged'], ['r#2', 'closed'], ['r#3', 'merged']]);
+});
+
 // Feedback is waiting on a PR when, after the newest commit, the last non-bot review or comment is from someone but its author and isn't an approval. It beats ready; the author's reply clears it until the reviewer speaks again.
 test("a reviewer's last word since the newest commit makes feedback; a bot, the author's reply, an older review or an approval do not", async t => {
   const hour = 3600000, commit = Date.now() - 4 * hour, at = n => iso(commit + n * hour);

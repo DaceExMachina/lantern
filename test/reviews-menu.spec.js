@@ -29,6 +29,9 @@ test('the button and the list are there only while a PR asks for my review, and 
   assert.deepStrictEqual(rows().map(a => [a.href, a.querySelector('.ti').textContent, a.querySelector('b').textContent, a.querySelector('.me').textContent]),
     [['https://github.com/o/app/pull/1', '', 'app#1', 'app#1checks failing'], ['https://github.com/o/app/pull/2', 'Fix it', 'app#2', 'app#2in review']], 'worst first');
   assert.strictEqual(rows()[0].querySelector('i').style.background, flyColour('failing'));
+  store.reviews = [{ url: 'https://github.com/o/app/pull/3', label: 'app#3', title: 'Done', need: 'merged', since: 1 }];
+  await nextTick();
+  assert.ok(!button(), 'one leaving (merged, closed or reviewed) is no longer asking');
   store.reviews = [];
   await nextTick();
   assert.ok(!button(), 'all reviewed: the button goes');

@@ -190,10 +190,10 @@ extension LanternServer {
             var results = [JSON?](repeating: nil, count: queries.count)
             DispatchQueue.concurrentPerform(iterations: queries.count) { i in let r = queries[i](); DispatchQueue.main.sync { results[i] = r } }
             // GitHub sometimes answers a good query with nothing at all: no errors, but every list empty. An answer with all of
-            // reviews, mine and closed empty, from a query whose last answer had something, is a blip too. A really empty account
+            // reviews, mine, closed and the review lists empty, from a query whose last answer had something, is a blip too. A really empty account
             // shows empty once what it had ages out (GH_KEEP_MS).
             for i in results.indices {
-                let empty = { (d: JSON?) in ["reviews", "mine", "closed"].allSatisfy { ((d?[$0] as? JSON)?["nodes"] as? [JSON])?.isEmpty != false } }
+                let empty = { (d: JSON?) in ["reviews", "mine", "closed", "reviewed", "requestedClosed"].allSatisfy { ((d?[$0] as? JSON)?["nodes"] as? [JSON])?.isEmpty != false } }
                 if results[i] != nil, empty(results[i]), let last = previous[keys[i]], !empty(last.data) { results[i] = nil }
             }
             // a query that failed (a blip) keeps what it found in the last 10 minutes (GH_KEEP_MS), so its PRs neither vanish and fly back in,
@@ -203,9 +203,13 @@ extension LanternServer {
                 guard errors[keys[i]] != "expired", let last = previous[keys[i]], t0 - last.at < GH_KEEP_MS else { return nil }
                 return last.data
             }
-            var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:]
+            var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:], reviewEnded: [String: String] = [:]
             for data in answers {
                 for p in (data?["closed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { closed[str(p["url"])] = str(p["state"]) }
+                // how a review request ended, for stamp: merged or closed as it says, and one I reviewed (still open) leaves like a merge.
+                // One in neither list was withdrawn (or I can't see it any more), and just drifts away.
+                for p in (data?["requestedClosed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { reviewEnded[str(p["url"])] = str(p["state"]) }
+                for p in (data?["reviewed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { reviewEnded[str(p["url"])] = str(p["state"]) == "OPEN" ? "MERGED" : str(p["state"]) }
                 // reshape to gh's form so prNeed can read it: checks become one rollup state
                 let shaped = { (p: JSON) -> JSON in
                     var p = p
@@ -250,7 +254,7 @@ extension LanternServer {
                 let t = now()
                 // fresh answers are remembered with their time; a kept one keeps its old time, so it ages out
                 self.lastResults = Dictionary(keys.enumerated().compactMap { i, k in results[i].map { (k, (at: t, data: $0)) } ?? previous[k].map { (k, $0) } }, uniquingKeysWith: { a, _ in a })
-                self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: [:], at: t)
+                self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: reviewEnded, at: t)
                 self.stale = dead
                 for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
                 // a query that failed with nothing from before would make its PRs look gone, so then nothing is logged
