@@ -1,0 +1,24 @@
+#!/bin/sh
+# Deploys a server change (app/*.swift other than main.swift) to the running Lantern.app without touching its window, its
+# full-screen Space or your focus: rebuilds the app in place, then stops only the server, which the app starts again from the
+# new build and reloads the page. The window's own code (app/main.swift) only changes with a full relaunch, so this refuses
+# when the running window wasn't built from this main.swift.
+# LANTERN_APP: a copy of the app other than ~/Applications/Lantern.app.
+set -e
+cd "$(dirname "$0")/.."
+APP=${LANTERN_APP:-"$HOME/Applications/Lantern.app"}
+BIN="$APP/Contents/MacOS/Lantern"
+WINDOW=$(pgrep -fx "$BIN") || { echo "Lantern isn't running, so there's nothing to reload: open it" >&2; exit 1; }
+# The installed app speaks for the window when the window runs it, or when this script installed it under that window
+# (it notes the window and the new build). An app built by hand since the window opened doesn't.
+RUNNING=$(lsof -a -p "$WINDOW" -d txt 2>/dev/null | awk '/\/MacOS\/Lantern$/ { print $8; exit }')
+NOTE="${TMPDIR:-/tmp}/lantern-reloaded"
+if { [ "$(stat -f %i "$BIN")" != "$RUNNING" ] && [ "$(cat "$NOTE" 2>/dev/null)" != "$WINDOW $(stat -f %i "$BIN")" ]; } ||
+   ! cmp -s app/main.swift "$APP/Contents/Resources/main.swift"; then
+  echo "The running window wasn't built from this app/main.swift, so this needs a full relaunch: app/build.sh, quit Lantern, then open -g \"$APP\"" >&2
+  exit 1
+fi
+app/build.sh "$(dirname "$APP")"
+echo "$WINDOW $(stat -f %i "$BIN")" > "$NOTE"
+pkill -P "$WINDOW" -f -- --server || true # its own server, whatever path it was started by
+echo "Restarted the server; the window stays as it is"

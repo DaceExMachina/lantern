@@ -8,6 +8,7 @@ OUT=build/Lantern.app
 [ -f ../dist/index.html ] || { echo "Build the page first: npm install && npm run build" >&2; exit 1; }
 rm -rf build && mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources" build/Lantern.iconset
 cp Info.plist "$OUT/Contents/"
+cp main.swift "$OUT/Contents/Resources/" # the window's code, so scripts/reload-server can tell whether it changed
 # the built page rides along inside the app
 cp -R ../dist "$OUT/Contents/Resources/"
 for s in 16 32 128 256 512; do

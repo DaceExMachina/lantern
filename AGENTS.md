@@ -1,6 +1,6 @@
 # Lantern
 
-A paper lantern for macOS that glows with your Claude Code sessions. Claude Code's hooks post events to a small Swift server inside Lantern.app (`app/`), which streams sessions to a web page (`index.html`, `src/`), which Vite builds into `dist/`, over Server-Sent Events. See [CONTRIBUTING.md](CONTRIBUTING.md) for the layout, previewing and tests.
+A paper lantern for macOS that glows with your Claude Code sessions. Claude Code's hooks post events to a small Swift server that Lantern.app runs as its child (`app/`), which streams sessions to a web page (`index.html`, `src/`), which Vite builds into `dist/`, over Server-Sent Events. See [CONTRIBUTING.md](CONTRIBUTING.md) for the layout, previewing and tests.
 
 ## Session state
 

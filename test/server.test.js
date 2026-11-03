@@ -2150,7 +2150,8 @@ const fakeVite = (config, vite, stay) => {
   if (config) fs.writeFileSync(path.join(dir, 'vite.config.js'), '');
   if (vite) {
     fs.mkdirSync(path.join(dir, 'node_modules/.bin'), { recursive: true });
-    const body = stay ? 'echo $$ > "$HERE/../../vite.pid"\ntrap \'kill $!\' TERM\n/bin/sleep 120 </dev/null >/dev/null 2>&1 &\nwait\n' : '';
+    // a TERM that lands before the sleep has started must still end it, so the trap leaves rather than going on to wait
+    const body = stay ? 'echo $$ > "$HERE/../../vite.pid"\ntrap \'kill $! 2>/dev/null; exit\' TERM\n/bin/sleep 120 </dev/null >/dev/null 2>&1 &\nwait\n' : '';
     fs.writeFileSync(path.join(dir, 'node_modules/.bin/vite'), `#!/bin/sh\nHERE=\${0%/*}\necho "$PWD $* $PATH" >> "$HERE/../../vite.log"\n${body}`, { mode: 0o755 });
   }
   return dir;
@@ -2209,6 +2210,26 @@ test('the watcher stops with the server, and a watcher an earlier run left behin
   t.server.kill('SIGTERM'); // how the app is relaunched
   await until(() => !alive(mine), 'the watcher to stop with the server');
   assert.ok(!fs.existsSync(recorded), 'the pid file is gone');
+});
+// The app runs the server as its child, so quitting or crashing the app must not leave a server holding the port: the server
+// notices its parent go and stops as it does on SIGTERM, closing the event log's open spans.
+test('the server stops cleanly when whoever started it is killed (SIGKILL), as when the app crashes', async t => {
+  const home = fs.mkdtempSync(path.join(tmp, 'home-')), db = path.join(home, 'data/stats.sqlite');
+  const env = { HOME: home, CLAUDE_CONFIG_DIR: path.join(home, '.claude'), LANTERN_DATA: path.join(home, 'data'), LANTERN_PORT: '0', LANTERN_WEB: ROOT, PATH: path.join(home, 'no-bin') };
+  // a parent that can die without a word: a shell that starts the server and waits
+  const parent = spawn('/bin/sh', ['-c', `"${BIN}" & echo "pid $!"; wait`], { env, stdio: ['ignore', 'pipe', 'ignore'] });
+  t.after(() => parent.kill('SIGKILL'));
+  let out = '';
+  parent.stdout.on('data', chunk => out += chunk);
+  const pid = Number(await until(() => out.match(/^pid (\d+)$/m)?.[1], 'the server\'s pid'));
+  t.after(() => { try { process.kill(pid, 'SIGKILL'); } catch {} });
+  const base = await until(() => out.match(/^Lantern lit at (\S+)$/m)?.[1], 'the server to start');
+  const open = () => execFileSync('sqlite3', [db, "SELECT count(*) FROM spans WHERE kind = 'server' AND ended IS NULL"], { encoding: 'utf8' }).trim();
+  await until(() => fs.existsSync(db) && open() === '1', 'the server span to open');
+  parent.kill('SIGKILL');
+  await until(() => !alive(pid), 'the server to stop with its parent', 10000);
+  assert.strictEqual(execFileSync('sqlite3', [db, "SELECT json_extract(data, '$.how') FROM spans WHERE kind = 'server'"], { encoding: 'utf8' }).trim(), 'shutdown');
+  await assert.rejects(fetch(base + '/stats'), 'nothing answers on its port');
 });
 test('the pid file only ever stops this checkout\'s vite, and only a stopping server\'s own pid is removed from it', async t => {
   const web = fakeVite(true, true, true), other = fakeVite(true, true, true), fake = `${fakeNode()}/node`;
@@ -2664,6 +2685,17 @@ test('now playing: open fails when the helper gives no app, or one this Mac does
     await until(() => events.some(e => e[0] === 'nowPlaying' && JSON.parse(e[1])?.bundle === bundle), 'the item to arrive');
     assert.strictEqual((await post(base, '/now-playing', { command: 'open' })).status, 404, `bundle "${bundle}"`);
   }
+});
+
+// The app's server is a background process, which macOS won't let bring another app forward, so it asks the window to with
+// an `activate <app path>` line on its output (bringForward in Terminals.swift). The test server does the same with
+// LANTERN_HAND_ACTIVATION, so this finds a real app (Finder) and pulls no focus.
+test('now playing: open in the app\'s server asks the window to bring the playing app forward', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_NOW_PLAYING: fakeHelper(), FAKE_BUNDLE: 'com.apple.finder', LANTERN_HAND_ACTIVATION: '1' });
+  const events = nowPlayingEvents(t, base);
+  await until(() => events.some(e => e[0] === 'nowPlaying' && JSON.parse(e[1])?.bundle === 'com.apple.finder'), 'the item to arrive');
+  assert.strictEqual((await post(base, '/now-playing', { command: 'open' })).status, 204);
+  await until(() => /^activate \/.*\/Finder\.app$/m.test(t.output()), 'the activate line');
 });
 
 // Nothing ignores SIGPIPE in the server, so a write to a helper that stopped reading must fail, not kill it.
