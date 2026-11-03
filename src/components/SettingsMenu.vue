@@ -65,6 +65,10 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
 </script>
 
 <template>
+  <label><select id="style" aria-label="Lantern style" aria-describedby="tip-style" :value="styleKey" @change="pick"><option v-for="(st, key) in STYLES" :key="key" :value="key">{{ st.name }}</option></select></label>
+  <span class="tip" role="tooltip" id="tip-style">Picks the lantern for every window, the iTerm2 panel and the screensaver. Choose from the barrel, the round chōchin, the brass Moroccan and the pillar candle. Some of the options here only work on certain lanterns.</span>
+  <div class="ribbon" :class="{ unavailable: !style.ribbon }"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour" aria-describedby="tip-ribbon"><button v-for="([name, [front]]) in Object.entries(RIBBONS)" :key="name" :title="name" :aria-label="`${name} ribbon`" :aria-pressed="name === ribbon" :disabled="!style.ribbon" :style="{ '--c': front }" @click="post('/settings', { ribbon: name })"></button></span></div>
+  <span class="tip" role="tooltip" id="tip-ribbon">Colours the bookmark ribbon that hangs inside the barrel lantern. The other lanterns have no ribbon, so these are greyed out on them.</span>
   <ToggleSwitch ref="first" class="notify" label="notify when a session waits" :checked="notify" describedby="tip-notify" @change="onNotify">notify when a session waits</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications.</span>
   <ToggleSwitch label="show stale PRs" :checked="settings.stale !== false" describedby="tip-stale" @change="on => post('/settings', { stale: on })">show stale PRs</ToggleSwitch>
@@ -76,10 +80,6 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
   <ToggleSwitch label="review requests" :checked="settings.reviews !== false" describedby="tip-reviews" @change="on => post('/settings', { reviews: on })">review requests</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-reviews">Shows the PRs waiting on your review as fireflies round the lantern, and the reviews button at the footer's left. Switched off, Lantern stops asking GitHub for them. It needs GitHub status.</span>
   <!-- System stats: the cpu-mem branch adds its ToggleSwitch row and tip here -->
-  <label><select id="style" aria-label="Lantern style" aria-describedby="tip-style" :value="styleKey" @change="pick"><option v-for="(st, key) in STYLES" :key="key" :value="key">{{ st.name }}</option></select></label>
-  <span class="tip" role="tooltip" id="tip-style">Picks the lantern for every window, the iTerm2 panel and the screensaver. Choose from the barrel, the round chōchin, the brass Moroccan and the pillar candle. Some of the options here only work on certain lanterns.</span>
-  <div class="ribbon" :class="{ unavailable: !style.ribbon }"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour" aria-describedby="tip-ribbon"><button v-for="([name, [front]]) in Object.entries(RIBBONS)" :key="name" :title="name" :aria-label="`${name} ribbon`" :aria-pressed="name === ribbon" :disabled="!style.ribbon" :style="{ '--c': front }" @click="post('/settings', { ribbon: name })"></button></span></div>
-  <span class="tip" role="tooltip" id="tip-ribbon">Colours the bookmark ribbon that hangs inside the barrel lantern. The other lanterns have no ribbon, so these are greyed out on them.</span>
   <template v-for="row in switches" :key="row.key">
     <ToggleSwitch :label="row.label" :checked="row.on" :describedby="row.tip" @change="row.set">{{ row.label }}<template #after><label><input type="time" :aria-label="row.label" :aria-describedby="row.tip" :value="row.time" :disabled="!row.on" @change="postTime(row.key, $event)"></label></template></ToggleSwitch>
     <span class="tip" role="tooltip" :id="row.tip">{{ row.text }}</span>
