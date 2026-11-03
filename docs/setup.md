@@ -112,6 +112,7 @@ Lantern keeps its settings in `settings.json` in `~/Library/Application Support/
 |---|---|---|
 | `port` | `7717` | The server's port. Run the installer with `LANTERN_PORT=7718` to set it: it writes it here and points the hooks, the iTerm2 panel and the screensaver at it. |
 | `claudeDir` | `~/.claude` | Claude Code's config folder. The installer writes it from `CLAUDE_CONFIG_DIR`. |
+| `githubLogin` | gh's own account | Whose review requests the reviews list shows, for a `gh` whose account for a folder is an agent's rather than yours (a wrapper that picks a token by folder, say). Only requests addressed to that login count, not to a team it is in. Also set live with `curl -H 'Content-Type: application/json' -d '{"githubLogin":"you"}' http://127.0.0.1:7717/settings`. |
 | `supervisorPattern` | `"supervisor\|orchestrat"` | A regular expression, ignoring case, for agent types that fly as supervisors (a size up). |
 
 `LANTERN_PORT` in the environment beats the file, as in `open --env LANTERN_PORT=7718 ~/Applications/Lantern.app`.

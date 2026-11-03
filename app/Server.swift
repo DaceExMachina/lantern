@@ -1032,6 +1032,9 @@ final class LanternServer {
                     settings["github"] = github.boolValue; ok = true
                     if github.boolValue { DispatchQueue.main.async { self.refreshGitHub() } } else { clearGitHub() }
                 }
+                // whose review requests the reviews list shows when gh's account isn't the person's (null: gh's own account)
+                if let login = j["githubLogin"] as? String, Re("^[A-Za-z0-9-]+$").test(login) { settings["githubLogin"] = login; ok = true; DispatchQueue.main.async { self.refreshGitHub() } }
+                if j["githubLogin"] is NSNull { settings["githubLogin"] = nil; ok = true; DispatchQueue.main.async { self.refreshGitHub() } }
                 if let style = j["style"] as? String, Re("^[a-z]+$").test(style) { settings["style"] = style; ok = true }
                 // goals for the stats panel: a number turns one on, null turns it off
                 if let g = j["goals"] as? JSON {

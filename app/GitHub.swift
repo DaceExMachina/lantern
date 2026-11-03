@@ -13,32 +13,42 @@ let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 let GH_WEB = ProcessInfo.processInfo.environment["LANTERN_GITHUB_WEB"] ?? "https://github.com", GH_API = ProcessInfo.processInfo.environment["LANTERN_GITHUB_API"] ?? "https://api.github.com"
 let SECURITY = ProcessInfo.processInfo.environment["LANTERN_SECURITY"] ?? "/usr/bin/security"
 let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }"
-// GitHub's GraphQL gives up after about 10 seconds and `mine` with all its fields takes longer than that past ~50 PRs, so `mine`
-// comes a page at a time: the first query also carries reviews and closed, the rest only the next page of `mine`.
-let MINE_PAGE = 25
-func prQuery(_ fields: String, after: String? = nil) -> String {
-    let mine = "mine: search(query: \"is:pr is:open archived:false author:@me\", type: ISSUE, first: \(MINE_PAGE)\(after.map { ", after: \"\($0)\"" } ?? "")) { pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { \(fields) } } }"
-    if after != nil { return "query { \(mine) }" }
-    return """
-    query {
-      reviews: search(query: "is:pr is:open archived:false review-requested:@me", type: ISSUE, first: 20) { nodes { ... on PullRequest { \(fields) } } }
-      \(mine)
-      closed: search(query: "is:pr is:closed archived:false author:@me sort:updated-desc", type: ISSUE, first: 30) { nodes { ... on PullRequest { url state } } }
+// GitHub's GraphQL gives up after about 10 seconds and `mine` and `reviews` with all their fields take longer than that past ~50 PRs,
+// so they come a page at a time: the first query also carries closed, reviewed and requestedClosed, the rest only the next pages.
+// `login` is whose review requests count: `@me`, or `githubLogin` in the settings, for a gh whose account is an agent's rather than
+// the person's. `user-review-requested` is requests addressed to them, not to a team they are in.
+let PAGE_SIZE = 25, PAGED = ["reviews", "mine"]
+func prQuery(_ fields: String, _ login: String, after: [String: String]? = nil) -> String {
+    let searches = [
+        "reviews": "is:pr is:open archived:false user-review-requested:\(login)", "mine": "is:pr is:open archived:false author:@me",
+        "closed": "is:pr is:closed archived:false author:@me sort:updated-desc", "reviewed": "is:pr is:open archived:false reviewed-by:\(login) sort:updated-desc",
+        "requestedClosed": "is:pr is:closed archived:false user-review-requested:\(login) sort:updated-desc",
+    ]
+    let search = { (name: String) -> String in
+        let paged = PAGED.contains(name), count = paged ? PAGE_SIZE : 30, cursor = after?[name].map { ", after: \"\($0)\"" } ?? ""
+        let body = paged ? "pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { \(fields) } }" : "nodes { ... on PullRequest { url state } }"
+        return "\(name): search(query: \"\(searches[name]!)\", type: ISSUE, first: \(count)\(cursor)) { \(body) }"
     }
-    """
+    return "query { \((after.map { Array($0.keys) } ?? Array(searches.keys)).sorted().map(search).joined(separator: "\n")) }"
 }
-// Asks for every page of `mine` and returns the first answer with all the pages' PRs in it, or nil if the first has no `mine` (a
-// token without checks access) or a later one fails (a blip, so the caller keeps what it had). ponytail: 20 pages (500 PRs) at most.
-func allPages(_ fields: String, _ ask: (String) -> JSON?) -> JSON? {
-    guard var d = ask(prQuery(fields)), var mine = d["mine"] as? JSON else { return nil }
-    var nodes = mine["nodes"] as? [JSON] ?? []
+func nodesOf(_ search: Any?) -> [JSON] { (search as? JSON)?["nodes"] as? [JSON] ?? [] }
+func nextPages(_ d: JSON) -> [String: String] {
+    Dictionary(uniqueKeysWithValues: PAGED.compactMap { name in
+        guard let info = (d[name] as? JSON)?["pageInfo"] as? JSON, truthy(info["hasNextPage"]), let cursor = info["endCursor"] as? String else { return nil }
+        return (name, cursor)
+    })
+}
+// Asks for every page of `reviews` and `mine` and returns the first answer with all the pages' PRs in it, or nil if the first has no
+// `mine` (a token without checks access) or a later one fails (a blip, so the caller keeps what it had). ponytail: 20 pages (500 PRs) at most.
+func allPages(_ fields: String, _ login: String, _ ask: (String) -> JSON?) -> JSON? {
+    guard var d = ask(prQuery(fields, login)), d["mine"] is JSON else { return nil }
+    var next = nextPages(d)
     for _ in 1..<20 {
-        guard let info = mine["pageInfo"] as? JSON, truthy(info["hasNextPage"]), let cursor = info["endCursor"] as? String else { break }
-        guard let next = ask(prQuery(fields, after: cursor))?["mine"] as? JSON else { return nil }
-        nodes += next["nodes"] as? [JSON] ?? []
-        mine = next
+        if next.isEmpty { break }
+        guard let page = ask(prQuery(fields, login, after: next)) else { return nil }
+        for name in next.keys { d[name] = ["nodes": nodesOf(d[name]) + nodesOf(page[name])] }
+        next = nextPages(page)
     }
-    d["mine"] = ["nodes": nodes]
     return d
 }
 // Feedback is waiting while the last word after the newest commit belongs to a reviewer: the newest review or page comment
@@ -95,9 +105,9 @@ func git(_ cwd: String, _ args: [String]) -> String? {
 }
 // gh prints the response even when the query partly fails; a token without checks access fails the whole thing, so
 // that one is asked again without checks
-func ghGraphql(_ cwd: String) -> JSON? {
+func ghGraphql(_ cwd: String, _ login: String) -> JSON? {
     let data = { (q: String) -> JSON? in (parse(Data(run(GH, ["api", "graphql", "-f", "query=\(q)"], cwd: cwd, timeout: 20).out.utf8)) as? JSON)?["data"] as? JSON }
-    return allPages(PR_GQL, data) ?? allPages(Re(" commits\\(.*$").replace(PR_GQL, ""), data)
+    return allPages(PR_GQL, login, data) ?? allPages(Re(" commits\\(.*$").replace(PR_GQL, ""), login, data)
 }
 // Through gh, which GitHub account a folder gets can depend on where it is (a wrapper that picks a token by the
 // top folder under home, say: ~/work for one account, ~/projects for another). So the PR query runs once per top folder
@@ -159,7 +169,7 @@ extension LanternServer {
         refreshing = true
         let epoch = githubEpoch
         let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
-        let tokens = accounts.items, previous = lastResults
+        let tokens = accounts.items, previous = lastResults, me = (settings["githubLogin"] as? String).flatMap { Re("^[A-Za-z0-9-]+$").test($0) ? $0 : nil } ?? "@me"
         DispatchQueue.global().async {
             // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
             // every time from a background process.
@@ -167,12 +177,12 @@ extension LanternServer {
             var errors: [String: String] = [:]
             let folders = tokens.isEmpty ? accountFolders(live.map(\.1)) : [], keys = tokens.isEmpty ? folders.map(\.top) : tokens.map(\.0) // a query is a top folder's gh or an account's token
             let queries: [() -> JSON?] = tokens.isEmpty
-                ? folders.map { f in { ghGraphql(f.cwd) } }
+                ? folders.map { f in { ghGraphql(f.cwd, me) } }
                 : tokens.map { login, account in {
                     var c = account
                     let ask = { (q: String) -> (status: Int, json: JSON?) in fetch(GH_API + "/graphql", method: "POST", headers: ["Authorization": "Bearer \(str(c["token"]))", "User-Agent": "lantern-pr"], body: ["query": q]) }
                     var expired = false
-                    let data = allPages(PR_GQL) { q in
+                    let data = allPages(PR_GQL, me) { q in
                         var r = ask(q)
                         if r.status == 401 { // expired or revoked: refresh once and ask again
                             switch self.renew(login, c) {

@@ -1607,6 +1607,44 @@ test('reviews: each PR asking for my review carries its need', async t => {
   assert.deepStrictEqual(reviews.map(r => [r.label, r.need]), [['r#1', 'failing'], ['r#2', 'draft'], ['r#3', 'waiting']]);
 });
 
+// gh as GitHub answers a search for review requests: the requests of the login the query names (`@me` is the account gh runs as, the
+// agent's), a page at a time as `first` and `after` ask, with every query it gets logged.
+function ghRequests(requests) {
+  const { gh, repo } = ghRepo([]), dir = path.dirname(gh), log = path.join(dir, 'queries.log');
+  fs.writeFileSync(path.join(dir, 'requests.json'), JSON.stringify(requests));
+  fs.writeFileSync(gh, `#!${process.execPath}
+const fs = require('fs'), q = process.argv.find(a => a.startsWith('query=')).slice(6), asked = JSON.parse(fs.readFileSync('${dir}/requests.json', 'utf8'));
+fs.appendFileSync('${log}', q + '\\n');
+const data = { mine: { nodes: [] }, closed: { nodes: [] } };
+for (const m of q.matchAll(/(\\w+): search\\(query: "([^"]*)", type: ISSUE, first: (\\d+)(?:, after: "(\\d+)")?/g)) {
+  const [, name, query, first, after] = m, who = /review-requested:(\\S+)/.exec(query)?.[1];
+  if (name !== 'reviews') continue;
+  const all = asked[who === '@me' ? 'agent' : who] || [], from = Number(after || 0), page = all.slice(from, from + Number(first));
+  data.reviews = { pageInfo: { hasNextPage: from + page.length < all.length, endCursor: String(from + page.length) }, nodes: page };
+}
+console.log(JSON.stringify({ data }));
+`, { mode: 0o755 });
+  return { gh, repo, queries: () => fs.readFileSync(log, 'utf8') };
+}
+// The review list is the person's requests, not the agent account gh may run as: the login comes from the settings, only requests
+// addressed to it count (not its teams'), and the list pages past one page's worth.
+test('reviews: the list is the configured login\'s requests, every page of them', async t => {
+  const { gh, repo, queries } = ghRequests({ agent: [prNode(900, iso(Date.now()))], dace: Array.from({ length: 30 }, (_, i) => prNode(i + 1, iso(Date.now()))) });
+  const base = await serve(t, {}, () => {}, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  await until(async () => (await snapshot(base)).reviews?.length === 1, 'a refresh as the account gh runs as');
+  assert.match(queries(), /user-review-requested:@me/);
+  await post(base, '/settings', { githubLogin: 'dace' });
+  const { reviews } = await until(async () => { const s = await snapshot(base); return s.reviews?.length === 30 && s; }, "a refresh to list all of dace's requests");
+  assert.ok(reviews.every(r => r.label !== 'r#900'), "the agent's request is not dace's");
+  assert.match(queries(), /user-review-requested:dace/);
+  assert.match(queries(), /reviewed-by:dace/);
+  assert.match(queries(), /after: "25"/);
+  await post(base, '/settings', { githubLogin: 'a b' }).catch(() => {});
+  assert.doesNotMatch(queries(), /user-review-requested:a b/, 'a login is a login, not a way into the query');
+});
+
 // A review request that ends leaves its firefly the way a PR's does: merged and closed as they say, one I reviewed (still open)
 // like a merge, and one withdrawn without my review just drops out.
 test('reviews: an ended request stays a minute with how it ended', async t => {
