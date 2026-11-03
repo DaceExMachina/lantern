@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The settings menu, inside the native #menu popover: the switches, the lantern and ribbon pickers, the quiet hours and
+// The settings menu, inside the native #menu popover: the on/off switches, the lantern and ribbon pickers, the quiet hours and
 // the day rollover, the GitHub section and the legend. It shows what the store holds (fed by the settings event) and
 // changes a setting by POSTing it; the scene hears the settings event too and reacts itself (src/wiring.ts).
 // An option's tip (the .tip after its row) docks just above the menu at the menu's width, like the recap's session card
@@ -65,15 +65,15 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
 </script>
 
 <template>
-  <ToggleSwitch ref="first" class="notify" :checked="notify" describedby="tip-notify" @change="onNotify">notify me when a session needs me</ToggleSwitch>
+  <ToggleSwitch ref="first" class="notify" label="notify when a session waits" :checked="notify" describedby="tip-notify" @change="onNotify">notify when a session waits</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications.</span>
-  <ToggleSwitch :checked="settings.stale !== false" describedby="tip-stale" @change="on => post('/settings', { stale: on })">show stale PRs</ToggleSwitch>
+  <ToggleSwitch label="show stale PRs" :checked="settings.stale !== false" describedby="tip-stale" @change="on => post('/settings', { stale: on })">show stale PRs</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns and nobody has touched for a week, as pale wisps drifting low in the scene. It needs GitHub status.</span>
-  <ToggleSwitch :class="{ unavailable: !style.surface }" :checked="settings.lanternText !== 'off'" :disabled="!style.surface" describedby="tip-text" @change="on => post('/settings', { lanternText: on ? 'sessions' : 'off' })">show session text</ToggleSwitch>
+  <ToggleSwitch :class="{ unavailable: !style.surface }" label="show session text" :checked="settings.lanternText !== 'off'" :disabled="!style.surface" describedby="tip-text" @change="on => post('/settings', { lanternText: on ? 'sessions' : 'off' })">show session text</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-text">Prints lines your sessions wrote onto the lantern's paper, fading in and out. Only the barrel and the round chōchin have paper, so it's greyed out on the Moroccan and the candle.</span>
-  <ToggleSwitch :checked="settings.nowPlaying !== false" describedby="tip-playing" @change="on => post('/settings', { nowPlaying: on })">now playing</ToggleSwitch>
+  <ToggleSwitch label="now playing" :checked="settings.nowPlaying !== false" describedby="tip-playing" @change="on => post('/settings', { nowPlaying: on })">now playing</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-playing">Shows what's playing on this Mac, with previous, play or pause and next, above the footer. Switched off, Lantern stops asking your Mac what's playing.</span>
-  <ToggleSwitch :checked="settings.reviews !== false" describedby="tip-reviews" @change="on => post('/settings', { reviews: on })">review requests</ToggleSwitch>
+  <ToggleSwitch label="review requests" :checked="settings.reviews !== false" describedby="tip-reviews" @change="on => post('/settings', { reviews: on })">review requests</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-reviews">Shows the PRs waiting on your review as fireflies round the lantern, and the reviews button at the footer's left. Switched off, Lantern stops asking GitHub for them. It needs GitHub status.</span>
   <!-- System stats: the cpu-mem branch adds its ToggleSwitch row and tip here -->
   <label><select id="style" aria-label="Lantern style" aria-describedby="tip-style" :value="styleKey" @change="pick"><option v-for="(st, key) in STYLES" :key="key" :value="key">{{ st.name }}</option></select></label>
@@ -81,7 +81,7 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
   <div class="ribbon" :class="{ unavailable: !style.ribbon }"><span>ribbon</span><span id="ribbons" role="group" aria-label="Ribbon colour" aria-describedby="tip-ribbon"><button v-for="([name, [front]]) in Object.entries(RIBBONS)" :key="name" :title="name" :aria-label="`${name} ribbon`" :aria-pressed="name === ribbon" :disabled="!style.ribbon" :style="{ '--c': front }" @click="post('/settings', { ribbon: name })"></button></span></div>
   <span class="tip" role="tooltip" id="tip-ribbon">Colours the bookmark ribbon that hangs inside the barrel lantern. The other lanterns have no ribbon, so these are greyed out on them.</span>
   <template v-for="row in switches" :key="row.key">
-    <div class="time switch"><span>{{ row.label }}</span><span class="pill" role="group" :aria-label="row.label" :aria-describedby="row.tip"><button :aria-pressed="!row.on" @click="row.set(false)"><span>off</span></button><button :aria-pressed="row.on" @click="row.set(true)"><span>on</span></button></span><label><input type="time" :aria-label="row.label" :aria-describedby="row.tip" :value="row.time" :disabled="!row.on" @change="postTime(row.key, $event)"></label></div>
+    <ToggleSwitch :label="row.label" :checked="row.on" :describedby="row.tip" @change="row.set">{{ row.label }}<template #after><label><input type="time" :aria-label="row.label" :aria-describedby="row.tip" :value="row.time" :disabled="!row.on" @change="postTime(row.key, $event)"></label></template></ToggleSwitch>
     <span class="tip" role="tooltip" :id="row.tip">{{ row.text }}</span>
   </template>
   <label class="time">day rollover <input type="time" aria-describedby="tip-day" :value="dayStart" @change="postTime('dayStart', $event)"></label>

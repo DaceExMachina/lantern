@@ -163,6 +163,8 @@ In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F
 
 **Button bars:** the bar's padding belongs to its buttons. Each control is an outer button or link that fills its zone, out to the bar's edges and up to its neighbours, so the hit areas touch with no dead space. Where it has a visible part bigger than its content (a pill, a hover tint), that's a `.face` inside it, the size it would be anyway, lit with `button:hover .face` or `a:hover .face` wherever the pointer is in the zone. A control that's only an icon or text (the PR toggle) just takes the hover colour. The hover card's header, rows, chips and toggle work this way.
 
+**On/off settings:** every one in the settings menu is a `ToggleSwitch` (`src/components/ToggleSwitch.vue`), the "off | on" pair the quiet-hours rows use, with a tip row after it and `aria-describedby` pointing at the tip. Don't add a plain checkbox, or a second switch style, to the menu. A setting with a value (quiet from's time) puts it in the `after` slot.
+
 The session-state and PR colours are drawn by the scene too, so they live in two places: `:root`, and `MOTHS`, `RIBBON` and `WARM` (stats.ts and lanterns.ts) and `FLY` (fireflies.ts), where the scene blends them. The test fails if the two disagree, so change both together.
 
 ## Adding a terminal

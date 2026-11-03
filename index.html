@@ -92,8 +92,8 @@
   #menu .tip.show { opacity: 1; }
   #menu > label { display: flex; padding: 5px 0; }
   #menu .time { justify-content: space-between; white-space: nowrap; }
-  /* quiet from and quiet until: their words, an off | on switch built like the time input, then the time (faded while off).
-     The times line up with the day rollover's below.
+  /* every on/off setting (src/components/ToggleSwitch.vue): its words, an off | on switch built like the time input, then, for quiet from and
+     quiet until, the time (faded while off). The times line up with the day rollover's below.
      Nothing moves when it flips. The words and each half of the switch run the row's full height, and the halves touch. */
   #menu .switch { display: flex; }
   #menu .switch > span:first-child { flex: 1; display: flex; align-items: center; padding: 5px 0; }
@@ -302,15 +302,6 @@
   input[type=checkbox]:checked { background: var(--accent); border-color: var(--accent); }
   input[type=checkbox]:checked::after { content: ''; width: 6px; height: 3px; border: solid #F6F0FF; border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }
   input[type=checkbox]:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
-  /* the settings' switch (src/components/ToggleSwitch.vue): the words, then an iOS-style switch on the right. The label is the row, so its click area
-     runs the row's full width and height. The knob is the input's ::before, slid by its checked state. */
-  .toggle { justify-content: space-between; }
-  .toggle input[role=switch] { appearance: none; margin: 0; flex: none; box-sizing: border-box; width: 28px; height: 16px; padding: var(--space-0-5); border: 1px solid var(--ink-faint); border-radius: var(--radius-pill); background: var(--surface-raised); display: grid; place-content: center start; cursor: pointer; transition: background var(--fade); }
-  .toggle input[role=switch]::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-strong); transition: transform var(--fade); }
-  .toggle input[role=switch]:checked { background: var(--accent); border-color: var(--accent); }
-  .toggle input[role=switch]:checked::after { content: none; } /* the plain checkbox's tick */
-  .toggle input[role=switch]:checked::before { transform: translateX(12px); }
-  .toggle input[role=switch]:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   #threads path { animation: shimmer 2.4s linear infinite; }
   @keyframes shimmer { to { stroke-dashoffset: -18; } }
   .moth { pointer-events: none; }
