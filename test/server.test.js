@@ -2150,7 +2150,8 @@ const fakeVite = (config, vite, stay) => {
   if (config) fs.writeFileSync(path.join(dir, 'vite.config.js'), '');
   if (vite) {
     fs.mkdirSync(path.join(dir, 'node_modules/.bin'), { recursive: true });
-    const body = stay ? 'echo $$ > "$HERE/../../vite.pid"\ntrap \'kill $!\' TERM\n/bin/sleep 120 </dev/null >/dev/null 2>&1 &\nwait\n' : '';
+    // a TERM that lands before the sleep has started must still end it, so the trap leaves rather than going on to wait
+    const body = stay ? 'echo $$ > "$HERE/../../vite.pid"\ntrap \'kill $! 2>/dev/null; exit\' TERM\n/bin/sleep 120 </dev/null >/dev/null 2>&1 &\nwait\n' : '';
     fs.writeFileSync(path.join(dir, 'node_modules/.bin/vite'), `#!/bin/sh\nHERE=\${0%/*}\necho "$PWD $* $PATH" >> "$HERE/../../vite.log"\n${body}`, { mode: 0o755 });
   }
   return dir;
