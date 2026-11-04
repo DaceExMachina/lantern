@@ -3,25 +3,25 @@
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { expect, test } from 'vitest';
-import { Q } from '../src/scene/scene';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
 const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4 },
   sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5 }, gone: { cpu: 0, mem: 0, n: 0 } } };
 
-const mounted = async (variant = 'a') => {
-  Q.set('popup', variant);
+Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true }); // a session's CPU is of one core, the dropdown's percents of the Mac's two
+
+const mounted = async () => {
   const pinia = createPinia(), store = useLanternStore(pinia);
   store.sessions = [{ id: 'a', title: 'quiet one', cwd: '/w/a' }, { id: 'b', title: '', cwd: '/w/busy' }];
   const w = mount(UsageMenu, { global: { plugins: [pinia] } });
-  Q.delete('popup');
   store.usage = usage;
   await w.vm.$nextTick();
   return { w, store };
 };
+const widths = el => [...el.querySelectorAll('i')].map(i => parseFloat(i.style.width));
 
-test('it shows nothing until a sample comes, then the Mac meters (no Lantern) and the busiest sessions by name; the setting turns it off', async () => {
+test('it shows nothing until a sample comes, then the Mac meters (no Lantern) and the key by name; the setting turns it off', async () => {
   const pinia = createPinia(), store = useLanternStore(pinia);
   store.sessions = [{ id: 'a', title: 'quiet one', cwd: '/w/a' }, { id: 'b', title: '', cwd: '/w/busy' }];
   const w = mount(UsageMenu, { global: { plugins: [pinia] } });
@@ -30,7 +30,9 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   await w.vm.$nextTick();
   expect(w.find('#usageButton').text()).toBe('42%12.0 GB'); // icons and numbers, no words, nothing of Lantern's own
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
-  expect(w.findAll('#usage .r:not(.head)').map(r => r.text())).toEqual(['This Mac42%12.0 GB', 'Lantern1%300 MB', 'busy56%2.0 GB', 'quiet one0%900 MB']); // the Mac, Lantern, then the busiest first; a session with no processes left out
+  expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of the Mac', '12.0of 32 GB']);
+  expect(w.findAll('#usage .kh span').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
+  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'Lantern1%300 MB', 'quiet one0%900 MB', 'everything else13%8.8 GB']); // busiest first, Lantern among them, a session with no processes left out, then the rest of the Mac
   store.settings = { ...store.settings, systemStats: false };
   await w.vm.$nextTick();
   expect(w.find('#usageButton').exists()).toBe(false);
@@ -53,28 +55,23 @@ test('each metric has its own sparkline, which grows with each sample and stops 
   w.unmount();
 });
 
-test('every dropdown layout shows each row\'s CPU and RAM with bars sized by share and tooltips naming whose they are', async () => {
-  for (const v of ['a', 'b', 'c', 'd']) {
-    const { w } = await mounted(v);
-    const text = w.find('#usage').text();
-    for (const t of [...v === 'c' ? [] : ['This Mac'], 'Lantern', 'busy', 'quiet one', '56%', '2.0 GB', '900 MB']) expect(text, `${v}: ${t}`).toContain(t);
-    expect(w.findAll('#usage [title]').map(e => e.attributes('title')).join('|'), v).toContain('busy · 56% CPU');
-    w.unmount();
-  }
-  const { w } = await mounted('a');
-  const widths = r => w.findAll('#usage .r')[r].findAll('u').map(u => u.element.style.width);
-  expect(widths(3)).toEqual(['55.5%', '6.3%']); // busy: 55.5% of a core, 2048 of 32768 MB of RAM
-  expect(widths(1)).toEqual(['41.6%', '37.5%']); // the Mac
-  w.unmount();
-});
-
-test('the CPU and RAM switch re-ranks the sessions in layout c', async () => {
-  const { w, store } = await mounted('c');
-  store.usage = { ...usage, sessions: { ...usage.sessions, a: { cpu: 0.4, mem: 5000, n: 2 } } };
+test('the split bars give each listed row its share of the Mac and the rest to everything else, and the key\'s bars use the same scale', async () => {
+  const { w, store } = await mounted();
+  const [cpu, mem] = w.findAll('#usage section .bar').map(b => widths(b.element));
+  expect(cpu.map(n => +n.toFixed(2))).toEqual([27.75, 0.6, 0.2, 13.05]); // busy, Lantern, quiet one (percent of the Mac's two cores), everything else
+  expect(cpu.reduce((a, b) => a + b, 0)).toBeCloseTo(41.6, 1); // together they are the Mac's own CPU
+  expect(mem.map(n => +n.toFixed(2))).toEqual([6.25, 0.92, 2.75, 27.59]); // of 32768 MB; the last is 12288 - 300 - 2048 - 900
+  expect(mem.reduce((a, b) => a + b, 0)).toBeCloseTo(37.5, 1);
+  expect(w.findAll('#usage .krow').map(r => parseFloat(r.find('.track i').element.style.width))).toEqual(cpu); // a row's bar is its CPU segment
+  expect(w.findAll('#usage .bar')[0].findAll('i').map(i => i.attributes('title'))).toEqual(['busy · 28% CPU', 'Lantern · 1% CPU', 'quiet one · 0% CPU', 'everything else · 13% CPU']);
+  expect(w.findAll('#usage .bar')[1].findAll('i')[0].attributes('title')).toBe('busy · 2.0 GB RAM');
+  // a session's swatch is the colour of its segment, and stays put when the ranking changes
+  const colours = () => Object.fromEntries(w.findAll('#usage .krow').map(r => [r.find('.n').text(), r.find('.sw').element.style.background]));
+  const before = colours();
+  expect(new Set(Object.values(before)).size).toBe(4);
+  store.usage = { ...usage, sessions: { ...usage.sessions, a: { cpu: 90, mem: 900, n: 2 } } }; // quiet one now leads
   await w.vm.$nextTick();
-  const names = () => w.findAll('#usage .item .n').map(n => n.text());
-  expect(names()).toEqual(['busy', 'Lantern', 'quiet one']); // by CPU
-  await w.findAll('#usage .sort button')[1].trigger('click');
-  expect(names()).toEqual(['quiet one', 'busy', 'Lantern']); // by RAM
+  expect(w.findAll('#usage .krow .n')[0].text()).toBe('quiet one');
+  expect(colours()).toEqual(before);
   w.unmount();
 });

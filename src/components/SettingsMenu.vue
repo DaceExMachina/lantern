@@ -79,7 +79,8 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
   <span class="tip" role="tooltip" id="tip-playing">Shows what's playing on this Mac, with previous, play or pause and next, above the footer. Switched off, Lantern stops asking your Mac what's playing.</span>
   <ToggleSwitch label="review requests" :checked="settings.reviews !== false" describedby="tip-reviews" @change="on => post('/settings', { reviews: on })">review requests</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-reviews">Shows the PRs waiting on your review as fireflies round the lantern, and the reviews button at the footer's left. Switched off, Lantern stops asking GitHub for them. It needs GitHub status.</span>
-  <!-- System stats: the cpu-mem branch adds its ToggleSwitch row and tip here -->
+  <ToggleSwitch label="system stats" :checked="settings.systemStats !== false" describedby="tip-system" @change="on => post('/settings', { systemStats: on })">system stats</ToggleSwitch>
+  <span class="tip" role="tooltip" id="tip-system">Shows your Mac's CPU and RAM at the top left, with a dropdown of what Lantern and your busiest sessions use. Switched off, Lantern stops measuring.</span>
   <template v-for="row in switches" :key="row.key">
     <ToggleSwitch :label="row.label" :checked="row.on" :describedby="row.tip" @change="row.set">{{ row.label }}<template #after><label><input type="time" :aria-label="row.label" :aria-describedby="row.tip" :value="row.time" :disabled="!row.on" @change="postTime(row.key, $event)"></label></template></ToggleSwitch>
     <span class="tip" role="tooltip" :id="row.tip">{{ row.text }}</span>

@@ -1,20 +1,25 @@
 <script setup lang="ts">
 // CPU and RAM, a small readout in the scene's top left (below the app window's drag strip, which takes every click on it):
 // this Mac's CPU and RAM as two ring gauges with a number and a sparkline of the last two minutes under each. Clicking it opens a
-// dropdown (a native popover, like the reviews menu) with the Mac, Lantern and the busiest sessions (UsagePopup.vue, in layouts to
-// choose between with ?popup=). The numbers come from the usage event every few seconds (app/Usage.swift) and are gone with
-// settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
+// dropdown (a native popover, like the reviews menu): the Mac's CPU and RAM each with a bar split by who uses it, and a key of
+// Lantern and the busiest sessions in the colours of those splits. The numbers come from the usage event every few seconds
+// (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, ref, shallowRef, watch } from 'vue';
-import { devSelect, devSlider } from '../dev';
+import { devSlider } from '../dev';
 import { memText, project } from '../scene/card';
 import { useLanternStore } from '../stores/lantern';
-import UsagePopup, { type UsageRow } from './UsagePopup.vue';
+import UsageIcon from './UsageIcon.vue';
 import UsageRing from './UsageRing.vue';
 
 const TOP = 8, HISTORY = 24, W = 48, H = 14; // the busiest sessions listed, samples kept (24 x 5 s = 2 minutes), the sparkline's viewBox (stretched to fit)
+// a session's colour, handed out in the order sessions first show up so it keeps it as the ranking shifts; Lantern's is its own, and "everything else" is dim
+const SLOTS = ['--accent-violet', '--pr-in-review', '--pr-ready', '--pr-feedback', '--pr-changes', '--pr-draft', '--state-snoozed', '--agents-ink'];
+const slots = new Map<string, string>();
+const colour = (id: string) => { let c = slots.get(id); if (!c) { c = SLOTS[slots.size % SLOTS.length] ?? SLOTS[0]; slots.set(id, c ?? ''); } return `var(${c})`; };
+const LANTERN = 'var(--lantern-warm)', ELSE = 'var(--ink-faint)';
+const CORES = navigator.hardwareConcurrency || 1; // a session's CPU is in cores' worth of percent; the Mac's is of all of them
 
 const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring size in px (the number and the sparklines scale with it)', v => { size.value = v; }));
-const popup = ref(devSelect('HUD', 'popup', 'dropdown', ['a', 'b', 'c', 'd'], 'a', 'The dropdown layout: a two columns, b rings, c big rings and a ranked list, d butterfly', v => { popup.value = v; }));
 
 const store = useLanternStore();
 const roomy = !document.body.matches('.panel, .screensaver, .ambient'); // fixed by the time the chrome mounts
@@ -29,21 +34,27 @@ const history = shallowRef<{ cpu: number; mem: number }[]>([]); // bounded, one 
 watch(u, v => { if (v) history.value = [...history.value, { cpu: cpuPct.value, mem: memPct.value }].slice(-HISTORY); }, { immediate: true });
 const line = (k: 'cpu' | 'mem') => history.value.map((s, i) => `${(i * W / (HISTORY - 1)).toFixed(1)},${(H - s[k] / 100 * H).toFixed(1)}`).join(' ');
 
-// the dropdown's rows. Bars are a share of something real: RAM of the Mac's total; CPU of one core per hundred (or of the busiest, when one passes that)
-const row = (id: string, name: string, cpu: number, mem: number, cpuPct: number, memPct: number, total = 0): UsageRow => ({
-  id, name, cpu: `${Math.round(cpu)}%`, mem: memText(mem), cpuPct, memPct, cpuRaw: cpu, memRaw: mem,
-  cpuTip: `${name} · ${Math.round(cpu)}% CPU`, memTip: `${name} · ${memText(mem)} RAM${total ? ` of ${memText(total)}` : ''}` });
-const mac = computed(() => { const m = u.value?.mac; return row('mac', 'This Mac', m?.cpu ?? 0, m?.used ?? 0, cpuPct.value, memPct.value, m?.total); });
-const rows = computed(() => {
+// the dropdown: Lantern and the busiest sessions (CPU first, in whole percents so a hair of noise doesn't reorder, then RAM), and everything else the Mac is doing.
+// Percents are of the whole Mac, so the split bars add up to its own bar
+const popup = computed(() => {
   const v = u.value;
-  if (!v) return [];
-  // the sessions with processes left, busiest CPU first (whole percents, so a hair of noise doesn't reorder), then RAM
+  if (!v) return null;
+  const used = v.mac.used, total = v.mac.total;
   const sessions = Object.entries(v.sessions).filter(([, g]) => g.n)
     .sort(([, a], [, b]) => Math.round(b.cpu) - Math.round(a.cpu) || b.mem - a.mem).slice(0, TOP)
-    .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { id, name: s ? s.title || project(s) : id.slice(0, 8), g }; });
-  const all = [{ id: 'lantern', name: 'Lantern', g: v.lantern }, ...sessions];
-  const full = Math.max(100, ...all.map(r => r.g.cpu)), total = v.mac.total;
-  return all.map(r => row(r.id, r.name, r.g.cpu, r.g.mem, r.g.cpu / full * 100, r.g.mem / total * 100, total));
+    .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { name: s ? s.title || project(s) : id.slice(0, 8), g, c: colour(id) }; });
+  const rows = [{ name: 'Lantern', g: v.lantern, c: LANTERN }, ...sessions]
+    .sort((a, b) => Math.round(b.g.cpu) - Math.round(a.g.cpu) || b.g.mem - a.g.mem)
+    .map(r => ({ name: r.name, c: r.c, cpu: r.g.cpu / CORES, mem: r.g.mem, memPct: r.g.mem / total * 100 }));
+  const cpuElse = Math.max(0, v.mac.cpu - rows.reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(0, used - rows.reduce((a, r) => a + r.mem, 0));
+  const all = [...rows, { name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100 }];
+  const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
+  return {
+    rows: all.map(r => ({ ...r, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu) })),
+    blocks: [
+      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
+      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ c: r.c, w: w(r.memPct), tip: `${r.name} · ${memText(r.mem)} RAM` })) }],
+  };
 });
 </script>
 
@@ -56,8 +67,19 @@ const rows = computed(() => {
         <svg class="spark" :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none" aria-hidden="true"><polyline :points="line(m.kind)" /></svg>
       </span>
     </button>
-    <div id="usage" class="flyup" popover :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
-      <UsagePopup :variant="popup" :mac="mac" :pressure="u.mac.pressure" :rows="rows" />
+    <div v-if="popup" id="usage" class="flyup" popover :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
+      <section v-for="b in popup.blocks" :key="b.kind">
+        <div class="big"><UsageIcon :kind="b.kind" /><b>{{ b.num }}</b><span>{{ b.of }}</span></div>
+        <div class="bar"><i v-for="(s, i) in b.segs" :key="i" :title="s.tip" :style="{ width: s.w, background: s.c }"></i></div>
+      </section>
+      <hr>
+      <div class="key">
+        <div class="kh"><span>Session</span><span>CPU</span><span>MEM</span></div>
+        <div v-for="r in popup.rows" :key="r.name" class="krow" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`">
+          <i class="sw" :style="{ background: r.c }"></i><span class="n">{{ r.name }}</span><span>{{ r.cpuText }}</span><span>{{ r.memText }}</span>
+          <b class="track"><i :style="{ width: r.cpuW, background: r.c }"></i></b>
+        </div>
+      </div>
     </div>
   </template>
 </template>
