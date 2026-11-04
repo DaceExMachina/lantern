@@ -35,7 +35,7 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
   expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of the Mac', '12.0of 32 GB']);
   expect(w.findAll('#usage .kh span').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
-  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'Lantern1%300 MB', 'quiet one0%900 MB', 'everything else13%8.8 GB']); // busiest first, Lantern among them, a session with no processes left out, then the rest of the Mac
+  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'Lantern1%0.3 GB', 'quiet one0%0.9 GB', 'everything else13%8.8 GB']); // busiest first, Lantern among them, a session with no processes left out, then the rest of the Mac
   store.settings = { ...store.settings, systemStats: false };
   await w.vm.$nextTick();
   expect(w.find('#usageButton').exists()).toBe(false);
@@ -101,11 +101,11 @@ test('a session row is a button that stands in for its moth; Lantern and everyth
   expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'DIV', 'BUTTON', 'DIV']); // busy, Lantern, quiet one, everything else
   const hide = w.find('#usage').element.hidePopover = vi.fn();
   await rows[0].trigger('pointerenter');
-  expect(card.peekSession).toHaveBeenCalledWith('b');
+  expect(card.peekSession).toHaveBeenCalledWith('b', rows[0].element);
   await rows[0].trigger('pointerleave');
   expect(card.unpeekSession).toHaveBeenCalledTimes(1);
   await rows[2].trigger('focus');
-  expect(card.peekSession).toHaveBeenLastCalledWith('a');
+  expect(card.peekSession).toHaveBeenLastCalledWith('a', expect.any(Element));
   await rows[1].trigger('pointerenter'); // Lantern: highlight only
   expect(card.peekSession).toHaveBeenCalledTimes(2);
   await rows[0].trigger('click');
@@ -129,11 +129,11 @@ test('a session segment in the bars behaves like its row: a button that peeks, p
   expect(segs.map(s => s.element.tagName)).toEqual(['BUTTON', 'I', 'BUTTON', 'I']); // busy, Lantern, quiet one, everything else
   const hide = w.find('#usage').element.hidePopover = vi.fn();
   await segs[0].trigger('pointerenter');
-  expect(card.peekSession).toHaveBeenCalledWith('b');
+  expect(card.peekSession).toHaveBeenCalledWith('b', segs[0].element);
   await segs[0].trigger('pointerleave');
   expect(card.unpeekSession).toHaveBeenCalledTimes(1);
   await w.findAll('#usage .bar')[1].findAll(':scope > *')[2].trigger('focus'); // quiet one's RAM segment
-  expect(card.peekSession).toHaveBeenLastCalledWith('a');
+  expect(card.peekSession).toHaveBeenLastCalledWith('a', expect.any(Element));
   await segs[1].trigger('pointerenter'); await segs[3].trigger('pointerenter'); // Lantern, everything else
   expect(card.peekSession).toHaveBeenCalledTimes(2);
   await segs[0].trigger('click');

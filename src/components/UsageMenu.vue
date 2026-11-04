@@ -52,10 +52,10 @@ const popup = computed(() => {
   const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '' }];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
-    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu) })),
+    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), cpuW: w(r.cpu) })),
     blocks: [
       { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, id: r.id, c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
-      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, c: r.c, w: w(r.memPct), tip: `${r.name} · ${memText(r.mem)} RAM` })) }],
+      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, c: r.c, w: w(r.memPct), tip: `${r.name} · ${gb(r.mem)} RAM` })) }],
   };
 });
 
@@ -64,9 +64,10 @@ const popup = computed(() => {
 // (a beat later, so a double click, which opens the session itself, still lands on the row)
 const hot = ref<string | null>(null);
 let closing: ReturnType<typeof setTimeout> | undefined;
+const gb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`; // the column is always GB, as the cards' numbers are
 const menuOf = (e: Event) => e.currentTarget instanceof Element ? e.currentTarget.closest<HTMLElement>('#usage') : null;
 const rowEvents = (key: string, id: string) => {
-  const on = () => { hot.value = key; if (id) peekSession(id); }, off = () => { hot.value = null; if (id) unpeekSession(); };
+  const on = (e: Event) => { hot.value = key; if (id && e.currentTarget instanceof Element) peekSession(id, e.currentTarget); }, off = () => { hot.value = null; if (id) unpeekSession(); };
   return id ? {
     pointerenter: on, focus: on, pointerleave: off, blur: off,
     click: (e: Event) => { const menu = menuOf(e); pinSession(id); clearTimeout(closing); closing = setTimeout(() => menu?.hidePopover?.(), 250); },

@@ -63,6 +63,8 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
 function paint() {
   chrome.update();
   const c = $('card');
+  // while the usage dropdown (a popover, so in the top layer) is open the card goes in the top layer too, shown after it, which puts it above
+  if (document.querySelector('#usage:popover-open')) { c.popover = 'manual'; if (c.matches(':popover-open')) c.hidePopover(); c.showPopover(); }
   c.classList.add('show');
   c.classList.toggle('compact', !live.expanded);
 }
@@ -70,7 +72,7 @@ export function enterZone(a: Zone) {
   clearTimeout(live.hideTimer);
   const t = a.target, cardAt = 'session' in t ? t.cardAt : undefined;
   if (live.hovered === t && (!a.cardAt || cardAt === a.cardAt)) return; // already showing it
-  if (live.hovered !== t) live.expanded = false;
+  if (live.hovered !== t) { live.expanded = false; aside = null; }
   live.hovered = t; if (a.cardAt && 'session' in t) t.cardAt = a.cardAt;
   paint();
 }
@@ -83,13 +85,19 @@ export function expandCard(zone: Zone) {
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
-export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
+export function hideCard() { live.hovered = held = shown = aside = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); $('card').removeAttribute('popover'); hidePrTip(); }
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
 // The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
 // it was clicked open, and a click expands it, as clicking the moth does; a double click is openSession.
-export function peekSession(id: string) { const m = sessionMoth(id); if (m) enterZone(m.zone); }
+// The card then sits beside the dropdown, level with the row or segment `from`, rather than by its moth, which the dropdown covers (placeCard).
+export function peekSession(id: string, from: Element) {
+  const m = sessionMoth(id), menu = from.closest('#usage');
+  if (!m || !menu) return;
+  enterZone(m.zone);
+  aside = { x: menu.getBoundingClientRect().right, y: from.getBoundingClientRect().top };
+}
 export function unpeekSession() { if (!live.expanded) hideCard(); }
 export function pinSession(id: string) { const m = sessionMoth(id); if (m) expandCard(m.zone); }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
@@ -161,6 +169,7 @@ export const cutShort = (el: Element) => { const t = el.querySelector('.ti'); re
 // The card is pinned where it opened: it takes its anchor (the area's screen position and clearance) when it's first placed
 // for an area and keeps it, whatever its moth does (flies, takes a new home, the lantern's sway) until it's hidden or another
 // area's card replaces it. Only the viewport clamp below follows a resize.
+let aside: { x: number, y: number } | null = null; // where the card goes when a usage row or segment shows it: beside the dropdown, not by its moth
 let held: { zone: Zone, x: number, y: number, gap: number } | null = null, shown: { x: number, y: number } | null = null; // the anchor in screen px, and where the card last sat
 export function pinAnchor(zone: Zone, x: number, y: number, gap: number) {
   if (held?.zone !== zone) held = { zone, x, y, gap };
@@ -178,8 +187,8 @@ export function placeCard() {
   // it stays above the footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits there
   const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - 16)}px`;
   if (c.style.maxHeight !== most) c.style.maxHeight = most;
-  const a = pinAnchor(zone, p.x, p.y, zone.r * ctm.a * 0.7), gap = a.gap; // clear of the hover area, which covers the moth
-  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
+  const a = aside ? { x: aside.x, y: aside.y - 8, gap: 8 } : pinAnchor(zone, p.x, p.y, zone.r * ctm.a * 0.7), gap = a.gap; // aside: level with the row, 8px right of the dropdown (the clamp below keeps it on screen) // clear of the hover area, which covers the moth
+  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = !aside && a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   // while the pointer is on it (opening an agent, say), it stays put rather than flipping above its moth, moving up only
   // as far as it must to stay on screen
   const to = { x: Math.max(8, x), y: Math.max(8, titlebar(), Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
