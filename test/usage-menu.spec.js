@@ -35,7 +35,7 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
   expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of the Mac', '12.0of 32 GB']);
   expect(w.findAll('#usage .kh span').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
-  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'Lantern1%0.3 GB', 'quiet one0%0.9 GB', 'everything else13%8.8 GB']); // in GB, as the processes are; busiest first, Lantern among them, a session with no processes left out, then the rest of the Mac
+  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'quiet one0%0.9 GB', 'everything else13%8.8 GB', 'Lantern1%0.3 GB']); // in GB, as the processes are; busiest first, a session with no processes left out, then the rest of the Mac, then Lantern's own use apart
   store.settings = { ...store.settings, systemStats: false };
   await w.vm.$nextTick();
   expect(w.find('#usageButton').exists()).toBe(false);
@@ -62,12 +62,14 @@ test('each metric has its own sparkline under its bar in the dropdown, which gro
 test('the split bars give each listed row its share of the Mac and the rest to everything else, and the key\'s bars use the same scale', async () => {
   const { w, store } = await mounted();
   const [cpu, mem] = w.findAll('#usage section .bar').map(b => widths(b.element));
-  expect(cpu.map(n => +n.toFixed(2))).toEqual([27.75, 0.6, 0.2, 13.05]); // busy, Lantern, quiet one (percent of the Mac's two cores), everything else
+  expect(cpu.map(n => +n.toFixed(2))).toEqual([27.75, 0.2, 13.05, 0.6]); // busy, quiet one (percent of the Mac's two cores), everything else, Lantern
   expect(cpu.reduce((a, b) => a + b, 0)).toBeCloseTo(41.6, 1); // together they are the Mac's own CPU
-  expect(mem.map(n => +n.toFixed(2))).toEqual([6.25, 0.92, 2.75, 27.59]); // of 32768 MB; the last is 12288 - 300 - 2048 - 900
+  expect(mem.map(n => +n.toFixed(2))).toEqual([6.25, 2.75, 27.59, 0.92]); // of 32768 MB; the third is 12288 - 300 - 2048 - 900
   expect(mem.reduce((a, b) => a + b, 0)).toBeCloseTo(37.5, 1);
-  expect(w.findAll('#usage .krow').map(r => parseFloat(r.find('.track i').element.style.width))).toEqual(cpu); // a row's bar is its CPU segment
-  expect(w.findAll('#usage .bar')[0].findAll('i').map(i => i.attributes('title'))).toEqual(['busy · 28% CPU', 'Lantern · 1% CPU', 'quiet one · 0% CPU', 'everything else · 13% CPU']);
+  const track = k => w.findAll('#usage .krow').map(r => parseFloat(r.findAll('.track i')[k].element.style.width));
+  expect(track(0)).toEqual(cpu); // a row's first bar is its CPU segment
+  expect(track(1)).toEqual(mem); // and its second its RAM segment
+  expect(w.findAll('#usage .bar')[0].findAll('i').map(i => i.attributes('title'))).toEqual(['busy · 28% CPU', 'quiet one · 0% CPU', 'everything else · 13% CPU', 'Lantern · 1% CPU']);
   expect(w.findAll('#usage .bar')[1].findAll('i')[0].attributes('title')).toBe('busy · 2.0 GB RAM');
   // a session's swatch is its moth's tint, which is also the colour of its segment and its row bar, and stays put when the ranking changes
   const tint = s => { const el = document.createElement('div'); el.style.background = tintFor(s); return el.style.background; }; // as the browser spells it
@@ -97,14 +99,14 @@ test('the dropdown has no x axis or y labels, only a line in a box on a fixed sc
 test('a session row is a button that stands in for its moth; Lantern and everything else are not', async () => {
   const { w } = await mounted();
   const rows = w.findAll('#usage .krow');
-  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'DIV', 'BUTTON', 'DIV']); // busy, Lantern, quiet one, everything else
+  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'DIV', 'DIV']); // busy, quiet one, everything else, Lantern
   await rows[0].trigger('pointerenter');
   expect(card.peekSession).toHaveBeenCalledWith('b');
   await rows[0].trigger('pointerleave');
   expect(card.unpeekSession).toHaveBeenCalledTimes(1);
-  await rows[2].trigger('focus');
+  await rows[1].trigger('focus');
   expect(card.peekSession).toHaveBeenLastCalledWith('a');
-  await rows[1].trigger('pointerenter'); // Lantern: highlight only
+  await rows[3].trigger('pointerenter'); // Lantern: highlight only
   expect(card.peekSession).toHaveBeenCalledTimes(2);
   w.unmount();
 });
@@ -115,13 +117,13 @@ test('a click opens a session\'s processes under its row, in the dropdown, one r
   const key = () => [...w.find('#usage .key').element.children].map(el => el.classList.contains('sd') ? 'detail' : el.textContent.split(/\d/)[0]);
   const krow = name => w.findAll('#usage .krow').find(r => r.text().startsWith(name));
   await krow('busy').trigger('click');
-  expect(key()).toEqual(['SessionCPUMEM', 'busy', 'detail', 'Lantern', 'quiet one', 'everything else']); // the heading row, then the open row's processes right under it
+  expect(key()).toEqual(['SessionCPUMEM', 'busy', 'detail', 'quiet one', 'everything else', '', 'Lantern']); // the heading row, then the open row's processes right under it
   expect(krow('busy').attributes('aria-expanded')).toBe('true');
   expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['vitest', '×3', '25%', '1.5 GB'], ['claude', '', '3%', '0.5 GB'], ['zsh', '', '0%', '<0.1 GB']]);
   expect(w.findAll('#usage .acts button').map(b => b.text())).toEqual(['Open card', 'Go to session']);
   expect([card.pinSession, card.openSession, hide].map(f => f.mock.calls.length)).toEqual([0, 0, 0]); // no card held, the dropdown stays
   await krow('quiet one').trigger('click');
-  expect(key()).toEqual(['SessionCPUMEM', 'busy', 'Lantern', 'quiet one', 'detail', 'everything else']); // another row: it opens and the first closes
+  expect(key()).toEqual(['SessionCPUMEM', 'busy', 'quiet one', 'detail', 'everything else', '', 'Lantern']); // another row: it opens and the first closes
   await krow('quiet one').trigger('click');
   expect(w.findAll('#usage .sd')).toHaveLength(0); // its second click closes it
   await krow('busy').trigger('click');
@@ -146,6 +148,21 @@ test('a click opens a session\'s processes under its row, in the dropdown, one r
   w.unmount();
 });
 
+test('each row has a CPU bar with a RAM bar right under it, scaled like the Mac\'s own bars; Lantern\'s own use sits last under a rule, marked with a ring, not a swatch', async () => {
+  const { w } = await mounted();
+  const row = name => w.findAll('#usage .krow').find(r => r.text().startsWith(name));
+  const bars = r => r.findAll('.tracks .track i').map(i => [parseFloat(i.element.style.width), i.element.style.background]);
+  const busy = bars(row('busy'));
+  expect(busy.map(b => b[0])).toEqual([27.75, 2048 / 32768 * 100]); // CPU of the Mac (55.5% of one of two cores), then RAM of its total
+  expect(busy.map(b => b[1])).toEqual([tintFor({ id: 'b', cwd: '/w/busy' }), tintFor({ id: 'b', cwd: '/w/busy' })]); // both in the session's colour, as in the Mac's bars
+  expect(w.findAll('#usage .krow').map(r => r.findAll('.tracks .track').length)).toEqual([2, 2, 2, 2]);
+  const key = [...w.find('#usage .key').element.children];
+  expect(key.slice(-2).map(e => e.tagName)).toEqual(['HR', 'DIV']); // the rule, then Lantern
+  expect(row('Lantern').find('.sw').classes()).toContain('app');
+  expect(w.findAll('#usage .krow .sw').filter(s => s.classes('app'))).toHaveLength(1);
+  w.unmount();
+});
+
 test('hovering a segment or a row highlights that session in both bars and the key, and dims the rest', async () => {
   const { w } = await mounted();
   const hot = () => ({ segs: w.findAll('#usage .bar i').map(i => i.classes('hot')), rows: w.findAll('#usage .krow').map(r => r.classes('hot')), dim: w.find('#usage').classes('hl') });
@@ -154,8 +171,8 @@ test('hovering a segment or a row highlights that session in both bars and the k
   expect(hot()).toEqual({ segs: [true, false, false, false, true, false, false, false], rows: [true, false, false, false], dim: true }); // its CPU segment too, and its row
   await w.findAll('#usage .bar')[1].findAll('i')[0].trigger('pointerleave');
   expect(hot().dim).toBe(false);
-  await w.findAll('#usage .krow')[3].trigger('pointerenter'); // everything else: highlight only
-  expect(hot()).toEqual({ segs: [false, false, false, true, false, false, false, true], rows: [false, false, false, true], dim: true });
+  await w.findAll('#usage .krow')[2].trigger('pointerenter'); // everything else: highlight only
+  expect(hot()).toEqual({ segs: [false, false, true, false, false, false, true, false], rows: [false, false, true, false], dim: true });
   w.unmount();
 });
 
@@ -163,14 +180,14 @@ test('while a row is open the rows keep their order, numbers still live; a new s
   const { w, store } = await mounted();
   const names = () => w.findAll('#usage .krow').map(r => r.find('.n').text());
   const krow = name => w.findAll('#usage .krow').find(r => r.text().startsWith(name));
-  expect(names()).toEqual(['busy', 'Lantern', 'quiet one', 'everything else']);
+  expect(names()).toEqual(['busy', 'quiet one', 'everything else', 'Lantern']);
   await krow('busy').trigger('click');
   store.sessions = [...store.sessions, { id: 'c', title: 'newcomer', cwd: '/w/c' }];
   store.usage = { ...usage, sessions: { ...usage.sessions, a: { cpu: 90, mem: 900, n: 2 }, c: { cpu: 200, mem: 100, n: 1 } } }; // the quiet one and a newcomer now lead
   await w.vm.$nextTick();
-  expect(names()).toEqual(['busy', 'Lantern', 'quiet one', 'newcomer', 'everything else']); // held, the newcomer at the end
+  expect(names()).toEqual(['busy', 'quiet one', 'newcomer', 'everything else', 'Lantern']); // held, the newcomer at the end
   expect(krow('quiet one').text()).toContain('45%'); // its numbers move all the same
   await krow('busy').trigger('click');
-  expect(names()).toEqual(['newcomer', 'quiet one', 'busy', 'Lantern', 'everything else']); // closed: sorted again
+  expect(names()).toEqual(['newcomer', 'quiet one', 'busy', 'everything else', 'Lantern']); // closed: sorted again
   w.unmount();
 });
