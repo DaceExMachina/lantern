@@ -391,9 +391,7 @@ test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and
 test('a session\'s row in the usage dropdown shows its moth\'s card on hover, puts it away on leaving, and pins it open on a click', async () => {
   const s = session();
   live.raw = [s]; sync();
-  const menu = document.createElement('div'), row = document.createElement('button');
-  menu.id = 'usage'; menu.append(row); document.body.append(menu);
-  peekSession('s1', row); await nextTick();
+  peekSession('s1'); await nextTick();
   assert.strictEqual(live.hovered, sessionMoth('s1'), 'hovering the row hovers the moth');
   assert.ok($('card').classList.contains('show') && $('card').classList.contains('compact'), 'a compact card');
   unpeekSession();
@@ -402,34 +400,32 @@ test('a session\'s row in the usage dropdown shows its moth\'s card on hover, pu
   assert.strictEqual(live.expanded, true, 'a click expands it, as clicking the moth does');
   unpeekSession();
   assert.strictEqual(live.hovered, sessionMoth('s1'), 'and leaving the row leaves a pinned card be');
-  peekSession('nobody', row); // a session with no moth is quietly nothing
-  menu.remove();
+  peekSession('nobody'); // a session with no moth is quietly nothing
 });
 
-test('a card shown from the usage dropdown goes in the top layer above it and sits beside it, level with the row', async () => {
+test('a card shown from the usage dropdown goes in the top layer after it, so it draws above it, and stays at its moth', async () => {
   live.raw = [session()]; sync();
-  const menu = document.createElement('div'), row = document.createElement('button'), c = $('card');
-  menu.id = 'usage'; menu.append(row); document.body.append(menu);
+  const menu = document.createElement('div'), c = $('card');
+  menu.id = 'usage'; document.body.append(menu);
   let open = false; // happy-dom has no top layer: a stand-in that tracks showPopover and hidePopover
-  menu.matches = sel => sel === '#usage:popover-open' ? open : Element.prototype.matches.call(menu, sel);
   const layer = [];
   c.showPopover = () => { layer.push('card'); }; c.hidePopover = () => { layer.length = 0; };
   const matches = c.matches.bind(c); c.matches = sel => sel === ':popover-open' ? layer.length > 0 : matches(sel);
-  menu.getBoundingClientRect = () => ({ right: 340 }); row.getBoundingClientRect = () => ({ top: 120 });
   document.querySelector = (q => sel => sel === '#usage:popover-open' ? (open ? menu : null) : q.call(document, sel))(document.querySelector);
-  const svg = document.querySelector('svg'); // no layout or SVG matrices in happy-dom
-  const footer = document.querySelector('footer'); footer.getBoundingClientRect = () => ({ top: 700 });
-  svg.getScreenCTM = () => ({ a: 1 }); svg.createSVGPoint = () => ({ matrixTransform: () => ({ x: 0, y: 0 }) });
+  const footer = document.querySelector('footer'); footer.getBoundingClientRect = () => ({ top: 700 }); // no layout or SVG matrices in happy-dom
+  const svg = document.querySelector('svg');
+  svg.getScreenCTM = () => ({ a: 1 }); svg.createSVGPoint = () => ({ matrixTransform: () => ({ x: 100, y: 200 }) });
   try {
-    peekSession('s1', row);
+    peekSession('s1');
     assert.strictEqual(c.getAttribute('popover'), null, 'with the dropdown closed the card stays in the page');
     unpeekSession();
     open = true;
-    peekSession('s1', row);
+    peekSession('s1');
     assert.strictEqual(c.getAttribute('popover'), 'manual', 'with it open the card is a popover of its own');
     assert.deepStrictEqual(layer, ['card'], 'shown, after the dropdown');
     placeCard();
-    assert.strictEqual(c.style.transform, 'translate(348px, 120px)', '8px right of the dropdown, level with the row');
+    const gap = sessionMoth('s1').zone.r * 0.7;
+    assert.strictEqual(c.style.transform, `translate(${100 + gap}px, ${200 + gap}px)`, 'and placed at its moth\'s anchor, as ever');
     unpeekSession();
     assert.strictEqual(c.getAttribute('popover'), null, 'putting the card away takes it out of the top layer');
   } finally { delete document.querySelector; menu.remove(); delete c.showPopover; delete c.hidePopover; delete c.matches; delete footer.getBoundingClientRect; delete svg.getScreenCTM; delete svg.createSVGPoint; }

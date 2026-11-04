@@ -67,7 +67,7 @@ let closing: ReturnType<typeof setTimeout> | undefined;
 const gb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`; // the column is always GB, as the cards' numbers are
 const menuOf = (e: Event) => e.currentTarget instanceof Element ? e.currentTarget.closest<HTMLElement>('#usage') : null;
 const rowEvents = (key: string, id: string) => {
-  const on = (e: Event) => { hot.value = key; if (id && e.currentTarget instanceof Element) peekSession(id, e.currentTarget); }, off = () => { hot.value = null; if (id) unpeekSession(); };
+  const on = () => { hot.value = key; if (id) peekSession(id); }, off = () => { hot.value = null; if (id) unpeekSession(); };
   return id ? {
     pointerenter: on, focus: on, pointerleave: off, blur: off,
     click: (e: Event) => { const menu = menuOf(e); pinSession(id); clearTimeout(closing); closing = setTimeout(() => menu?.hidePopover?.(), 250); },
