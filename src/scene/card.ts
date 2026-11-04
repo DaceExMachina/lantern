@@ -79,6 +79,11 @@ export function hideCard() { live.hovered = held = shown = null; live.expanded =
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
+// The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
+// it was clicked open, and a click expands it, as clicking the moth does; a double click is openSession.
+export function peekSession(id: string) { const m = sessionMoth(id); if (m) enterZone(m.zone); }
+export function unpeekSession() { if (!live.expanded) hideCard(); }
+export function pinSession(id: string) { const m = sessionMoth(id); if (m) expandCard(m.zone); }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.

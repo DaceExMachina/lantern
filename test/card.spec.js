@@ -12,7 +12,7 @@ import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, unpeekSession } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -383,4 +383,19 @@ test('the card shows its session\'s CPU and memory as one row with a bar for eac
   store.usage = { ...store.usage, sessions: { s1: { cpu: 0, mem: 0, n: 0 } } };
   await nextTick();
   assert.strictEqual(row().length, 0, 'no processes, no row');
+});
+
+test('a session\'s row in the usage dropdown shows its moth\'s card on hover, puts it away on leaving, and pins it open on a click', async () => {
+  const s = session();
+  live.raw = [s]; sync();
+  peekSession('s1'); await nextTick();
+  assert.strictEqual(live.hovered, sessionMoth('s1'), 'hovering the row hovers the moth');
+  assert.ok($('card').classList.contains('show') && $('card').classList.contains('compact'), 'a compact card');
+  unpeekSession();
+  assert.strictEqual(live.hovered, null, 'leaving puts it away');
+  pinSession('s1'); await nextTick();
+  assert.strictEqual(live.expanded, true, 'a click expands it, as clicking the moth does');
+  unpeekSession();
+  assert.strictEqual(live.hovered, sessionMoth('s1'), 'and leaving the row leaves a pinned card be');
+  peekSession('nobody'); // a session with no moth is quietly nothing
 });

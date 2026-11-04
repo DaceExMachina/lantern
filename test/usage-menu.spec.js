@@ -2,8 +2,10 @@
 // busiest sessions with their CPU and memory breakdowns, fed by the store's usage (the usage event), and gone when settings.systemStats is off.
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { tintFor } from '../src/scene/lanterns';
+vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), openSession: vi.fn() }));
+import * as card from '../src/scene/card';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
@@ -47,9 +49,10 @@ test('the rings fill to the Mac\'s CPU and RAM, and say so when hovered', async 
   w.unmount();
 });
 
-test('each metric has its own sparkline, which grows with each sample and stops at two minutes', async () => {
+test('each metric has its own sparkline under its bar in the dropdown, which grows with each sample and stops at two minutes', async () => {
   const { w, store } = await mounted();
-  const pts = k => w.find(`#usageButton .${k} .spark polyline`).attributes('points').split(' ').length;
+  const pts = k => w.findAll('#usage section')[k === 'cpu' ? 0 : 1].find('.spark polyline').attributes('points').split(' ').length;
+  expect(w.find('#usageButton .spark').exists(), 'none on the HUD').toBe(false);
   expect([pts('cpu'), pts('mem')]).toEqual([1, 1]);
   for (let i = 0; i < 40; i++) { store.usage = { ...usage, mac: { ...usage.mac, cpu: i } }; await w.vm.$nextTick(); }
   expect([pts('cpu'), pts('mem')]).toEqual([24, 24]);
@@ -78,5 +81,55 @@ test('the split bars give each listed row its share of the Mac and the rest to e
   await w.vm.$nextTick();
   expect(w.findAll('#usage .krow .n')[0].text()).toBe('quiet one');
   expect(colours()).toEqual(before);
+  w.unmount();
+});
+
+test('the dropdown has no x axis or y labels, only a line in a box on a fixed scale', async () => {
+  const { w } = await mounted();
+  expect(w.findAll('#usage .chart')).toHaveLength(2);
+  expect(w.find('#usage .chart').text(), 'no labels').toBe('');
+  expect(w.find('#usage .chart line').exists(), 'no midline').toBe(false);
+  const y = k => +w.findAll('#usage section')[k].find('.spark polyline').attributes('points').split(',')[1];
+  expect([y(0), y(1)]).toEqual([+(14 - 0.416 * 14).toFixed(1), +(14 - 0.375 * 14).toFixed(1)]); // the Mac's 41.6% CPU and 37.5% RAM against a 0 to 100 scale
+  w.unmount();
+});
+
+test('a session row is a button that stands in for its moth; Lantern and everything else are not', async () => {
+  vi.useFakeTimers();
+  const { w } = await mounted();
+  const rows = w.findAll('#usage .krow');
+  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'DIV', 'BUTTON', 'DIV']); // busy, Lantern, quiet one, everything else
+  const hide = w.find('#usage').element.hidePopover = vi.fn();
+  await rows[0].trigger('pointerenter');
+  expect(card.peekSession).toHaveBeenCalledWith('b');
+  await rows[0].trigger('pointerleave');
+  expect(card.unpeekSession).toHaveBeenCalledTimes(1);
+  await rows[2].trigger('focus');
+  expect(card.peekSession).toHaveBeenLastCalledWith('a');
+  await rows[1].trigger('pointerenter'); // Lantern: highlight only
+  expect(card.peekSession).toHaveBeenCalledTimes(2);
+  await rows[0].trigger('click');
+  expect(card.pinSession).toHaveBeenCalledWith('b');
+  expect(hide).not.toHaveBeenCalled(); // a beat later, so a double click can still land
+  vi.advanceTimersByTime(300);
+  expect(hide).toHaveBeenCalledTimes(1);
+  await rows[0].trigger('click'); await rows[0].trigger('dblclick');
+  expect(card.openSession).toHaveBeenCalledWith('b', false);
+  vi.advanceTimersByTime(300);
+  expect(hide).toHaveBeenCalledTimes(2); // the double click closed it at once, not twice
+  vi.useRealTimers();
+  w.unmount();
+});
+
+test('hovering a segment or a row highlights that session in both bars and the key, and dims the rest', async () => {
+  const { w } = await mounted();
+  const hot = () => ({ segs: w.findAll('#usage .bar i').map(i => i.classes('hot')), rows: w.findAll('#usage .krow').map(r => r.classes('hot')), dim: w.find('#usage').classes('hl') });
+  expect(hot()).toEqual({ segs: Array(8).fill(false), rows: Array(4).fill(false), dim: false });
+  await w.findAll('#usage .bar')[1].findAll('i')[0].trigger('pointerenter'); // busy's RAM segment
+  expect(hot()).toEqual({ segs: [true, false, false, false, true, false, false, false], rows: [true, false, false, false], dim: true }); // its CPU segment too, and its row
+  await w.findAll('#usage .bar')[1].findAll('i')[0].trigger('pointerleave');
+  expect(hot().dim).toBe(false);
+  await w.findAll('#usage .krow')[3].trigger('pointerenter'); // everything else: highlight only
+  expect(hot()).toEqual({ segs: [false, false, false, true, false, false, false, true], rows: [false, false, false, true], dim: true });
   w.unmount();
 });
