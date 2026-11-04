@@ -16,7 +16,7 @@ final class Usage {
     private var at: Double? // when that was, seconds
     private var socketOf: [pid_t: (start: Double, socket: String)] = [:] // each Claude process's value of its per-process variable, once a tool of its shows it (by pid, so a resumed session or a second process is learned on its own)
     private var launched: [pid_t: (start: Double, socket: String?)] = [:] // launchd's children already looked at (with no value too), so each is read once
-    private var names: [pid_t: (start: Double, name: String)] = [:] // a process's name once it was already there at the last sample (not still between fork and exec), so the Mac's hundreds of daemons are read once
+    private var names: [pid_t: (start: Double, app: Bool, name: String)] = [:] // a process's name once it was already there at the last sample (not still between fork and exec), so the Mac's hundreds of daemons are read once
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
@@ -96,27 +96,44 @@ final class Usage {
         if let responsible = Self.responsible {
             for p in started.keys where owner[p] == nil { if let i = owner[responsible(p)] { trees[i].append(p) } }
         }
-        // by name, busiest first (CPU as shown, then memory, then name so the order holds still); past eight, the eighth is the rest
-        func group(_ pids: [pid_t]) -> JSON {
+        // by name, busiest first (CPU as shown, then memory, then name so the order holds still). Past eight, seven are named: the four busiest
+        // and then the biggest of the rest by memory (an idle VM or browser is no hog, but it's what the memory is in), the others "other".
+        // `app`: name a process for the app it works for (else's: a helper under its app), not by itself.
+        let claimed = Set(trees.joined())
+        func group(_ pids: [pid_t], app: Bool = false) -> JSON {
             let u = use(pids)
-            let groups = Dictionary(grouping: u) { name($0.pid) }
+            let order: ((name: String, cpu: Double, mem: UInt64, of: [(pid: pid_t, ns: Double, mem: UInt64)]), (name: String, cpu: Double, mem: UInt64, of: [(pid: pid_t, ns: Double, mem: UInt64)])) -> Bool = { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
+            let groups = Dictionary(grouping: u) { name($0.pid, app: app) }
                 .map { (name: $0.key, cpu: cpu($0.value.reduce(0) { $0 + $1.ns }), mem: $0.value.reduce(0) { $0 + $1.mem }, of: $0.value) }
-                .sorted { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
-            let shown = groups.count > 8 ? groups.prefix(7) + [(name: "other", cpu: 0, mem: 0, of: groups.dropFirst(7).flatMap(\.of))] : groups[...]
+                .sorted(by: order)
+            var shown = Array(groups)
+            if groups.count > 8 {
+                let rest = groups.dropFirst(4).sorted { ($0.mem, $1.name) > ($1.mem, $0.name) }
+                shown = (groups.prefix(4) + rest.prefix(3)).sorted(by: order) + [(name: "other", cpu: 0, mem: 0, of: rest.dropFirst(3).flatMap(\.of))]
+            }
             var g = sum(u)
             g["procs"] = shown.map { sum($0.of).merging(["name": $0.name]) { a, _ in a } }
             return g
         }
-        func name(_ p: pid_t) -> String {
-            if let c = names[p], c.start == started[p] { return c.name }
-            let n = Self.name(p)
-            if started[p] ?? 0 < since { names[p] = (started[p] ?? 0, n) }
+        func name(_ p: pid_t, app: Bool) -> String {
+            if let c = names[p], c.start == started[p], c.app == app { return c.name }
+            let n = app ? appName(p) : Self.name(p)
+            if started[p] ?? 0 < since { names[p] = (started[p] ?? 0, app, n) }
             return n
+        }
+        // the app a process works for: its responsible process's when that's alive and in no row (Docker's VM works for Docker, a browser's helpers
+        // for the browser), by the name of the .app it runs from, else by its own name
+        func appName(_ p: pid_t) -> String {
+            var r = Self.responsible?(p) ?? p
+            if r <= 0 || r == p || started[r] == nil || claimed.contains(r) { r = p }
+            var buf = [CChar](repeating: 0, count: 4096)
+            proc_pidpath(r, &buf, 4096)
+            if let app = String(cString: buf).split(separator: "/").first(where: { $0.hasSuffix(".app") }) { return Self.tidy(String(app.dropLast(4))) }
+            return Self.name(r)
         }
         var perSession: JSON = [:]
         for (i, (id, _)) in sessions.enumerated() { perSession[id] = group(trees[i]) }
-        let claimed = Set(trees.joined())
-        let out: JSON = ["sessions": perSession, "lantern": group(trees[sessions.count]), "else": group(started.keys.filter { !claimed.contains($0) }), "mac": mac()]
+        let out: JSON = ["sessions": perSession, "lantern": group(trees[sessions.count]), "else": group(started.keys.filter { !claimed.contains($0) }, app: true), "mac": mac()]
         before = now
         names = names.filter { started[$0.key] != nil }
         at = t
@@ -131,13 +148,14 @@ final class Usage {
     // WebKit's helper services, which Lantern's window runs in, by what they do
     private static let webKit = ["com.apple.WebKit.GPU": "WebKit GPU", "com.apple.WebKit.WebContent": "WebKit page", "com.apple.WebKit.Networking": "WebKit network"]
     private static let tools: Set<String> = ["vite", "vitest", "tsc", "vue-tsc", "playwright", "next"]
+    private static func tidy(_ n: String) -> String { n.hasPrefix("Google Chrome") ? "Chrome" : n } // the browser and its helpers (renderer, GPU) as one
     private static func name(_ pid: pid_t) -> String {
         let args = Self.procargs(pid).args
         // a path's last part; a title a process gave itself (node's process.title, "npm exec some-mcp --flag"), its first word
         let first = args.first ?? "", path = first.hasPrefix("/") ? first : String(first.split(separator: " ").first ?? "")
         var n = String(path.split(separator: "/").last ?? "")
         if n.hasPrefix("-") { n.removeFirst() } // a login shell's "-zsh"
-        if n.hasPrefix("Google Chrome") { n = "Chrome" } // the browser and its helpers (renderer, GPU) as one
+        n = tidy(n)
         if n.isEmpty {
             var info = proc_bsdinfo()
             proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))

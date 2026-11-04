@@ -2,7 +2,9 @@
 // busiest sessions with their CPU and memory breakdowns, fed by the store's usage (the usage event), and gone when settings.systemStats is off.
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
-import { expect, test, vi } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
+
+beforeEach(() => localStorage.removeItem('lantern-usage-sort')); // the sort pick is kept per viewer, so no test inherits another's
 import { tintFor } from '../src/scene/lanterns';
 vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), openSession: vi.fn() }));
 import * as card from '../src/scene/card';
@@ -11,7 +13,7 @@ import { useLanternStore } from '../src/stores/lantern';
 
 const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4, procs: [{ name: 'WebKit GPU', n: 1, cpu: 1, mem: 150 }, { name: 'Lantern', n: 3, cpu: 0.2, mem: 200 }] },
   sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 50, mem: 1500 }, { name: 'claude', n: 1, cpu: 5.5, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 48 }] }, gone: { cpu: 0, mem: 0, n: 0 } },
-  else: { cpu: 20, mem: 8000, n: 300, procs: [{ name: 'Slack Helper', n: 4, cpu: 12, mem: 2500 }, { name: 'other', n: 296, cpu: 8, mem: 5500 }, { name: 'kernel_task', n: 1, cpu: 0, mem: 40 }] } };
+  else: { cpu: 20, mem: 8000, n: 300, procs: [{ name: 'Docker', n: 1, cpu: 0, mem: 5000 }, { name: 'Slack Helper', n: 4, cpu: 12, mem: 2500 }, { name: 'other', n: 296, cpu: 8, mem: 5500 }, { name: 'kernel_task', n: 1, cpu: 0, mem: 40 }] } };
 
 Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true }); // a session's CPU is of one core, the dropdown's percents of the Mac's two
 
@@ -35,7 +37,7 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   expect(w.find('#usageButton').text()).toBe('42%12.0 GB'); // icons and numbers, no words, nothing of Lantern's own
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
   expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of the Mac', '12.0of 32 GB']);
-  expect(w.findAll('#usage .kh span').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
+  expect(w.findAll('#usage .kh > *').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
   expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'quiet one0%0.9 GB', 'everything else13%8.8 GB', 'Lantern1%0.3 GB']); // in GB, as the processes are; busiest first, a session with no processes left out, then the rest of the Mac, then Lantern's own use apart
   store.settings = { ...store.settings, systemStats: false };
   await w.vm.$nextTick();
@@ -186,8 +188,11 @@ test('everything else opens its processes like Lantern\'s, with no card to open 
   await row().trigger('pointerenter');
   await row().trigger('click');
   expect(row().attributes('aria-expanded')).toBe('true');
-  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '5.4 GB']]); // CPU as shown, "other" last
+  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['Docker', '', '0%', '4.9 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '5.4 GB']]); // CPU as shown, "other" last
   expect(w.find('#usage .sd .head').text()).toBe('Processes300');
+  const heat = name => w.findAll('#usage .proc').find(r => r.text().startsWith(name)).findAll('span').flatMap(c => c.classes());
+  expect(heat('Docker')).toContain('hot1'); // 4.9 GB is yellow (so the colours work here)...
+  expect(heat('other').filter(c => c.startsWith('hot') && c !== 'hot0')).toEqual([]); // ...but "other", 5.4 GB of small things, never gets one
   expect(w.findAll('#usage .acts')).toHaveLength(0);
   await row().trigger('dblclick');
   expect([card.peekSession, card.pinSession].map(f => f.mock.calls.length)).toEqual([0, 0]);
@@ -201,6 +206,29 @@ test('with no processes from the server for everything else (an older one), its 
   const row = w.findAll('#usage .krow').find(r => r.text().startsWith('everything else'));
   expect(row.element.tagName).toBe('DIV');
   w.unmount();
+});
+
+test('the CPU and MEM headers pick the sort key: sessions and the open processes follow it, Lantern and everything else stay last, the pick is kept, and an open row is re-sorted once', async () => {
+  const sorted = { ...usage, sessions: { a: { cpu: 30, mem: 4000, n: 2 }, b: { cpu: 110, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 100, mem: 300 }, { name: 'claude', n: 1, cpu: 10, mem: 1500 }] } } };
+  const { w } = await mounted(sorted);
+  const names = () => w.findAll('#usage .krow .n').map(n => n.text());
+  const head = k => w.findAll('#usage .kh button').find(b => b.text() === k);
+  expect(names()).toEqual(['busy', 'quiet one', 'everything else', 'Lantern']); // CPU by default
+  expect(head('CPU').attributes('aria-pressed')).toBe('true');
+  expect(head('MEM').attributes('aria-pressed')).toBe('false');
+  await w.findAll('#usage .krow')[0].trigger('click'); // busy opens: its processes by CPU, and the rows' order is held
+  expect(w.findAll('#usage .pn').map(n => n.text())).toEqual(['vitest', 'claude']);
+  await head('MEM').trigger('click');
+  await w.vm.$nextTick(); await w.vm.$nextTick();
+  expect(names()).toEqual(['quiet one', 'busy', 'everything else', 'Lantern']); // sorted again, with its row still open
+  expect(w.findAll('#usage .pn').map(n => n.text())).toEqual(['claude', 'vitest']); // its processes by RAM
+  expect(localStorage.getItem('lantern-usage-sort')).toBe('mem');
+  w.unmount();
+  const again = await mounted(sorted); // a new dropdown remembers it
+  expect(again.w.findAll('#usage .krow .n').map(n => n.text())).toEqual(['quiet one', 'busy', 'everything else', 'Lantern']);
+  expect(again.w.findAll('#usage .kh button').find(b => b.text() === 'MEM').attributes('aria-pressed')).toBe('true');
+  localStorage.removeItem('lantern-usage-sort');
+  again.w.unmount();
 });
 
 test('a session segment in the bars behaves like its row: a button that peeks, opens its processes and, double clicked, opens the card; everything else and Lantern are highlight only', async () => {

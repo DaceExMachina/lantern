@@ -14,7 +14,7 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue';
 import type { UsageGroup as Group } from '../types';
-import { cores, groupUse, memText, peekSession, pinSession, project, sessionUse, unpeekSession } from '../scene/card';
+import { cores, groupUse, memText, peekSession, pinSession, project, sessionUse, unpeekSession, type UsageSort } from '../scene/card';
 import { heatOf, heatTip } from '../scene/heat';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
@@ -40,6 +40,11 @@ const line = (k: 'cpu' | 'mem') => history.value.map((s, i) => `${(i * W / (HIST
 
 // While a row's processes are open, the rows keep the order they had when it opened, their numbers still live: a new one joins at the end, one
 // that's gone drops out. Closing it lets them sort again. (The open row's processes still sort as they come.)
+// The sessions' order is by CPU (then RAM) or by RAM (then CPU), picked with the column headers and kept per viewer; Lantern and everything else stay at the foot.
+let saved: string | null = null;
+try { saved = localStorage.getItem('lantern-usage-sort'); } catch {}
+const sort = ref<UsageSort>(saved === 'mem' ? 'mem' : 'cpu');
+const byUse = (a: Group, b: Group) => sort.value === 'mem' ? b.mem - a.mem || Math.round(b.cpu) - Math.round(a.cpu) : Math.round(b.cpu) - Math.round(a.cpu) || b.mem - a.mem;
 const open = ref<string | null>(null), held = shallowRef<string[] | null>(null);
 const at = (order: string[], k: string) => order.includes(k) ? order.indexOf(k) : order.length;
 // the dropdown: the busiest sessions (CPU first, in whole percents so a hair of noise doesn't reorder, then RAM), then everything else the Mac is doing, then,
@@ -50,18 +55,18 @@ const popup = computed(() => {
   if (!v) return null;
   const used = v.mac.used, total = v.mac.total;
   const sessions = Object.entries(v.sessions).filter(([, g]) => g.n)
-    .sort(([, a], [, b]) => Math.round(b.cpu) - Math.round(a.cpu) || b.mem - a.mem).slice(0, TOP)
+    .sort(([, a], [, b]) => byUse(a, b)).slice(0, TOP)
     .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { id, name: s ? s.title || project(s) : id.slice(0, 8), g, c: tintFor(s ?? { id }) }; });
   const order = held.value;
   const row = (r: { id: string; name: string; g: Group; c: string }) => { const h = heatOf(r.id || 'lantern', r.g), tip = heatTip(h, r.g); return { id: r.id, name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, memPct: r.g.mem / total * 100, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem, app: false, rest: false }; };
-  const rows = sessions.sort((a, b) => order ? at(order, a.id) - at(order, b.id) : Math.round(b.g.cpu) - Math.round(a.g.cpu) || b.g.mem - a.g.mem).map(row);
+  const rows = sessions.sort((a, b) => order ? at(order, a.id) - at(order, b.id) : byUse(a.g, b.g)).map(row);
   const app = { ...row({ id: '', name: 'Lantern', g: v.lantern, c: LANTERN }), app: true };
   const cpuElse = Math.max(0, v.mac.cpu - [...rows, app].reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(0, used - [...rows, app].reduce((a, r) => a + r.mem, 0));
-  const elseUse = groupUse('else', v.else); // an older server sends none: the row is then plain
+  const elseUse = groupUse('else', v.else, sort.value); // an older server sends none: the row is then plain
   const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '', app: false, rest: !!elseUse }, app];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
-    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), btn: !!(r.id || r.app || r.rest), use: r.id ? sessionUse(v, r.id) : r.app ? groupUse('lantern', v.lantern) : r.rest ? elseUse : null })),
+    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), btn: !!(r.id || r.app || r.rest), use: r.id ? sessionUse(v, r.id, sort.value) : r.app ? groupUse('lantern', v.lantern, sort.value) : r.rest ? elseUse : null })),
     blocks: [
       { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
       { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.memPct), tip: `${r.name} · ${gb(r.mem)} RAM` })) }],
@@ -76,6 +81,12 @@ const hot = ref<string | null>(null);
 const gb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`; // the column is always GB, as the cards' numbers are
 const menu = useTemplateRef<HTMLElement>('menu');
 // one row's processes open at a time, the rows' order held from now until it closes (or the dropdown does)
+async function setSort(k: UsageSort) {
+  if (k === sort.value) return;
+  sort.value = k;
+  try { localStorage.setItem('lantern-usage-sort', k); } catch {}
+  if (open.value) { held.value = null; await nextTick(); held.value = (popup.value?.rows ?? []).map(r => r.key); } // an open row's order is held again, once sorted
+}
 function setOpen(key: string | null) { held.value = key ? (popup.value?.rows ?? []).map(r => r.key) : null; open.value = key; }
 const close = () => menu.value?.hidePopover?.();
 // The open row's processes count as its row for hovering, so the moth's card stays up over them (the dropdown, in the top layer, is never under it).
@@ -108,7 +119,7 @@ const rowEvents = (key: string, id: string, btn: boolean) => {
       </section>
       <hr>
       <div class="key">
-        <div class="kh"><span>Session</span><span>CPU</span><span>MEM</span></div>
+        <div class="kh"><span>Session</span><button v-for="k in (['cpu', 'mem'] as const)" :key="k" :aria-pressed="sort === k" :title="`Sort by ${k === 'cpu' ? 'CPU' : 'RAM'}`" @click="setSort(k)">{{ k === 'cpu' ? 'CPU' : 'MEM' }}</button></div>
         <template v-for="r in popup.rows" :key="r.name">
         <hr v-if="r.app">
         <component :is="r.btn ? 'button' : 'div'" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
