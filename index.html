@@ -267,7 +267,7 @@
   .uring { width: var(--hud, 14px); height: var(--hud, 14px); flex: none; fill: none; stroke-width: 2; color: var(--m); }
   .uring circle { stroke: var(--lantern-quiet); }
   .uring .arc { stroke: var(--m); stroke-linecap: round; }
-  #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 320px; max-width: calc(100vw - 2 * var(--space-3)); max-height: calc(100vh - 2 * var(--space-6) - var(--titlebar) - var(--hud)); padding: var(--space-4); gap: var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
+  #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 320px; max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; max-height: calc(100vh - max(var(--space-2), var(--titlebar)) - var(--space-1) - var(--hud) * 1.5 - var(--space-3) - var(--space-6)); padding: var(--space-4); /* below its top, it stops clear of the footer and scrolls inside */ gap: var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
   #usage section { display: flex; flex-direction: column; gap: var(--space-2); }
   #usage .big { display: flex; align-items: baseline; gap: var(--space-2); color: var(--ink-dim); }
   #usage .big svg { width: var(--space-4); height: var(--space-4); align-self: center; color: var(--ink-dim); }
@@ -416,21 +416,29 @@
   :is(#card, #dock) :is(.use, .procs) .hot3, #usage .hot3 { color: var(--pr-failing); }
   :is(#card, #dock) .use svg { width: 1.1em; height: 1.1em; vertical-align: -0.2em; margin-right: var(--space-1); }
   :is(#card, #dock) .tray .foot { margin-top: var(--space-1-5); }
-  /* the expanded card's processes by name: name, how many when more than one, CPU, RAM, in columns, quiet like the info line */
-  #card .procs { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: var(--space-0-5) var(--space-3); margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
-  #card .proc { display: contents; }
-  #card .proc > * { text-align: right; white-space: nowrap; }
-  #card .proc .pn { text-align: left; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
-  #card .proc .x { color: var(--ink-faint); }
-  /* the info line at a card's foot opens the stats detail; under the detail, buttons to open the card in full and go to the session, side by side */
+  /* a session's processes (StatsDetail): name, how many when more than one, CPU, RAM, in columns, quiet like the info line; then
+     buttons to open its card and go to the session, side by side, each filling its half. On a card under its info line, in the
+     usage dropdown under the session's row, where the numbers line up under the row's CPU and MEM. */
+  .sd .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); }
+  .sd .procs { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: var(--space-0-5) var(--space-3); margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+  .sd .proc { display: contents; }
+  .sd .proc > * { text-align: right; white-space: nowrap; }
+  .sd .proc .pn { text-align: left; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
+  .sd .proc .x { color: var(--ink-faint); }
+  .sd .acts { display: flex; margin-top: var(--space-1); }
+  .sd .acts button { all: unset; box-sizing: border-box; flex: 1; cursor: pointer; text-align: center; font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
+  .sd .acts .face { display: block; padding: var(--space-0-5) var(--space-1-5); border-radius: var(--radius-md); }
+  .sd .acts button:hover .face { color: var(--ink-hover); background: color-mix(in srgb, var(--accent-violet) 8%, transparent); }
+  .sd .acts button:focus-visible .face { outline: 1px solid var(--focus); }
+  #card .stat + .sd { margin-top: var(--space-2); }
+  #usage .sd { padding: 0 var(--space-4) var(--space-2) var(--space-6); } /* indented about to the session's name */
+  #usage .sd .procs { grid-template-columns: minmax(0, 1fr) auto 6ch 8ch; column-gap: var(--space-2); }
+  /* the info line at an expanded card's foot opens its processes, its chevron turning over */
   #card button.stat { display: flex; width: 100%; gap: var(--space-1); align-items: center; text-align: left; }
   #card button.stat .sl { flex: 1; min-width: 0; }
   #card button.stat .chev { flex: none; transition: transform var(--fade); }
   #card button.stat[aria-expanded="true"] .chev { transform: rotate(180deg); }
   #card button.stat:hover { color: var(--ink-hover); }
-  #card .stat + .head { margin-top: var(--space-2); }
-  #card .acts { display: flex; margin-top: var(--space-1); }
-  #card .acts button.more { flex: 1; width: auto; text-align: center; }
   /* a side session's CPU and RAM, left of its time */
   :is(#card, #dock) .arow .use { flex: none; margin-left: auto; color: var(--ink-dim); }
   :is(#card, #dock) .arow .use + .t { margin-left: 0; }

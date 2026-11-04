@@ -59,8 +59,6 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
   }
   return best;
 }
-/** Whether the card is held open (a click expanded it, or a stats panel row opened its stats detail): it stays, rather than going as a hover tooltip does. */
-export const kept = () => live.expanded || live.detail;
 // The card's contents are src/components/SessionCard.vue's, from the store that chrome.update fills; the scene only says
 // what it's for, shows and hides it, and places it every frame (placeCard).
 // Hovering any area (a session's moth, a ghost, a wisp) shows its card compact, a tooltip the pointer passes through
@@ -70,13 +68,13 @@ function paint() {
   chrome.update();
   const c = $('card');
   c.classList.add('show');
-  c.classList.toggle('compact', !kept()); // a tooltip the pointer passes through
+  c.classList.toggle('compact', !live.expanded);
 }
 export function enterZone(a: Zone) {
   clearTimeout(live.hideTimer);
   const t = a.target, cardAt = 'session' in t ? t.cardAt : undefined;
   if (live.hovered === t && (!a.cardAt || cardAt === a.cardAt)) return; // already showing it
-  if (live.hovered !== t) live.expanded = live.detail = false;
+  if (live.hovered !== t) live.expanded = false;
   live.hovered = t; if (a.cardAt && 'session' in t) t.cardAt = a.cardAt;
   paint();
 }
@@ -89,19 +87,16 @@ export function expandCard(zone: Zone) {
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
-export function hideCard() { live.hovered = held = shown = null; live.expanded = live.detail = false; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
+export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
 // The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
-// it was clicked open. A click opens the card's stats detail (statsSession), held where it is; a double click opens the card in full (pinSession).
-// Neither toggles, so a double click's first click just opens the stats on the way.
+// it was clicked open. A click opens the session's processes in the dropdown itself (UsageMenu.vue); a double click, or the processes' Open card,
+// expands the card (pinSession), which never puts it away, so a card already open stays open.
 export function peekSession(id: string) { const m = sessionMoth(id); if (m) enterZone(m.zone); }
-export function unpeekSession() { if (!kept()) hideCard(); }
-export function statsSession(id: string) { const m = sessionMoth(id); if (m) { enterZone(m.zone); live.detail = true; paint(); } }
+export function unpeekSession() { if (!live.expanded) hideCard(); }
 export function pinSession(id: string) { const m = sessionMoth(id); if (m) { enterZone(m.zone); live.expanded = true; paint(); } }
-// The info line at a card's foot opens and closes its stats detail. Closing it on a compact card leaves a hover tooltip, which goes once the pointer leaves.
-export function toggleDetail() { live.detail = !live.detail; paint(); }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.

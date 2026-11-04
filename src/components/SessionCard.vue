@@ -13,10 +13,10 @@ import type { Ghost, Hovered, Session } from '../types';
 import SessionRows from './SessionRows.vue';
 
 const store = useLanternStore();
-const shown = shallowRef<Hovered | null>(null), opened = ref(0), full = ref(false), detail = ref(false);
+const shown = shallowRef<Hovered | null>(null), opened = ref(0), full = ref(false);
 // sync, so a card hidden and opened again before Vue next patches still starts afresh. A card is compact on hover and full
-// once a click expands it (store.expanded), with its stats detail open or not (store.detail); fading out, it stays as it was.
-watch([() => store.hovered, () => store.expanded, () => store.detail], ([h, x, d], [was]) => { if (h) { shown.value = h; full.value = x; detail.value = d; } if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
+// once a click expands it (store.expanded); fading out, it stays as it was.
+watch([() => store.hovered, () => store.expanded], ([h, x], [was]) => { if (h) { shown.value = h; full.value = x; } if (h && !was) opened.value++; }, { immediate: true, flush: 'sync' });
 // a session's card finds its session in the store, or while its moth leaves, the one the moth last had; a stale PR's wisp
 // shows its owner's card when Lantern knows that session (live: the session card; gone quiet: its ghost's card), and only
 // a PR with no known session gets the PR-only card
@@ -45,7 +45,7 @@ onUpdated(() => {
 
 <template>
   <template v-if="shown">
-    <SessionRows v-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" :detail />
+    <SessionRows v-if="session" :key="`${opened}:${session.id}`" :s="session" :now="store.now" :compact="!full" />
     <template v-else-if="'review' in shown">
       <h3><span class="title"><span class="face">{{ shown.review.label }}</span></span><span class="chip idle"><span class="face">review</span></span></h3>
       <div :class="{ gist: !full }">{{ shown.review.title || '' }}</div>

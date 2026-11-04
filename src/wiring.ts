@@ -11,7 +11,7 @@ import './scene/github'; // its dev toggle
 import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
 import { fitView, frame, frameDue } from './scene/frame';
 import { setLanternText, wakePages } from './scene/pages';
-import { clickZone, enterZone, expandCard, hideCard, kept, zoneAt, zones } from './scene/card';
+import { clickZone, enterZone, expandCard, hideCard, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
 import { flashBadge } from './scene/flash';
@@ -99,17 +99,17 @@ const zoneFor = (e: MouseEvent) => e.target instanceof Element && e.target.close
 // Taps never hide the card on pointerleave, which a finger lifting would trigger at once.
 // A long press reaches snooze through the contextmenu event below.
 const isTouch = (e: Event) => 'pointerType' in e && e.pointerType === 'touch';
-// Leaving every area (or the scene, or the card) starts the card's grace period, once: a held card (expanded, or its stats detail open) waits EXPANDED_GRACE
-// for the pointer to come back to it or its moth; a compact hover card, a tooltip, goes at once. While a card is held, other moths don't take it over on hover.
+// Leaving every area (or the scene, or the card) starts the card's grace period, once: an expanded card waits EXPANDED_GRACE
+// for the pointer to come back to it or its moth; a compact hover card, a tooltip, goes at once. While a card is expanded, other moths don't take it over on hover.
 const EXPANDED_GRACE = 2000;
-const hideSoon = (hoverMs: number) => { clearTimeout(live.hideTimer); live.hideTimer = setTimeout(hideCard, kept() ? EXPANDED_GRACE : hoverMs); };
+const hideSoon = (hoverMs: number) => { clearTimeout(live.hideTimer); live.hideTimer = setTimeout(hideCard, live.expanded ? EXPANDED_GRACE : hoverMs); };
 let inZone = false;
 const leaveZones = () => { if (inZone) { inZone = false; hideSoon($('card').matches('.compact') ? 0 : 700); } };
 for (const type of ['pointerdown', 'pointermove'] as const) $('scene').addEventListener(type, e => {
   if (isTouch(e)) return;
   const z = zoneFor(e);
   $('scene').style.cursor = z ? 'pointer' : '';
-  if (z && (!kept() || z.target === live.hovered)) { inZone = true; enterZone(z); } else leaveZones();
+  if (z && (!live.expanded || z.target === live.hovered)) { inZone = true; enterZone(z); } else leaveZones();
 });
 $('scene').addEventListener('pointerleave', e => isTouch(e) || leaveZones());
 // A click or tap on an area (a moth, a ghost, a wisp) expands its card; a shift-click runs the area's menu (a moth snoozes), and
@@ -126,13 +126,13 @@ $('scene').addEventListener('dblclick', e => {
   const z = zoneFor(e);
   if (z && !e.shiftKey) clickZone(z, false);
 });
-// A click anywhere but the card and its own area puts away a held card (or, from a tap, any card), and so does Escape.
+// A click anywhere but the card and its own area puts away an expanded card (or, from a tap, any card), and so does Escape.
 // It listens while the click is on its way down, before the button it lands on can take itself away (the agents' "more")
 // and leave nothing to tell it was on the card; a click on another moth then expands that one's (above).
 addEventListener('click', e => {
-  if ((kept() || isTouch(e)) && zoneFor(e)?.target !== live.hovered && !(e.target instanceof Element && e.target.closest('#card'))) hideCard();
+  if ((live.expanded || isTouch(e)) && zoneFor(e)?.target !== live.hovered && !(e.target instanceof Element && e.target.closest('#card'))) hideCard();
 }, true);
-addEventListener('keydown', e => { if (e.key === 'Escape' && kept()) hideCard(); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && live.expanded) hideCard(); });
 $('scene').addEventListener('contextmenu', e => zoneFor(e)?.menu?.());
 // no browser or web view menu (Reload and friends) anywhere: a right-click that misses a moth does nothing
 addEventListener('contextmenu', e => e.preventDefault());

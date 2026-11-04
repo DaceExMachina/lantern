@@ -4,13 +4,13 @@ import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { expect, test, vi } from 'vitest';
 import { tintFor } from '../src/scene/lanterns';
-vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), statsSession: vi.fn(), openSession: vi.fn() }));
+vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), openSession: vi.fn() }));
 import * as card from '../src/scene/card';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
 const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4 },
-  sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5 }, gone: { cpu: 0, mem: 0, n: 0 } } };
+  sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 50, mem: 1500 }, { name: 'claude', n: 1, cpu: 5.5, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 48 }] }, gone: { cpu: 0, mem: 0, n: 0 } } };
 
 Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true }); // a session's CPU is of one core, the dropdown's percents of the Mac's two
 
@@ -95,11 +95,9 @@ test('the dropdown has no x axis or y labels, only a line in a box on a fixed sc
 });
 
 test('a session row is a button that stands in for its moth; Lantern and everything else are not', async () => {
-  vi.useFakeTimers();
   const { w } = await mounted();
   const rows = w.findAll('#usage .krow');
   expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'DIV', 'BUTTON', 'DIV']); // busy, Lantern, quiet one, everything else
-  const hide = w.find('#usage').element.hidePopover = vi.fn();
   await rows[0].trigger('pointerenter');
   expect(card.peekSession).toHaveBeenCalledWith('b');
   await rows[0].trigger('pointerleave');
@@ -108,18 +106,34 @@ test('a session row is a button that stands in for its moth; Lantern and everyth
   expect(card.peekSession).toHaveBeenLastCalledWith('a');
   await rows[1].trigger('pointerenter'); // Lantern: highlight only
   expect(card.peekSession).toHaveBeenCalledTimes(2);
-  await rows[0].trigger('click');
-  expect(card.statsSession).toHaveBeenCalledWith('b'); // a click: the card held open with its stats detail
-  expect(card.pinSession).not.toHaveBeenCalled();
-  expect(hide).not.toHaveBeenCalled(); // a beat later, so a double click can still land
-  vi.advanceTimersByTime(300);
+  w.unmount();
+});
+
+test('a click opens a session\'s processes under its row, in the dropdown, one row at a time; a double click and their buttons open the card or the session and close the dropdown', async () => {
+  const { w } = await mounted();
+  const hide = w.find('#usage').element.hidePopover = vi.fn();
+  const key = () => [...w.find('#usage .key').element.children].map(el => el.classList.contains('sd') ? 'detail' : el.textContent.split(/\d/)[0]);
+  const krow = name => w.findAll('#usage .krow').find(r => r.text().startsWith(name));
+  await krow('busy').trigger('click');
+  expect(key()).toEqual(['SessionCPUMEM', 'busy', 'detail', 'Lantern', 'quiet one', 'everything else']); // the heading row, then the open row's processes right under it
+  expect(krow('busy').attributes('aria-expanded')).toBe('true');
+  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['vitest', '×3', '25%', '1.5 GB'], ['claude', '', '3%', '0.5 GB'], ['zsh', '', '0%', '<0.1 GB']]);
+  expect(w.findAll('#usage .acts button').map(b => b.text())).toEqual(['Open card', 'Go to session']);
+  expect([card.pinSession, card.openSession, hide].map(f => f.mock.calls.length)).toEqual([0, 0, 0]); // no card held, the dropdown stays
+  await krow('quiet one').trigger('click');
+  expect(key()).toEqual(['SessionCPUMEM', 'busy', 'Lantern', 'quiet one', 'detail', 'everything else']); // another row: it opens and the first closes
+  await krow('quiet one').trigger('click');
+  expect(w.findAll('#usage .sd')).toHaveLength(0); // its second click closes it
+  await krow('busy').trigger('click');
+  await w.find('#usage .acts button').trigger('click');
+  expect(card.pinSession).toHaveBeenLastCalledWith('b'); // Open card
   expect(hide).toHaveBeenCalledTimes(1);
-  await rows[0].trigger('click'); await rows[0].trigger('dblclick');
-  expect(card.pinSession).toHaveBeenCalledWith('b'); // a double click: the card in full
-  expect(card.openSession).not.toHaveBeenCalled(); // going to the session is the card's own button now
-  vi.advanceTimersByTime(300);
-  expect(hide).toHaveBeenCalledTimes(2); // the double click closed it at once, not twice
-  vi.useRealTimers();
+  await w.findAll('#usage .acts button')[1].trigger('click');
+  expect(card.openSession).toHaveBeenLastCalledWith('b', false); // Go to session
+  expect(hide).toHaveBeenCalledTimes(2);
+  await krow('quiet one').trigger('dblclick');
+  expect(card.pinSession).toHaveBeenLastCalledWith('a'); // a double click: the card in full
+  expect(hide).toHaveBeenCalledTimes(3);
   w.unmount();
 });
 

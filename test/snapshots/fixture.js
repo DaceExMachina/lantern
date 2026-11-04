@@ -146,9 +146,9 @@
         quietEnd: '7:15', quietEndOn: false, dayStart: '4:00', recapSeen: '9999-12-31' });
       page.$('menu').showPopover();
     }, snap('menu-alt'), () => { page.$('menu').hidePopover(); page.toggleDevPanel(); },
-    // a session's CPU and RAM: its full card with the stats detail closed (scrolled to the info line, its side session's own
-    // numbers beside its time), then the compact card a stats panel row's click opens, its processes listed (a test run, a
-    // type check, a dev server) with the buttons to open the card and go to the session
+    // a session's CPU and RAM: its full card with its processes closed (scrolled to the info line, its side session's own
+    // numbers beside its time), then open under the info line (a test run, a type check, a dev server), then the usage
+    // dropdown with the session's row clicked open, its processes under it with the buttons to open its card and go to it
     () => {
       const g = (name, n, cpu, mem) => ({ name, n, cpu, mem }), sum = procs => procs.reduce((a, p) => ({ cpu: a.cpu + p.cpu, mem: a.mem + p.mem, n: a.n + p.n }), { cpu: 0, mem: 0, n: 0 });
       const busy = [g('vitest', 4, 380, 2900), g('tsc', 1, 95, 610), g('node', 6, 22.4, 950), g('claude', 1, 14.1, 820), g('vite', 1, 6.5, 410), g('Chrome', 3, 2.2, 640), g('zsh', 3, 0, 12), g('other', 5, 0.4, 85)];
@@ -160,7 +160,13 @@
       if (hud && card.left < hud.right && card.right > hud.left && card.top < hud.bottom) errs.push(`the card (top ${card.top}) is under the usage rings (bottom ${hud.bottom})`);
       page.$('card').querySelector('.cardBody').scrollTop = 1e4;
     }, snap('card-stats'), () => { page.hideCard(); },
-    async () => { page.statsSession('sess-alpha'); await Promise.resolve(); page.placeCard(); }, snap('card-stats-open'), () => { page.hideCard(); },
+    expand('sess-alpha'), async () => { page.$('card').querySelector('.stat').click(); await new Promise(r => realSetTimeout(r, 50)); page.$('card').querySelector('.cardBody').scrollTop = 1e4; }, snap('card-stats-open'), () => { page.hideCard(); },
+    // the usage dropdown with the busy session's row clicked open, its processes under it (the iTerm panel has no dropdown)
+    ...Q.has('panel') ? [] : [async () => {
+      page.$('usage').showPopover();
+      [...page.$('usage').querySelectorAll('.krow.session')].find(r => r.textContent.startsWith('sess-alpha')).click();
+      await new Promise(r => realSetTimeout(r, 100));
+    }, snap('usage-open'), () => { page.$('usage').hidePopover(); }],
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
   // lands on that control, the header's out to the card's own corners.

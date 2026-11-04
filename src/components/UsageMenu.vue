@@ -12,13 +12,14 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // dropdown (a native popover, like the reviews menu): the Mac's CPU and RAM each with a bar split by who uses it and a line of the last two minutes (a fixed scale: CPU 0 to 100%, RAM 0 to the Mac's total), and a key of
 // Lantern and the busiest sessions in the colours of those splits. The numbers come from the usage event every few seconds
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
-import { computed, shallowRef, watch } from 'vue';
-import { cores, memText, peekSession, pinSession, project, statsSession, unpeekSession } from '../scene/card';
+import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue';
+import { cores, memText, peekSession, pinSession, project, sessionUse, unpeekSession } from '../scene/card';
 import { heatOf, heatTip } from '../scene/heat';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
 import UsageIcon from './UsageIcon.vue';
 import UsageRing from './UsageRing.vue';
+import StatsDetail from './StatsDetail.vue';
 
 const TOP = 8, HISTORY = 24, W = 48, H = 14; // the busiest sessions listed, samples kept (24 x 5 s = 2 minutes), the sparkline's viewBox (stretched to fit)
 const LANTERN = 'var(--lantern-warm)', ELSE = 'var(--ink-faint)';
@@ -52,7 +53,7 @@ const popup = computed(() => {
   const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '' }];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
-    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu) })),
+    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu), use: r.id ? sessionUse(v, r.id) : null })),
     blocks: [
       { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
       { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, c: r.c, w: w(r.memPct), tip: `${r.name} · ${memText(r.mem)} RAM` })) }],
@@ -60,17 +61,18 @@ const popup = computed(() => {
 });
 
 // One highlighted session, by row key, shared by the split bars and the key: hovering or focusing either lights its segments and row and dims the rest.
-// A session's row is also a button standing in for its moth: hover or focus shows the moth's card, a click holds it open with its stats detail (its
-// processes) and puts the dropdown away (a beat later, so a double click, which opens the card in full, still lands on the row)
-const hot = ref<string | null>(null);
-let closing: ReturnType<typeof setTimeout> | undefined;
-const menuOf = (e: Event) => e.currentTarget instanceof Element ? e.currentTarget.closest<HTMLElement>('#usage') : null;
+// A session's row is also a button standing in for its moth: hover or focus shows the moth's card. A click opens the session's processes under
+// its row (StatsDetail), one row at a time, and another click closes them; a double click opens the moth's card in full and puts the dropdown
+// away, as the processes' Open card and Go to session do. (A double click's two clicks open and close the row on the way.)
+const hot = ref<string | null>(null), open = ref<string | null>(null);
+const menu = useTemplateRef<HTMLElement>('menu');
+const close = () => menu.value?.hidePopover?.();
 const rowEvents = (key: string, id: string) => {
   const on = () => { hot.value = key; if (id) peekSession(id); }, off = () => { hot.value = null; if (id) unpeekSession(); };
   return id ? {
     pointerenter: on, focus: on, pointerleave: off, blur: off,
-    click: (e: Event) => { const menu = menuOf(e); statsSession(id); clearTimeout(closing); closing = setTimeout(() => menu?.hidePopover?.(), 250); },
-    dblclick: (e: Event) => { clearTimeout(closing); menuOf(e)?.hidePopover?.(); pinSession(id); },
+    click: async () => { open.value = open.value === id ? null : id; await nextTick(); menu.value?.querySelector('.sd')?.scrollIntoView({ block: 'nearest' }); },
+    dblclick: () => { close(); pinSession(id); },
   } : { pointerenter: on, pointerleave: off };
 };
 </script>
@@ -83,7 +85,7 @@ const rowEvents = (key: string, id: string) => {
         <span class="top"><UsageRing :pct="m.pct" :kind="m.kind" /><span class="v">{{ m.text }}</span></span>
       </span>
     </button>
-    <div v-if="popup" id="usage" :class="['flyup', { hl: hot }]" popover :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
+    <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
       <section v-for="b in popup.blocks" :key="b.kind">
         <div class="big"><UsageIcon :kind="b.kind" /><b>{{ b.num }}</b><span>{{ b.of }}</span></div>
         <div class="bar"><i v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c }" @pointerenter="hot = s.key" @pointerleave="hot = null"></i></div>
@@ -94,11 +96,14 @@ const rowEvents = (key: string, id: string) => {
       <hr>
       <div class="key">
         <div class="kh"><span>Session</span><span>CPU</span><span>MEM</span></div>
-        <component :is="r.id ? 'button' : 'div'" v-for="r in popup.rows" :key="r.name" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
-          v-on="rowEvents(r.key, r.id)">
+        <template v-for="r in popup.rows" :key="r.name">
+        <component :is="r.id ? 'button' : 'div'" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
+          :aria-expanded="r.id ? open === r.id : undefined" v-on="rowEvents(r.key, r.id)">
           <i class="sw" :style="{ background: r.c }"></i><span class="n">{{ r.name }}</span><span :class="`hot${r.cpuHot}`" :title="r.cpuTip || undefined">{{ r.cpuText }}</span><span :class="`hot${r.memHot}`" :title="r.memTip || undefined">{{ r.memText }}</span>
           <b class="track"><i :style="{ width: r.cpuW, background: r.c }"></i></b>
         </component>
+        <StatsDetail v-if="r.use && open === r.id" :id="r.id" :use="r.use" @done="close" />
+        </template>
       </div>
     </div>
   </template>

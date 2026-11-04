@@ -12,7 +12,7 @@ import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, statsSession, unpeekSession } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, unpeekSession } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -28,7 +28,7 @@ const mount = () => {
   app?.unmount();
   const pinia = createPinia();
   store = useLanternStore(pinia);
-  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.detail = live.detail; store.now = Date.now(); };
+  chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.now = Date.now(); };
   app = createApp(SessionCard).use(pinia);
   app.mount($('card'));
 };
@@ -450,30 +450,15 @@ test('a card\'s processes sit behind its info line: a click opens them in place,
   find(card, 'stat')[0].click(); await nextTick();
   assert.strictEqual(find(card, 'proc').length, 0, 'a second click closes them');
   const compact = await hover(session());
-  assert.deepStrictEqual([find(compact, 'proc').length, find(compact, 'hint').length], [0, 1], 'the hover card keeps to its one line of totals and its hint');
+  assert.deepStrictEqual([find(compact, 'proc').length, find(compact, 'stat').length, find(compact, 'hint').length], [0, 0, 1], 'the hover card, a tooltip, keeps to its plain line of totals and its hint');
 });
 
-test('a stats panel row\'s click holds the compact card at its moth with its processes open; Open card expands it, Go to session opens the session', async () => {
-  store.usage = busy();
+test('opening a card from the usage dropdown (a double click, or Open card) never puts away one already open', async () => {
   live.raw = [session()]; sync();
-  statsSession('s1'); await nextTick();
-  const card = $('card');
-  assert.deepStrictEqual([live.hovered, live.expanded, live.detail], [sessionMoth('s1'), false, true], 'the moth\'s card, compact, its detail open');
-  assert.ok(card.classList.contains('show') && !card.classList.contains('compact'), 'not a tooltip: the pointer can reach its buttons');
-  assert.strictEqual(find(card, 'cardBody').length, 0, 'the compact layout');
-  assert.deepStrictEqual([find(card, 'proc').length, find(card, 'hint').length], [3, 0], 'the processes where the hint was');
-  assert.deepStrictEqual(labels(card), ['Open card', 'Go to session']);
-  unpeekSession();
-  assert.strictEqual(live.hovered, sessionMoth('s1'), 'leaving the row leaves it be, as a pinned card');
-  statsSession('s1'); await nextTick(); // a double click's second click changes nothing
-  assert.deepStrictEqual([live.expanded, live.detail, find(card, 'proc').length], [false, true, 3]);
-  find(card, 'acts')[0].children[0].click(); await nextTick();
-  assert.deepStrictEqual([live.expanded, live.detail, find(card, 'cardBody').length, find(card, 'proc').length], [true, true, 1, 3], 'Open card: the full card, its processes still open');
   pinSession('s1'); await nextTick();
-  assert.strictEqual(live.expanded, true, 'opening it again (a double click on the row) leaves it open');
-  find(card, 'acts')[0].children[0].click(); await nextTick();
-  assert.deepStrictEqual(posts, [['/focus', { id: 's1' }]], 'Go to session does what clicking the moth\'s title does');
-  assert.strictEqual(live.hovered, null, 'and puts the card away');
+  assert.deepStrictEqual([live.hovered === sessionMoth('s1'), live.expanded], [true, true], 'the moth\'s card, in full');
+  pinSession('s1'); await nextTick();
+  assert.deepStrictEqual([live.hovered === sessionMoth('s1'), live.expanded], [true, true], 'again: still open, where a click on the moth would close it');
 });
 
 test('a side session shows its own CPU and RAM left of its time; an agent, inside the session\'s processes, has none', async () => {
