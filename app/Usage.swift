@@ -4,7 +4,8 @@
 // Memory), not RSS, which counts pages the system can take back. A process's CPU is how much CPU time it used since the last
 // sample, as a share of one core, so a busy tool can show over 100. A session's processes also go out grouped by name
 // ("procs", for its expanded card), the busiest first, eight groups at most.
-// Lantern's own use counts its WebKit services (GPU, page, network), launchd's children that macOS says Lantern is responsible for.
+// A session also counts what it started and daemonized, found by a variable Claude Code sets on its tools (macOS hides a process's environment
+// when it's one of its own signed tools, so a daemonized `sleep` stays out). Lantern's own use counts its WebKit services (GPU, page, network), launchd's children that macOS says Lantern is responsible for.
 // ponytail: a process that starts and ends between two samples is missed; sample faster if short test runs matter.
 import Foundation
 import Darwin
@@ -12,6 +13,8 @@ import Darwin
 final class Usage {
     private var before: [pid_t: UInt64] = [:] // CPU time in ns per process at the last sample
     private var at: Double? // when that was, seconds
+    private var socketOf: [String: String] = [:] // each session's own value of Claude Code's per-process variable, once one of its processes shows it
+    private var launched: [pid_t: (start: Double, socket: String?)] = [:] // launchd's children already looked at, so each is read once
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
@@ -68,6 +71,19 @@ final class Usage {
         var trees = sessions.map { tree($0.1) } + [tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : []))]
         var owner: [pid_t: Int] = [:]
         for (i, t) in trees.enumerated() { for p in t where owner[p] == nil { owner[p] = i } }
+        // A session's tools that daemonized (a background dev server, launchd's child now) still carry the variable Claude Code sets on
+        // everything it starts, unique to its process: find a session's value on a live process it started (not Claude itself, which may carry the value of a session that ran it), then claim launchd's children that carry it.
+        socketOf = socketOf.filter { k, _ in sessions.contains { $0.0 == k } }
+        for (i, (id, pids)) in sessions.enumerated() where socketOf[id] == nil { socketOf[id] = trees[i].lazy.filter { !pids.contains(Int($0)) }.compactMap { Self.envValue($0, Self.sessionVariable) }.first }
+        let bySocket = Dictionary(socketOf.compactMap { id, v in sessions.firstIndex { $0.0 == id }.map { (v, $0) } }) { a, _ in a }
+        if !bySocket.isEmpty {
+            for p in kids[1] ?? [] where owner[p] == nil {
+                let socket = launched[p].flatMap { $0.start == started[p] ? $0.socket : nil } ?? Self.envValue(p, Self.sessionVariable)
+                launched[p] = (started[p] ?? 0, socket)
+                if let i = socket.flatMap({ bySocket[$0] }) { for q in tree([Int(p)]) where owner[q] == nil { trees[i].append(q); owner[q] = i } }
+            }
+            launched = launched.filter { started[$0.key] != nil }
+        }
         if let responsible = Self.responsible {
             for p in started.keys where owner[p] == nil { if let i = owner[responsible(p)] { trees[i].append(p) } }
         }
@@ -121,15 +137,24 @@ final class Usage {
         }
         return n
     }
-    // A process's arguments, from KERN_PROCARGS2 (argc, the executable's path, NULs, then argv); empty when it can't be read.
-    private static func args(_ pid: pid_t) -> [String] {
+    // A process's arguments and environment, from KERN_PROCARGS2 (argc, the executable's path, NULs, then argv, then environ); empty when it can't be read.
+    private static func procargs(_ pid: pid_t) -> (args: [String], env: [String]) {
         var mib = [CTL_KERN, KERN_PROCARGS2, pid], size = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return [] }
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return ([], []) }
         var buf = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return [] }
+        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return ([], []) }
         let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
-        return buf[4..<size].split(separator: 0).dropFirst().prefix(argc).map { String(decoding: $0, as: UTF8.self) }
+        let parts = buf[4..<size].split(separator: 0).dropFirst().map { String(decoding: $0, as: UTF8.self) }
+        return (Array(parts.prefix(argc)), Array(parts.dropFirst(argc)))
     }
+    private static func args(_ pid: pid_t) -> [String] { procargs(pid).args }
+    // The value of one environment variable of a process (a process's own, so only ours can be read); only this one is ever picked out.
+    private static func envValue(_ pid: pid_t, _ name: String) -> String? {
+        procargs(pid).env.first { $0.hasPrefix(name + "=") }.map { String($0.dropFirst(name.count + 1)) }
+    }
+    // Claude Code sets this on every process it starts (the socket its tools reach it by): one value per Claude process, so per session.
+    // Undocumented: if it goes, daemonized tools fall out of their session as before.
+    private static let sessionVariable = "CLAUDE_CODE_MESSAGING_SOCKET"
 
     private func mac() -> JSON {
         var cpu = host_cpu_load_info(), n = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info>.size / 4)

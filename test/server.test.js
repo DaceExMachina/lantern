@@ -2919,6 +2919,28 @@ test('usage: WebKit\'s helper services are named for what they do', async t => {
   });
 });
 
+test('usage: a tool a session started that daemonized stays with it, by the variable Claude Code sets on what it starts; another session\'s, or one without it, does not', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const WAIT = 'setTimeout(() => {}, 60000)';
+  // a live tool of the session (it carries the variable), then three tools that start a node of their own and exit, so it's launchd's child: the session's, another's and one with no variable
+  // (node, not sleep: macOS withholds the environment of its own signed tools, which is why a daemonized `sleep` can't be claimed)
+  const daemon = name => `require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { argv0: '${name}', detached: true, stdio: 'ignore' }).unref()`;
+  const tool = (socket, js) => `spawn(process.execPath, ['-e', ${JSON.stringify(js)}], { env: Object.fromEntries(Object.entries({ ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: ${JSON.stringify(socket)} }).filter(([, v]) => v)), stdio: 'ignore' });`;
+  // the session itself carries another session's value (it was started from one): that mustn't be taken for its own
+  const code = `const { spawn } = require('child_process'); ${tool('/s/mine', WAIT)} setTimeout(() => { ${tool('/s/mine', daemon('mine-daemon'))} ${tool('/s/other', daemon('other-daemon'))} ${tool('', daemon('bare-daemon'))} }, 500); ${WAIT}`;
+  const child = spawn(process.execPath, ['-e', code], { env: { ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: '/s/outer' }, stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000012';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  await streamed(base, async blocks => {
+    const names = () => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]?.procs?.map(p => p.name) ?? []);
+    await until(() => names().find(n => n.includes('mine-daemon')), 'the session\'s own daemon in its processes');
+    await new Promise(r => setTimeout(r, 1000)); // long enough for the others to have shown, were they going to
+    assert.ok(names().every(n => !n.includes('other-daemon') && !n.includes('bare-daemon')), 'only the session\'s own, by its variable');
+  });
+});
+
 test('usage: with systemStats off nothing is sampled or sent', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
   await post(base, '/settings', { systemStats: false });
