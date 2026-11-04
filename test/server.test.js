@@ -2872,3 +2872,29 @@ test('reviews: switched off, the review searches are not asked and the list is e
   await post(base, '/settings', { reviews: false });
   await until(async () => ((await snapshot(base)).reviews ?? []).length === 0, 'the list to empty');
 });
+
+// CPU and memory (app/Usage.swift) go out as their own `event: usage`, for each session's processes and the ones they started,
+// Lantern's own and the Mac's, and stop when settings.systemStats is off.
+test('usage: a session\'s sample counts its process and the children it started, and goes out as its own event', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const child = spawn(process.execPath, ['-e', "require('child_process').spawn('sleep', ['60']); setTimeout(() => {}, 60000)"], { stdio: 'ignore' });
+  t.after(() => child.kill());
+  const id = UUID(9);
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  let usage;
+  const blocks = await streamed(base, async blocks => {
+    usage = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1])).find(u => u.sessions[id]?.n >= 2), 'a sample with the session and its child');
+  });
+  assert.ok(usage.sessions[id].mem > 0, 'memory is the footprint of the tree');
+  assert.ok(usage.lantern.n >= 1 && usage.lantern.mem > 0, 'Lantern\'s own');
+  assert.ok(usage.mac.total > 0 && usage.mac.used > 0 && ['normal', 'warning', 'critical'].includes(usage.mac.pressure), 'the Mac\'s');
+  assert.ok(!blocks.some(b => b.startsWith('data:') && b.includes('"cpu"')), 'the session snapshot doesn\'t carry it');
+});
+
+test('usage: with systemStats off nothing is sampled or sent', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  await post(base, '/settings', { systemStats: false });
+  const blocks = await streamed(base, () => wait(1000));
+  assert.deepStrictEqual(blocks.concat(blocks.opening).filter(b => b.startsWith('event: usage')), []);
+});

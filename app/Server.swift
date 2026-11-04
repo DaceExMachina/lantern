@@ -355,6 +355,7 @@ final class LanternServer {
             if self.autoQuiet() { self.settingsChanged() } else { self.observe() }
         }
         Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in self.gauge() }
+        Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_USAGE_SECONDS"] ?? "") ?? 5, repeats: true) { _ in self.sendUsage() }
         // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
         pageMtime = pageVersion()
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
@@ -409,6 +410,19 @@ final class LanternServer {
         if r != sentReviews { sentReviews = r; msg += "event: reviews\ndata: \(r)\n\n" }
         if g != sentStale { sentStale = g; msg += "event: stale\ndata: \(g)\n\n" }
         send(msg + "data: \(snapshot())\n\n")
+    }
+    // CPU and memory (Usage.swift), on its own event so a sample doesn't rebuild the snapshot. Sampled only while a page is open and
+    // settings.systemStats isn't off, on its own queue.
+    var systemStatsOn: Bool { settings["systemStats"] as? Bool != false }
+    let usage = Usage(), usageQueue = DispatchQueue(label: "lantern.usage")
+    var lastUsage: String?
+    func sendUsage() {
+        guard systemStatsOn, !clients.isEmpty else { return }
+        let groups = sessions.items.map { ($0.0, $0.1["pids"] as? [Int] ?? []) }
+        usageQueue.async {
+            let out = jsonText(self.usage.sample(groups))
+            DispatchQueue.main.async { if self.systemStatsOn { self.lastUsage = out; self.send("event: usage\ndata: \(out)\n\n") } }
+        }
     }
     func githubState() -> JSON { ["accounts": accounts.items.map { ["login": $0.0, "error": or($0.1["error"], "")!] }, "signIn": signIn ?? NSNull()] }
     func broadcastGitHub() { send("event: github\ndata: \(jsonText(githubState()))\n\n") }
@@ -1075,6 +1089,10 @@ final class LanternServer {
                     settings["goals"] = goals
                 }
                 if let g = j["stale"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() { settings["stale"] = g.boolValue; ok = true }
+                if let g = j["systemStats"] as? NSNumber, CFGetTypeID(g) == CFBooleanGetTypeID() {
+                    settings["systemStats"] = g.boolValue; ok = true
+                    if g.boolValue { sendUsage() } else { lastUsage = nil }
+                }
                 // session text on the barrel: turning them off drops every word held; turning them on reads the pool afresh
                 if let t = j["lanternText"] as? String, ["sessions", "off"].contains(t) {
                     let was = wordsOn
@@ -1140,7 +1158,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\nevent: nowPlayingArt\ndata: \(jsonText(nowPlayingArt))\n\nevent: nowPlaying\ndata: \(nowPlaying)\n\ndata: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\nevent: nowPlayingArt\ndata: \(jsonText(nowPlayingArt))\n\nevent: nowPlaying\ndata: \(nowPlaying)\n\n" + (systemStatsOn ? lastUsage.map { "event: usage\ndata: \($0)\n\n" } ?? "" : "") + "data: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()

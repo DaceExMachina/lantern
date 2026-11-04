@@ -1,9 +1,10 @@
 // The hover card for a moth: its session, what it needs from you, its PRs and agents.
 
+import { heatOf, heatTip } from './heat';
 import { chrome, live } from './live';
 import { $, titlebar } from './scene';
 import { sessionMoth } from './state';
-import type { Agent, CardAt, Hovered, PR, Session, Zone } from '../types';
+import type { Agent, CardAt, Hovered, PR, Session, Usage, Zone } from '../types';
 
 // ---- hover card ------------------------------------------------------------------
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
@@ -18,6 +19,17 @@ export function tipSpot(tip: HTMLElement, el: Element) {
 export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
+/** Memory in MB as a person reads it. */
+export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+/** This Mac's core count: a group of processes' CPU is percent of one core, the usage readout's percents are of all of them. */
+export const cores = () => navigator.hardwareConcurrency || 1;
+/** A session's processes for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB, each with how hot it runs (heat.ts); null with no sample or no processes. */
+export function sessionUse(usage: Usage | null, id: string) {
+  const g = usage?.sessions[id];
+  if (!g || !g.n) return null;
+  const h = heatOf(id, g), tip = heatTip(h, g);
+  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+}
 export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a
@@ -51,6 +63,8 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
 function paint() {
   chrome.update();
   const c = $('card');
+  // while the usage dropdown (a popover, so in the top layer) is open the card goes in the top layer too, shown after it, which puts it above
+  if (document.querySelector('#usage:popover-open')) { c.popover = 'manual'; if (c.matches(':popover-open')) c.hidePopover(); c.showPopover(); }
   c.classList.add('show');
   c.classList.toggle('compact', !live.expanded);
 }
@@ -71,10 +85,15 @@ export function expandCard(zone: Zone) {
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
-export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
+export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); $('card').removeAttribute('popover'); hidePrTip(); }
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
+// The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
+// it was clicked open, and a click expands it, as clicking the moth does; a double click is openSession.
+export function peekSession(id: string) { const m = sessionMoth(id); if (m) enterZone(m.zone); }
+export function unpeekSession() { if (!live.expanded) hideCard(); }
+export function pinSession(id: string) { const m = sessionMoth(id); if (m) expandCard(m.zone); }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.

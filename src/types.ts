@@ -76,6 +76,13 @@ export interface GitHub { accounts: { login: string; error: string }[]; signIn: 
 export const isGitHub = (x: unknown): x is GitHub => isRecord(x)
   && arrayOf((a: unknown): a is GitHub['accounts'][number] => isRecord(a) && isString(a['login']) && isString(a['error']))(x['accounts'])
   && (x['signIn'] === null || isRecord(x['signIn']) && isString(x['signIn']['url']) && isString(x['signIn']['code']));
+/** CPU (percent of one core) and memory (MB, physical footprint) of a group of processes, and how many (app/Usage.swift). */
+export interface UsageGroup { cpu: number; mem: number; n: number }
+const isUsageGroup = (x: unknown): x is UsageGroup => isRecord(x) && isNumber(x['cpu']) && isNumber(x['mem']) && isNumber(x['n']);
+/** The usage event: every session's processes and their children, Lantern's own, and the Mac (cpu: percent of all cores; MB). */
+export interface Usage { sessions: Record<string, UsageGroup>; lantern: UsageGroup; mac: { cpu: number; used: number; total: number; pressure: string } }
+export const isUsage = (x: unknown): x is Usage => isRecord(x) && isRecord(x['sessions']) && Object.values(x['sessions']).every(isUsageGroup) && isUsageGroup(x['lantern'])
+  && isRecord(x['mac']) && isNumber(x['mac']['cpu']) && isNumber(x['mac']['used']) && isNumber(x['mac']['total']) && isString(x['mac']['pressure']);
 /** What's playing on this Mac, from any app (app/NowPlaying.swift). Its cover comes on its own, as nowPlayingArt. */
 export interface NowPlaying { title: string; artist: string; app: string; bundle: string; playing: boolean }
 export const isNowPlaying = (x: unknown): x is NowPlaying => isRecord(x)
@@ -89,7 +96,7 @@ const isPin = (x: unknown): x is Pin => isRecord(x) && isString(x['id']) && opt(
 export interface Settings {
   style?: string | undefined; ribbon?: string | undefined; lanternText?: string | undefined; quietUntil?: number | undefined;
   quietEnd?: string | undefined; quietEndOn?: boolean | undefined; quietFrom?: string | undefined; dayStart?: string | undefined;
-  supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined; nowPlaying?: boolean | undefined; reviews?: boolean | undefined;
+  supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined; nowPlaying?: boolean | undefined; reviews?: boolean | undefined; systemStats?: boolean | undefined;
   pinned?: Pin[] | undefined;
 }
 export function parseSettings(x: unknown): Settings {
@@ -100,7 +107,7 @@ export function parseSettings(x: unknown): Settings {
   return {
     style: str('style'), ribbon: str('ribbon'), lanternText: str('lanternText'), quietUntil: isNumber(quietUntil) ? quietUntil : undefined,
     quietEnd: str('quietEnd'), quietEndOn: bool('quietEndOn'), quietFrom: str('quietFrom'), dayStart: str('dayStart'),
-    supervisorPattern: str('supervisorPattern'), recapSeen: str('recapSeen'), github: bool('github'), stale: bool('stale'), nowPlaying: bool('nowPlaying'), reviews: bool('reviews'),
+    supervisorPattern: str('supervisorPattern'), recapSeen: str('recapSeen'), github: bool('github'), stale: bool('stale'), nowPlaying: bool('nowPlaying'), reviews: bool('reviews'), systemStats: bool('systemStats'),
     pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined,
   };
 }
