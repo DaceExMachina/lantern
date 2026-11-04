@@ -92,6 +92,7 @@ final class Usage {
         let first = args.first ?? "", path = first.hasPrefix("/") ? first : String(first.split(separator: " ").first ?? "")
         var n = String(path.split(separator: "/").last ?? "")
         if n.hasPrefix("-") { n.removeFirst() } // a login shell's "-zsh"
+        if n.hasPrefix("Google Chrome") { n = "Chrome" } // the browser and its helpers (renderer, GPU) as one
         if n.isEmpty {
             var info = proc_bsdinfo()
             proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))

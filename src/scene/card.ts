@@ -23,10 +23,10 @@ export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 
 export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
 /** This Mac's core count: a group of processes' CPU is percent of one core, the usage readout's percents are of all of them. */
 export const cores = () => navigator.hardwareConcurrency || 1;
-/** A group of processes' numbers for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB, each with how hot it runs (heat.ts, by `key`). */
+/** A group of processes' numbers for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB (under 0.1, "<0.1 GB"), each with how hot it runs (heat.ts, by `key`). */
 function useText(key: string, g: UsageGroup) {
   const h = heatOf(key, g), tip = heatTip(h, g);
-  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: g.mem < 102.4 ? '<0.1 GB' : `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
 }
 /** A session's processes for its card: the totals and each group by name (the expanded card's Processes); null with no sample or no processes. */
 export function sessionUse(usage: Usage | null, id: string) {
@@ -179,14 +179,18 @@ export function placeCard() {
   const zone = 'session' in h && h.cardAt === 'flies' && h.flyZone ? h.flyZone : h.zone; // beside whichever area was hovered
   pt.x = zone.x; pt.y = zone.y;
   const p = pt.matrixTransform(ctm), c = $('card');
-  // it stays above the footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits there
-  const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - 16)}px`;
-  if (c.style.maxHeight !== most) c.style.maxHeight = most;
   const a = pinAnchor(zone, p.x, p.y, zone.r * ctm.a * 0.7), gap = a.gap; // clear of the hover area, which covers the moth
-  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
+  const x = Math.max(8, Math.min(a.x + gap, innerWidth - c.offsetWidth - 12));
+  // it stays below the titlebar, and below the CPU and RAM rings (#usageButton) when it would sit beside them, and above the
+  // footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits between
+  const hud = document.getElementById('usageButton')?.getBoundingClientRect();
+  const top = Math.max(8, titlebar(), hud && x < hud.right && x + c.offsetWidth > hud.left ? hud.bottom + 8 : 0);
+  const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - top - 8)}px`;
+  if (c.style.maxHeight !== most) c.style.maxHeight = most;
+  const y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   // while the pointer is on it (opening an agent, say), it stays put rather than flipping above its moth, moving up only
   // as far as it must to stay on screen
-  const to = { x: Math.max(8, x), y: Math.max(8, titlebar(), Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
+  const to = { x, y: Math.max(top, Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
   shown = to;
   c.style.transform = `translate(${to.x}px, ${to.y}px)`;
 }

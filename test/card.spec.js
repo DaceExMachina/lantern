@@ -435,7 +435,7 @@ test('an expanded card lists its processes by name, a count past one, CPU of the
   const head = find(card, 'head').find(h => h.textContent.startsWith('Processes'));
   assert.strictEqual(head && text(head), 'Processes7', 'a heading with how many processes, in the tray though it has no agents or PRs');
   const rows = find(card, 'proc').map(r => [...r.children].map(text));
-  assert.deepStrictEqual(rows, [['vitest', '×4', '75%', '2.0 GB'], ['claude', '', '2%', '0.8 GB'], ['zsh', '×2', '0%', '0.0 GB']], 'in the order the server sent');
+  assert.deepStrictEqual(rows, [['vitest', '×4', '75%', '2.0 GB'], ['claude', '', '2%', '0.8 GB'], ['zsh', '×2', '0%', '<0.1 GB']], 'in the order the server sent, a few MB as under a tenth of a GB');
   assert.strictEqual(find(card, 'proc')[0].children[2].className, 'hot2', 'three cores of CPU runs orange, as the session\'s own number would');
   assert.strictEqual(find(card, 'pn')[0].title, 'vitest', 'a long name cut short is in full in its tooltip');
   const compact = await hover(session());
