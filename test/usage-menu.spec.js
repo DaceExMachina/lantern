@@ -10,15 +10,16 @@ import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
 const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4, procs: [{ name: 'WebKit GPU', n: 1, cpu: 1, mem: 150 }, { name: 'Lantern', n: 3, cpu: 0.2, mem: 200 }] },
-  sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 50, mem: 1500 }, { name: 'claude', n: 1, cpu: 5.5, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 48 }] }, gone: { cpu: 0, mem: 0, n: 0 } } };
+  sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 50, mem: 1500 }, { name: 'claude', n: 1, cpu: 5.5, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 48 }] }, gone: { cpu: 0, mem: 0, n: 0 } },
+  else: { cpu: 20, mem: 8000, n: 300, procs: [{ name: 'Slack Helper', n: 4, cpu: 12, mem: 2500 }, { name: 'other', n: 296, cpu: 8, mem: 5500 }, { name: 'kernel_task', n: 1, cpu: 0, mem: 40 }] } };
 
 Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true }); // a session's CPU is of one core, the dropdown's percents of the Mac's two
 
-const mounted = async () => {
+const mounted = async (u = usage) => {
   const pinia = createPinia(), store = useLanternStore(pinia);
   store.sessions = [{ id: 'a', title: 'quiet one', cwd: '/w/a' }, { id: 'b', title: '', cwd: '/w/busy' }];
   const w = mount(UsageMenu, { global: { plugins: [pinia] } });
-  store.usage = usage;
+  store.usage = u;
   await w.vm.$nextTick();
   return { w, store };
 };
@@ -96,17 +97,17 @@ test('the dropdown has no x axis or y labels, only a line in a box on a fixed sc
   w.unmount();
 });
 
-test('a session row is a button that stands in for its moth; Lantern and everything else are not', async () => {
+test('a session row is a button that stands in for its moth; Lantern and everything else are buttons too, but highlight only', async () => {
   const { w } = await mounted();
   const rows = w.findAll('#usage .krow');
-  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'DIV', 'BUTTON']); // busy, quiet one, everything else, Lantern (whose processes open, but there's no card)
+  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON']); // busy, quiet one, everything else, Lantern (whose processes open, but there's no card)
   await rows[0].trigger('pointerenter');
   expect(card.peekSession).toHaveBeenCalledWith('b');
   await rows[0].trigger('pointerleave');
   expect(card.unpeekSession).toHaveBeenCalledTimes(1);
   await rows[1].trigger('focus');
   expect(card.peekSession).toHaveBeenLastCalledWith('a');
-  await rows[3].trigger('pointerenter'); // Lantern: highlight only
+  await rows[2].trigger('pointerenter'); await rows[3].trigger('pointerenter'); // everything else, Lantern: highlight only
   expect(card.peekSession).toHaveBeenCalledTimes(2);
   w.unmount();
 });
@@ -178,11 +179,35 @@ test('Lantern\'s row opens its processes like a session\'s, with no card to open
   w.unmount();
 });
 
-test('a session segment in the bars behaves like its row: a button that peeks, opens its processes and, double clicked, opens the card; everything else is highlight only', async () => {
+test('everything else opens its processes like Lantern\'s, with no card to open and no peeking at a moth', async () => {
+  const { w } = await mounted();
+  card.peekSession.mockClear(); card.pinSession.mockClear();
+  const row = () => w.findAll('#usage .krow').find(r => r.text().startsWith('everything else'));
+  await row().trigger('pointerenter');
+  await row().trigger('click');
+  expect(row().attributes('aria-expanded')).toBe('true');
+  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '5.4 GB']]); // CPU as shown, "other" last
+  expect(w.find('#usage .sd .head').text()).toBe('Processes300');
+  expect(w.findAll('#usage .acts')).toHaveLength(0);
+  await row().trigger('dblclick');
+  expect([card.peekSession, card.pinSession].map(f => f.mock.calls.length)).toEqual([0, 0]);
+  await row().trigger('click');
+  expect(w.findAll('#usage .sd')).toHaveLength(0);
+  w.unmount();
+});
+
+test('with no processes from the server for everything else (an older one), its row stays a plain row', async () => {
+  const { w } = await mounted({ ...usage, else: undefined });
+  const row = w.findAll('#usage .krow').find(r => r.text().startsWith('everything else'));
+  expect(row.element.tagName).toBe('DIV');
+  w.unmount();
+});
+
+test('a session segment in the bars behaves like its row: a button that peeks, opens its processes and, double clicked, opens the card; everything else and Lantern are highlight only', async () => {
   vi.clearAllMocks();
   const { w } = await mounted();
   const segs = w.findAll('#usage .bar')[0].findAll(':scope > *');
-  expect(segs.map(s => s.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'I', 'BUTTON']); // busy, quiet one, everything else, Lantern (its processes open, it has no moth)
+  expect(segs.map(s => s.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON']); // busy, quiet one, everything else, Lantern (their processes open, they have no moth)
   const hide = w.find('#usage').element.hidePopover = vi.fn();
   await segs[0].trigger('pointerenter');
   expect(card.peekSession).toHaveBeenCalledWith('b');

@@ -3,7 +3,8 @@
 // for parents, then rusage for only the processes that count. Memory is the physical footprint (what Activity Monitor calls
 // Memory), not RSS, which counts pages the system can take back. A process's CPU is how much CPU time it used since the last
 // sample, as a share of one core, so a busy tool can show over 100. A session's processes also go out grouped by name
-// ("procs", for its expanded card), the busiest first, eight groups at most.
+// ("procs", for its expanded card), the busiest first, eight groups at most; so do Lantern's and everything else's, the processes
+// in no row's tree (the "else" group, for the stats panel's "everything else" row).
 // A session also counts what it started and daemonized, found by a variable Claude Code sets on its tools (macOS hides a process's environment
 // when it's one of its own signed tools, so a daemonized `sleep` stays out). Lantern's own use counts its WebKit services (GPU, page, network), launchd's children that macOS says Lantern is responsible for.
 // ponytail: a process that starts and ends between two samples is missed; sample faster if short test runs matter.
@@ -15,6 +16,7 @@ final class Usage {
     private var at: Double? // when that was, seconds
     private var socketOf: [pid_t: (start: Double, socket: String)] = [:] // each Claude process's value of its per-process variable, once a tool of its shows it (by pid, so a resumed session or a second process is learned on its own)
     private var launched: [pid_t: (start: Double, socket: String?)] = [:] // launchd's children already looked at (with no value too), so each is read once
+    private var names: [pid_t: (start: Double, name: String)] = [:] // a process's name once it was already there at the last sample (not still between fork and exec), so the Mac's hundreds of daemons are read once
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
@@ -97,7 +99,7 @@ final class Usage {
         // by name, busiest first (CPU as shown, then memory, then name so the order holds still); past eight, the eighth is the rest
         func group(_ pids: [pid_t]) -> JSON {
             let u = use(pids)
-            let groups = Dictionary(grouping: u) { Self.name($0.pid) }
+            let groups = Dictionary(grouping: u) { name($0.pid) }
                 .map { (name: $0.key, cpu: cpu($0.value.reduce(0) { $0 + $1.ns }), mem: $0.value.reduce(0) { $0 + $1.mem }, of: $0.value) }
                 .sorted { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
             let shown = groups.count > 8 ? groups.prefix(7) + [(name: "other", cpu: 0, mem: 0, of: groups.dropFirst(7).flatMap(\.of))] : groups[...]
@@ -105,10 +107,18 @@ final class Usage {
             g["procs"] = shown.map { sum($0.of).merging(["name": $0.name]) { a, _ in a } }
             return g
         }
+        func name(_ p: pid_t) -> String {
+            if let c = names[p], c.start == started[p] { return c.name }
+            let n = Self.name(p)
+            if started[p] ?? 0 < since { names[p] = (started[p] ?? 0, n) }
+            return n
+        }
         var perSession: JSON = [:]
         for (i, (id, _)) in sessions.enumerated() { perSession[id] = group(trees[i]) }
-        let out: JSON = ["sessions": perSession, "lantern": group(trees[sessions.count]), "mac": mac()]
+        let claimed = Set(trees.joined())
+        let out: JSON = ["sessions": perSession, "lantern": group(trees[sessions.count]), "else": group(started.keys.filter { !claimed.contains($0) }), "mac": mac()]
         before = now
+        names = names.filter { started[$0.key] != nil }
         at = t
         return out
     }

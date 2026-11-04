@@ -2932,6 +2932,30 @@ test('usage: a session\'s processes go out grouped by name, a known tool by its 
   assert.ok(s.procs.every(p => typeof p.cpu === 'number' && p.mem >= 0), 'each with its CPU and RAM');
 });
 
+test('usage: everything outside every row\'s tree goes out as "else", grouped by name, and no process is in both', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  // the session's tree holds one named process; another is the test's own child, in no session's tree, busy so it tops the groups
+  // (past seven, a Mac's hundreds of processes fold into "other")
+  const outside = spawn(process.execPath, ['-e', 'for (;;);'], { argv0: 'outside-tree', detached: true, stdio: 'ignore' });
+  t.after(() => process.kill(-outside.pid));
+  const code = `require('child_process').spawn(process.execPath, ['-e', 'for (;;);'], { argv0: 'session-tool' }); setTimeout(() => {}, 60000)`; // busy too, so a miscounted one would top else's groups
+  const child = spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000014';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  let u;
+  await streamed(base, async blocks => {
+    u = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1])).find(v => v.sessions[id]?.procs?.some(p => p.name === 'session-tool') && v.else?.procs?.some(p => p.name === 'outside-tree')), 'a sample with the session\'s tool and the outside process');
+  });
+  assert.ok(u.else.procs.some(p => p.name === 'outside-tree'), 'the outside process shows by name');
+  const names = g => g.procs.map(p => p.name);
+  assert.ok(!names(u.else).includes('session-tool'), 'a session\'s process is not everything else');
+  assert.ok(!names(u.sessions[id]).includes('outside-tree') && !names(u.lantern).includes('outside-tree'), 'nor is the outside one in a row');
+  assert.ok(u.else.procs.length <= 8 && u.else.n === u.else.procs.reduce((a, p) => a + p.n, 0), 'eight groups at most, every process counted once');
+  assert.ok(u.else.mem > 0 && u.else.cpu >= 0, 'with its totals');
+});
+
 test('usage: WebKit\'s helper services are named for what they do', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
   const code = `const { spawn } = require('child_process'); spawn('sleep', ['60'], { argv0: '/x/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU' }); setTimeout(() => {}, 60000)`;

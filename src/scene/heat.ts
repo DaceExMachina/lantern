@@ -12,10 +12,11 @@ NAMES.forEach((n, i) => {
   devSlider('Usage heat', `heatram${i + 1}`, `RAM ${n}`, 0, 64, 1, ramAt[i] ?? 0, 'GB of RAM from which a session\'s RAM number turns this colour', v => { ramAt[i] = v; });
 });
 
-const samples = new Map<string, number[]>(); // per session (and 'lantern', and each session's process groups, "id/name"): the last few CPU readings in cores
+const samples = new Map<string, number[]>(); // per session (and 'lantern' and 'else', and each session's process groups, "id/name"): the last few CPU readings in cores
 /** Takes a usage sample: remembers each group's CPU, and forgets the ones that are gone, so it stays as small as the sessions. */
 export function recordUsage(u: Usage) {
-  const now = [...Object.entries(u.sessions).flatMap(([id, g]) => [[id, g] as const, ...(g.procs ?? []).map(p => [`${id}/${p.name}`, p] as const)]), ['lantern', u.lantern] as const];
+  const groups = Object.entries({ ...u.sessions, lantern: u.lantern, ...u.else && { else: u.else } });
+  const now = groups.flatMap(([id, g]) => [[id, g] as const, ...(g.procs ?? []).map(p => [`${id}/${p.name}`, p] as const)]);
   const seen = new Set<string>();
   for (const [id, g] of now) { seen.add(id); samples.set(id, [...samples.get(id) ?? [], g.cpu / 100].slice(-WINDOW)); }
   for (const id of samples.keys()) if (!seen.has(id)) samples.delete(id);
