@@ -14,7 +14,7 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue';
 import type { UsageGroup as Group } from '../types';
-import { cores, memText, peekSession, pinSession, project, sessionUse, unpeekSession } from '../scene/card';
+import { cores, groupUse, memText, peekSession, pinSession, project, sessionUse, unpeekSession } from '../scene/card';
 import { heatOf, heatTip } from '../scene/heat';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
@@ -60,7 +60,7 @@ const popup = computed(() => {
   const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '', app: false }, app];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
-    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), use: r.id ? sessionUse(v, r.id) : null })),
+    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), use: r.id ? sessionUse(v, r.id) : r.app ? groupUse('lantern', v.lantern) : null })),
     blocks: [
       { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
       { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, c: r.c, w: w(r.memPct), tip: `${r.name} · ${memText(r.mem)} RAM` })) }],
@@ -74,16 +74,16 @@ const popup = computed(() => {
 const hot = ref<string | null>(null);
 const menu = useTemplateRef<HTMLElement>('menu');
 // one row's processes open at a time, the rows' order held from now until it closes (or the dropdown does)
-function setOpen(id: string | null) { held.value = id ? (popup.value?.rows ?? []).map(r => r.key) : null; open.value = id; }
+function setOpen(key: string | null) { held.value = key ? (popup.value?.rows ?? []).map(r => r.key) : null; open.value = key; }
 const close = () => menu.value?.hidePopover?.();
 // The open row's processes count as its row for hovering, so the moth's card stays up over them (the dropdown, in the top layer, is never under it).
 const hover = (key: string, id: string) => ({ pointerenter: () => { hot.value = key; if (id) peekSession(id); }, pointerleave: () => { hot.value = null; if (id) unpeekSession(); } });
-const rowEvents = (key: string, id: string) => {
+const rowEvents = (key: string, id: string, app: boolean) => {
   const { pointerenter: on, pointerleave: off } = hover(key, id);
-  return id ? {
+  return id || app ? {
     pointerenter: on, focus: on, pointerleave: off, blur: off,
-    click: async () => { setOpen(open.value === id ? null : id); await nextTick(); menu.value?.querySelector('.sd')?.scrollIntoView({ block: 'nearest' }); },
-    dblclick: () => { close(); pinSession(id); },
+    click: async () => { setOpen(open.value === key ? null : key); await nextTick(); menu.value?.querySelector('.sd')?.scrollIntoView({ block: 'nearest' }); },
+    ...id && { dblclick: () => { close(); pinSession(id); } }, // Lantern's own row has processes to open but no card
   } : { pointerenter: on, pointerleave: off };
 };
 </script>
@@ -109,12 +109,12 @@ const rowEvents = (key: string, id: string) => {
         <div class="kh"><span>Session</span><span>CPU</span><span>MEM</span></div>
         <template v-for="r in popup.rows" :key="r.name">
         <hr v-if="r.app">
-        <component :is="r.id ? 'button' : 'div'" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
-          :aria-expanded="r.id ? open === r.id : undefined" v-on="rowEvents(r.key, r.id)">
+        <component :is="r.id || r.app ? 'button' : 'div'" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
+          :aria-expanded="r.id || r.app ? open === r.key : undefined" v-on="rowEvents(r.key, r.id, r.app)">
           <i :class="['sw', { app: r.app }]" :style="{ [r.app ? 'borderColor' : 'background']: r.c }"></i><span class="n">{{ r.name }}</span><span :class="`hot${r.cpuHot}`" :title="r.cpuTip || undefined">{{ r.cpuText }}</span><span :class="`hot${r.memHot}`" :title="r.memTip || undefined">{{ r.memText }}</span>
           <b class="tracks"><b class="track" aria-hidden="true"><i :style="{ width: r.cpuW, background: r.c }"></i></b><b class="track" aria-hidden="true"><i :style="{ width: r.memW, background: r.c }"></i></b></b>
         </component>
-        <StatsDetail v-if="r.use && open === r.id" :id="r.id" :use="r.use" v-on="hover(r.key, r.id)" @done="close" />
+        <StatsDetail v-if="r.use && open === r.key" :id="r.id" :use="r.use" :card="r.app" v-on="hover(r.key, r.id)" @done="close" />
         </template>
       </div>
     </div>

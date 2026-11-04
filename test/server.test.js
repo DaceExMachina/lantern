@@ -2866,6 +2866,7 @@ test('usage: a session\'s sample counts its process and the children it started,
   });
   assert.ok(usage.sessions[id].mem > 0, 'memory is the footprint of the tree');
   assert.ok(usage.lantern.n >= 1 && usage.lantern.mem > 0, 'Lantern\'s own');
+  assert.ok(usage.lantern.procs.length > 0 && usage.lantern.procs.every(p => p.name && p.n > 0), 'Lantern\'s own come by name too');
   assert.ok(usage.mac.total > 0 && usage.mac.used > 0 && ['normal', 'warning', 'critical'].includes(usage.mac.pressure), 'the Mac\'s');
   assert.ok(!blocks.some(b => b.startsWith('data:') && b.includes('"cpu"')), 'the session snapshot doesn\'t carry it');
 });
@@ -2903,6 +2904,19 @@ test('usage: a session\'s processes go out grouped by name, a known tool by its 
   const rows = s.procs.slice(0, -1);
   assert.ok(rows.every((p, i) => i === 0 || p.cpu < rows[i - 1].cpu || p.cpu === rows[i - 1].cpu && p.mem <= rows[i - 1].mem), `busiest first: ${JSON.stringify(rows)}`);
   assert.ok(s.procs.every(p => typeof p.cpu === 'number' && p.mem >= 0), 'each with its CPU and RAM');
+});
+
+test('usage: WebKit\'s helper services are named for what they do', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const code = `const { spawn } = require('child_process'); spawn('sleep', ['60'], { argv0: '/x/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU' }); setTimeout(() => {}, 60000)`;
+  const child = spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000011';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  await streamed(base, async blocks => {
+    await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).find(g => g?.procs?.some(p => p.name === 'WebKit GPU')), 'a GPU service called "WebKit GPU"');
+  });
 });
 
 test('usage: with systemStats off nothing is sampled or sent', async t => {

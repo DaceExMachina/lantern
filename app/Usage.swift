@@ -4,6 +4,7 @@
 // Memory), not RSS, which counts pages the system can take back. A process's CPU is how much CPU time it used since the last
 // sample, as a share of one core, so a busy tool can show over 100. A session's processes also go out grouped by name
 // ("procs", for its expanded card), the busiest first, eight groups at most.
+// Lantern's own use counts its WebKit services (GPU, page, network), launchd's children that macOS says Lantern is responsible for.
 // ponytail: a process that starts and ends between two samples is missed; sample faster if short test runs matter.
 import Foundation
 import Darwin
@@ -57,24 +58,33 @@ final class Usage {
             let (ns, mem) = u.reduce((0.0, UInt64(0))) { ($0.0 + $1.ns, $0.1 + $1.mem) }
             return ["cpu": cpu(ns), "mem": Int(mem >> 20), "n": u.count]
         }
-        var perSession: JSON = [:]
-        for (id, pids) in sessions {
-            let u = use(tree(pids))
-            // by name, busiest first (CPU as shown, then memory, then name so the order holds still); past eight, the eighth is the rest
+        // each row's processes: its tree, then what macOS says it is responsible for. A process in no row's tree (Lantern's WebKit
+        // services are launchd's children) goes to the row whose tree holds its responsible pid; tree membership always wins, so a
+        // session's tools stay with it though the terminal is responsible for them.
+        let parent = getppid()
+        var buf = [CChar](repeating: 0, count: 4096)
+        proc_pidpath(parent, &buf, 4096)
+        // Lantern: this server, and the app around it when that's what started it (its window), with the helper and the vite watcher below
+        var trees = sessions.map { tree($0.1) } + [tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : []))]
+        var owner: [pid_t: Int] = [:]
+        for (i, t) in trees.enumerated() { for p in t where owner[p] == nil { owner[p] = i } }
+        if let responsible = Self.responsible {
+            for p in started.keys where owner[p] == nil { if let i = owner[responsible(p)] { trees[i].append(p) } }
+        }
+        // by name, busiest first (CPU as shown, then memory, then name so the order holds still); past eight, the eighth is the rest
+        func group(_ pids: [pid_t]) -> JSON {
+            let u = use(pids)
             let groups = Dictionary(grouping: u) { Self.name($0.pid) }
                 .map { (name: $0.key, cpu: cpu($0.value.reduce(0) { $0 + $1.ns }), mem: $0.value.reduce(0) { $0 + $1.mem }, of: $0.value) }
                 .sorted { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
             let shown = groups.count > 8 ? groups.prefix(7) + [(name: "other", cpu: 0, mem: 0, of: groups.dropFirst(7).flatMap(\.of))] : groups[...]
             var g = sum(u)
             g["procs"] = shown.map { sum($0.of).merging(["name": $0.name]) { a, _ in a } }
-            perSession[id] = g
+            return g
         }
-        // Lantern: this server, and the app around it when that's what started it (its window), with the helper and the vite watcher below
-        let parent = getppid()
-        var buf = [CChar](repeating: 0, count: 4096)
-        proc_pidpath(parent, &buf, 4096)
-        let lantern = use(tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : [])))
-        let out: JSON = ["sessions": perSession, "lantern": sum(lantern), "mac": mac()]
+        var perSession: JSON = [:]
+        for (i, (id, _)) in sessions.enumerated() { perSession[id] = group(trees[i]) }
+        let out: JSON = ["sessions": perSession, "lantern": group(trees[sessions.count]), "mac": mac()]
         before = now
         at = t
         return out
@@ -82,6 +92,11 @@ final class Usage {
 
     // A process's name as a person reads it: the last part of its argv[0], as Activity Monitor shows it (Claude Code's binary is
     // named for its version but runs as "claude"), or for node or python running a tool everyone knows, the tool.
+    // macOS's responsible process for a pid (the app a helper works for), a private libsystem symbol: without it, no attribution by it
+    private static let responsible = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_get_pid_responsible_for_pid") // RTLD_DEFAULT
+        .map { unsafeBitCast($0, to: (@convention(c) (pid_t) -> pid_t).self) }
+    // WebKit's helper services, which Lantern's window runs in, by what they do
+    private static let webKit = ["com.apple.WebKit.GPU": "WebKit GPU", "com.apple.WebKit.WebContent": "WebKit page", "com.apple.WebKit.Networking": "WebKit network"]
     private static let tools: Set<String> = ["vite", "vitest", "tsc", "vue-tsc", "playwright", "next"]
     private static func name(_ pid: pid_t) -> String {
         let args = Self.args(pid)
@@ -95,6 +110,7 @@ final class Usage {
             proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
             n = withUnsafeBytes(of: info.pbi_comm) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
         }
+        if let w = webKit[n] { n = w }
         // node or python running a script (code given inline, `node -e` or `python -c`, has none to name it by)
         if n == "node" || n.lowercased().hasPrefix("python"), let script = args.dropFirst().prefix(while: { !["-e", "--eval", "-p", "--print", "-c"].contains($0) }).first(where: { !$0.hasPrefix("-") }) {
             // the script's own name (.bin/vite, typescript/bin/tsc) or its package's (node_modules/vitest/dist/workers/forks.js,

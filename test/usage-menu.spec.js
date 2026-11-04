@@ -9,7 +9,7 @@ import * as card from '../src/scene/card';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
-const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4 },
+const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4, procs: [{ name: 'WebKit GPU', n: 1, cpu: 1, mem: 150 }, { name: 'Lantern', n: 3, cpu: 0.2, mem: 200 }] },
   sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 50, mem: 1500 }, { name: 'claude', n: 1, cpu: 5.5, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 48 }] }, gone: { cpu: 0, mem: 0, n: 0 } } };
 
 Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true }); // a session's CPU is of one core, the dropdown's percents of the Mac's two
@@ -99,7 +99,7 @@ test('the dropdown has no x axis or y labels, only a line in a box on a fixed sc
 test('a session row is a button that stands in for its moth; Lantern and everything else are not', async () => {
   const { w } = await mounted();
   const rows = w.findAll('#usage .krow');
-  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'DIV', 'DIV']); // busy, quiet one, everything else, Lantern
+  expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'DIV', 'BUTTON']); // busy, quiet one, everything else, Lantern (whose processes open, but there's no card)
   await rows[0].trigger('pointerenter');
   expect(card.peekSession).toHaveBeenCalledWith('b');
   await rows[0].trigger('pointerleave');
@@ -157,9 +157,24 @@ test('each row has a CPU bar with a RAM bar right under it, scaled like the Mac\
   expect(busy.map(b => b[1])).toEqual([tintFor({ id: 'b', cwd: '/w/busy' }), tintFor({ id: 'b', cwd: '/w/busy' })]); // both in the session's colour, as in the Mac's bars
   expect(w.findAll('#usage .krow').map(r => r.findAll('.tracks .track').length)).toEqual([2, 2, 2, 2]);
   const key = [...w.find('#usage .key').element.children];
-  expect(key.slice(-2).map(e => e.tagName)).toEqual(['HR', 'DIV']); // the rule, then Lantern
+  expect(key.slice(-2).map(e => e.tagName)).toEqual(['HR', 'BUTTON']); // the rule, then Lantern
   expect(row('Lantern').find('.sw').classes()).toContain('app');
   expect(w.findAll('#usage .krow .sw').filter(s => s.classes('app'))).toHaveLength(1);
+  w.unmount();
+});
+
+test('Lantern\'s row opens its processes like a session\'s, with no card to open and no peeking at a moth', async () => {
+  const { w } = await mounted();
+  card.peekSession.mockClear();
+  const row = () => w.findAll('#usage .krow').find(r => r.text().startsWith('Lantern'));
+  await row().trigger('pointerenter');
+  await row().trigger('click');
+  expect(row().attributes('aria-expanded')).toBe('true');
+  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['WebKit GPU', '', '1%', '0.1 GB'], ['Lantern', '×3', '0%', '0.2 GB']]);
+  expect(w.findAll('#usage .acts')).toHaveLength(0);
+  expect(card.peekSession).not.toHaveBeenCalled();
+  await row().trigger('dblclick');
+  expect(card.pinSession).not.toHaveBeenCalled();
   w.unmount();
 });
 

@@ -30,8 +30,9 @@ function useText(key: string, g: UsageGroup) {
 }
 /** A session's processes for its card: the totals and each group by name (its Processes); null with no sample or no processes. The groups
  * sort by CPU as shown (whole percents of the Mac, where the server's order is by tenths of a core), then RAM, then name, "other" last. */
-export function sessionUse(usage: Usage | null, id: string) {
-  const g = usage?.sessions[id];
+export const sessionUse = (usage: Usage | null, id: string) => groupUse(id, usage?.sessions[id]);
+/** The same for any group of processes, by the key its heat is kept under (Lantern's own use, in the usage dropdown). */
+export function groupUse(id: string, g: UsageGroup | undefined) {
   if (!g || !g.n) return null;
   const shown = (p: ProcGroup) => Math.round(p.cpu / cores()), other = (p: ProcGroup) => Number(p.name === 'other');
   const procs = [...g.procs ?? []].sort((a, b) => other(a) - other(b) || shown(b) - shown(a) || b.mem - a.mem || a.name.localeCompare(b.name));
