@@ -12,7 +12,7 @@ import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, unpeekSession } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, sessionUse, unpeekSession } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -446,7 +446,7 @@ test('a card\'s processes sit behind its info line: a click opens them in place,
   assert.deepStrictEqual(find(card, 'proc').map(r => [...r.children].map(text)), [['vitest', '×4', '75%', '2.0 GB'], ['claude', '', '2%', '0.8 GB'], ['zsh', '×2', '0%', '<0.1 GB']], 'in the order the server sent, a few MB as under a tenth of a GB');
   assert.strictEqual(find(card, 'proc')[0].children[2].className, 'hot2', 'three cores of CPU runs orange, as the session\'s own number would');
   assert.strictEqual(find(card, 'pn')[0].title, 'vitest', 'a long name cut short is in full in its tooltip');
-  assert.deepStrictEqual(labels(card), ['Go to session'], 'the card is already open in full, so only the way to the session');
+  assert.deepStrictEqual(labels(card), [], 'no buttons: the card is open in full already, and its title goes to the session');
   find(card, 'stat')[0].click(); await nextTick();
   assert.strictEqual(find(card, 'proc').length, 0, 'a second click closes them');
   const compact = await hover(session());
@@ -469,4 +469,13 @@ test('a side session shows its own CPU and RAM left of its time; an agent, insid
   const rows = find(card, 'agent').map(r => [...r.querySelector('.arow').children].map(c => c.className.split(' ')[0]));
   assert.deepStrictEqual(rows, [['live', 'job', 't'], ['live', 'job', 'use', 't']], 'the agent: dot, job, time; the side session: its CPU and RAM just before its time');
   assert.match(text(find(card, 'agent')[1].querySelector('.use')), /10% · 0\.6 GB/);
+});
+
+test('a session\'s processes sort by CPU as shown (whole percents of the Mac), then RAM, then name, with "other" last', () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  // the server's order, by tenths of a core: 1.2% of a core (0.3% of the Mac) before 0.4% (0.1%), both showing 0%
+  const procs = [{ name: 'node', n: 1, cpu: 1.2, mem: 10 }, { name: 'other', n: 3, cpu: 0, mem: 900 }, { name: 'claude', n: 1, cpu: 0.4, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 500 }, { name: 'vite', n: 1, cpu: 8, mem: 40 }];
+  const u = { sessions: { s1: { cpu: 9.6, mem: 1950, n: 7, procs } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 65536, pressure: 'normal' } };
+  assert.deepStrictEqual(sessionUse(u, 's1').procs.map(p => `${p.name} ${p.cpu}`), ['vite 2%', 'claude 0%', 'zsh 0%', 'node 0%', 'other 0%'],
+    'vite first; then the 0% ones by RAM, the bigger first, whatever their tenths; a tie by name; "other" last');
 });
