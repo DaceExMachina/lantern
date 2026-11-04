@@ -2941,6 +2941,27 @@ test('usage: a tool a session started that daemonized stays with it, by the vari
   });
 });
 
+test('usage: a session that gets a new process (resumed) claims the new process\'s daemonized tools, not just its first one\'s', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const WAIT = 'setTimeout(() => {}, 60000)';
+  const daemon = name => `require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { argv0: '${name}', detached: true, stdio: 'ignore' }).unref()`;
+  const tool = (socket, js) => `spawn(process.execPath, ['-e', ${JSON.stringify(js)}], { env: { ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: ${JSON.stringify(socket)} }, stdio: 'ignore' });`;
+  const claude = code => { const c = spawn(process.execPath, ['-e', `const { spawn } = require('child_process'); ${code} ${WAIT}`], { stdio: 'ignore', detached: true }); t.after(() => process.kill(-c.pid)); return c; };
+  const id = 'aaaaaaaa-0000-4000-8000-000000000013';
+  const post = c => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(c.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  const first = claude(tool('/s/first', WAIT));
+  await post(first);
+  await streamed(base, async blocks => {
+    const procs = () => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).filter(Boolean);
+    await until(() => procs().find(g => g.n >= 2), 'the first process and its tool, whose value is now known');
+    // the session is resumed: the same id in a new process, whose tools carry a value of their own
+    const second = claude(`${tool('/s/second', WAIT)} setTimeout(() => { ${tool('/s/second', daemon('second-daemon'))} }, 500);`);
+    await post(second);
+    await until(() => procs().find(g => g.procs?.some(p => p.name === 'second-daemon')), 'the new process\'s daemon in the session');
+  });
+});
+
 test('usage: with systemStats off nothing is sampled or sent', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
   await post(base, '/settings', { systemStats: false });

@@ -13,8 +13,8 @@ import Darwin
 final class Usage {
     private var before: [pid_t: UInt64] = [:] // CPU time in ns per process at the last sample
     private var at: Double? // when that was, seconds
-    private var socketOf: [String: String] = [:] // each session's own value of Claude Code's per-process variable, once one of its processes shows it
-    private var launched: [pid_t: (start: Double, socket: String?)] = [:] // launchd's children already looked at, so each is read once
+    private var socketOf: [pid_t: (start: Double, socket: String)] = [:] // each Claude process's value of its per-process variable, once a tool of its shows it (by pid, so a resumed session or a second process is learned on its own)
+    private var launched: [pid_t: (start: Double, socket: String?)] = [:] // launchd's children already looked at (with no value too), so each is read once
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
@@ -73,12 +73,19 @@ final class Usage {
         for (i, t) in trees.enumerated() { for p in t where owner[p] == nil { owner[p] = i } }
         // A session's tools that daemonized (a background dev server, launchd's child now) still carry the variable Claude Code sets on
         // everything it starts, unique to its process: find a session's value on a live process it started (not Claude itself, which may carry the value of a session that ran it), then claim launchd's children that carry it.
-        socketOf = socketOf.filter { k, _ in sessions.contains { $0.0 == k } }
-        for (i, (id, pids)) in sessions.enumerated() where socketOf[id] == nil { socketOf[id] = trees[i].lazy.filter { !pids.contains(Int($0)) }.compactMap { Self.envValue($0, Self.sessionVariable) }.first }
-        let bySocket = Dictionary(socketOf.compactMap { id, v in sessions.firstIndex { $0.0 == id }.map { (v, $0) } }) { a, _ in a }
+        var bySocket: [String: Int] = [:]
+        for (i, (_, pids)) in sessions.enumerated() {
+            for pid in pids.map({ pid_t($0) }) where started[pid] != nil {
+                if socketOf[pid]?.start != started[pid] { socketOf[pid] = nil }
+                if socketOf[pid] == nil, let v = tree([Int(pid)]).lazy.filter({ $0 != pid }).compactMap({ Self.envValue($0) }).first { socketOf[pid] = (started[pid] ?? 0, v) }
+                if let v = socketOf[pid]?.socket { bySocket[v] = i }
+            }
+        }
+        socketOf = socketOf.filter { started[$0.key] != nil }
         if !bySocket.isEmpty {
             for p in kids[1] ?? [] where owner[p] == nil {
-                let socket = launched[p].flatMap { $0.start == started[p] ? $0.socket : nil } ?? Self.envValue(p, Self.sessionVariable)
+                let seen = launched[p].flatMap { $0.start == started[p] ? $0 : nil }
+                let socket = seen.map(\.socket) ?? Self.envValue(p)
                 launched[p] = (started[p] ?? 0, socket)
                 if let i = socket.flatMap({ bySocket[$0] }) { for q in tree([Int(p)]) where owner[q] == nil { trees[i].append(q); owner[q] = i } }
             }
@@ -115,7 +122,7 @@ final class Usage {
     private static let webKit = ["com.apple.WebKit.GPU": "WebKit GPU", "com.apple.WebKit.WebContent": "WebKit page", "com.apple.WebKit.Networking": "WebKit network"]
     private static let tools: Set<String> = ["vite", "vitest", "tsc", "vue-tsc", "playwright", "next"]
     private static func name(_ pid: pid_t) -> String {
-        let args = Self.args(pid)
+        let args = Self.procargs(pid).args
         // a path's last part; a title a process gave itself (node's process.title, "npm exec some-mcp --flag"), its first word
         let first = args.first ?? "", path = first.hasPrefix("/") ? first : String(first.split(separator: " ").first ?? "")
         var n = String(path.split(separator: "/").last ?? "")
@@ -147,10 +154,10 @@ final class Usage {
         let parts = buf[4..<size].split(separator: 0).dropFirst().map { String(decoding: $0, as: UTF8.self) }
         return (Array(parts.prefix(argc)), Array(parts.dropFirst(argc)))
     }
-    private static func args(_ pid: pid_t) -> [String] { procargs(pid).args }
-    // The value of one environment variable of a process (a process's own, so only ours can be read); only this one is ever picked out.
-    private static func envValue(_ pid: pid_t, _ name: String) -> String? {
-        procargs(pid).env.first { $0.hasPrefix(name + "=") }.map { String($0.dropFirst(name.count + 1)) }
+    // A process's value of the variable below (only ours can be read); nothing else of its environment is ever picked out.
+    private static func envValue(_ pid: pid_t) -> String? {
+        let prefix = sessionVariable + "="
+        return procargs(pid).env.first { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
     }
     // Claude Code sets this on every process it starts (the socket its tools reach it by): one value per Claude process, so per session.
     // Undocumented: if it goes, daemonized tools fall out of their session as before.
