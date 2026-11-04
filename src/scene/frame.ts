@@ -953,7 +953,7 @@ function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   if (m.shine) { // glowing gold for a message it sent or got (messages.ts), with an aura of light behind it
     wing = mix(wing, GOLD, 0.75 * m.shine);
-    addFlyLight(m.x, m.y, FIREFLY_BLOOM * (0.8 + 0.5 * m.shine), 1.2 * goldLook.aura * m.shine, GOLD);
+    addFlyLight(m.x, m.y, FIREFLY_BLOOM * (1 + 0.6 * m.shine), 1.4 * goldLook.aura * m.shine, GOLD);
   }
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
@@ -1062,14 +1062,19 @@ function mothThread(m: Moth, dt: number, s: number) {
     lit = mix(base, pal('core'), glow);
     if (m.pulse.at >= 1) m.pulse = null;
   }
-  // A message's gold pulse (messages.ts) takes the band while it runs, on a thicker thread, with an aura of light behind it
-  // drawn by the background shader, like a firefly's.
-  if (m.gold) {
-    at = m.gold.at; lit = GOLD; glow = 1;
-    const [cx, cy] = bowAt(ax, ay, bx, by, m, s, threadBow), u = 1 - at;
-    addFlyLight(u * u * ax + 2 * u * at * cx + at * at * bx, u * u * ay + 2 * u * at * cy + at * at * by, FIREFLY_BLOOM, 1.4 * goldLook.aura, GOLD);
+  // A message's gold pulse (messages.ts) takes the band while it runs: a comet heading along the thread, its bright head
+  // trailing a long tail, on a thicker, solid thread, with a soft glow along it drawn by the background shader as light.
+  const gold = m.gold;
+  if (gold) {
+    at = gold.at; lit = GOLD; glow = 1;
+    const [cx, cy] = bowAt(ax, ay, bx, by, m, s, threadBow);
+    for (let j = 0; j < 7; j++) { // the glow: dim lights close together from the head back down the tail, blending into one
+      const q = Math.min(1, Math.max(0, at - gold.dir * 0.045 * j)), u = 1 - q;
+      addFlyLight(u * u * ax + 2 * u * q * cx + q * q * bx, u * u * ay + 2 * u * q * cy + q * q * by, FIREFLY_BLOOM * (1.6 - 0.1 * j), goldLook.aura * 0.4 * (1 - j / 8), GOLD);
+    }
     put(m.thread, 'stroke-width', 1.5 + goldLook.width); // #threads draws them 1.5 wide
-  } else m.thread.removeAttribute('stroke-width');
+    put(m.thread, 'stroke-dasharray', 'none');
+  } else { m.thread.removeAttribute('stroke-width'); m.thread.removeAttribute('stroke-dasharray'); }
   if (!m.grad) {
     m.grad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
     for (let i = 0; i <= 16; i++) m.grad.append(el('stop', { offset: i / 16 }));
@@ -1078,9 +1083,11 @@ function mothThread(m: Moth, dt: number, s: number) {
   }
   put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', bx.toFixed(1)); put(m.grad, 'y2', by.toFixed(1));
   [...m.grad.children].forEach((st, i) => {
-    const o = i / 16, band = Math.max(0, 1 - Math.abs(o - at) / (m.gold ? 0.2 : 0.12)), faint = m.leaving ? 0.1 : 0.25;
+    // a gold comet: full at its head, gone just ahead of it, its tail fading over 40% of the thread behind
+    const o = i / 16, ahead = gold ? (o - at) * gold.dir : 0, faint = m.leaving ? 0.1 : 0.25;
+    const band = gold ? ahead > 0 ? Math.max(0, 1 - ahead / 0.07) : Math.max(0, 1 + ahead / 0.4) ** 1.5 : Math.max(0, 1 - Math.abs(o - at) / 0.12);
     put(st, 'stop-color', mix(base, lit, band));
-    // the thread itself is faint, the passing pulse nearly full; both fade out toward the ends
-    put(st, 'stop-opacity', (Math.min(1, o / 0.25, (1 - o) / 0.25) * (faint + (0.9 - faint) * band * glow)).toFixed(2));
+    // the thread itself is faint, the passing pulse nearly full; both fade out toward the ends (gold only right at them)
+    put(st, 'stop-opacity', (Math.min(1, o / (gold ? 0.06 : 0.25), (1 - o) / (gold ? 0.06 : 0.25)) * (faint + (0.95 - faint) * band * glow)).toFixed(2));
   });
 }

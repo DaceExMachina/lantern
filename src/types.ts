@@ -211,7 +211,7 @@ export interface SessionMoth extends MothBase {
   // its hover areas' spots, its thread's gradient, bow and pulses, and its fireflies' line
   zx?: number; zy?: number; fx?: number; fy?: number; grad?: SVGLinearGradientElement; flyGrad?: SVGLinearGradientElement; flyLine?: SVGPathElement;
   bowK?: number; ticks?: number; pulse?: { at: number } | null;
-  gold?: { at: number } | null; // a message's gold pulse on its thread, from the lantern (0) to the moth (1) (messages.ts)
+  gold?: { at: number; dir: 1 | -1 } | null; // a message's gold pulse on its thread: where, from the lantern (0) to the moth (1), and which way (messages.ts)
 }
 /** An agent's moth, orbiting its session's. */
 export interface AgentMoth extends MothBase { parentId: string; a: number; r: number; speed: number }

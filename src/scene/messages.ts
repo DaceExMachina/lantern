@@ -48,8 +48,8 @@ export function stepMessages(t: number) {
     a.shine = Math.max(a.shine ?? 0, rise(s / SHINE));
     b.shine = Math.max(b.shine ?? 0, rise((s - shineAt) / SHINE));
     // along a thread `at` runs from the lantern (0) to the moth (1): down the sender's, then up the receiver's
-    if (down && s >= downAt && s < upAt) a.gold = { at: 1 - (s - downAt) / down };
-    if (up && s >= upAt && s < upAt + up) b.gold = { at: (s - upAt) / up };
+    if (down && s >= downAt && s < upAt) a.gold = { at: 1 - (s - downAt) / down, dir: -1 };
+    if (up && s >= upAt && s < upAt + up) b.gold = { at: (s - upAt) / up, dir: 1 };
   }
 }
 
