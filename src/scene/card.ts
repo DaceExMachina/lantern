@@ -4,7 +4,7 @@ import { heatOf, heatTip } from './heat';
 import { chrome, live } from './live';
 import { $, titlebar } from './scene';
 import { sessionMoth } from './state';
-import type { Agent, CardAt, Hovered, PR, Session, Usage, Zone } from '../types';
+import type { Agent, CardAt, Hovered, PR, ProcGroup, Session, Usage, UsageGroup, Zone } from '../types';
 
 // ---- hover card ------------------------------------------------------------------
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
@@ -19,16 +19,24 @@ export function tipSpot(tip: HTMLElement, el: Element) {
 export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
-/** Memory in MB as a person reads it. */
-export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+/** Memory in MB as a person reads it: always GB, so the digits don't jump between MB and GB, and under a tenth of one "<0.1 GB". */
+export const memText = (mb: number) => mb < 102.4 ? '<0.1 GB' : `${(mb / 1024).toFixed(1)} GB`;
 /** This Mac's core count: a group of processes' CPU is percent of one core, the usage readout's percents are of all of them. */
 export const cores = () => navigator.hardwareConcurrency || 1;
-/** A session's processes for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB, each with how hot it runs (heat.ts); null with no sample or no processes. */
-export function sessionUse(usage: Usage | null, id: string) {
-  const g = usage?.sessions[id];
+/** A group of processes' numbers for a card: CPU as a percent of the Mac, RAM in GB (memText), each with how hot it runs (heat.ts, by `key`). */
+function useText(key: string, g: UsageGroup) {
+  const h = heatOf(key, g), tip = heatTip(h, g);
+  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: memText(g.mem), cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+}
+/** A session's processes for its card: the totals and each group by name (its Processes); null with no sample or no processes. The groups
+ * sort by CPU as shown (whole percents of the Mac, where the server's order is by tenths of a core), then RAM, then name, "other" last. */
+export const sessionUse = (usage: Usage | null, id: string) => groupUse(id, usage?.sessions[id]);
+/** The same for any group of processes, by the key its heat is kept under (Lantern's own use, in the usage dropdown). */
+export function groupUse(id: string, g: UsageGroup | undefined) {
   if (!g || !g.n) return null;
-  const h = heatOf(id, g), tip = heatTip(h, g);
-  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+  const shown = (p: ProcGroup) => Math.round(p.cpu / cores()), other = (p: ProcGroup) => Number(p.name === 'other');
+  const procs = [...g.procs ?? []].sort((a, b) => other(a) - other(b) || shown(b) - shown(a) || b.mem - a.mem || a.name.localeCompare(b.name));
+  return { ...useText(id, g), n: g.n, procs: procs.map(p => ({ name: p.name, n: p.n, ...useText(`${id}/${p.name}`, p) })) };
 }
 export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 
@@ -90,10 +98,11 @@ export function hideCard() { live.hovered = held = shown = null; live.expanded =
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
 // The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
-// it was clicked open, and a click expands it, as clicking the moth does; a double click is openSession.
+// it was clicked open. A click opens the session's processes in the dropdown itself (UsageMenu.vue); a double click, or the processes' Open card,
+// expands the card (pinSession), which never puts it away, so a card already open stays open.
 export function peekSession(id: string) { const m = sessionMoth(id); if (m) enterZone(m.zone); }
 export function unpeekSession() { if (!live.expanded) hideCard(); }
-export function pinSession(id: string) { const m = sessionMoth(id); if (m) expandCard(m.zone); }
+export function pinSession(id: string) { const m = sessionMoth(id); if (m) { enterZone(m.zone); live.expanded = true; paint(); } }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.
@@ -122,8 +131,8 @@ export const sideRow = (o: Session): Row => ({ id: o.id, job: o.title || project
 const TAG = /^\[([^\]]+)\]\s*/;
 export const tagOf = (activity: string) => activity.match(TAG)?.[1];
 export const stepOf = (activity: string) => activity.replace(TAG, '');
-// how old the session is and when it was last active
-export const footLine = (s: Session, now: number) => `${project(s)} · ${short(now - (s.started ?? now))} old · active ${short(now - (s.last ?? now))} ago`;
+// how old the session is and how long since it was last active
+export const footLine = (s: Session, now: number) => `${project(s)} · ${short(now - (s.started ?? now))} old · ${short(now - (s.last ?? now))} ago`;
 
 // The session's PRs, worst first, under a header that sums them up ("PRs · 1 ready · 2 in review · 8 drafts"). Either
 // chips coloured by state (its title in #prTip while hovered), or in the sidebar two-line rows (title; dot, number, state).
@@ -177,14 +186,18 @@ export function placeCard() {
   const zone = 'session' in h && h.cardAt === 'flies' && h.flyZone ? h.flyZone : h.zone; // beside whichever area was hovered
   pt.x = zone.x; pt.y = zone.y;
   const p = pt.matrixTransform(ctm), c = $('card');
-  // it stays above the footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits there
-  const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - 16)}px`;
-  if (c.style.maxHeight !== most) c.style.maxHeight = most;
   const a = pinAnchor(zone, p.x, p.y, zone.r * ctm.a * 0.7), gap = a.gap; // clear of the hover area, which covers the moth
-  const x = Math.min(a.x + gap, innerWidth - c.offsetWidth - 12), y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
+  const x = Math.max(8, Math.min(a.x + gap, innerWidth - c.offsetWidth - 12));
+  // it stays below the titlebar, and below the CPU and RAM rings (#usageButton) when it would sit beside them, and above the
+  // footer (in the iTerm panel the footer takes a good share of a short window), as tall as fits between
+  const hud = document.getElementById('usageButton')?.getBoundingClientRect();
+  const top = Math.max(8, titlebar(), hud && x < hud.right && x + c.offsetWidth > hud.left ? hud.bottom + 8 : 0);
+  const floor = document.querySelector('footer')?.getBoundingClientRect().top ?? innerHeight, most = `${Math.round(floor - top - 8)}px`;
+  if (c.style.maxHeight !== most) c.style.maxHeight = most;
+  const y = a.y + gap + c.offsetHeight > floor - 8 ? a.y - c.offsetHeight - gap : a.y + gap;
   // while the pointer is on it (opening an agent, say), it stays put rather than flipping above its moth, moving up only
   // as far as it must to stay on screen
-  const to = { x: Math.max(8, x), y: Math.max(8, titlebar(), Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
+  const to = { x, y: Math.max(top, Math.min(floor - 8 - c.offsetHeight, shown && c.matches(':hover') ? shown.y : y)) };
   shown = to;
   c.style.transform = `translate(${to.x}px, ${to.y}px)`;
 }

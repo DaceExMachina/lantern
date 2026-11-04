@@ -12,7 +12,7 @@ import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone, peekSession, placeCard, pinSession, unpeekSession } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone, peekSession, placeCard, pinSession, sessionUse, unpeekSession } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -238,9 +238,9 @@ test('the card\'s times move on with the clock, a second at a time, with nothing
   mount(); // a store made on the fake clock, so its tick is one
   const card = await show(session({ state: 'working', last: now - 58e3, subagents: [{ id: 'a', description: 'Build', started: now - 59e3, last: now }] }));
   const times = () => [text(find(card, 'foot')[0]).split(' · ').at(-1), text(find(card, 't')[0])];
-  assert.deepStrictEqual(times(), ['active 58s ago', '59s']);
+  assert.deepStrictEqual(times(), ['58s ago', '59s']);
   vi.advanceTimersByTime(2000); await nextTick();
-  assert.deepStrictEqual(times(), ['active 1m ago', '1m'], 'two seconds on');
+  assert.deepStrictEqual(times(), ['1m ago', '1m'], 'two seconds on');
 });
 
 // WebKit drops a click when the button pressed is replaced before the release, so a re-render (a server update, the
@@ -373,7 +373,7 @@ test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and
   store.usage = { sessions: { s1: { cpu: 100, mem: 615, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 6144, pressure: 'normal' } };
   await nextTick();
   const line = () => find(card, 'foot').map(text).find(t => t.includes('old'));
-  assert.match(line(), /active \d+m ago · 25% · 0\.6 GB$/, 'a quarter of the Mac, 615 MB as 0.6 GB: the same unit whatever the size');
+  assert.match(line(), /old · \d+m ago25% · 0\.6 GB$/, 'a quarter of the Mac, 615 MB as 0.6 GB: the same unit whatever the size');
   assert.strictEqual(find(card, 'use')[0].querySelectorAll('svg').length, 2, 'the chip and the RAM stick stand for the words');
   assert.strictEqual(find(card, 'bar').length + find(card, 'track').length, 0, 'no bars on the card');
   const tint = document.createElement('div'); tint.style.background = tintFor(session()); // the colour its moth has, as the browser spells it
@@ -382,7 +382,7 @@ test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and
   assert.strictEqual(find(card, 'name')[0].firstElementChild, find(card, 'sw')[0], 'the swatch comes first in the title');
   store.usage = { ...store.usage, sessions: { s1: { cpu: 200, mem: 3072, n: 3 } } };
   await nextTick();
-  assert.match(line(), /· 50% · 3\.0 GB$/, 'follows each sample');
+  assert.match(line(), /ago50% · 3\.0 GB$/, 'follows each sample');
   store.usage = { ...store.usage, sessions: { s1: { cpu: 0, mem: 0, n: 0 } } };
   await nextTick();
   assert.strictEqual(find(card, 'use').length, 0, 'no processes, nothing');
@@ -453,4 +453,57 @@ test('a session\'s CPU and RAM on its card turn yellow, orange, then red as it u
     assert.strictEqual(parts[0].title !== '' && /^(high CPU: about|CPU )/.test(parts[0].title), true);
   }
   assert.strictEqual(find(card, 'use')[0].children[1].title, 'high RAM: 16.0 GB');
+});
+
+const PROCS = [{ name: 'vitest', n: 4, cpu: 300, mem: 2048 }, { name: 'claude', n: 1, cpu: 8, mem: 820 }, { name: 'zsh', n: 2, cpu: 0, mem: 12 }];
+const busy = (more = {}) => ({ sessions: { s1: { cpu: 308, mem: 2880, n: 7, procs: PROCS }, ...more }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 65536, pressure: 'normal' } });
+const labels = card => find(card, 'acts').flatMap(a => [...a.children].map(text));
+
+test('a card\'s processes sit behind its info line: a click opens them in place, by name, a count past one, CPU of the Mac and RAM in GB, hot ones coloured, and closes them again', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  store.usage = busy();
+  const card = await show(session());
+  assert.strictEqual(find(card, 'proc').length, 0, 'hidden until asked for');
+  const [line] = find(card, 'stat');
+  assert.ok(line && line.localName === 'button' && /old · .* ago77% · 2\.8 GB$/.test(text(line)), 'the info line, CPU and RAM and all, is the button');
+  assert.strictEqual(line.getAttribute('aria-expanded'), 'false');
+  line.click(); await nextTick();
+  assert.strictEqual(find(card, 'stat')[0].getAttribute('aria-expanded'), 'true');
+  const head = find(card, 'head').find(h => h.textContent.startsWith('Processes'));
+  assert.strictEqual(head && text(head), 'Processes7', 'a heading with how many processes');
+  assert.deepStrictEqual(find(card, 'proc').map(r => [...r.children].map(text)), [['vitest', '×4', '75%', '2.0 GB'], ['claude', '', '2%', '0.8 GB'], ['zsh', '×2', '0%', '<0.1 GB']], 'in the order the server sent, a few MB as under a tenth of a GB');
+  assert.strictEqual(find(card, 'proc')[0].children[2].className, 'hot2', 'three cores of CPU runs orange, as the session\'s own number would');
+  assert.strictEqual(find(card, 'pn')[0].title, 'vitest', 'a long name cut short is in full in its tooltip');
+  assert.deepStrictEqual(labels(card), [], 'no buttons: the card is open in full already, and its title goes to the session');
+  find(card, 'stat')[0].click(); await nextTick();
+  assert.strictEqual(find(card, 'proc').length, 0, 'a second click closes them');
+  const compact = await hover(session());
+  assert.deepStrictEqual([find(compact, 'proc').length, find(compact, 'stat').length, find(compact, 'hint').length], [0, 0, 1], 'the hover card, a tooltip, keeps to its plain line of totals and its hint');
+});
+
+test('opening a card from the usage dropdown (a double click, or Open card) never puts away one already open', async () => {
+  live.raw = [session()]; sync();
+  pinSession('s1'); await nextTick();
+  assert.deepStrictEqual([live.hovered === sessionMoth('s1'), live.expanded], [true, true], 'the moth\'s card, in full');
+  pinSession('s1'); await nextTick();
+  assert.deepStrictEqual([live.hovered === sessionMoth('s1'), live.expanded], [true, true], 'again: still open, where a click on the moth would close it');
+});
+
+test('a side session shows its own CPU and RAM left of its time; an agent, inside the session\'s processes, has none', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  store.usage = busy({ side: { cpu: 40, mem: 600, n: 2, procs: [] } });
+  live.raw = [session({ id: 'side', parent: 's1', state: 'working', activity: 'Side work', started: now - 120e3 })]; sync();
+  const card = await show(session({ state: 'working', subagents: [{ id: 'a', description: 'Build', started: now - 60e3, last: now }] }));
+  const rows = find(card, 'agent').map(r => [...r.querySelector('.arow').children].map(c => c.className.split(' ')[0]));
+  assert.deepStrictEqual(rows, [['live', 'job', 't'], ['live', 'job', 'use', 't']], 'the agent: dot, job, time; the side session: its CPU and RAM just before its time');
+  assert.match(text(find(card, 'agent')[1].querySelector('.use')), /10% · 0\.6 GB/);
+});
+
+test('a session\'s processes sort by CPU as shown (whole percents of the Mac), then RAM, then name, with "other" last', () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  // the server's order, by tenths of a core: 1.2% of a core (0.3% of the Mac) before 0.4% (0.1%), both showing 0%
+  const procs = [{ name: 'node', n: 1, cpu: 1.2, mem: 10 }, { name: 'other', n: 3, cpu: 0, mem: 900 }, { name: 'claude', n: 1, cpu: 0.4, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 500 }, { name: 'vite', n: 1, cpu: 8, mem: 40 }];
+  const u = { sessions: { s1: { cpu: 9.6, mem: 1950, n: 7, procs } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 65536, pressure: 'normal' } };
+  assert.deepStrictEqual(sessionUse(u, 's1').procs.map(p => `${p.name} ${p.cpu}`), ['vite 2%', 'claude 0%', 'zsh 0%', 'node 0%', 'other 0%'],
+    'vite first; then the 0% ones by RAM, the bigger first, whatever their tenths; a tie by name; "other" last');
 });

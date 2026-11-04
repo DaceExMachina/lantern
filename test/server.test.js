@@ -2892,8 +2892,100 @@ test('usage: a session\'s sample counts its process and the children it started,
   });
   assert.ok(usage.sessions[id].mem > 0, 'memory is the footprint of the tree');
   assert.ok(usage.lantern.n >= 1 && usage.lantern.mem > 0, 'Lantern\'s own');
+  assert.ok(usage.lantern.procs.length > 0 && usage.lantern.procs.every(p => p.name && p.n > 0), 'Lantern\'s own come by name too');
   assert.ok(usage.mac.total > 0 && usage.mac.used > 0 && ['normal', 'warning', 'critical'].includes(usage.mac.pressure), 'the Mac\'s');
   assert.ok(!blocks.some(b => b.startsWith('data:') && b.includes('"cpu"')), 'the session snapshot doesn\'t carry it');
+});
+
+test('usage: a session\'s processes go out grouped by name, a known tool by its name, busiest first, the rest past seven as "other"', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const dir = fs.mkdtempSync(path.join(tmp, 'tools-')), at = f => path.join(dir, f), WAIT = 'setTimeout(() => {}, 60000)';
+  for (const f of ['node_modules/.bin/vite', 'node_modules/vitest/dist/workers/forks.js', 'next/server.js']) { fs.mkdirSync(path.dirname(at(f)), { recursive: true }); fs.writeFileSync(at(f), WAIT); }
+  // node (the session) running: three sleeps; node running vite, a vitest worker, and a server.js that only sits in a folder
+  // called next; Chrome and a helper of its; a login shell's "-zsh" (node underneath, so it's big enough to show); and eight
+  // more names, one each. Each is [command, argv0, ...arguments].
+  const app = '/Applications/Google Chrome.app/Contents', chrome = [['sleep', `${app}/MacOS/Google Chrome`, '60'], ['sleep', `${app}/Frameworks/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)`, '60']];
+  const kids = [['sleep', 'sleep', '60'], ['sleep', 'sleep', '60'], ['sleep', 'sleep', '60'], ...chrome, [process.execPath, '-zsh', '-e', WAIT],
+    ...['node_modules/.bin/vite', 'node_modules/vitest/dist/workers/forks.js', 'next/server.js'].map(f => [process.execPath, 'node', at(f)]),
+    ...[1, 2, 3, 4, 5, 6, 7, 8].map(i => ['sleep', `p${i}`, '60'])];
+  const code = `const { spawn } = require('child_process'); for (const [cmd, argv0, ...args] of ${JSON.stringify(kids)}) spawn(cmd, args, { argv0 }); ${WAIT}`;
+  const child = spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000010';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  let s;
+  await streamed(base, async blocks => {
+    // the third sample with all eighteen, once starting up no longer counts as CPU
+    s = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).filter(g => g?.n === 18)[2], 'a sample with all eighteen');
+  });
+  const by = Object.fromEntries(s.procs.map(p => [p.name, p]));
+  assert.strictEqual(s.procs.length, 8, 'eight rows at most');
+  assert.strictEqual(s.procs.at(-1).name, 'other', 'the eighth is the rest');
+  assert.deepStrictEqual([by.node?.n, by.vite?.n, by.vitest?.n, by.sleep?.n, by.Chrome?.n], [2, 1, 1, 3, 2],
+    'node (the session and the server.js in a folder called next), vite by its file, vitest by its package, the sleeps together, Chrome and its helper as one');
+  assert.strictEqual(by.zsh?.n, 1, 'a login shell\'s "-zsh" is zsh');
+  assert.strictEqual(by.other.n, 7, 'the seven smallest one-process groups');
+  assert.strictEqual(s.procs.reduce((a, p) => a + p.n, 0), 18, 'every process counted once');
+  const rows = s.procs.slice(0, -1);
+  assert.ok(rows.every((p, i) => i === 0 || p.cpu < rows[i - 1].cpu || p.cpu === rows[i - 1].cpu && p.mem <= rows[i - 1].mem), `busiest first: ${JSON.stringify(rows)}`);
+  assert.ok(s.procs.every(p => typeof p.cpu === 'number' && p.mem >= 0), 'each with its CPU and RAM');
+});
+
+test('usage: WebKit\'s helper services are named for what they do', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const code = `const { spawn } = require('child_process'); spawn('sleep', ['60'], { argv0: '/x/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU' }); setTimeout(() => {}, 60000)`;
+  const child = spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000011';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  await streamed(base, async blocks => {
+    await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).find(g => g?.procs?.some(p => p.name === 'WebKit GPU')), 'a GPU service called "WebKit GPU"');
+  });
+});
+
+test('usage: a tool a session started that daemonized stays with it, by the variable Claude Code sets on what it starts; another session\'s, or one without it, does not', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const WAIT = 'setTimeout(() => {}, 60000)';
+  // a live tool of the session (it carries the variable), then three tools that start a node of their own and exit, so it's launchd's child: the session's, another's and one with no variable
+  // (node, not sleep: macOS withholds the environment of its own signed tools, which is why a daemonized `sleep` can't be claimed)
+  const daemon = name => `require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { argv0: '${name}', detached: true, stdio: 'ignore' }).unref()`;
+  const tool = (socket, js) => `spawn(process.execPath, ['-e', ${JSON.stringify(js)}], { env: Object.fromEntries(Object.entries({ ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: ${JSON.stringify(socket)} }).filter(([, v]) => v)), stdio: 'ignore' });`;
+  // the session itself carries another session's value (it was started from one): that mustn't be taken for its own
+  const code = `const { spawn } = require('child_process'); ${tool('/s/mine', WAIT)} setTimeout(() => { ${tool('/s/mine', daemon('mine-daemon'))} ${tool('/s/other', daemon('other-daemon'))} ${tool('', daemon('bare-daemon'))} }, 500); ${WAIT}`;
+  const child = spawn(process.execPath, ['-e', code], { env: { ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: '/s/outer' }, stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000012';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  await streamed(base, async blocks => {
+    const names = () => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]?.procs?.map(p => p.name) ?? []);
+    await until(() => names().find(n => n.includes('mine-daemon')), 'the session\'s own daemon in its processes');
+    await new Promise(r => setTimeout(r, 1000)); // long enough for the others to have shown, were they going to
+    assert.ok(names().every(n => !n.includes('other-daemon') && !n.includes('bare-daemon')), 'only the session\'s own, by its variable');
+  });
+});
+
+test('usage: a session that gets a new process (resumed) claims the new process\'s daemonized tools, not just its first one\'s', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const WAIT = 'setTimeout(() => {}, 60000)';
+  const daemon = name => `require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { argv0: '${name}', detached: true, stdio: 'ignore' }).unref()`;
+  const tool = (socket, js) => `spawn(process.execPath, ['-e', ${JSON.stringify(js)}], { env: { ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: ${JSON.stringify(socket)} }, stdio: 'ignore' });`;
+  const claude = code => { const c = spawn(process.execPath, ['-e', `const { spawn } = require('child_process'); ${code} ${WAIT}`], { stdio: 'ignore', detached: true }); t.after(() => process.kill(-c.pid)); return c; };
+  const id = 'aaaaaaaa-0000-4000-8000-000000000013';
+  const post = c => fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(c.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  const first = claude(tool('/s/first', WAIT));
+  await post(first);
+  await streamed(base, async blocks => {
+    const procs = () => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).filter(Boolean);
+    await until(() => procs().find(g => g.n >= 2), 'the first process and its tool, whose value is now known');
+    // the session is resumed: the same id in a new process, whose tools carry a value of their own
+    const second = claude(`${tool('/s/second', WAIT)} setTimeout(() => { ${tool('/s/second', daemon('second-daemon'))} }, 500);`);
+    await post(second);
+    await until(() => procs().find(g => g.procs?.some(p => p.name === 'second-daemon')), 'the new process\'s daemon in the session');
+  });
 });
 
 test('usage: with systemStats off nothing is sampled or sent', async t => {

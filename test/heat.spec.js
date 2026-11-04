@@ -28,6 +28,15 @@ test('a brief spike does not flash a colour, a sustained load does, and it cools
   expect(heatOf('unseen', { cpu: 300, mem: 0, n: 1 }).cpu, 'a session with no history uses its one reading').toBe(2);
 });
 
+test('a session\'s process groups are averaged the same way, by session and name, and forgotten when they go', () => {
+  const at = cpu => ({ mac, lantern: { cpu: 0, mem: 1, n: 1 }, sessions: { s: { cpu, mem: 0, n: 1, procs: [{ name: 'vitest', n: 1, cpu, mem: 0 }] } } });
+  for (let i = 0; i < 5; i++) recordUsage(at(0));
+  recordUsage(at(500));
+  expect(heatOf('s/vitest', { cpu: 500, mem: 0, n: 1 }).cpu, 'one 5-core sample among six: no colour').toBe(0);
+  recordUsage(usage(0, 0));
+  expect(heatOf('s/vitest', { cpu: 300, mem: 0, n: 1 }).cores, 'gone with its last sample: its one reading').toBe(3);
+});
+
 test('a session that is gone is forgotten, and the tooltip says why', () => {
   feed(300, 0, 6, 'gone');
   recordUsage(usage(0, 0, 'other'));
