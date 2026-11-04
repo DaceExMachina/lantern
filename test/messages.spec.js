@@ -13,13 +13,13 @@ const load = async () => {
   lanterns.applyStyle('barrel');
   return { live, state, frame, messages };
 };
-// Runs frames for `seconds` from `t`, noting each one: both moths' glow and gold pulse, the threads' widths and whether it was brisk.
+// Runs frames for `seconds` from `t`, noting each one: both moths' glow and gold pulse, the sender's swell and thread width, and whether it was brisk.
 const play = (frame, live, t, seconds) => {
   const seen = [];
   for (let i = 0; i < seconds * 60; i++) {
     frame.frame(t += 1000 / 60);
     const [a, b] = ['api', 'blog'].map(id => live.moths.get(id));
-    seen.push({ t, a: a.shine, b: b.shine, ga: a.gold?.at, gb: b.gold?.at, wa: a.thread.getAttribute('stroke-width'), brisk: live.brisk });
+    seen.push({ t, a: a.shine, b: b.shine, ga: a.gold?.at, gb: b.gold?.at, wa: a.swell?.getAttribute('d') || '', ta: a.thread.getAttribute('stroke-width'), brisk: live.brisk });
   }
   return { seen, t };
 };
@@ -37,9 +37,9 @@ test('a message between two flying moths: sender glows, gold runs down its threa
   const downs = seen.map(f => f.ga).filter(v => v !== undefined), ups = seen.map(f => f.gb).filter(v => v !== undefined);
   assert.ok(downs.every((v, i) => i === 0 || v < downs[i - 1]) && downs[0] > 0.9 && downs.at(-1) < 0.1, 'down the sender\'s thread, moth to lantern');
   assert.ok(ups.every((v, i) => i === 0 || v > ups[i - 1]) && ups[0] < 0.1 && ups.at(-1) > 0.9, 'up the receiver\'s, lantern to moth');
-  assert.ok(Number(seen[down].wa) > 1.5, 'the sender\'s thread draws thicker while the gold runs down it');
+  assert.ok(seen[down].wa.startsWith('M') && seen[down].ta === null, 'a gold swell runs down the sender\'s thread, which keeps its own width');
   const last = seen.at(-1);
-  assert.deepStrictEqual([messages.flights.length, last.a, last.b, last.ga, last.gb, last.wa], [0, 0, 0, undefined, undefined, null], 'all gone after');
+  assert.deepStrictEqual([messages.flights.length, last.a, last.b, last.ga, last.gb, last.wa], [0, 0, 0, undefined, undefined, ''], 'all gone after');
 });
 
 test('between two moths on the lantern only the glows play, and the frame is calm again after', async () => {

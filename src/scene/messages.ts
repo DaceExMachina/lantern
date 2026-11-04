@@ -1,9 +1,9 @@
 // Messages between sessions: when one session sends another a message (SendMessage, which the server passes on as
-// `event: message`), a gold pulse carries it. The sender's moth glows gold, a gold pulse runs down its thread to the
-// lantern, then up the receiver's thread to its moth, which glows gold in turn. A moth sitting on the lantern has no
+// `event: message`), a gold pulse carries it. The sender's moth turns a little gold, a gold pulse runs down its thread to the
+// lantern, then up the receiver's thread to its moth, which turns gold in turn. A moth sitting on the lantern has no
 // thread out, so that leg is skipped: the pulse just reaches the lantern, or leaves from it.
-// This only says, each frame, where the gold is: frame.ts draws it, on the threads (mothThread, with the tool calls'
-// white pulse) and on the moths (mothColour), and each glow's aura is light the background shader draws, like a firefly's.
+// This only says, each frame, where the gold is: frame.ts draws it, a gold swell travelling along the thread with a faint
+// halo of light (mothThread), and a touch of gold on the moths' wings (mothColour).
 
 import { live } from './live';
 import { WARM } from './lanterns';
@@ -12,10 +12,10 @@ import { devButton, devSlider } from '../dev';
 import type { SessionMoth } from '../types';
 
 export const GOLD = WARM.mid; // the lantern's warm gold, #FFC266 (--accent-warm in the chrome)
-// The dev panel's knobs: the gold pulse's extra thickness on the thread, how strong its aura is, and how fast it all plays.
+// The dev panel's knobs: how much the thread swells under the gold pulse, how bright its halo is, and how fast it all plays.
 export const goldLook = {
-  width: devSlider('Messages', 'msgwidth', 'pulse thickness', 0, 4, 0.25, 2, 'How much thicker a thread draws while a message\'s gold pulse runs along it (scene units)', v => { goldLook.width = v; }),
-  aura: devSlider('Messages', 'msgaura', 'aura', 0, 2, 0.05, 1, 'How bright the soft glow behind a message\'s gold pulses is', v => { goldLook.aura = v; }),
+  width: devSlider('Messages', 'msgwidth', 'swell', 0, 4, 0.25, 2.5, 'How much thicker a thread swells where a message\'s gold pulse is (scene units)', v => { goldLook.width = v; }),
+  aura: devSlider('Messages', 'msgaura', 'halo', 0, 1, 0.05, 0.45, 'How bright the faint halo round a message\'s gold pulse is', v => { goldLook.aura = v; }),
   speed: devSlider('Messages', 'msgspeed', 'speed', 0.25, 3, 0.05, 1, 'How fast a message plays: the glows and the trip down and up the threads', v => { goldLook.speed = v; }),
 };
 // seconds at speed 1: each moth's glow, and each leg along a thread
