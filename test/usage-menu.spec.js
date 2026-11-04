@@ -131,6 +131,15 @@ test('a click opens a session\'s processes under its row, in the dropdown, one r
   await w.findAll('#usage .acts button')[1].trigger('click');
   expect(card.openSession).toHaveBeenLastCalledWith('b', false); // Go to session
   expect(hide).toHaveBeenCalledTimes(2);
+  // hovering the open row's processes (busy's, still open) counts as hovering its row: the moth's card stays up, and goes once the pointer leaves them
+  card.peekSession.mockClear(); card.unpeekSession.mockClear();
+  await krow('busy').trigger('pointerenter'); await krow('busy').trigger('pointerleave');
+  await w.find('#usage .sd').trigger('pointerenter');
+  expect(card.peekSession).toHaveBeenLastCalledWith('b'); // back on the card it just left
+  expect(card.peekSession).toHaveBeenCalledTimes(2);
+  await w.find('#usage .sd').trigger('pointerleave');
+  expect(card.unpeekSession).toHaveBeenCalledTimes(2);
+  await krow('busy').trigger('click');
   await krow('quiet one').trigger('dblclick');
   expect(card.pinSession).toHaveBeenLastCalledWith('a'); // a double click: the card in full
   expect(hide).toHaveBeenCalledTimes(3);
@@ -147,5 +156,21 @@ test('hovering a segment or a row highlights that session in both bars and the k
   expect(hot().dim).toBe(false);
   await w.findAll('#usage .krow')[3].trigger('pointerenter'); // everything else: highlight only
   expect(hot()).toEqual({ segs: [false, false, false, true, false, false, false, true], rows: [false, false, false, true], dim: true });
+  w.unmount();
+});
+
+test('while a row is open the rows keep their order, numbers still live; a new session joins at the end; closing it sorts them again', async () => {
+  const { w, store } = await mounted();
+  const names = () => w.findAll('#usage .krow').map(r => r.find('.n').text());
+  const krow = name => w.findAll('#usage .krow').find(r => r.text().startsWith(name));
+  expect(names()).toEqual(['busy', 'Lantern', 'quiet one', 'everything else']);
+  await krow('busy').trigger('click');
+  store.sessions = [...store.sessions, { id: 'c', title: 'newcomer', cwd: '/w/c' }];
+  store.usage = { ...usage, sessions: { ...usage.sessions, a: { cpu: 90, mem: 900, n: 2 }, c: { cpu: 200, mem: 100, n: 1 } } }; // the quiet one and a newcomer now lead
+  await w.vm.$nextTick();
+  expect(names()).toEqual(['busy', 'Lantern', 'quiet one', 'newcomer', 'everything else']); // held, the newcomer at the end
+  expect(krow('quiet one').text()).toContain('45%'); // its numbers move all the same
+  await krow('busy').trigger('click');
+  expect(names()).toEqual(['newcomer', 'quiet one', 'busy', 'Lantern', 'everything else']); // closed: sorted again
   w.unmount();
 });
