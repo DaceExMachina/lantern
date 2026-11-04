@@ -63,6 +63,8 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
 function paint() {
   chrome.update();
   const c = $('card');
+  // while the usage dropdown (a popover, so in the top layer) is open the card goes in the top layer too, shown after it, which puts it above
+  if (document.querySelector('#usage:popover-open')) { c.popover = 'manual'; if (c.matches(':popover-open')) c.hidePopover(); c.showPopover(); }
   c.classList.add('show');
   c.classList.toggle('compact', !live.expanded);
 }
@@ -83,7 +85,7 @@ export function expandCard(zone: Zone) {
 }
 // shift+click does what right-click does (the area's `menu`, where it has one), since right-click isn't obvious
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
-export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); hidePrTip(); }
+export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); $('card').removeAttribute('popover'); hidePrTip(); }
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
