@@ -1,3 +1,4 @@
+import { recordUsage } from './scene/heat';
 import { Q } from './scene/scene';
 import { useLanternStore } from './stores/lantern';
 import { fetchStats, isGitHub, isNowPlaying, isReview, isUsage, parseJson, parseSettings } from './types';
@@ -18,7 +19,7 @@ export function connect(store = useLanternStore()) {
   listen('reviews', t => { const v = parseJson(t); store.reviews = Array.isArray(v) ? v.filter(isReview) : []; });
   // ?style= previews one lantern, whatever the settings say (the scene does the same)
   listen('settings', t => { up(); const settings = parseSettings(parseJson(t)); store.settings = { ...settings, style: Q.get('style') ?? settings.style }; if (settings.systemStats === false) store.usage = null; });
-  listen('usage', t => { const v = parseJson(t); if (isUsage(v)) store.usage = v; });
+  listen('usage', t => { const v = parseJson(t); if (isUsage(v)) { recordUsage(v); store.usage = v; } });
   listen('github', t => { const github = parseJson(t); if (isGitHub(github)) store.github = github; });
   listen('nowPlaying', t => { const v = parseJson(t); store.nowPlaying = isNowPlaying(v) ? v : null; });
   listen('nowPlayingArt', t => { const v = parseJson(t); store.nowPlayingArt = typeof v === 'string' ? v : ''; }); // a data URL, or "" for none

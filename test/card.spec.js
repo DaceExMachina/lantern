@@ -411,3 +411,18 @@ test('a long title shortens to one line with an ellipsis; the open arrow and the
   assert.strictEqual(style(go).flexShrink, '0', 'the arrow never shrinks or wraps');
   for (const el of [card.querySelector('h3 .chip'), card.querySelector('h3 .pin')].filter(Boolean)) assert.strictEqual(style(el).flexShrink, '0');
 });
+
+test('a session\'s CPU and RAM on its card turn yellow, orange, then red as it uses more, each with its reason, the icon along with the number', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  const card = await show(session());
+  const steps = [[50, 1024, 'hot0', 'hot0'], [150, 4 * 1024, 'hot1', 'hot1'], [250, 8 * 1024, 'hot2', 'hot2'], [450, 16 * 1024, 'hot3', 'hot3']]; // cores' worth, GB
+  for (const [cpu, mem, c, m] of steps) {
+    store.usage = { sessions: { s1: { cpu, mem, n: 3 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 65536, pressure: 'normal' } };
+    await nextTick();
+    const parts = [...find(card, 'use')[0].children];
+    assert.deepStrictEqual(parts.map(p => p.className), [c, m], `${cpu}% of a core, ${mem} MB`);
+    assert.ok(parts.every(p => p.querySelector('svg')), 'the icon is inside the coloured part, so it takes the colour too');
+    assert.strictEqual(parts[0].title !== '' && /^(high CPU: about|CPU )/.test(parts[0].title), true);
+  }
+  assert.strictEqual(find(card, 'use')[0].children[1].title, 'high RAM: 16.0 GB');
+});

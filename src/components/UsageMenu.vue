@@ -14,6 +14,7 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, shallowRef, watch } from 'vue';
 import { cores, memText, openSession, peekSession, pinSession, project, unpeekSession } from '../scene/card';
+import { heatOf, heatTip } from '../scene/heat';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
 import UsageIcon from './UsageIcon.vue';
@@ -46,9 +47,9 @@ const popup = computed(() => {
     .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { id, name: s ? s.title || project(s) : id.slice(0, 8), g, c: tintFor(s ?? { id }) }; });
   const rows = [{ id: '', name: 'Lantern', g: v.lantern, c: LANTERN }, ...sessions]
     .sort((a, b) => Math.round(b.g.cpu) - Math.round(a.g.cpu) || b.g.mem - a.g.mem)
-    .map(r => ({ id: r.id, name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, memPct: r.g.mem / total * 100 }));
+    .map(r => { const h = heatOf(r.id || 'lantern', r.g), tip = heatTip(h, r.g); return { id: r.id, name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, memPct: r.g.mem / total * 100, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem }; });
   const cpuElse = Math.max(0, v.mac.cpu - rows.reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(0, used - rows.reduce((a, r) => a + r.mem, 0));
-  const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100 }];
+  const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '' }];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
     rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu) })),
@@ -95,7 +96,7 @@ const rowEvents = (key: string, id: string) => {
         <div class="kh"><span>Session</span><span>CPU</span><span>MEM</span></div>
         <component :is="r.id ? 'button' : 'div'" v-for="r in popup.rows" :key="r.name" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
           v-on="rowEvents(r.key, r.id)">
-          <i class="sw" :style="{ background: r.c }"></i><span class="n">{{ r.name }}</span><span>{{ r.cpuText }}</span><span>{{ r.memText }}</span>
+          <i class="sw" :style="{ background: r.c }"></i><span class="n">{{ r.name }}</span><span :class="`hot${r.cpuHot}`" :title="r.cpuTip || undefined">{{ r.cpuText }}</span><span :class="`hot${r.memHot}`" :title="r.memTip || undefined">{{ r.memText }}</span>
           <b class="track"><i :style="{ width: r.cpuW, background: r.c }"></i></b>
         </component>
       </div>
