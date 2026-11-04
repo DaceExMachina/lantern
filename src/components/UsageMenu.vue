@@ -13,7 +13,7 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // Lantern and the busiest sessions in the colours of those splits. The numbers come from the usage event every few seconds
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, shallowRef, watch } from 'vue';
-import { cores, memText, openSession, peekSession, pinSession, project, unpeekSession } from '../scene/card';
+import { cores, memText, peekSession, pinSession, project, statsSession, unpeekSession } from '../scene/card';
 import { heatOf, heatTip } from '../scene/heat';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
@@ -60,8 +60,8 @@ const popup = computed(() => {
 });
 
 // One highlighted session, by row key, shared by the split bars and the key: hovering or focusing either lights its segments and row and dims the rest.
-// A session's row is also a button standing in for its moth: hover or focus shows the moth's card, a click pins it open and puts the dropdown away
-// (a beat later, so a double click, which opens the session itself, still lands on the row)
+// A session's row is also a button standing in for its moth: hover or focus shows the moth's card, a click holds it open with its stats detail (its
+// processes) and puts the dropdown away (a beat later, so a double click, which opens the card in full, still lands on the row)
 const hot = ref<string | null>(null);
 let closing: ReturnType<typeof setTimeout> | undefined;
 const menuOf = (e: Event) => e.currentTarget instanceof Element ? e.currentTarget.closest<HTMLElement>('#usage') : null;
@@ -69,8 +69,8 @@ const rowEvents = (key: string, id: string) => {
   const on = () => { hot.value = key; if (id) peekSession(id); }, off = () => { hot.value = null; if (id) unpeekSession(); };
   return id ? {
     pointerenter: on, focus: on, pointerleave: off, blur: off,
-    click: (e: Event) => { const menu = menuOf(e); pinSession(id); clearTimeout(closing); closing = setTimeout(() => menu?.hidePopover?.(), 250); },
-    dblclick: (e: Event) => { clearTimeout(closing); menuOf(e)?.hidePopover?.(); openSession(id, false); },
+    click: (e: Event) => { const menu = menuOf(e); statsSession(id); clearTimeout(closing); closing = setTimeout(() => menu?.hidePopover?.(), 250); },
+    dblclick: (e: Event) => { clearTimeout(closing); menuOf(e)?.hidePopover?.(); pinSession(id); },
   } : { pointerenter: on, pointerleave: off };
 };
 </script>

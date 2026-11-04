@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { expect, test, vi } from 'vitest';
 import { tintFor } from '../src/scene/lanterns';
-vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), openSession: vi.fn() }));
+vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), statsSession: vi.fn(), openSession: vi.fn() }));
 import * as card from '../src/scene/card';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
@@ -109,12 +109,14 @@ test('a session row is a button that stands in for its moth; Lantern and everyth
   await rows[1].trigger('pointerenter'); // Lantern: highlight only
   expect(card.peekSession).toHaveBeenCalledTimes(2);
   await rows[0].trigger('click');
-  expect(card.pinSession).toHaveBeenCalledWith('b');
+  expect(card.statsSession).toHaveBeenCalledWith('b'); // a click: the card held open with its stats detail
+  expect(card.pinSession).not.toHaveBeenCalled();
   expect(hide).not.toHaveBeenCalled(); // a beat later, so a double click can still land
   vi.advanceTimersByTime(300);
   expect(hide).toHaveBeenCalledTimes(1);
   await rows[0].trigger('click'); await rows[0].trigger('dblclick');
-  expect(card.openSession).toHaveBeenCalledWith('b', false);
+  expect(card.pinSession).toHaveBeenCalledWith('b'); // a double click: the card in full
+  expect(card.openSession).not.toHaveBeenCalled(); // going to the session is the card's own button now
   vi.advanceTimersByTime(300);
   expect(hide).toHaveBeenCalledTimes(2); // the double click closed it at once, not twice
   vi.useRealTimers();

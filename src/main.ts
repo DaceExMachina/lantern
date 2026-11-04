@@ -32,5 +32,5 @@ createApp(UsageMenu).use(pinia).mount('#usageSlot'); // display: contents; the r
 createApp(ReviewsMenu).use(pinia).mount('#reviewsSlot'); // display: contents; the button places itself at the footer's left, its dropdown flies up from it
 const store = useLanternStore(pinia);
 // the scene's side of the store: copied over after a sync and when the card's target changes, never per frame
-chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.now = Date.now(); };
+chrome.update = () => { store.sessions = sessions; store.hovered = live.hovered; store.expanded = live.expanded; store.detail = live.detail; store.now = Date.now(); };
 connect(store);

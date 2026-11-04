@@ -371,7 +371,7 @@
   /* Every control on the card is an outer button or link that fills its zone: the padding around it, out to the card's
      edges and up to its neighbours, so the hit areas touch with no dead space. Its .face inside is the visible part
      (the pill, the hover tint), the size it always was, lit while the pointer is anywhere in the zone. */
-  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .more, .tog, .pr2, .pin), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
+  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .more, .tog, .pr2, .pin, .stat), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
   :is(#card, #dock) :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
   :is(#card, #dock) .face { display: block; border-radius: var(--radius-md); }
   /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill (a stale PR's or a ghost's has a plain .title and pill, same layout) */
@@ -422,6 +422,18 @@
   #card .proc > * { text-align: right; white-space: nowrap; }
   #card .proc .pn { text-align: left; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
   #card .proc .x { color: var(--ink-faint); }
+  /* the info line at a card's foot opens the stats detail; under the detail, buttons to open the card in full and go to the session, side by side */
+  #card button.stat { display: flex; width: 100%; gap: var(--space-1); align-items: center; text-align: left; }
+  #card button.stat .sl { flex: 1; min-width: 0; }
+  #card button.stat .chev { flex: none; transition: transform var(--fade); }
+  #card button.stat[aria-expanded="true"] .chev { transform: rotate(180deg); }
+  #card button.stat:hover { color: var(--ink-hover); }
+  #card .stat + .head { margin-top: var(--space-2); }
+  #card .acts { display: flex; margin-top: var(--space-1); }
+  #card .acts button.more { flex: 1; width: auto; text-align: center; }
+  /* a side session's CPU and RAM, left of its time */
+  :is(#card, #dock) .arow .use { flex: none; margin-left: auto; color: var(--ink-dim); }
+  :is(#card, #dock) .arow .use + .t { margin-left: 0; }
   :is(#card, #dock) .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); }
   :is(#card, #dock) .head .r { text-transform: none; letter-spacing: 0; }
   :is(#card, #dock) .tray > :not(:first-child):is(.head, .phead) { margin-top: var(--space-3); }
