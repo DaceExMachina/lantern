@@ -179,7 +179,11 @@
       page.$('usage').showPopover();
       [...page.$('usage').querySelectorAll('.krow.session')].find(r => r.textContent.startsWith('sess-alpha')).click();
       await new Promise(r => realSetTimeout(r, 100));
-    }, snap('usage-open'), () => { page.$('usage').hidePopover(); }],
+    }, snap('usage-open'), async () => { // then closed again and scrolled to the bottom: the sessions' two bars, everything else, and Lantern's own use under its rule
+      [...page.$('usage').querySelectorAll('.krow.session')].find(r => r.textContent.startsWith('sess-alpha')).click();
+      await new Promise(r => realSetTimeout(r, 100));
+      page.$('usage').scrollTop = 1e4;
+    }, snap('usage-rows'), () => { page.$('usage').hidePopover(); }],
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
   // lands on that control, the header's out to the card's own corners.
