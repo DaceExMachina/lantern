@@ -61,7 +61,7 @@ export function starAxis(starts: number[], from: number, to: number, gutter: num
 export const gutterFor = (early: number) => early ? Math.min(90, 8 + 14 * early) : 0;
 
 // Shows day `i` of /stats (the last one is today). `auto` is the lantern opening it by itself: it marks the day as
-// seen for every window, and says so in a notification when "notify me" is on.
+// seen for every window, and says so in a notification when "notify when a session waits" is on.
 export async function openRecap(i: number, auto = false) {
   const j = await fetchStats(), d = j.days[i];
   if (!d) return false;

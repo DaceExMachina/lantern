@@ -378,6 +378,9 @@ final class LanternServer {
     }
     // Session text (the barrel's pages) are on unless settings.json says "off"; while off, none are read, kept or sent.
     var wordsOn: Bool { settings["lanternText"] as? String != "off" }
+    // The now playing widget and the review requests are on unless settings.json says false. Off, the helper isn't running (NowPlaying.swift)
+    // and the review searches aren't asked (GitHub.swift).
+    func isOn(_ key: String) -> Bool { (settings[key] as? NSNumber)?.boolValue ?? true }
     func send(_ msg: String) { for c in clients.values { write(c, msg) } }
     /// Tells the pages something changed. Hook events arrive in bursts, so one send, a moment later, covers them all.
     func broadcast() {
@@ -1029,7 +1032,9 @@ final class LanternServer {
         // Change a shared setting and tell every open window.
         if json && req.url == "/settings" {
             var ok = false
+            let wasPlaying = isOn("nowPlaying"), wasReviews = isOn("reviews")
             if let j = body {
+                for key in ["nowPlaying", "reviews"] { if let on = j[key] as? NSNumber, CFGetTypeID(on) == CFBooleanGetTypeID() { settings[key] = on.boolValue; ok = true } }
                 if let github = j["github"] as? NSNumber, CFGetTypeID(github) == CFBooleanGetTypeID() {
                     settings["github"] = github.boolValue; ok = true
                     if github.boolValue { DispatchQueue.main.async { self.refreshGitHub() } } else { clearGitHub() }
@@ -1094,6 +1099,8 @@ final class LanternServer {
             if !ok { return respond(c, 400) }
             stats.dayStart = clockMinutes(settings["dayStart"]) ?? 0
             autoQuiet()
+            if wasPlaying != isOn("nowPlaying") { if isOn("nowPlaying") { startNowPlaying() } else { stopNowPlaying() } }
+            if wasReviews != isOn("reviews") { if isOn("reviews") { DispatchQueue.main.async { self.refreshGitHub() } } else { reviews = []; broadcast() } }
             settingsChanged()
             return respond(c, 204)
         }

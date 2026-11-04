@@ -10,6 +10,7 @@ import NowPlaying from '../src/components/NowPlaying.vue';
 import ReviewsMenu from '../src/components/ReviewsMenu.vue';
 import { flyColour } from '../src/scene/fireflies';
 import { useLanternStore } from '../src/stores/lantern';
+import { parseSettings } from '../src/types';
 
 let app, store;
 const button = () => document.getElementById('reviewsButton');
@@ -78,4 +79,15 @@ test('the now playing widget gives way while the dropdown is open', async () => 
 test('the list is capped below the window drag strip, so it scrolls instead of running under the title bar', () => {
   const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8').match(/^\s*#reviews \{[^}]*\}/m)?.[0];
   assert.match(css, /max-height: calc\(100vh - 52px - max\(var\(--space-5\), var\(--titlebar\)\)\)/);
+});
+
+test('with review requests switched off in the settings there is no button, and it returns when they are on again', async () => {
+  store.reviews = [{ url: 'https://github.com/o/app/pull/2', label: 'app#2', title: 'Fix it', need: 'waiting' }];
+  await nextTick();
+  assert.ok(button(), 'on by default');
+  store.settings = parseSettings({ reviews: false }); await nextTick();
+  assert.ok(!button());
+  assert.ok(!document.getElementById('reviews'));
+  store.settings = parseSettings({ reviews: true }); await nextTick();
+  assert.ok(button());
 });

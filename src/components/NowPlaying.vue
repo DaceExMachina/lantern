@@ -24,7 +24,7 @@ function press(command: 'previous' | 'toggle' | 'next' | 'open') {
 </script>
 
 <template>
-  <div v-if="item && !store.reviewsOpen" id="nowPlaying" aria-label="Now playing">
+  <div v-if="item && store.settings.nowPlaying !== false && !store.reviewsOpen" id="nowPlaying" aria-label="Now playing">
     <img v-if="art" class="art" :class="{ opens: item.bundle }" :src="art" alt="" @click="press('open')">
     <div class="what" :class="{ opens: item.bundle }" @click="press('open')"><div class="title" :title="item.title">{{ item.title }}</div><div v-if="by" class="by">{{ by }}</div></div>
     <button aria-label="Previous" title="Previous" @click="press('previous')"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor"><path d="M3 3h1.6v10H3zM13 3v10L5.5 8z"/></svg></button>

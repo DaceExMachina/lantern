@@ -18,12 +18,13 @@ let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision 
 // `login` is whose review requests count: `@me`, or `githubLogin` in the settings, for a gh whose account is an agent's rather than
 // the person's. `user-review-requested` is requests addressed to them, not to a team they are in.
 let PAGE_SIZE = 25, PAGED = ["reviews", "mine"]
-func prQuery(_ fields: String, _ login: String, after: [String: String]? = nil) -> String {
-    let searches = [
+func prQuery(_ fields: String, _ login: String, after: [String: String]? = nil, reviews: Bool = true) -> String {
+    var searches = [
         "reviews": "is:pr is:open archived:false user-review-requested:\(login)", "mine": "is:pr is:open archived:false author:@me",
         "closed": "is:pr is:closed archived:false author:@me sort:updated-desc", "reviewed": "is:pr is:open archived:false reviewed-by:\(login) sort:updated-desc",
         "requestedClosed": "is:pr is:closed archived:false user-review-requested:\(login) sort:updated-desc",
     ]
+    if !reviews { for name in ["reviews", "reviewed", "requestedClosed"] { searches[name] = nil } } // the review requests are switched off: don't ask for them
     let search = { (name: String) -> String in
         let paged = PAGED.contains(name), count = paged ? PAGE_SIZE : 30, cursor = after?[name].map { ", after: \"\($0)\"" } ?? ""
         let body = paged ? "pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { \(fields) } }" : "nodes { ... on PullRequest { url state } }"
@@ -40,12 +41,12 @@ func nextPages(_ d: JSON) -> [String: String] {
 }
 // Asks for every page of `reviews` and `mine` and returns the first answer with all the pages' PRs in it, or nil if the first has no
 // `mine` (a token without checks access) or a later one fails (a blip, so the caller keeps what it had). ponytail: 20 pages (500 PRs) at most.
-func allPages(_ fields: String, _ login: String, _ ask: (String) -> JSON?) -> JSON? {
-    guard var d = ask(prQuery(fields, login)), d["mine"] is JSON else { return nil }
+func allPages(_ fields: String, _ login: String, reviews: Bool = true, _ ask: (String) -> JSON?) -> JSON? {
+    guard var d = ask(prQuery(fields, login, reviews: reviews)), d["mine"] is JSON else { return nil }
     var next = nextPages(d)
     for _ in 1..<20 {
         if next.isEmpty { break }
-        guard let page = ask(prQuery(fields, login, after: next)) else { return nil }
+        guard let page = ask(prQuery(fields, login, after: next, reviews: reviews)) else { return nil }
         for name in next.keys { d[name] = ["nodes": nodesOf(d[name]) + nodesOf(page[name])] }
         next = nextPages(page)
     }
@@ -105,9 +106,9 @@ func git(_ cwd: String, _ args: [String]) -> String? {
 }
 // gh prints the response even when the query partly fails; a token without checks access fails the whole thing, so
 // that one is asked again without checks
-func ghGraphql(_ cwd: String, _ login: String) -> JSON? {
+func ghGraphql(_ cwd: String, _ login: String, reviews: Bool) -> JSON? {
     let data = { (q: String) -> JSON? in (parse(Data(run(GH, ["api", "graphql", "-f", "query=\(q)"], cwd: cwd, timeout: 20).out.utf8)) as? JSON)?["data"] as? JSON }
-    return allPages(PR_GQL, login, data) ?? allPages(Re(" commits\\(.*$").replace(PR_GQL, ""), login, data)
+    return allPages(PR_GQL, login, reviews: reviews, data) ?? allPages(Re(" commits\\(.*$").replace(PR_GQL, ""), login, reviews: reviews, data)
 }
 // Through gh, which GitHub account a folder gets can depend on where it is (a wrapper that picks a token by the
 // top folder under home, say: ~/work for one account, ~/projects for another). So the PR query runs once per top folder
@@ -169,7 +170,7 @@ extension LanternServer {
         refreshing = true
         let epoch = githubEpoch
         let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
-        let tokens = accounts.items, previous = lastResults, me = (settings["githubLogin"] as? String).flatMap { Re("^[A-Za-z0-9-]+$").test($0) ? $0 : nil } ?? "@me"
+        let tokens = accounts.items, previous = lastResults, wantReviews = isOn("reviews"), me = (settings["githubLogin"] as? String).flatMap { Re("^[A-Za-z0-9-]+$").test($0) ? $0 : nil } ?? "@me"
         DispatchQueue.global().async {
             // Only folders inside a git repo: elsewhere (a home folder, say) gh may fall back to the Keychain, which prompts
             // every time from a background process.
@@ -177,12 +178,12 @@ extension LanternServer {
             var errors: [String: String] = [:]
             let folders = tokens.isEmpty ? accountFolders(live.map(\.1)) : [], keys = tokens.isEmpty ? folders.map(\.top) : tokens.map(\.0) // a query is a top folder's gh or an account's token
             let queries: [() -> JSON?] = tokens.isEmpty
-                ? folders.map { f in { ghGraphql(f.cwd, me) } }
+                ? folders.map { f in { ghGraphql(f.cwd, me, reviews: wantReviews) } }
                 : tokens.map { login, account in {
                     var c = account
                     let ask = { (q: String) -> (status: Int, json: JSON?) in fetch(GH_API + "/graphql", method: "POST", headers: ["Authorization": "Bearer \(str(c["token"]))", "User-Agent": "lantern-pr"], body: ["query": q]) }
                     var expired = false
-                    let data = allPages(PR_GQL, me) { q in
+                    let data = allPages(PR_GQL, me, reviews: wantReviews) { q in
                         var r = ask(q)
                         if r.status == 401 { // expired or revoked: refresh once and ask again
                             switch self.renew(login, c) {

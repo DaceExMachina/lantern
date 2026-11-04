@@ -12,8 +12,9 @@ import { mothFireflies, reviewZones } from '../src/scene/frame';
 import { hex } from '../src/scene/lanterns';
 import { live } from '../src/scene/live';
 import { VIEW } from '../src/scene/scene';
+import { layOut } from './page.js';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const T0 = 1.8e12, FRAME = 1000 / 60, URL = 'https://github.com/o/r/pull/7';
 // one frame at wall clock `now`: the firefly's light [x, y, radius, brightness], or null once it's gone
@@ -229,4 +230,21 @@ test('a lamp firefly is pushed off a moth swarm, and its spread shrinks in a nar
   openWindow(1, 1);
   const narrow = at({ ...lampVary }), wide = (openWindow(1.8, 1), at({ ...lampVary }));
   assert.notDeepStrictEqual(narrow.slice(0, 2), wide.slice(0, 2), 'the spread follows the window width');
+});
+
+test('the lamp circles review requests only while the setting is on', async () => {
+  let clock = T0;
+  vi.spyOn(Date, 'now').mockImplementation(() => clock);
+  layOut(); vi.resetModules(); // the real frame wants the page's own markup
+  const [{ live }, frame, fireflies, lanterns] = await Promise.all(['live', 'frame', 'fireflies', 'lanterns'].map(f => import(`../src/scene/${f}.ts`)));
+  lanterns.applyStyle('barrel');
+  live.reviews = [{ url: URL, label: 'o/r#7', title: 'Fix it', need: 'failing', seen: 0 }];
+  frame.frame(1000);
+  assert.ok(fireflies.lanternFlies.has(URL), 'on: the request has its firefly');
+  live.reviewsOn = false;
+  for (const at of [2000, 5000, 8000]) { clock = T0 + at; frame.frame(at); } // it drifts off for 2.5s
+  assert.strictEqual(fireflies.lanternFlies.size, 0, 'off: the firefly is gone');
+  live.reviewsOn = true;
+  frame.frame(9000);
+  assert.ok(fireflies.lanternFlies.has(URL), 'and back when it is switched on again');
 });
