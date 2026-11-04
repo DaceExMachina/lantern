@@ -922,6 +922,7 @@ function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: numbe
 // Moths near the lantern catch its light, the session that needs me turns violet, and a scorched one is charred a
 // little, healing as its episode runs out.
 // Snoozed moths rest on the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
+let mothTint = devSlider('Moths', 'mothtint', 'moth tint', 0, 1, 0.05, 0.45, 'How much of its session\'s colour a moth carries (the same colour marks the session in the usage dropdown and on its cards)', v => { mothTint = v; });
 function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number) {
   const host = m.parentId === undefined ? m : live.moths.get(m.parentId), calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
   m.cool += ((calling ? (host?.session?.snoozed ? 0.5 : 1) : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3; // idle and landed: a hint of violet (MOTH_RESTING)
@@ -930,7 +931,7 @@ function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number
   const singed = needsMe && m.session?.error;
   // Landed, the flame is behind the moth: it turns to a darker silhouette against the glowing paper.
   const backlit = m.fold || 0;
-  let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+  let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, mothTint) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.

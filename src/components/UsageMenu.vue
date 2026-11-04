@@ -6,18 +6,14 @@
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, ref, shallowRef, watch } from 'vue';
 import { devSlider } from '../dev';
-import { memText, project } from '../scene/card';
+import { cores, memText, project } from '../scene/card';
+import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
 import UsageIcon from './UsageIcon.vue';
 import UsageRing from './UsageRing.vue';
 
 const TOP = 8, HISTORY = 24, W = 48, H = 14; // the busiest sessions listed, samples kept (24 x 5 s = 2 minutes), the sparkline's viewBox (stretched to fit)
-// a session's colour, handed out in the order sessions first show up so it keeps it as the ranking shifts; Lantern's is its own, and "everything else" is dim
-const SLOTS = ['--accent-violet', '--pr-in-review', '--pr-ready', '--pr-feedback', '--pr-changes', '--pr-draft', '--state-snoozed', '--agents-ink'];
-const slots = new Map<string, string>();
-const colour = (id: string) => { let c = slots.get(id); if (!c) { c = SLOTS[slots.size % SLOTS.length] ?? SLOTS[0]; slots.set(id, c ?? ''); } return `var(${c})`; };
 const LANTERN = 'var(--lantern-warm)', ELSE = 'var(--ink-faint)';
-const CORES = navigator.hardwareConcurrency || 1; // a session's CPU is in cores' worth of percent; the Mac's is of all of them
 
 const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring size in px (the number and the sparklines scale with it)', v => { size.value = v; }));
 
@@ -42,10 +38,10 @@ const popup = computed(() => {
   const used = v.mac.used, total = v.mac.total;
   const sessions = Object.entries(v.sessions).filter(([, g]) => g.n)
     .sort(([, a], [, b]) => Math.round(b.cpu) - Math.round(a.cpu) || b.mem - a.mem).slice(0, TOP)
-    .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { name: s ? s.title || project(s) : id.slice(0, 8), g, c: colour(id) }; });
+    .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { name: s ? s.title || project(s) : id.slice(0, 8), g, c: tintFor(s ?? { id }) }; });
   const rows = [{ name: 'Lantern', g: v.lantern, c: LANTERN }, ...sessions]
     .sort((a, b) => Math.round(b.g.cpu) - Math.round(a.g.cpu) || b.g.mem - a.g.mem)
-    .map(r => ({ name: r.name, c: r.c, cpu: r.g.cpu / CORES, mem: r.g.mem, memPct: r.g.mem / total * 100 }));
+    .map(r => ({ name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, memPct: r.g.mem / total * 100 }));
   const cpuElse = Math.max(0, v.mac.cpu - rows.reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(0, used - rows.reduce((a, r) => a + r.mem, 0));
   const all = [...rows, { name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100 }];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;

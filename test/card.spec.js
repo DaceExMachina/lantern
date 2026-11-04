@@ -7,6 +7,7 @@ import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import SessionCard from '../src/components/SessionCard.vue';
+import { tintFor } from '../src/scene/lanterns';
 import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
@@ -365,10 +366,21 @@ test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the
   assert.deepStrictEqual(find(one, 'phead').map(text), ['PRs · api · 1 ready · 1 draft'], 'a single repo is baked into the one heading');
 });
 
-test('the card shows its session\'s CPU and memory from the usage event, and nothing without one', async () => {
+test('the card shows its session\'s CPU and memory as one row with a bar for each, and nothing without a sample, with the setting off or with no processes', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
   const card = await show(session());
   assert.strictEqual(find(card, 'use').length, 0);
-  store.usage = { sessions: { s1: { cpu: 12.4, mem: 1536, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 2, pressure: 'normal' } };
+  store.usage = { sessions: { s1: { cpu: 100, mem: 1536, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 6144, pressure: 'normal' } };
   await nextTick();
-  assert.deepStrictEqual(find(card, 'use').map(text), ['12% CPU · 1.5 GB']);
+  const row = () => find(card, 'use');
+  assert.deepStrictEqual(row().map(text), ['25%1.5 GB'], 'of the Mac\'s four cores, 1536 MB');
+  assert.deepStrictEqual([...row()[0].querySelectorAll('.track i')].map(i => i.style.width), ['25.00%', '25.00%'], 'CPU of the Mac, RAM of its 6144 MB');
+  const tint = document.createElement('div'); tint.style.background = tintFor(session()); // the colour its moth has, as the browser spells it
+  assert.strictEqual(row()[0].querySelector('.sw').style.background, tint.style.background, 'in the session\'s colour');
+  store.usage = { ...store.usage, sessions: { s1: { cpu: 200, mem: 3072, n: 3 } } };
+  await nextTick();
+  assert.deepStrictEqual(row().map(text), ['50%3.0 GB'], 'follows each sample');
+  store.usage = { ...store.usage, sessions: { s1: { cpu: 0, mem: 0, n: 0 } } };
+  await nextTick();
+  assert.strictEqual(row().length, 0, 'no processes, no row');
 });

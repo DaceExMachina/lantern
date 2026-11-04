@@ -3,6 +3,7 @@
 import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { expect, test } from 'vitest';
+import { tintFor } from '../src/scene/lanterns';
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
@@ -65,10 +66,14 @@ test('the split bars give each listed row its share of the Mac and the rest to e
   expect(w.findAll('#usage .krow').map(r => parseFloat(r.find('.track i').element.style.width))).toEqual(cpu); // a row's bar is its CPU segment
   expect(w.findAll('#usage .bar')[0].findAll('i').map(i => i.attributes('title'))).toEqual(['busy · 28% CPU', 'Lantern · 1% CPU', 'quiet one · 0% CPU', 'everything else · 13% CPU']);
   expect(w.findAll('#usage .bar')[1].findAll('i')[0].attributes('title')).toBe('busy · 2.0 GB RAM');
-  // a session's swatch is the colour of its segment, and stays put when the ranking changes
+  // a session's swatch is its moth's tint, which is also the colour of its segment and its row bar, and stays put when the ranking changes
+  const tint = s => { const el = document.createElement('div'); el.style.background = tintFor(s); return el.style.background; }; // as the browser spells it
   const colours = () => Object.fromEntries(w.findAll('#usage .krow').map(r => [r.find('.n').text(), r.find('.sw').element.style.background]));
   const before = colours();
-  expect(new Set(Object.values(before)).size).toBe(4);
+  expect(before.busy).toBe(tint({ id: 'b', cwd: '/w/busy' }));
+  expect(before['quiet one']).toBe(tint({ id: 'a', cwd: '/w/a' }));
+  expect(w.findAll('#usage .bar')[0].findAll('i')[0].element.style.background, 'its segment too').toBe(before.busy);
+  expect(w.findAll('#usage .krow')[0].find('.track i').element.style.background, 'and its row bar').toBe(before.busy);
   store.usage = { ...usage, sessions: { ...usage.sessions, a: { cpu: 90, mem: 900, n: 2 } } }; // quiet one now leads
   await w.vm.$nextTick();
   expect(w.findAll('#usage .krow .n')[0].text()).toBe('quiet one');

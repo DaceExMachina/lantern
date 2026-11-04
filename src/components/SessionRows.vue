@@ -10,11 +10,12 @@
 // edges) and an inner .face that's the visible pill or hover, the size it always was (index.html). Each keeps its element
 // through a re-render (stable keys, no swapping a control out), since WebKit drops a click whose pressed button is replaced.
 import { computed, reactive, ref } from 'vue';
-import { AGENT_CAP, cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, project, running, sideRow, stateLine, usageText } from '../scene/card';
+import { AGENT_CAP, cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, project, running, sideRow, stateLine } from '../scene/card';
 import { useLanternStore } from '../stores/lantern';
 import type { Session } from '../types';
 import AgentRow from './AgentRow.vue';
 import PrBlock from './PrBlock.vue';
+import UsageLine from './UsageLine.vue';
 
 const props = defineProps<{ s: Session; now: number; dock?: boolean; compact?: boolean }>();
 const store = useLanternStore();
@@ -38,8 +39,6 @@ const counts = computed(() => {
   const n = (k: number, one: string) => k ? `${k} ${one}${k > 1 ? 's' : ''}` : '';
   return [run.value.count, n(side.value.length, 'side session'), n(props.s.github?.length ?? 0, 'PR')].filter(Boolean).join(' · ');
 });
-// its processes' CPU and memory, from the usage event (not in the sidebar's pins that have ended, or with the setting off)
-const use = computed(() => { const u = store.usage?.sessions[props.s.id]; return u && u.n ? usageText(u) : ''; });
 const toggleAgent = (id: string) => { if (!openAgents.delete(id)) openAgents.add(id); };
 // In the sidebar the PRs are listed or chips, per pin; the card only shows chips (listed stays undefined: no toggle).
 const listed = computed(() => props.dock ? !pin.value?.chips : undefined);
@@ -51,7 +50,7 @@ const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id
   <template v-if="compact">
     <div v-if="gist" class="gist">{{ gist }}</div>
     <div v-if="counts" class="foot counts">{{ counts }}</div>
-    <div v-if="use" class="foot use">{{ use }}</div>
+    <UsageLine :id="s.id" />
     <div class="hint">Click for details, double click to open session</div>
   </template>
   <div v-else class="cardBody">
@@ -68,6 +67,6 @@ const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id
       <div class="foot">{{ footLine(s, now) }}</div>
     </div>
     <div v-else class="foot">{{ footLine(s, now) }}</div>
-    <div v-if="use" class="foot use">{{ use }}</div>
+    <UsageLine :id="s.id" />
   </div>
 </template>
