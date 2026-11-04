@@ -312,7 +312,7 @@ final class LanternServer {
                         for try await line in lines.lines {
                             if line.hasPrefix("event: ") { event = String(line.dropFirst(7)); continue }
                             guard line.hasPrefix("data: ") else { continue }
-                            // a session messaging another is passed on as it is, for the pages' spark
+                            // a session messaging another is passed on as it is, for the pages' gold pulse
                             if event == "message" { let msg = "event: message\n\(line)\n\n"; await MainActor.run { self.send(msg) } }
                             // the sessions are the one message without an event name
                             if event == nil, let list = parse(Data(line.utf8.dropFirst(6))) as? [JSON] { heard = true; await MainActor.run { self.mirrored(list) } }
@@ -483,8 +483,8 @@ final class LanternServer {
         let ev = e["hook_event_name"] as? String
         if ev == "SessionEnd" { sessions[id] = nil; agents[id] = nil; return }
         // one session messaging another (its agents' messages included): the pages fly a spark between their moths. No text.
-        if sessions[id] != nil, let to = (e["peers"] as? [String])?.first(where: { $0 != id && sessions[$0] != nil }) {
-            send("event: message\ndata: \(jsonText(["from": id, "to": to, "at": now()]))\n\n")
+        if let to = (e["peers"] as? [String])?.first(where: { $0 != id && sessions[$0] != nil }) {
+            send("event: message\ndata: \(jsonText(["from": id, "to": to]))\n\n")
         }
 
         let joining = sessions[id] == nil

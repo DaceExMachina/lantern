@@ -880,7 +880,7 @@ test('a SendMessage to a peer session, by socket or by name, reaches the pages a
   const base = await serve(t, { '.claude/sessions/111.json': peer(111, UUID(1), 'jwt'), '.claude/sessions/222.json': peer(222, UUID(2), 'lantern'),
     '.claude/sessions/333.json': peer(333, UUID(3), 'gone') });
   const sent = (id, to) => post(base, '/event', { session_id: id, hook_event_name: 'PostToolUse', cwd: '/work', tool_name: 'SendMessage', tool_input: { to, summary: 's', message: 'secret' }, tool_response: {} });
-  const messages = blocks => blocks.filter(b => b.startsWith('event: message')).map(b => JSON.parse(b.match(/^data: (.*)$/m)[1])).map(({ from, to, at }) => ({ from, to, at: typeof at }));
+  const messages = blocks => blocks.filter(b => b.startsWith('event: message')).map(b => JSON.parse(b.match(/^data: (.*)$/m)[1]));
   await post(base, '/event', toolCall(UUID(1)));
   await post(base, '/event', toolCall(UUID(2)));
   const blocks = await streamed(base, async () => {
@@ -890,7 +890,7 @@ test('a SendMessage to a peer session, by socket or by name, reaches the pages a
     await sent(UUID(1), 'gone'); // listed, but not a session Lantern has
     await sent(UUID(1), 'jwt'); // itself
   });
-  assert.deepStrictEqual(messages(blocks), [{ from: UUID(1), to: UUID(2), at: 'number' }, { from: UUID(2), to: UUID(1), at: 'number' }]);
+  assert.deepStrictEqual(messages(blocks), [{ from: UUID(1), to: UUID(2) }, { from: UUID(2), to: UUID(1) }]);
   assert.ok(!blocks.some(b => b.startsWith('event: message') && b.includes('secret')));
 });
 
