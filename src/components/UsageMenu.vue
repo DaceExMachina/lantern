@@ -1,11 +1,18 @@
+<script lang="ts">
+import { ref } from 'vue';
+import { devSlider } from '../dev';
+
+// registered when the module loads, not when the readout first mounts, so the dev panel (which lists its rows once) has it
+const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring size in px (the number and the sparklines scale with it)', v => { size.value = v; }));
+</script>
+
 <script setup lang="ts">
 // CPU and RAM, a small readout in the scene's top left (below the app window's drag strip, which takes every click on it):
 // this Mac's CPU and RAM as two ring gauges with a number and a sparkline of the last two minutes under each. Clicking it opens a
 // dropdown (a native popover, like the reviews menu): the Mac's CPU and RAM each with a bar split by who uses it, and a key of
 // Lantern and the busiest sessions in the colours of those splits. The numbers come from the usage event every few seconds
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
-import { computed, ref, shallowRef, watch } from 'vue';
-import { devSlider } from '../dev';
+import { computed, shallowRef, watch } from 'vue';
 import { cores, memText, project } from '../scene/card';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
@@ -14,8 +21,6 @@ import UsageRing from './UsageRing.vue';
 
 const TOP = 8, HISTORY = 24, W = 48, H = 14; // the busiest sessions listed, samples kept (24 x 5 s = 2 minutes), the sparkline's viewBox (stretched to fit)
 const LANTERN = 'var(--lantern-warm)', ELSE = 'var(--ink-faint)';
-
-const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring size in px (the number and the sparklines scale with it)', v => { size.value = v; }));
 
 const store = useLanternStore();
 const roomy = !document.body.matches('.panel, .screensaver, .ambient'); // fixed by the time the chrome mounts
