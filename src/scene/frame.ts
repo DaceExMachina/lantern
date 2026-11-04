@@ -150,9 +150,25 @@ function drawRibbon(knot: Point, dt: number, s: number) {
   put(byId('ribbonEdge', SVGPathElement), 'd', `M${[...L, ...R.reverse()].map(pt).join('L')}Z`);
 }
 
+// The frame rate. Wings beating in flight and a firefly's entrance or exit (live.brisk) want every frame the display
+// shows; the rest drifts slowly, so while nothing's that quick the scene draws at fps.calm, about half the work. Each is a
+// cap: 60 draws every frame on a 60 Hz screen. The slack lets a 30 fps cap land on every other refresh (or every fourth at 120 Hz).
+export const fps = {
+  calm: devSlider('Performance', 'calmfps', 'calm fps', 20, 60, 5, 30, 'Frames a second while nothing moves fast: every moth landed, no firefly flying in or off (60 draws every frame)', v => { fps.calm = v; }),
+  brisk: devSlider('Performance', 'briskfps', 'flying fps', 20, 60, 5, 60, 'Frames a second while a moth flies or a firefly flies in or off (60 draws every frame)', v => { fps.brisk = v; }),
+};
+let drawnAt = -Infinity;
+/** Whether a frame is due at `t` (a requestAnimationFrame time, ms); if so it counts as drawn. */
+export function frameDue(t: number) {
+  if (t >= drawnAt && t - drawnAt < 1000 / (live.brisk ? fps.brisk : fps.calm) - 4) return false;
+  drawnAt = t;
+  return true;
+}
+
 // One frame: the lantern burns brighter the more sessions work and turns violet while one needs me, then each part
 // draws itself in turn: the lantern and its flame, the moths one by one, the stale wisps, and the light behind it all.
 export function frame(t: number) {
+  live.brisk = false; // until something this frame moves fast
   fitView(); // the scene's size, should it have changed (above)
   const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
   const s = t / 1000;
@@ -358,7 +374,7 @@ export function drawSparks(dt: number, s: number, { size, tip }: Flame) {
     sparkClock--;
     sparks.push({ x: 340 + (tx - farSlide / 2 - fx) / fk, y: FLAME_BASE + (ty - fy) / fk + 6 * size, vx: (Math.random() - 0.5) * 16, vy: -25 - Math.random() * 30, life: 1 });
   }
-  for (const p of sparks) { p.x += p.vx * dt + Math.sin(s * 4 + p.vy) * 0.3; p.y += p.vy * dt; p.life -= dt * 0.8; }
+  for (const p of sparks) { p.x += p.vx * dt + Math.sin(s * 4 + p.vy) * 18 * dt; /* its wobble by the second, so any frame rate shows the same */ p.y += p.vy * dt; p.life -= dt * 0.8; }
   while (sparks.length && (sparks[0]?.life ?? 1) <= 0) sparks.shift();
   // a fixed set of ember circles, reused every frame (switching lanterns replaces #sparks, so refill it then)
   const embers = $('sparks', SVGGElement);
@@ -881,6 +897,7 @@ function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: numbe
   const resting = perched && m.fidget !== 'hop'; // perched and not hopping
   m.rate ??= wingRate(m.key);
   const beat = m.beat = (m.beat ?? m.phase) + (resting ? 1.5 : flap * m.rate) * dt; // accumulated, so speed changes never jump the wings
+  if (!resting) live.brisk = true; // beating wings want every frame (frameDue)
   const height = (resting ? 0.35 : 1) * (0.85 + 0.15 * Math.sin(s * 0.9 + m.phase * 2)); // every beat stays clearly visible
   const sweep = resting ? 0 : 0.4 * Math.cos(m.beat);
   // landing turns the moth onto the lantern; taking off (or a restless hop) turns it back

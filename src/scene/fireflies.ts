@@ -186,6 +186,7 @@ export function swarm(flies: Map<string, Firefly>, want: Map<string, FlyState>, 
       const [mx, my] = stretch(m.home), dx = x - mx, dy = y - my, d = Math.hypot(dx, dy) || 1;
       if (d < AVOID) { const push = 55 * (1 - d / AVOID) ** 2 / d; x += dx * push; y += dy * push; }
     }
+    if (f.leave ? !gone : (now - (f.p.seen ?? 0)) / 1000 < ARRIVE) live.brisk = true; // flying in, or a merge or close flying off (frame.ts frameDue)
     if (!f.leave) y = Math.max(y, roof() + size); // under the app's drag strip, bloom and all; one leaving flies out past it
     f.x = x; f.y = y; f.size = size;
     if (f.leave && !gone && t > (f.leave.kind === 'merged' ? exitAt(f.leave.start) : 0) && offScreen(x, y, size)) { flies.delete(url); continue; } // only on its way out: a loop near the top edge dips off screen and back
