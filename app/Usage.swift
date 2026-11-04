@@ -12,7 +12,6 @@ final class Usage {
     private var before: [pid_t: UInt64] = [:] // CPU time in ns per process at the last sample
     private var at: Double? // when that was, seconds
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
-    private var names: [pid_t: (Double, String)] = [:] // each process's name and its start time, so a reused pid is named afresh
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
     /// `sessions` is each session's id and process ids. Call it from one queue; it keeps state between calls.
@@ -53,40 +52,38 @@ final class Usage {
             }
         }
         let cpu = { (ns: Double) in secs == 0 ? 0 : (ns / (secs * 1e9) * 1000).rounded() / 10 } // percent of a core, to a tenth
-        func sum(_ u: some Sequence<(pid: pid_t, ns: Double, mem: UInt64)>, n: Int) -> JSON {
+        // n counts the processes that could be read, so a session's count matches its rows (one run as root isn't)
+        func sum(_ u: [(pid: pid_t, ns: Double, mem: UInt64)]) -> JSON {
             let (ns, mem) = u.reduce((0.0, UInt64(0))) { ($0.0 + $1.ns, $0.1 + $1.mem) }
-            return ["cpu": cpu(ns), "mem": Int(mem >> 20), "n": n]
+            return ["cpu": cpu(ns), "mem": Int(mem >> 20), "n": u.count]
         }
         var perSession: JSON = [:]
         for (id, pids) in sessions {
-            let all = tree(pids), u = use(all)
+            let u = use(tree(pids))
             // by name, busiest first (CPU as shown, then memory, then name so the order holds still); past eight, the eighth is the rest
-            let groups = Dictionary(grouping: u) { name($0.pid, started[$0.pid] ?? 0) }
+            let groups = Dictionary(grouping: u) { Self.name($0.pid) }
                 .map { (name: $0.key, cpu: cpu($0.value.reduce(0) { $0 + $1.ns }), mem: $0.value.reduce(0) { $0 + $1.mem }, of: $0.value) }
                 .sorted { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
             let shown = groups.count > 8 ? groups.prefix(7) + [(name: "other", cpu: 0, mem: 0, of: groups.dropFirst(7).flatMap(\.of))] : groups[...]
-            var g = sum(u, n: all.count)
-            g["procs"] = shown.map { sum($0.of, n: $0.of.count).merging(["name": $0.name]) { a, _ in a } }
+            var g = sum(u)
+            g["procs"] = shown.map { sum($0.of).merging(["name": $0.name]) { a, _ in a } }
             perSession[id] = g
         }
         // Lantern: this server, and the app around it when that's what started it (its window), with the helper and the vite watcher below
         let parent = getppid()
         var buf = [CChar](repeating: 0, count: 4096)
         proc_pidpath(parent, &buf, 4096)
-        let lantern = tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : [])), mine = use(lantern)
-        let out: JSON = ["sessions": perSession, "lantern": sum(mine, n: lantern.count), "mac": mac()]
+        let lantern = use(tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : [])))
+        let out: JSON = ["sessions": perSession, "lantern": sum(lantern), "mac": mac()]
         before = now
         at = t
-        names = names.filter { started[$0.key] == $0.value.0 } // forget the ones that ended
         return out
     }
 
     // A process's name as a person reads it: the last part of its argv[0], as Activity Monitor shows it (Claude Code's binary is
     // named for its version but runs as "claude"), or for node or python running a tool everyone knows, the tool.
-    // ponytail: named once per process; a process that renames itself later (process.title) keeps its first name.
     private static let tools: Set<String> = ["vite", "vitest", "tsc", "vue-tsc", "playwright", "next"]
-    private func name(_ pid: pid_t, _ start: Double) -> String {
-        if let (s, n) = names[pid], s == start { return n }
+    private static func name(_ pid: pid_t) -> String {
         let args = Self.args(pid)
         // a path's last part; a title a process gave itself (node's process.title, "npm exec some-mcp --flag"), its first word
         let first = args.first ?? "", path = first.hasPrefix("/") ? first : String(first.split(separator: " ").first ?? "")
@@ -98,12 +95,14 @@ final class Usage {
             proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
             n = withUnsafeBytes(of: info.pbi_comm) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
         }
-        if n == "node" || n.lowercased().hasPrefix("python"), let script = args.dropFirst().first(where: { !$0.hasPrefix("-") }) {
-            // the script's path from its end: .bin/vite, vitest/dist/workers/forks.js, typescript/bin/tsc, @playwright/test/cli.js
-            let parts = script.split(separator: "/").reversed().map { $0.split(separator: ".").first.map { String($0.drop { $0 == "@" }) } ?? "" }
-            if let tool = parts.first(where: Self.tools.contains) { n = tool }
+        // node or python running a script (code given inline, `node -e` or `python -c`, has none to name it by)
+        if n == "node" || n.lowercased().hasPrefix("python"), let script = args.dropFirst().prefix(while: { !["-e", "--eval", "-p", "--print", "-c"].contains($0) }).first(where: { !$0.hasPrefix("-") }) {
+            // the script's own name (.bin/vite, typescript/bin/tsc) or its package's (node_modules/vitest/dist/workers/forks.js,
+            // node_modules/@playwright/test/cli.js); never any folder on the way, so ~/x/next/server.js stays node
+            let file = String(script.split(separator: "/").last?.split(separator: ".").first ?? "")
+            let package = script.components(separatedBy: "node_modules/").dropFirst().last?.split(separator: "/").first.map { String($0.drop { $0 == "@" }) } ?? ""
+            if let tool = [file, package].first(where: tools.contains) { n = tool }
         }
-        names[pid] = (start, n)
         return n
     }
     // A process's arguments, from KERN_PROCARGS2 (argc, the executable's path, NULs, then argv); empty when it can't be read.
