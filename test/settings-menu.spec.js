@@ -127,7 +127,7 @@ test('a hovered row shows its tip docked above the menu; leaving, or closing the
 test('every option\'s tip follows its row, and the controls point at them', () => {
   const w = open({});
   const tips = w.findAll('.tip');
-  expect(tips.length).toBe(10);
+  expect(tips.length).toBe(11);
   for (const t of tips) {
     const prev = t.element.previousElementSibling;
     expect(prev.matches('.tip'), t.attributes('id')).toBe(false);
@@ -138,22 +138,25 @@ test('every option\'s tip follows its row, and the controls point at them', () =
 // the switch is one component (src/components/ToggleSwitch.vue), the quiet hours' off | on pair; every on/off row in the menu uses it
 test('every on/off row is the one off | on switch, and the menu has no checkbox', async () => {
   const w = open({ nowPlaying: false });
-  const rows = ['notify when', 'show stale PRs', 'show session text', 'now playing', 'review requests', 'quiet from', 'quiet until'].map(t => row(w, t));
+  const rows = ['notify when', 'show stale PRs', 'show session text', 'now playing', 'review requests', 'system stats', 'quiet from', 'quiet until'].map(t => row(w, t));
   for (const r of rows) {
     expect(r.classes(), r.text()).toContain('switch');
     expect(r.find('.pill').attributes('role'), r.text()).toBe('group');
     expect(r.findAll('button').map(b => b.text()), r.text()).toEqual(['off', 'on']);
   }
   expect(w.findAll('input[type=checkbox]').length, 'no checkbox in the menu').toBe(0);
-  expect(w.findAll('.pill').length).toBe(7);
+  expect(w.findAll('.pill').length).toBe(8);
   expect(isOn(w, 'now playing')).toBe(false);
   expect(isOn(w, 'review requests'), 'on unless the server says false').toBe(true);
+  expect(isOn(w, 'system stats'), 'on unless the server says false').toBe(true);
 });
 
-test('the now playing and review requests switches post their setting', async () => {
+test('the now playing, review requests and system stats switches post their setting', async () => {
   const w = open({});
   await flip(w, 'now playing', false);
   await flip(w, 'review requests', false);
   await flip(w, 'review requests', true);
   expect(posts).toEqual([['/settings', { nowPlaying: false }], ['/settings', { reviews: false }], ['/settings', { reviews: true }]]);
+  await flip(w, 'system stats', false);
+  expect(posts.at(-1)).toEqual(['/settings', { systemStats: false }]);
 });

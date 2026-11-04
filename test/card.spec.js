@@ -7,11 +7,12 @@ import { createPinia } from 'pinia';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import SessionCard from '../src/components/SessionCard.vue';
+import { tintFor } from '../src/scene/lanterns';
 import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, unpeekSession } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -365,6 +366,43 @@ test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the
   assert.deepStrictEqual(find(one, 'phead').map(text), ['PRs · api · 1 ready · 1 draft'], 'a single repo is baked into the one heading');
 });
 
+test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and a swatch of the session\'s colour starts the title; nothing without a sample or processes', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  const card = await show(session());
+  assert.strictEqual(find(card, 'use').length, 0);
+  store.usage = { sessions: { s1: { cpu: 100, mem: 615, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 6144, pressure: 'normal' } };
+  await nextTick();
+  const line = () => find(card, 'foot').map(text).find(t => t.includes('old'));
+  assert.match(line(), /active \d+m ago · 25% · 0\.6 GB$/, 'a quarter of the Mac, 615 MB as 0.6 GB: the same unit whatever the size');
+  assert.strictEqual(find(card, 'use')[0].querySelectorAll('svg').length, 2, 'the chip and the RAM stick stand for the words');
+  assert.strictEqual(find(card, 'bar').length + find(card, 'track').length, 0, 'no bars on the card');
+  const tint = document.createElement('div'); tint.style.background = tintFor(session()); // the colour its moth has, as the browser spells it
+  assert.strictEqual(find(card, 'sw')[0].style.background, tint.style.background, 'the swatch before the title is the session\'s colour');
+  assert.strictEqual(find(card, 'name')[0].style.color, '', 'and the title keeps its own colour');
+  assert.strictEqual(find(card, 'name')[0].firstElementChild, find(card, 'sw')[0], 'the swatch comes first in the title');
+  store.usage = { ...store.usage, sessions: { s1: { cpu: 200, mem: 3072, n: 3 } } };
+  await nextTick();
+  assert.match(line(), /· 50% · 3\.0 GB$/, 'follows each sample');
+  store.usage = { ...store.usage, sessions: { s1: { cpu: 0, mem: 0, n: 0 } } };
+  await nextTick();
+  assert.strictEqual(find(card, 'use').length, 0, 'no processes, nothing');
+});
+
+test('a session\'s row in the usage dropdown shows its moth\'s card on hover, puts it away on leaving, and pins it open on a click', async () => {
+  const s = session();
+  live.raw = [s]; sync();
+  peekSession('s1'); await nextTick();
+  assert.strictEqual(live.hovered, sessionMoth('s1'), 'hovering the row hovers the moth');
+  assert.ok($('card').classList.contains('show') && $('card').classList.contains('compact'), 'a compact card');
+  unpeekSession();
+  assert.strictEqual(live.hovered, null, 'leaving puts it away');
+  pinSession('s1'); await nextTick();
+  assert.strictEqual(live.expanded, true, 'a click expands it, as clicking the moth does');
+  unpeekSession();
+  assert.strictEqual(live.hovered, sessionMoth('s1'), 'and leaving the row leaves a pinned card be');
+  peekSession('nobody'); // a session with no moth is quietly nothing
+});
+
 test('a long title shortens to one line with an ellipsis; the open arrow and the pin stay on its row', async () => {
   const card = await show(session({ title: 'free trial, develop '.repeat(12) }));
   const [nm, go] = [card.querySelector('h3 .nm'), card.querySelector('h3 .go')], style = el => getComputedStyle(el);
@@ -372,4 +410,19 @@ test('a long title shortens to one line with an ellipsis; the open arrow and the
   assert.deepStrictEqual([style(nm.parentElement).display, style(nm).whiteSpace, style(nm).textOverflow], ['flex', 'nowrap', 'ellipsis']);
   assert.strictEqual(style(go).flexShrink, '0', 'the arrow never shrinks or wraps');
   for (const el of [card.querySelector('h3 .chip'), card.querySelector('h3 .pin')].filter(Boolean)) assert.strictEqual(style(el).flexShrink, '0');
+});
+
+test('a session\'s CPU and RAM on its card turn yellow, orange, then red as it uses more, each with its reason, the icon along with the number', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  const card = await show(session());
+  const steps = [[50, 1024, 'hot0', 'hot0'], [150, 4 * 1024, 'hot1', 'hot1'], [250, 8 * 1024, 'hot2', 'hot2'], [450, 16 * 1024, 'hot3', 'hot3']]; // cores' worth, GB
+  for (const [cpu, mem, c, m] of steps) {
+    store.usage = { sessions: { s1: { cpu, mem, n: 3 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 65536, pressure: 'normal' } };
+    await nextTick();
+    const parts = [...find(card, 'use')[0].children];
+    assert.deepStrictEqual(parts.map(p => p.className), [c, m], `${cpu}% of a core, ${mem} MB`);
+    assert.ok(parts.every(p => p.querySelector('svg')), 'the icon is inside the coloured part, so it takes the colour too');
+    assert.strictEqual(parts[0].title !== '' && /^(high CPU: about|CPU )/.test(parts[0].title), true);
+  }
+  assert.strictEqual(find(card, 'use')[0].children[1].title, 'high RAM: 16.0 GB');
 });
