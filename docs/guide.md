@@ -28,7 +28,8 @@ On the pillar candle, a moth whose PR has failing checks (its red firefly) flies
 A few smaller things to watch for:
 
 - Threads pulse with a little glow each time a session or one of its agents runs a tool.
-- Each project gets a faint tint, slightly different per session, so you can tell moths apart.
+- When one session sends another a message, the sender glows gold, a gold pulse runs down its thread to the lantern and up the other's, and the receiver glows gold too. Only that a message went is shown, never what it said.
+- Each session gets its own colour, one of twelve spread around the colour wheel, so you can tell moths apart. The same colour marks it in the usage dropdown and on its cards.
 - A singed moth (grey) means the turn ended with an API error.
 
 The scene stretches to fill any window shape, wide, tall or square, and the lantern stays the same size in the middle.

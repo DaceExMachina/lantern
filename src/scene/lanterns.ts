@@ -868,10 +868,12 @@ export const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C849
 // backlit against the paper. Mostly grey: mix(mix(MOTH_IDLE, MOTH_CALL, 0.15), '#2B2440', 0.45).
 export const MOTH_RESTING = '#8B7FA2';
 
-// A tint per project (from its folder name), nudged a little per session so two sessions in one repo still differ. It colours the session's moth, and
-// its swatches in the usage dropdown and on its cards. Light enough (l 0.72) to read on the dark surfaces.
-export function tintFor(s: Pick<Session, 'id' | 'cwd'>) {
-  const hue = (hash((s.cwd ?? '').split('/').filter(Boolean).pop()) % 360 + (hash(s.id) % 29) - 14 + 360) % 360;
+// A tint per session: one of 12 hues thirty degrees apart (so pinks, reds and purples turn up beside the greens), picked from its id alone
+// so it never changes and every window agrees. It colours the session's moth, and its swatches in the usage dropdown and on its cards.
+// Light enough (l 0.72) to read on the dark surfaces. ponytail: a hash, so two live sessions can share a hue; assign by least used if that bites.
+export const TINT_HUES = 12;
+export function tintFor(s: Pick<Session, 'id'>) {
+  const hue = ((Math.imul(hash(s.id), 2654435761) >>> 0) / 2 ** 32 * TINT_HUES | 0) * (360 / TINT_HUES); // Fibonacci hashing: the top bits, since a string hash's low ones clump
   const l = 0.72, a = 0.55 * Math.min(l, 1 - l), f = (n: number) => { const k = (n + hue / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
   return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 }

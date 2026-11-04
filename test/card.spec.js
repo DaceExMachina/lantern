@@ -12,7 +12,7 @@ import { $ } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone, peekSession, pinSession, sessionUse, unpeekSession } from '../src/scene/card';
+import { enterZone, expandCard, hideCard, hoverZone, peekSession, placeCard, pinSession, sessionUse, unpeekSession } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -401,6 +401,34 @@ test('a session\'s row in the usage dropdown shows its moth\'s card on hover, pu
   unpeekSession();
   assert.strictEqual(live.hovered, sessionMoth('s1'), 'and leaving the row leaves a pinned card be');
   peekSession('nobody'); // a session with no moth is quietly nothing
+});
+
+test('a card shown from the usage dropdown goes in the top layer after it, so it draws above it, and stays at its moth', async () => {
+  live.raw = [session()]; sync();
+  const menu = document.createElement('div'), c = $('card');
+  menu.id = 'usage'; document.body.append(menu);
+  let open = false; // happy-dom has no top layer: a stand-in that tracks showPopover and hidePopover
+  const layer = [];
+  c.showPopover = () => { layer.push('card'); }; c.hidePopover = () => { layer.length = 0; };
+  const matches = c.matches.bind(c); c.matches = sel => sel === ':popover-open' ? layer.length > 0 : matches(sel);
+  document.querySelector = (q => sel => sel === '#usage:popover-open' ? (open ? menu : null) : q.call(document, sel))(document.querySelector);
+  const footer = document.querySelector('footer'); footer.getBoundingClientRect = () => ({ top: 700 }); // no layout or SVG matrices in happy-dom
+  const svg = document.querySelector('svg');
+  svg.getScreenCTM = () => ({ a: 1 }); svg.createSVGPoint = () => ({ matrixTransform: () => ({ x: 100, y: 200 }) });
+  try {
+    peekSession('s1');
+    assert.strictEqual(c.getAttribute('popover'), null, 'with the dropdown closed the card stays in the page');
+    unpeekSession();
+    open = true;
+    peekSession('s1');
+    assert.strictEqual(c.getAttribute('popover'), 'manual', 'with it open the card is a popover of its own');
+    assert.deepStrictEqual(layer, ['card'], 'shown, after the dropdown');
+    placeCard();
+    const gap = sessionMoth('s1').zone.r * 0.7;
+    assert.strictEqual(c.style.transform, `translate(${100 + gap}px, ${200 + gap}px)`, 'and placed at its moth\'s anchor, as ever');
+    unpeekSession();
+    assert.strictEqual(c.getAttribute('popover'), null, 'putting the card away takes it out of the top layer');
+  } finally { delete document.querySelector; menu.remove(); delete c.showPopover; delete c.hidePopover; delete c.matches; delete footer.getBoundingClientRect; delete svg.getScreenCTM; delete svg.createSVGPoint; }
 });
 
 test('a long title shortens to one line with an ellipsis; the open arrow and the pin stay on its row', async () => {

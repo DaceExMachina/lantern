@@ -60,18 +60,19 @@ const popup = computed(() => {
   const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '', app: false }, app];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
-    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: memText(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), use: r.id ? sessionUse(v, r.id) : r.app ? groupUse('lantern', v.lantern) : null })),
+    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), use: r.id ? sessionUse(v, r.id) : r.app ? groupUse('lantern', v.lantern) : null })),
     blocks: [
-      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
-      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, c: r.c, w: w(r.memPct), tip: `${r.name} · ${memText(r.mem)} RAM` })) }],
+      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, id: r.id, app: r.app, c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
+      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, app: r.app, c: r.c, w: w(r.memPct), tip: `${r.name} · ${gb(r.mem)} RAM` })) }],
   };
 });
 
 // One highlighted session, by row key, shared by the split bars and the key: hovering or focusing either lights its segments and row and dims the rest.
-// A session's row is also a button standing in for its moth: hover or focus shows the moth's card. A click opens the session's processes under
+// A session's row, and its segment in the bars, is also a button standing in for its moth: hover or focus shows the moth's card. A click opens the session's processes under
 // its row (StatsDetail), one row at a time, and another click closes them; a double click opens the moth's card in full and puts the dropdown
 // away, as the processes' Open card and Go to session do. (A double click's two clicks open and close the row on the way.)
 const hot = ref<string | null>(null);
+const gb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`; // the column is always GB, as the cards' numbers are
 const menu = useTemplateRef<HTMLElement>('menu');
 // one row's processes open at a time, the rows' order held from now until it closes (or the dropdown does)
 function setOpen(key: string | null) { held.value = key ? (popup.value?.rows ?? []).map(r => r.key) : null; open.value = key; }
@@ -99,7 +100,7 @@ const rowEvents = (key: string, id: string, app: boolean) => {
     <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover @toggle="(e: Event) => 'newState' in e && e.newState === 'closed' && setOpen(null)" :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
       <section v-for="b in popup.blocks" :key="b.kind">
         <div class="big"><UsageIcon :kind="b.kind" /><b>{{ b.num }}</b><span>{{ b.of }}</span></div>
-        <div class="bar"><i v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c }" @pointerenter="hot = s.key" @pointerleave="hot = null"></i></div>
+        <div class="bar"><component :is="s.id || s.app ? 'button' : 'i'" v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c }" v-on="rowEvents(s.key, s.id, s.app)"></component></div>
         <div class="chart" aria-hidden="true">
           <svg class="spark" :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none"><polyline :points="line(b.kind)" /></svg>
         </div>

@@ -15,6 +15,7 @@ import { clickZone, enterZone, expandCard, hideCard, zoneAt, zones } from './sce
 import { MIN } from './scene/stats';
 import { maybeRecap } from './scene/recap';
 import { flashBadge } from './scene/flash';
+import { sendMessage } from './scene/messages';
 
 const es = new EventSource('/events');
 // A named event's data, as text: its JSON goes through a guard or parser (types.ts) before the scene sees it.
@@ -29,6 +30,8 @@ listen('stale', t => { live.stalePRs = listOf(t, isStalePR); });
 listen('name', t => { const name = parseJson(t); live.firstName = isString(name) ? name : ''; showPencil(); }); // the user's first name, for Jerrett's pencil (pencil.ts)
 // a badge just earned (sent once, never on reconnect): the fireflies' flash, except in quiet hours and on the screensavers
 listen('badge', t => { const b = parseJson(t); if (isRecord(b) && isString(b['id']) && !quiet() && !document.body.matches('.screensaver, .ambient')) flashBadge(b['id']); });
+// one session messaged another (SendMessage): a gold pulse runs from its moth to the other's (messages.ts)
+listen('message', t => { const m = parseJson(t); if (isRecord(m) && isString(m['from']) && isString(m['to'])) sendMessage(m['from'], m['to']); });
 const PINNED = Q.get('style'); // ?style= previews one lantern, whatever the settings say
 let version = ''; // index.html's version on the server: when it changes (an edit, or a restart after one), reload
 listen('version', t => { if (version && t !== version) location.reload(); version = t; });
