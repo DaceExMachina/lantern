@@ -20,8 +20,8 @@ export let level = 0, cool = 0, sparkClock = 0, last = performance.now();
 interface Spark { x: number; y: number; vx: number; vy: number; life: number; scorch?: boolean }
 export const sparks: Spark[] = [];
 let pulseIds = 0; // numbers the threads' gradients
-// a message's gold swell on a thread: how far it reaches ahead of the pulse and trails behind, as shares of the thread
-const SWELL_HEAD = 0.05, SWELL_TAIL = 0.22;
+// a message's gold pulse on a thread: how far its thicker dashes reach ahead of it and trail behind, as shares of the thread
+const SWELL_HEAD = 0.05, SWELL_TAIL = 0.25;
 // Writing an attribute WebKit already has can still cost a repaint, so the frame loop only writes values that changed.
 export const put = (el: Element | null | undefined, k: string, v: string | number) => { if (el) { v = String(v); if (el.getAttribute(k) !== v) el.setAttribute(k, v); } };
 
@@ -792,7 +792,7 @@ export function mothTarget(k: string, m: Moth, dt: number, s: number): Aim | nul
 export function dropMoth(k: string, m: Moth) {
   m.g.remove(); m.zz?.forEach(t => t.remove());
   if (m.parentId === undefined) {
-    m.thread?.remove(); zones.delete(m.zone); if (m.flyZone) zones.delete(m.flyZone); m.grad?.remove(); m.flyGrad?.remove(); m.flyLine?.remove();
+    m.thread?.remove(); m.gilt?.forEach(g => g.remove()); m.giltGrads?.forEach(g => g.remove()); zones.delete(m.zone); if (m.flyZone) zones.delete(m.flyZone); m.grad?.remove(); m.flyGrad?.remove(); m.flyLine?.remove();
   }
   live.moths.delete(k);
   if (live.hovered === m) hideCard();
@@ -953,7 +953,10 @@ function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number
   const backlit = m.fold || 0;
   let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
-  if (m.shine) wing = mix(wing, GOLD, 0.35 * m.shine); // a touch of gold for a message it sent or got (messages.ts)
+  if (m.shine) { // a touch of gold for a message it sent or got (messages.ts), in a soft warm halo
+    wing = mix(wing, GOLD, 0.35 * m.shine);
+    addFlyLight(m.x, m.y, FIREFLY_BLOOM * (1.4 + 0.4 * m.shine), -goldLook.glow * m.shine, GOLD); // haze only: no hot centre
+  }
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
@@ -1061,24 +1064,39 @@ function mothThread(m: Moth, dt: number, s: number) {
     lit = mix(base, pal('core'), glow);
     if (m.pulse.at >= 1) m.pulse = null;
   }
-  // A message's gold pulse (messages.ts) takes the band while it runs, heading along the thread with a tail behind it. Where
-  // it is, the thread swells: a gold ribbon over that stretch alone, widest at the head and tapering off both ways (longer
-  // behind), with a faint halo of light hugging it, drawn by the background shader. The rest of the thread is as ever.
-  const gold = m.gold;
+  // A message's gold pulse (messages.ts) takes the band while it runs, heading along the thread with a tail behind it, and
+  // its dashes swell there: three copies of the thread, each a step thicker, dashed and marching in step with it, show only
+  // over a stretch round the pulse that narrows toward its head, so the dashes thicken in steps to the head and taper off
+  // behind. A faint halo of light hugs that stretch, drawn by the background shader.
+  const gold = m.gold, d = m.thread.getAttribute('d') ?? '';
   if (gold) {
     at = gold.at; lit = GOLD; glow = 1;
-    const [cx, cy] = bowAt(ax, ay, bx, by, m, s, threadBow), L: string[] = [], R: string[] = [];
-    for (let k = 0; k <= 12; k++) {
-      const d = -SWELL_TAIL + (SWELL_TAIL + SWELL_HEAD) * k / 12, q = Math.min(1, Math.max(0, at + gold.dir * d)), u = 1 - q;
-      const x = u * u * ax + 2 * u * q * cx + q * q * bx, y = u * u * ay + 2 * u * q * cy + q * q * by;
-      const tx = u * (cx - ax) + q * (bx - cx), ty = u * (cy - ay) + q * (by - cy), tl = Math.hypot(tx, ty) || 1;
-      const half = (0.75 + goldLook.width / 2) * (d > 0 ? 1 - d / SWELL_HEAD : (1 + d / SWELL_TAIL) ** 1.5);
-      L.push(`${(x - ty / tl * half).toFixed(1)} ${(y + tx / tl * half).toFixed(1)}`); R.unshift(`${(x + ty / tl * half).toFixed(1)} ${(y - tx / tl * half).toFixed(1)}`);
-      if (k % 4 === 0 && k) addFlyLight(x, y, FIREFLY_BLOOM * 0.55, goldLook.aura * (k / 12), GOLD); // the halo, faint, brightest at the head
+    if (!m.giltGrads) {
+      m.giltGrads = m.gilt.map(g => {
+        const grad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
+        for (let i = 0; i < 4; i++) grad.append(el('stop', { 'stop-color': GOLD }));
+        $('threads', SVGGElement).append(grad);
+        put(g, 'stroke', `url(#${grad.id})`);
+        return grad;
+      });
     }
-    if (!m.swell) $('threads', SVGGElement).append(m.swell = el('path', { fill: GOLD, stroke: 'none', 'fill-opacity': 0.85 }));
-    put(m.swell, 'd', `M${L.join('L')}L${R.join('L')}Z`);
-  } else if (m.swell) put(m.swell, 'd', '');
+    m.giltGrads.forEach((grad, k) => {
+      const g = nth(m.gilt, k), f = 1 - k / 3, back = at - gold.dir * SWELL_TAIL * f, ahead = at + gold.dir * SWELL_HEAD * f;
+      const lo = Math.min(back, ahead), hi = Math.max(back, ahead), edge = 0.03;
+      put(g, 'd', d); put(g, 'stroke-width', (1.5 + goldLook.width * (k + 1) / 3).toFixed(2));
+      put(grad, 'x1', ax.toFixed(1)); put(grad, 'y1', ay.toFixed(1)); put(grad, 'x2', bx.toFixed(1)); put(grad, 'y2', by.toFixed(1));
+      [[lo - edge, 0], [lo, 0.9], [hi, 0.9], [hi + edge, 0]].forEach(([o = 0, a = 0], i) => {
+        const st = grad.children[i];
+        put(st, 'offset', Math.min(1, Math.max(0, o)).toFixed(3)); put(st, 'stop-opacity', a);
+      });
+    });
+    const [cx, cy] = bowAt(ax, ay, bx, by, m, s, threadBow);
+    // the halo: one even, soft glow along the whole stretch, from lights closer together than their own size, all haze
+    for (let j = 0; j <= 10; j++) {
+      const q = Math.min(1, Math.max(0, at - gold.dir * (SWELL_TAIL * (1 - j / 10) - SWELL_HEAD * j / 10))), u = 1 - q;
+      addFlyLight(u * u * ax + 2 * u * q * cx + q * q * bx, u * u * ay + 2 * u * q * cy + q * q * by, FIREFLY_BLOOM * 0.6, -goldLook.aura * 0.3 * Math.min(1, j / 3, (10 - j) / 2 + 0.5), GOLD);
+    }
+  } else for (const g of m.gilt) put(g, 'd', '');
   if (!m.grad) {
     m.grad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
     for (let i = 0; i <= 16; i++) m.grad.append(el('stop', { offset: i / 16 }));

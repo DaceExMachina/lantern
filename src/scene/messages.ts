@@ -1,9 +1,9 @@
 // Messages between sessions: when one session sends another a message (SendMessage, which the server passes on as
-// `event: message`), a gold pulse carries it. The sender's moth turns a little gold, a gold pulse runs down its thread to the
-// lantern, then up the receiver's thread to its moth, which turns gold in turn. A moth sitting on the lantern has no
+// `event: message`), a gold pulse carries it. The sender's moth glows softly gold, a gold pulse runs down its thread to the
+// lantern, then up the receiver's thread to its moth, which glows in turn. A moth sitting on the lantern has no
 // thread out, so that leg is skipped: the pulse just reaches the lantern, or leaves from it.
-// This only says, each frame, where the gold is: frame.ts draws it, a gold swell travelling along the thread with a faint
-// halo of light (mothThread), and a touch of gold on the moths' wings (mothColour).
+// This only says, each frame, where the gold is: frame.ts draws it: the thread's dashes swelling gold where the pulse is, with a faint
+// halo of light (mothThread), and a touch of gold on the moths' wings in a soft warm halo (mothColour).
 
 import { live } from './live';
 import { WARM } from './lanterns';
@@ -12,10 +12,12 @@ import { devButton, devSlider } from '../dev';
 import type { SessionMoth } from '../types';
 
 export const GOLD = WARM.mid; // the lantern's warm gold, #FFC266 (--accent-warm in the chrome)
-// The dev panel's knobs: how much the thread swells under the gold pulse, how bright its halo is, and how fast it all plays.
+// The dev panel's knobs: how much the thread's dashes swell under the gold pulse, how bright its halo and the moths' are, and
+// how fast it all plays.
 export const goldLook = {
-  width: devSlider('Messages', 'msgwidth', 'swell', 0, 4, 0.25, 2.5, 'How much thicker a thread swells where a message\'s gold pulse is (scene units)', v => { goldLook.width = v; }),
+  width: devSlider('Messages', 'msgwidth', 'dash swell', 0, 4, 0.25, 2.5, 'How much thicker a thread\'s dashes get at the head of a message\'s gold pulse (scene units)', v => { goldLook.width = v; }),
   aura: devSlider('Messages', 'msgaura', 'halo', 0, 1, 0.05, 0.45, 'How bright the faint halo round a message\'s gold pulse is', v => { goldLook.aura = v; }),
+  glow: devSlider('Messages', 'msgglow', 'moth glow', 0, 2, 0.05, 0.9, 'How bright the soft warm halo round a moth that sends or gets a message is', v => { goldLook.glow = v; }),
   speed: devSlider('Messages', 'msgspeed', 'speed', 0.25, 3, 0.05, 1, 'How fast a message plays: the glows and the trip down and up the threads', v => { goldLook.speed = v; }),
 };
 // seconds at speed 1: each moth's glow, and each leg along a thread

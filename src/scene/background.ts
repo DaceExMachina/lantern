@@ -290,7 +290,7 @@ precision mediump float; uniform vec3 uCol; varying float vA, vS, vD;
 void main() { float d = length(gl_PointCoord - 0.5) * 2.0; gl_FragColor = vec4(mix(uCol, vec3(1.0, 0.15, 0.1), vD * (1.0 - vS)), vA * smoothstep(1.0, 0.6, d)); }`);
 // The fireflies and stale wisps (fireflies.ts, stale.ts): points of light added onto the scene, a white-hot core in a
 // bloom of the PR's colour, fading into a wide, more saturated haze that lights the air around it. bloomSprite in
-// fireflies.ts draws the same falloff for the badge flash, so change the two together.
+// fireflies.ts draws the same falloff for the badge flash, so change the two together (it has no haze-only kind).
 const FLIES = program(`
 attribute vec4 a; attribute vec3 c; uniform vec4 uBox; uniform vec2 uRes; varying float vA; varying vec3 vC;
 void main() {
@@ -304,9 +304,10 @@ void main() {
   // bloom: a hot pinpoint, a tight glow and a wider one, then a long inverse-square tail that fades out by the edge
   float peak = exp(-d * d * 400.0), inner = exp(-d * d * 60.0), wide = exp(-d * d * 10.0), tail = edge * edge / (1.0 + d * d * 150.0);
   // a near-white core, a centre that goes whiter as it swells, the PR's colour further out, then a deeper haze
-  float core = exp(-d * d * 1500.0);
-  vec3 light = mix(vC, vec3(1.0), 0.85) * 1.6 * core + mix(vC, vec3(1.0), clamp(peak * vA * 1.5, 0.0, 1.0)) * (1.2 * peak + 0.7 * inner) + vC * 0.5 * wide + deep * 0.6 * tail;
-  gl_FragColor = vec4(light * vA, 1.0);
+  // A negative brightness is a haze with no hot centre (a message's halo, frame.ts mothThread: many overlap into one even glow)
+  float a = abs(vA), hot = step(0.0, vA), core = exp(-d * d * 1500.0) * hot;
+  vec3 light = mix(vC, vec3(1.0), 0.85) * 1.6 * core + mix(vC, vec3(1.0), clamp(peak * a * 1.5, 0.0, 1.0)) * (1.2 * peak * hot + 0.7 * inner * mix(0.25, 1.0, hot)) + vC * 0.5 * wide + deep * 0.6 * tail;
+  gl_FragColor = vec4(light * a, 1.0);
 }`);
 const fliesBuf = gl.createBuffer();
 // the fireflies' light over the background and dust (a point bigger than the GPU allows, 511px on a Mac, is drawn at
