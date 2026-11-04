@@ -9,7 +9,7 @@ import { isReview, isSession, isStalePR, isRecord, isString, isTime, parseJson, 
 import { showPencil } from './scene/pencil';
 import './scene/github'; // its dev toggle
 import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
-import { fitView, frame } from './scene/frame';
+import { fitView, frame, frameDue } from './scene/frame';
 import { setLanternText, wakePages } from './scene/pages';
 import { clickZone, enterZone, expandCard, hideCard, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
@@ -76,7 +76,7 @@ applyStyle(PINNED && isStyleKey(PINNED) ? PINNED : 'barrel'); // until the serve
 // The macOS screensaver's web view never fires requestAnimationFrame, so when it goes quiet a timer takes over,
 // and the screensaver also calls lanternTick() on its own animation clock. In a normal window rAF runs and these idle.
 let rafAt = 0;
-const loop = (t: number) => { rafAt = performance.now(); frame(t); requestAnimationFrame(loop); };
+const loop = (t: number) => { rafAt = performance.now(); if (frameDue(t)) frame(t); requestAnimationFrame(loop); }; // frameDue: the frame rate (frame.ts)
 requestAnimationFrame(loop);
 window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 100) { rafAt = now - 86; frame(now); } }; // at most ~70 fps
 // Not while the page is hidden (a minimised or covered window, a closed panel), since rAF stops then too. Except in the

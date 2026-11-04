@@ -13,7 +13,7 @@ interface Live {
   recapSeen: string | null;
   moths: Map<string, Moth>; hovered: Hovered | null; expanded: boolean; hideTimer: ReturnType<typeof setTimeout> | undefined;
   tally: Stats['tally']; pinnedBadge: string | null; cdLeaves: Leaf[] | null; farWall: HTMLCanvasElement | null;
-  flyLightN: number; ghostWingN: number;
+  flyLightN: number; ghostWingN: number; brisk: boolean;
 }
 
 export const live: Live = {
@@ -41,6 +41,9 @@ export const live: Live = {
   farWall: null, // the Moroccan's far wall baked into a picture (lanterns.ts bakeFarWall), for background.ts to upload
   // what this frame queued for the background's shaders: firefly lights and ghost moth wing corners (background.ts resets them)
   flyLightN: 0, ghostWingN: 0,
+  // whether this frame drew something moving fast (a moth's wings in flight, a firefly flying in or off), which wants the
+  // display's full frame rate (frame.ts frameDue); frame() clears it
+  brisk: false,
 };
 
 // The chrome's view of the scene: src/main.ts points `update` at the Pinia store, which it copies the sessions, the card's
