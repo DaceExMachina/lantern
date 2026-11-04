@@ -17,7 +17,8 @@ export const GOLD = WARM.mid; // the lantern's warm gold, #FFC266 (--accent-warm
 export const goldLook = {
   width: devSlider('Messages', 'msgwidth', 'dash swell', 0, 4, 0.25, 2.5, 'How much thicker a thread\'s dashes get at the head of a message\'s gold pulse (scene units)', v => { goldLook.width = v; }),
   aura: devSlider('Messages', 'msgaura', 'halo', 0, 1, 0.05, 0.45, 'How bright the faint halo round a message\'s gold pulse is', v => { goldLook.aura = v; }),
-  glow: devSlider('Messages', 'msgglow', 'moth glow', 0, 2, 0.05, 0.9, 'How bright the soft warm halo round a moth that sends or gets a message is', v => { goldLook.glow = v; }),
+  tint: devSlider('Messages', 'msgtint', 'moth gold', 0, 1, 0.05, 0.8, 'How far a moth that sends or gets a message turns gold at the peak (its wings and body)', v => { goldLook.tint = v; }),
+  glow: devSlider('Messages', 'msgglow', 'moth glow', 0, 1, 0.02, 0.3, 'How bright the faint, wide halo round a moth that sends or gets a message is', v => { goldLook.glow = v; }),
   speed: devSlider('Messages', 'msgspeed', 'speed', 0.25, 3, 0.05, 1, 'How fast a message plays: the glows and the trip down and up the threads', v => { goldLook.speed = v; }),
 };
 // seconds at speed 1: each moth's glow, and each leg along a thread

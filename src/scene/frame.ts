@@ -953,9 +953,12 @@ function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number
   const backlit = m.fold || 0;
   let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
-  if (m.shine) { // a touch of gold for a message it sent or got (messages.ts), in a soft warm halo
-    wing = mix(wing, GOLD, 0.35 * m.shine);
-    addFlyLight(m.x, m.y, FIREFLY_BLOOM * (1.4 + 0.4 * m.shine), -goldLook.glow * m.shine, GOLD); // haze only: no hot centre
+  if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
+    wing = mix(wing, GOLD, goldLook.tint * m.shine);
+    // centred on the moth as drawn: its wings hinge at (-2, -6) from m.x, m.y and reach about 18 up and to the right, so
+    // their middle sits about (3, -13) off, scaled and turned with the moth. Haze only: no hot centre.
+    const a = (m.tilt ?? 0) * Math.PI / 180, ox = 3 * m.size, oy = -13 * m.size;
+    addFlyLight(m.x + ox * Math.cos(a) - oy * Math.sin(a), m.y + ox * Math.sin(a) + oy * Math.cos(a), FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
   }
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
