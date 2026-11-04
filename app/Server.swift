@@ -312,6 +312,8 @@ final class LanternServer {
                         for try await line in lines.lines {
                             if line.hasPrefix("event: ") { event = String(line.dropFirst(7)); continue }
                             guard line.hasPrefix("data: ") else { continue }
+                            // a session messaging another is passed on as it is, for the pages' gold pulse
+                            if event == "message" { let msg = "event: message\n\(line)\n\n"; await MainActor.run { self.send(msg) } }
                             // the sessions are the one message without an event name
                             if event == nil, let list = parse(Data(line.utf8.dropFirst(6))) as? [JSON] { heard = true; await MainActor.run { self.mirrored(list) } }
                             event = nil
@@ -475,10 +477,29 @@ final class LanternServer {
         return out
     }
 
+    /// The sessions a SendMessage that went through (PostToolUse) could be addressed to, read off the main queue: Claude Code
+    /// lists each running session in sessions/<pid>.json with its name and messaging socket, and `to` is one or the other
+    /// ("lantern", "uds:/tmp/cc-socks/2780.sock"). A subagent's id or "main" names none. handle() keeps the first that's live.
+    func peers(_ e: JSON) -> [String] {
+        guard str(e["hook_event_name"]) == "PostToolUse", str(e["tool_name"]) == "SendMessage",
+              let to = (e["tool_input"] as? JSON)?["to"] as? String, !to.isEmpty else { return [] }
+        return CLAUDE_DIRS.flatMap { dir in
+            ((try? FileManager.default.contentsOfDirectory(atPath: dir + "/sessions")) ?? []).filter { $0.hasSuffix(".json") }.compactMap { f -> String? in
+                guard let j = FileManager.default.contents(atPath: "\(dir)/sessions/\(f)").flatMap(parse) as? JSON, let sid = j["sessionId"] as? String else { return nil }
+                let named = (j["name"] as? String).map { $0.caseInsensitiveCompare(to) == .orderedSame } ?? false
+                return named || to == "uds:" + str(j["messagingSocketPath"]) ? sid : nil
+            }
+        }
+    }
+
     func handle(_ e: JSON) {
         guard let id = e["session_id"] as? String, !id.isEmpty else { return }
         let ev = e["hook_event_name"] as? String
         if ev == "SessionEnd" { sessions[id] = nil; agents[id] = nil; return }
+        // one session messaging another (its agents' messages included): the pages fly a spark between their moths. No text.
+        if let to = (e["peers"] as? [String])?.first(where: { $0 != id && sessions[$0] != nil }) {
+            send("event: message\ndata: \(jsonText(["from": id, "to": to]))\n\n")
+        }
 
         let joining = sessions[id] == nil
         var s = sessions[id] ?? ["id": id, "cwd": or(e["cwd"], "")!, "turn": "running", "started": now(), "last": 0]
@@ -947,6 +968,7 @@ final class LanternServer {
             // every event passes through one serial queue, so they're handled in the order they came
             prep.async {
                 e["taskStarts"] = self.taskStarts(e)
+                e["peers"] = self.peers(e)
                 DispatchQueue.main.async { self.handle(e); self.broadcast(); self.respond(c, 200) }
             }
             return

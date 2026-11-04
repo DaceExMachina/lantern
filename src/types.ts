@@ -206,17 +206,20 @@ interface MothBase {
   fidget?: '' | 'hop' | 'breathe'; into?: number; landJitter?: number; rand?: () => number;
   // a fresh snooze's puff and the sleeping z's it breathes out
   puff?: Puff | null; zStart?: number | undefined; zOff?: number;
+  shine?: number; // how strongly it glows gold for a message it sent or got, 0 to 1 (messages.ts)
 }
 /** A session's moth. It wanders round its `home` (a spot on the ring, `spot`, or circling its parent's as a satellite),
  * lands on the lantern when its session waits, and is tied to the lantern by its thread. */
 export interface SessionMoth extends MothBase {
-  parentId?: undefined; thread: SVGPathElement; zone: Zone; flyZone?: Zone; cardAt?: CardAt;
+  parentId?: undefined; thread: SVGPathElement; gilt: SVGPathElement[]; zone: Zone; flyZone?: Zone; cardAt?: CardAt;
   satellite?: string | null; spot?: Point; home?: Point; snooze?: '' | 'once' | 'always';
   // which spot on its line it lands on, and the hop it landed from (frame.ts mothTarget)
   along?: number; perchKey?: string; hopSlot?: number | undefined;
   // its hover areas' spots, its thread's gradient, bow and pulses, and its fireflies' line
   zx?: number; zy?: number; fx?: number; fy?: number; grad?: SVGLinearGradientElement; flyGrad?: SVGLinearGradientElement; flyLine?: SVGPathElement;
   bowK?: number; ticks?: number; pulse?: { at: number } | null;
+  giltGrads?: SVGLinearGradientElement[]; // the gold pulse's stretch on each of the `gilt` copies of its thread (frame.ts mothThread)
+  gold?: { at: number; dir: 1 | -1 } | null; // a message's gold pulse on its thread: where, from the lantern (0) to the moth (1), and which way (messages.ts)
 }
 /** An agent's moth, orbiting its session's. */
 export interface AgentMoth extends MothBase { parentId: string; a: number; r: number; speed: number }

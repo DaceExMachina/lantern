@@ -114,9 +114,11 @@ export function hoverArea(moth: () => SessionMoth, at: CardAt): Zone {
 
 function makeSessionMoth(key: string): SessionMoth {
   const [x, y] = stretch(EDGES[Math.floor(Math.random() * EDGES.length)] ?? [CX, CY]);
-  const thread = el('path');
-  $('threads', SVGGElement).append(thread);
-  const m: SessionMoth = { ...mothNode(), key, size: SIZE.session, thread, zone: hoverArea(() => m, 'moth'),
+  // its thread, and over it the copies a message's gold pulse thickens (frame.ts mothThread), made with it so their dashes
+  // march in step with its own (index.html's shimmer starts as each path is made)
+  const thread = el('path'), gilt = [el('path'), el('path'), el('path')];
+  $('threads', SVGGElement).append(thread, ...gilt);
+  const m: SessionMoth = { ...mothNode(), key, size: SIZE.session, thread, gilt, zone: hoverArea(() => m, 'moth'),
     x, y, phase: seeded(hash(key))() * 10, cool: 0, leaving: false };
   return m;
 }
