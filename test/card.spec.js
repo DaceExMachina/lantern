@@ -238,9 +238,9 @@ test('the card\'s times move on with the clock, a second at a time, with nothing
   mount(); // a store made on the fake clock, so its tick is one
   const card = await show(session({ state: 'working', last: now - 58e3, subagents: [{ id: 'a', description: 'Build', started: now - 59e3, last: now }] }));
   const times = () => [text(find(card, 'foot')[0]).split(' · ').at(-1), text(find(card, 't')[0])];
-  assert.deepStrictEqual(times(), ['active 58s ago', '59s']);
+  assert.deepStrictEqual(times(), ['58s ago', '59s']);
   vi.advanceTimersByTime(2000); await nextTick();
-  assert.deepStrictEqual(times(), ['active 1m ago', '1m'], 'two seconds on');
+  assert.deepStrictEqual(times(), ['1m ago', '1m'], 'two seconds on');
 });
 
 // WebKit drops a click when the button pressed is replaced before the release, so a re-render (a server update, the
@@ -373,7 +373,7 @@ test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and
   store.usage = { sessions: { s1: { cpu: 100, mem: 615, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 6144, pressure: 'normal' } };
   await nextTick();
   const line = () => find(card, 'foot').map(text).find(t => t.includes('old'));
-  assert.match(line(), /active \d+m ago · 25% · 0\.6 GB$/, 'a quarter of the Mac, 615 MB as 0.6 GB: the same unit whatever the size');
+  assert.match(line(), /old · \d+m ago25% · 0\.6 GB$/, 'a quarter of the Mac, 615 MB as 0.6 GB: the same unit whatever the size');
   assert.strictEqual(find(card, 'use')[0].querySelectorAll('svg').length, 2, 'the chip and the RAM stick stand for the words');
   assert.strictEqual(find(card, 'bar').length + find(card, 'track').length, 0, 'no bars on the card');
   const tint = document.createElement('div'); tint.style.background = tintFor(session()); // the colour its moth has, as the browser spells it
@@ -382,7 +382,7 @@ test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and
   assert.strictEqual(find(card, 'name')[0].firstElementChild, find(card, 'sw')[0], 'the swatch comes first in the title');
   store.usage = { ...store.usage, sessions: { s1: { cpu: 200, mem: 3072, n: 3 } } };
   await nextTick();
-  assert.match(line(), /· 50% · 3\.0 GB$/, 'follows each sample');
+  assert.match(line(), /ago50% · 3\.0 GB$/, 'follows each sample');
   store.usage = { ...store.usage, sessions: { s1: { cpu: 0, mem: 0, n: 0 } } };
   await nextTick();
   assert.strictEqual(find(card, 'use').length, 0, 'no processes, nothing');
@@ -437,7 +437,7 @@ test('a card\'s processes sit behind its info line: a click opens them in place,
   const card = await show(session());
   assert.strictEqual(find(card, 'proc').length, 0, 'hidden until asked for');
   const [line] = find(card, 'stat');
-  assert.ok(line && line.localName === 'button' && /old · active .* · 77% · 2\.8 GB$/.test(text(line)), 'the info line, CPU and RAM and all, is the button');
+  assert.ok(line && line.localName === 'button' && /old · .* ago77% · 2\.8 GB$/.test(text(line)), 'the info line, CPU and RAM and all, is the button');
   assert.strictEqual(line.getAttribute('aria-expanded'), 'false');
   line.click(); await nextTick();
   assert.strictEqual(find(card, 'stat')[0].getAttribute('aria-expanded'), 'true');

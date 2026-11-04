@@ -128,8 +128,8 @@ export const sideRow = (o: Session): Row => ({ id: o.id, job: o.title || project
 const TAG = /^\[([^\]]+)\]\s*/;
 export const tagOf = (activity: string) => activity.match(TAG)?.[1];
 export const stepOf = (activity: string) => activity.replace(TAG, '');
-// how old the session is and when it was last active
-export const footLine = (s: Session, now: number) => `${project(s)} · ${short(now - (s.started ?? now))} old · active ${short(now - (s.last ?? now))} ago`;
+// how old the session is and how long since it was last active
+export const footLine = (s: Session, now: number) => `${project(s)} · ${short(now - (s.started ?? now))} old · ${short(now - (s.last ?? now))} ago`;
 
 // The session's PRs, worst first, under a header that sums them up ("PRs · 1 ready · 2 in review · 8 drafts"). Either
 // chips coloured by state (its title in #prTip while hovered), or in the sidebar two-line rows (title; dot, number, state).

@@ -115,6 +115,7 @@
   };
   // A session's card expanded, as a click on its moth does, placed at once rather than over frames that would move the clock
   const expand = id => async () => { page.hideCard(); page.expandCard(page.live.moths.get(id).zone); await Promise.resolve(); page.placeCard(); };
+  let usageNow; // the usage sample the CPU and RAM scenes show
   // the chrome scenes: each panel opened over the barrel in turn, then closed (a function, as run() adds to LAST)
   const chrome = () => [
     // the now playing widget above the footer, with a cover; its buttons' hit areas run its full height and meet
@@ -153,12 +154,24 @@
       const g = (name, n, cpu, mem) => ({ name, n, cpu, mem }), sum = procs => procs.reduce((a, p) => ({ cpu: a.cpu + p.cpu, mem: a.mem + p.mem, n: a.n + p.n }), { cpu: 0, mem: 0, n: 0 });
       const busy = [g('vitest', 4, 380, 2900), g('tsc', 1, 95, 610), g('node', 6, 22.4, 950), g('claude', 1, 14.1, 820), g('vite', 1, 6.5, 410), g('Chrome', 3, 2.2, 640), g('zsh', 3, 0, 12), g('other', 5, 0.4, 85)];
       const side = [g('claude', 1, 9.5, 410), g('zsh', 1, 0, 4)];
-      emit('usage', { sessions: { 'sess-alpha': { ...sum(busy), procs: busy }, 'sess-delta': { ...sum(side), procs: side } }, lantern: { cpu: 3, mem: 200, n: 3 }, mac: { cpu: 30, used: 20000, total: 32768, pressure: 'normal' } });
+      usageNow = { sessions: { 'sess-alpha': { ...sum(busy), procs: busy }, 'sess-delta': { ...sum(side), procs: side } }, lantern: { cpu: 3, mem: 200, n: 3 }, mac: { cpu: 30, used: 20000, total: 32768, pressure: 'normal' } };
+      emit('usage', usageNow);
     },
     expand('sess-alpha'), () => { // opened up by the CPU and RAM rings, the card sits below them
       const card = page.$('card').getBoundingClientRect(), hud = document.getElementById('usageButton')?.getBoundingClientRect(); // the iTerm panel has none
       if (hud && card.left < hud.right && card.right > hud.left && card.top < hud.bottom) errs.push(`the card (top ${card.top}) is under the usage rings (bottom ${hud.bottom})`);
       page.$('card').querySelector('.cardBody').scrollTop = 1e4;
+    },
+    // its info line is one line whatever the numbers, and they keep their place as they tick: the narrowest, then the widest
+    async () => {
+      const foot = () => page.$('card').querySelector('.sf'), place = () => JSON.stringify([foot().getBoundingClientRect().height,
+        ...[...foot().querySelectorAll('.use > span')].map(v => { const b = v.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right)]; })]);
+      const at = (cpu, mem) => { emit('usage', { ...usageNow, sessions: { ...usageNow.sessions, 'sess-alpha': { ...usageNow.sessions['sess-alpha'], cpu, mem } } }); return new Promise(r => realSetTimeout(r, 50)).then(place); };
+      const narrow = await at(0, 10), wide = await at(800, 99.9 * 1024);
+      if (narrow !== wide) errs.push(`the card's info line moved as its numbers changed: ${narrow} then ${wide}`);
+      const sl = foot().querySelector('.sl'), use = foot().querySelector('.use').getBoundingClientRect();
+      if (sl.getClientRects().length !== 1 || Math.abs(sl.getBoundingClientRect().top - use.top) > 4) errs.push('the card\'s info line wraps');
+      emit('usage', usageNow); await new Promise(r => realSetTimeout(r, 50));
     }, snap('card-stats'), () => { page.hideCard(); },
     expand('sess-alpha'), async () => { page.$('card').querySelector('.stat').click(); await new Promise(r => realSetTimeout(r, 50)); page.$('card').querySelector('.cardBody').scrollTop = 1e4; }, snap('card-stats-open'), () => { page.hideCard(); },
     // the usage dropdown with the busy session's row clicked open, its processes under it (the iTerm panel has no dropdown)

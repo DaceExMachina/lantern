@@ -358,7 +358,7 @@
   :is(#card, .starCard, #dock) .pr i { flex: none; width: 6px; height: 6px; border-radius: 50%; align-self: center; }
   :is(#card, .starCard, #dock) .pr span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
   :is(#card, .starCard, #dock) a { color: var(--accent-violet); text-decoration: none; border-bottom: 1px solid var(--accent-violet-line); }
-  :is(#card, .starCard, #dock) a:hover { color: var(--ink-hover); border-color: var(--focus); }
+  :is(#card, .starCard, #dock) a:hover, #card button.stat:hover { color: var(--ink-hover); border-color: var(--focus); }
   select, input[type=time] { font: inherit; color: inherit; color-scheme: dark; background: var(--surface-raised); border: 1px solid var(--line); border-radius: var(--radius-md); padding: var(--space-0-5) var(--space-1-5); }
   :is(#card, .starCard, .tip) { position: fixed; left: 0; top: 0; pointer-events: none; opacity: 0; transition: opacity var(--fade); max-width: 300px;
     background: var(--surface-card); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-3); color: var(--ink);
@@ -411,6 +411,9 @@
   #card .hint { margin-top: var(--space-0-5); color: var(--ink-faint); font-size: var(--text-xs); }
   :is(#card, #dock) .tray { margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--surface-tray); border-top: 1px solid var(--line-soft); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
   :is(#card, #dock) .use { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  /* the info line's numbers hold their place: each with its icon in a fixed width, right-aligned, for "100%" (its % is wider than a digit) and "99.9 GB" */
+  :is(#card, #dock) .sf .use > span { display: inline-block; min-width: calc(4.5ch + 1.1em + var(--space-1)); text-align: right; }
+  :is(#card, #dock) .sf .use > :last-child { min-width: calc(7ch + 1.1em + var(--space-1)); }
   :is(#card, #dock) :is(.use, .procs) .hot1, #usage .hot1 { color: var(--pr-feedback); } /* a lot: yellow, then orange, then red (heat.ts) */
   :is(#card, #dock) :is(.use, .procs) .hot2, #usage .hot2 { color: var(--pr-changes); }
   :is(#card, #dock) :is(.use, .procs) .hot3, #usage .hot3 { color: var(--pr-failing); }
@@ -433,12 +436,11 @@
   #card .stat + .sd { margin-top: var(--space-2); }
   #usage .sd { padding: 0 var(--space-4) var(--space-2) var(--space-6); } /* indented about to the session's name */
   #usage .sd .procs { grid-template-columns: minmax(0, 1fr) auto 6ch 8ch; column-gap: var(--space-2); }
-  /* the info line at an expanded card's foot opens its processes, its chevron turning over */
-  #card button.stat { display: flex; width: 100%; gap: var(--space-1); align-items: center; text-align: left; }
-  #card button.stat .sl { flex: 1; min-width: 0; }
-  #card button.stat .chev { flex: none; transition: transform var(--fade); }
-  #card button.stat[aria-expanded="true"] .chev { transform: rotate(180deg); }
-  #card button.stat:hover { color: var(--ink-hover); }
+  /* the info line at an expanded card's foot opens its processes */
+  :is(#card, #dock) .sf { display: flex; gap: var(--space-2); align-items: center; white-space: nowrap; } /* one line: the text gives way, the numbers keep their place */
+  :is(#card, #dock) .sf .sl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  :is(#card, #dock) .sf .use { flex: none; }
+  #card button.stat { width: 100%; text-align: left; } /* a pointer, and on hover the links' colour */
   /* a side session's CPU and RAM, left of its time */
   :is(#card, #dock) .arow .use { flex: none; margin-left: auto; color: var(--ink-dim); }
   :is(#card, #dock) .arow .use + .t { margin-left: 0; }
