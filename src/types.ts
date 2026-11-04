@@ -77,8 +77,11 @@ export const isGitHub = (x: unknown): x is GitHub => isRecord(x)
   && arrayOf((a: unknown): a is GitHub['accounts'][number] => isRecord(a) && isString(a['login']) && isString(a['error']))(x['accounts'])
   && (x['signIn'] === null || isRecord(x['signIn']) && isString(x['signIn']['url']) && isString(x['signIn']['code']));
 /** CPU (percent of one core) and memory (MB, physical footprint) of a group of processes, and how many (app/Usage.swift). */
-export interface UsageGroup { cpu: number; mem: number; n: number }
-const isUsageGroup = (x: unknown): x is UsageGroup => isRecord(x) && isNumber(x['cpu']) && isNumber(x['mem']) && isNumber(x['n']);
+/** A session's also has `procs`: its processes by name, busiest first, the eighth "other" when there are more. */
+export interface UsageGroup { cpu: number; mem: number; n: number; procs?: ProcGroup[] }
+export interface ProcGroup { name: string; cpu: number; mem: number; n: number }
+const isProcGroup = (x: unknown): x is ProcGroup => isRecord(x) && isString(x['name']) && isNumber(x['cpu']) && isNumber(x['mem']) && isNumber(x['n']);
+const isUsageGroup = (x: unknown): x is UsageGroup => isRecord(x) && isNumber(x['cpu']) && isNumber(x['mem']) && isNumber(x['n']) && (x['procs'] === undefined || arrayOf(isProcGroup)(x['procs']));
 /** The usage event: every session's processes and their children, Lantern's own, and the Mac (cpu: percent of all cores; MB). */
 export interface Usage { sessions: Record<string, UsageGroup>; lantern: UsageGroup; mac: { cpu: number; used: number; total: number; pressure: string } }
 export const isUsage = (x: unknown): x is Usage => isRecord(x) && isRecord(x['sessions']) && Object.values(x['sessions']).every(isUsageGroup) && isUsageGroup(x['lantern'])

@@ -2870,6 +2870,34 @@ test('usage: a session\'s sample counts its process and the children it started,
   assert.ok(!blocks.some(b => b.startsWith('data:') && b.includes('"cpu"')), 'the session snapshot doesn\'t carry it');
 });
 
+test('usage: a session\'s processes go out grouped by name, a known tool by its name, busiest first, the rest past seven as "other"', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  const dir = fs.mkdtempSync(path.join(tmp, 'tools-')), vite = path.join(dir, 'node_modules/.bin/vite');
+  fs.mkdirSync(path.dirname(vite), { recursive: true });
+  fs.writeFileSync(vite, 'setTimeout(() => {}, 60000)');
+  // node (the session) running: three sleeps, node running vite, a login shell's "-zsh", and eight more names, one each
+  const kids = [['sleep', 'sleep'], ['sleep', 'sleep'], ['sleep', 'sleep'], [process.execPath, 'node', vite], ['sleep', '-zsh'], ...[1, 2, 3, 4, 5, 6, 7, 8].map(i => ['sleep', `p${i}`])];
+  const code = `const { spawn } = require('child_process'); for (const [cmd, argv0, arg] of ${JSON.stringify(kids)}) spawn(cmd, [arg ?? '60'], { argv0 }); setTimeout(() => {}, 60000)`;
+  const child = spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000010';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  let s;
+  await streamed(base, async blocks => {
+    s = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).find(g => g?.n === 14), 'a sample with all fourteen');
+  });
+  const by = Object.fromEntries(s.procs.map(p => [p.name, p]));
+  assert.strictEqual(s.procs.length, 8, 'eight rows at most');
+  assert.strictEqual(s.procs.at(-1).name, 'other', 'the eighth is the rest');
+  assert.deepStrictEqual([by.node?.n, by.vite?.n, by.sleep?.n], [1, 1, 3], 'node, the vite it runs by the tool\'s name, the sleeps together');
+  assert.strictEqual(by.other.n, 5, 'the five smallest one-process groups');
+  assert.strictEqual(s.procs.reduce((a, p) => a + p.n, 0), 14, 'every process counted once');
+  const rows = s.procs.slice(0, -1);
+  assert.ok(rows.every((p, i) => i === 0 || p.cpu < rows[i - 1].cpu || p.cpu === rows[i - 1].cpu && p.mem <= rows[i - 1].mem), `busiest first: ${JSON.stringify(rows)}`);
+  assert.ok(s.procs.every(p => typeof p.cpu === 'number' && p.mem >= 0), 'each with its CPU and RAM');
+});
+
 test('usage: with systemStats off nothing is sampled or sent', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
   await post(base, '/settings', { systemStats: false });

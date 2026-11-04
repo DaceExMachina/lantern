@@ -4,7 +4,7 @@ import { heatOf, heatTip } from './heat';
 import { chrome, live } from './live';
 import { $, titlebar } from './scene';
 import { sessionMoth } from './state';
-import type { Agent, CardAt, Hovered, PR, Session, Usage, Zone } from '../types';
+import type { Agent, CardAt, Hovered, PR, Session, Usage, UsageGroup, Zone } from '../types';
 
 // ---- hover card ------------------------------------------------------------------
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
@@ -23,12 +23,16 @@ export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 
 export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
 /** This Mac's core count: a group of processes' CPU is percent of one core, the usage readout's percents are of all of them. */
 export const cores = () => navigator.hardwareConcurrency || 1;
-/** A session's processes for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB, each with how hot it runs (heat.ts); null with no sample or no processes. */
+/** A group of processes' numbers for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB, each with how hot it runs (heat.ts, by `key`). */
+function useText(key: string, g: UsageGroup) {
+  const h = heatOf(key, g), tip = heatTip(h, g);
+  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+}
+/** A session's processes for its card: the totals and each group by name (the expanded card's Processes); null with no sample or no processes. */
 export function sessionUse(usage: Usage | null, id: string) {
   const g = usage?.sessions[id];
   if (!g || !g.n) return null;
-  const h = heatOf(id, g), tip = heatTip(h, g);
-  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+  return { ...useText(id, g), n: g.n, procs: (g.procs ?? []).map(p => ({ name: p.name, n: p.n, ...useText(`${id}/${p.name}`, p) })) };
 }
 export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 

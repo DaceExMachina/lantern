@@ -411,11 +411,17 @@
   #card .hint { margin-top: var(--space-0-5); color: var(--ink-faint); font-size: var(--text-xs); }
   :is(#card, #dock) .tray { margin: var(--space-2) calc(-1 * var(--space-3)) calc(-1 * var(--space-3)); padding: var(--space-1-5) var(--space-3) var(--space-2); background: var(--surface-tray); border-top: 1px solid var(--line-soft); border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
   :is(#card, #dock) .use { white-space: nowrap; font-variant-numeric: tabular-nums; }
-  :is(#card, #dock) .use .hot1, #usage .hot1 { color: var(--pr-feedback); } /* a lot: yellow, then orange, then red (heat.ts) */
-  :is(#card, #dock) .use .hot2, #usage .hot2 { color: var(--pr-changes); }
-  :is(#card, #dock) .use .hot3, #usage .hot3 { color: var(--pr-failing); }
+  :is(#card, #dock) :is(.use, .procs) .hot1, #usage .hot1 { color: var(--pr-feedback); } /* a lot: yellow, then orange, then red (heat.ts) */
+  :is(#card, #dock) :is(.use, .procs) .hot2, #usage .hot2 { color: var(--pr-changes); }
+  :is(#card, #dock) :is(.use, .procs) .hot3, #usage .hot3 { color: var(--pr-failing); }
   :is(#card, #dock) .use svg { width: 1.1em; height: 1.1em; vertical-align: -0.2em; margin-right: var(--space-1); }
   :is(#card, #dock) .tray .foot { margin-top: var(--space-1-5); }
+  /* the expanded card's processes by name: name, how many when more than one, CPU, RAM, in columns, quiet like the info line */
+  #card .procs { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: var(--space-0-5) var(--space-3); margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+  #card .proc { display: contents; }
+  #card .proc > * { text-align: right; white-space: nowrap; }
+  #card .proc .pn { text-align: left; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
+  #card .proc .x { color: var(--ink-faint); }
   :is(#card, #dock) .head { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-dim); font-size: var(--text-xs); }
   :is(#card, #dock) .head .r { text-transform: none; letter-spacing: 0; }
   :is(#card, #dock) .tray > :not(:first-child):is(.head, .phead) { margin-top: var(--space-3); }

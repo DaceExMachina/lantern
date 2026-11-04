@@ -19,6 +19,7 @@
   let wall = BASE; // the wall clock at T = 0. A scorching lantern's scene moves it (catchScorch); the stale PRs' dates stay on BASE
   window.lanternExpose = true; // src/expose.ts then puts the page's modules on window.lanternModules
   performance.now = () => T;
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 8 }); // a session's CPU is shown as a share of the Mac's cores
   window.Date = class extends RealDate { constructor(...a) { if (a.length) super(...a); else super(wall + T); } static now() { return wall + T; } };
   window.requestAnimationFrame = () => 0;
   window.setInterval = () => 0;
@@ -144,7 +145,16 @@
       emit('settings', { style: Q.get('style') || 'barrel', ribbon: 'plum', lanternText: 'off', stale: false, github: true, quietUntil: 0, quietFrom: '22:30',
         quietEnd: '7:15', quietEndOn: false, dayStart: '4:00', recapSeen: '9999-12-31' });
       page.$('menu').showPopover();
-    }, snap('menu-alt'),
+    }, snap('menu-alt'), () => { page.$('menu').hidePopover(); page.toggleDevPanel(); },
+    // the expanded cards' processes by name: a busy session (a test run, a type check, a dev server) and a quiet one
+    () => {
+      const g = (name, n, cpu, mem) => ({ name, n, cpu, mem }), sum = procs => procs.reduce((a, p) => ({ cpu: a.cpu + p.cpu, mem: a.mem + p.mem, n: a.n + p.n }), { cpu: 0, mem: 0, n: 0 });
+      const busy = [g('vitest', 4, 380, 2900), g('tsc', 1, 95, 610), g('node', 6, 22.4, 950), g('claude', 1, 14.1, 820), g('vite', 1, 6.5, 410), g('Google Chrome Helper (Renderer)', 3, 2.2, 640), g('zsh', 3, 0, 12), g('other', 5, 0.4, 85)];
+      const quiet = [g('claude', 1, 1.2, 380), g('node', 2, 0.3, 96), g('zsh', 1, 0, 4)];
+      emit('usage', { sessions: { 'sess-alpha': { ...sum(busy), procs: busy }, 'sess-bravo': { ...sum(quiet), procs: quiet } }, lantern: { cpu: 3, mem: 200, n: 3 }, mac: { cpu: 30, used: 20000, total: 32768, pressure: 'normal' } });
+    },
+    expand('sess-alpha'), () => { page.$('card').querySelector('.cardBody').scrollTop = 1e4; }, snap('card-procs'), () => { page.hideCard(); }, // scrolled to them
+    expand('sess-bravo'), snap('card-procs-quiet'), () => { page.hideCard(); },
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
   // lands on that control, the header's out to the card's own corners.

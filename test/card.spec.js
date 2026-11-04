@@ -426,3 +426,18 @@ test('a session\'s CPU and RAM on its card turn yellow, orange, then red as it u
   }
   assert.strictEqual(find(card, 'use')[0].children[1].title, 'high RAM: 16.0 GB');
 });
+
+test('an expanded card lists its processes by name, a count past one, CPU of the Mac and RAM in GB, hot ones coloured; the hover card doesn\'t', async () => {
+  Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
+  const procs = [{ name: 'vitest', n: 4, cpu: 300, mem: 2048 }, { name: 'claude', n: 1, cpu: 8, mem: 820 }, { name: 'zsh', n: 2, cpu: 0, mem: 12 }];
+  store.usage = { sessions: { s1: { cpu: 308, mem: 2880, n: 7, procs } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 65536, pressure: 'normal' } };
+  const card = await show(session());
+  const head = find(card, 'head').find(h => h.textContent.startsWith('Processes'));
+  assert.strictEqual(head && text(head), 'Processes7', 'a heading with how many processes, in the tray though it has no agents or PRs');
+  const rows = find(card, 'proc').map(r => [...r.children].map(text));
+  assert.deepStrictEqual(rows, [['vitest', '×4', '75%', '2.0 GB'], ['claude', '', '2%', '0.8 GB'], ['zsh', '×2', '0%', '0.0 GB']], 'in the order the server sent');
+  assert.strictEqual(find(card, 'proc')[0].children[2].className, 'hot2', 'three cores of CPU runs orange, as the session\'s own number would');
+  assert.strictEqual(find(card, 'pn')[0].title, 'vitest', 'a long name cut short is in full in its tooltip');
+  const compact = await hover(session());
+  assert.strictEqual(find(compact, 'proc').length, 0, 'the hover card keeps to its one line of totals');
+});

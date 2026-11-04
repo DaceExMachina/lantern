@@ -2,7 +2,8 @@
 // test runs, dev servers), Lantern's own processes, and the whole Mac. Native calls, no `ps`: one pass over the process table
 // for parents, then rusage for only the processes that count. Memory is the physical footprint (what Activity Monitor calls
 // Memory), not RSS, which counts pages the system can take back. A process's CPU is how much CPU time it used since the last
-// sample, as a share of one core, so a busy tool can show over 100.
+// sample, as a share of one core, so a busy tool can show over 100. A session's processes also go out grouped by name
+// ("procs", for its expanded card), the busiest first, eight groups at most.
 // ponytail: a process that starts and ends between two samples is missed; sample faster if short test runs matter.
 import Foundation
 import Darwin
@@ -11,6 +12,7 @@ final class Usage {
     private var before: [pid_t: UInt64] = [:] // CPU time in ns per process at the last sample
     private var at: Double? // when that was, seconds
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
+    private var names: [pid_t: (Double, String)] = [:] // each process's name and its start time, so a reused pid is named afresh
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
     /// `sessions` is each session's id and process ids. Call it from one queue; it keeps state between calls.
@@ -36,31 +38,81 @@ final class Usage {
             return out
         }
         var now: [pid_t: UInt64] = [:]
-        func group(_ pids: [pid_t]) -> JSON {
-            var mem: UInt64 = 0, cpu = 0.0
-            for p in pids {
+        let secs = at == nil || t <= since ? 0 : t - since
+        // CPU (ns used since the last sample) and memory (bytes) of each process that could be read
+        func use(_ pids: [pid_t]) -> [(pid: pid_t, ns: Double, mem: UInt64)] {
+            pids.compactMap { p in
                 var ru = rusage_info_v4()
                 let ok = withUnsafeMutablePointer(to: &ru) { $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(p, RUSAGE_INFO_V4, $0) } } == 0
-                guard ok else { continue }
+                guard ok else { return nil }
                 let ns = UInt64(Double(ru.ri_user_time + ru.ri_system_time) * timebase.0 / timebase.1)
                 now[p] = ns
-                mem += ru.ri_phys_footprint
                 // a process that began since the last sample has used all its time in it
-                if let was = before[p] { cpu += Double(ns &- was) } else if let s = started[p], s > since { cpu += Double(ns) }
+                let used = before[p].map { Double(ns &- $0) } ?? (started[p] ?? 0 > since ? Double(ns) : 0)
+                return (p, used, ru.ri_phys_footprint)
             }
-            return ["cpu": at == nil || t <= since ? 0 : (cpu / ((t - since) * 1e9) * 1000).rounded() / 10, "mem": Int(mem >> 20), "n": pids.count]
+        }
+        let cpu = { (ns: Double) in secs == 0 ? 0 : (ns / (secs * 1e9) * 1000).rounded() / 10 } // percent of a core, to a tenth
+        func sum(_ u: some Sequence<(pid: pid_t, ns: Double, mem: UInt64)>, n: Int) -> JSON {
+            let (ns, mem) = u.reduce((0.0, UInt64(0))) { ($0.0 + $1.ns, $0.1 + $1.mem) }
+            return ["cpu": cpu(ns), "mem": Int(mem >> 20), "n": n]
         }
         var perSession: JSON = [:]
-        for (id, pids) in sessions { perSession[id] = group(tree(pids)) }
+        for (id, pids) in sessions {
+            let all = tree(pids), u = use(all)
+            // by name, busiest first (CPU as shown, then memory, then name so the order holds still); past eight, the eighth is the rest
+            let groups = Dictionary(grouping: u) { name($0.pid, started[$0.pid] ?? 0) }
+                .map { (name: $0.key, cpu: cpu($0.value.reduce(0) { $0 + $1.ns }), mem: $0.value.reduce(0) { $0 + $1.mem }, of: $0.value) }
+                .sorted { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
+            let shown = groups.count > 8 ? groups.prefix(7) + [(name: "other", cpu: 0, mem: 0, of: groups.dropFirst(7).flatMap(\.of))] : groups[...]
+            var g = sum(u, n: all.count)
+            g["procs"] = shown.map { sum($0.of, n: $0.of.count).merging(["name": $0.name]) { a, _ in a } }
+            perSession[id] = g
+        }
         // Lantern: this server, and the app around it when that's what started it (its window), with the helper and the vite watcher below
         let parent = getppid()
         var buf = [CChar](repeating: 0, count: 4096)
         proc_pidpath(parent, &buf, 4096)
-        let lantern = group(tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : [])))
-        let out: JSON = ["sessions": perSession, "lantern": lantern, "mac": mac()]
+        let lantern = tree([Int(getpid())] + (String(cString: buf).contains("Lantern.app/") ? [Int(parent)] : [])), mine = use(lantern)
+        let out: JSON = ["sessions": perSession, "lantern": sum(mine, n: lantern.count), "mac": mac()]
         before = now
         at = t
+        names = names.filter { started[$0.key] == $0.value.0 } // forget the ones that ended
         return out
+    }
+
+    // A process's name as a person reads it: the last part of its argv[0], as Activity Monitor shows it (Claude Code's binary is
+    // named for its version but runs as "claude"), or for node or python running a tool everyone knows, the tool.
+    // ponytail: named once per process; a process that renames itself later (process.title) keeps its first name.
+    private static let tools: Set<String> = ["vite", "vitest", "tsc", "vue-tsc", "playwright", "next"]
+    private func name(_ pid: pid_t, _ start: Double) -> String {
+        if let (s, n) = names[pid], s == start { return n }
+        let args = Self.args(pid)
+        // a path's last part; a title a process gave itself (node's process.title, "npm exec some-mcp --flag"), its first word
+        let first = args.first ?? "", path = first.hasPrefix("/") ? first : String(first.split(separator: " ").first ?? "")
+        var n = String(path.split(separator: "/").last ?? "")
+        if n.hasPrefix("-") { n.removeFirst() } // a login shell's "-zsh"
+        if n.isEmpty {
+            var info = proc_bsdinfo()
+            proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size))
+            n = withUnsafeBytes(of: info.pbi_comm) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        }
+        if n == "node" || n.lowercased().hasPrefix("python"), let script = args.dropFirst().first(where: { !$0.hasPrefix("-") }) {
+            // the script's path from its end: .bin/vite, vitest/dist/workers/forks.js, typescript/bin/tsc, @playwright/test/cli.js
+            let parts = script.split(separator: "/").reversed().map { $0.split(separator: ".").first.map { String($0.drop { $0 == "@" }) } ?? "" }
+            if let tool = parts.first(where: Self.tools.contains) { n = tool }
+        }
+        names[pid] = (start, n)
+        return n
+    }
+    // A process's arguments, from KERN_PROCARGS2 (argc, the executable's path, NULs, then argv); empty when it can't be read.
+    private static func args(_ pid: pid_t) -> [String] {
+        var mib = [CTL_KERN, KERN_PROCARGS2, pid], size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return [] }
+        var buf = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return [] }
+        let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
+        return buf[4..<size].split(separator: 0).dropFirst().prefix(argc).map { String(decoding: $0, as: UTF8.self) }
     }
 
     private func mac() -> JSON {

@@ -5,7 +5,8 @@
 // pill cycles the snooze as a right-click on the moth does, and its pin pins it to the sidebar; the header stays put and the
 // body below scrolls when the card would be taller than the window. The top of the body is what it wants from me (a state
 // line only where it says more than the pill, its questions, its "You:" message as a quote), then the work in its tray:
-// agents (the first AGENT_CAP, until "more" lists the rest; all of them in the sidebar), side sessions, PRs.
+// agents (the first AGENT_CAP, until "more" lists the rest; all of them in the sidebar), side sessions, PRs, and its processes by name
+// with each group's CPU and RAM (from the usage event, as the info line's totals are).
 // Every control is an outer button or link that fills its zone (the padding around it, up to its neighbours and the card's
 // edges) and an inner .face that's the visible pill or hover, the size it always was (index.html). Each keeps its element
 // through a re-render (stable keys, no swapping a control out), since WebKit drops a click whose pressed button is replaced.
@@ -42,6 +43,8 @@ const counts = computed(() => {
 });
 // its processes' CPU and RAM, from the usage event (not in the sidebar's pins that have ended, or with the setting off)
 const use = computed(() => sessionUse(store.usage, props.s.id));
+// its processes by name, on the card (not the sidebar, which is narrower and keeps to the work)
+const procs = computed(() => !props.dock && use.value?.procs.length ? use.value.procs : null);
 const tint = computed(() => tintFor(props.s)); // the session's colour, shared with its moth and the usage dropdown
 const toggleAgent = (id: string) => { if (!openAgents.delete(id)) openAgents.add(id); };
 // In the sidebar the PRs are listed or chips, per pin; the card only shows chips (listed stays undefined: no toggle).
@@ -63,10 +66,11 @@ const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id
       <div v-if="s.forYou?.you?.length" class="msg"><template v-for="(piece, i) in s.forYou.you" :key="i"><template v-if="typeof piece === 'string'">{{ piece }}</template><a v-else :href="piece.url" target="_blank" rel="noopener">{{ piece.label }}</a></template></div>
     </template>
     <div v-else-if="s.prompt" class="prompt">{{ prompt }}</div>
-    <div v-if="run.rows.length || side.length || s.github?.length" class="tray">
+    <div v-if="run.rows.length || side.length || s.github?.length || procs" class="tray">
       <div v-if="run.rows.length" class="agentZone"><div class="head">Running<span class="r">{{ run.count }}</span></div><AgentRow v-for="r in agents" :key="r.id" :row="r" :now :open="dock || openAgents.has(r.id)" :plain="dock" @toggle="toggleAgent(r.id)" /><button v-if="agents.length < run.rows.length" class="more" @click="allAgents = true"><span class="face">{{ `${run.rows.length - agents.length} more` }}</span></button></div>
       <template v-if="side.length"><div class="head">Side sessions<span class="r">{{ side.length }}</span></div><AgentRow v-for="o in side" :key="o.id" :row="sideRow(o)" :now :open="dock || openAgents.has(o.id)" :plain="dock" @toggle="toggleAgent(o.id)" /></template>
       <PrBlock v-if="s.github?.length" :prs="s.github" :listed :now @toggle="toggleList" />
+      <template v-if="procs"><div class="head">Processes<span class="r">{{ use?.n }}</span></div><div class="procs"><div v-for="p in procs" :key="p.name" class="proc"><span class="pn" :title="p.name">{{ p.name }}</span><span class="x">{{ p.n > 1 ? `×${p.n}` : '' }}</span><span :class="`hot${p.cpuHot}`" :title="p.cpuTip || `CPU ${p.cpu} of the Mac`">{{ p.cpu }}</span><span :class="`hot${p.memHot}`" :title="p.memTip || `${p.mem} RAM`">{{ p.mem }}</span></div></div></template>
       <div class="foot">{{ footLine(s, now) }}<template v-if="use"> · <UsageLine :use /></template></div>
     </div>
     <div v-else class="foot">{{ footLine(s, now) }}<template v-if="use"> · <UsageLine :use /></template></div>
