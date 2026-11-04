@@ -366,23 +366,24 @@ test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the
   assert.deepStrictEqual(find(one, 'phead').map(text), ['PRs · api · 1 ready · 1 draft'], 'a single repo is baked into the one heading');
 });
 
-test('the card shows its session\'s CPU and memory as one row with a bar for each, and nothing without a sample, with the setting off or with no processes', async () => {
+test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and the title wears the session\'s colour; nothing without a sample or processes', async () => {
   Object.defineProperty(navigator, 'hardwareConcurrency', { value: 4, configurable: true });
   const card = await show(session());
   assert.strictEqual(find(card, 'use').length, 0);
-  store.usage = { sessions: { s1: { cpu: 100, mem: 1536, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 6144, pressure: 'normal' } };
+  store.usage = { sessions: { s1: { cpu: 100, mem: 615, n: 3 }, other: { cpu: 90, mem: 10, n: 1 } }, lantern: { cpu: 0, mem: 1, n: 1 }, mac: { cpu: 0, used: 1, total: 6144, pressure: 'normal' } };
   await nextTick();
-  const row = () => find(card, 'use');
-  assert.deepStrictEqual(row().map(text), ['25%1.5 GB'], 'of the Mac\'s four cores, 1536 MB');
-  assert.deepStrictEqual([...row()[0].querySelectorAll('.track i')].map(i => i.style.width), ['25.00%', '25.00%'], 'CPU of the Mac, RAM of its 6144 MB');
-  const tint = document.createElement('div'); tint.style.background = tintFor(session()); // the colour its moth has, as the browser spells it
-  assert.strictEqual(row()[0].querySelector('.sw').style.background, tint.style.background, 'in the session\'s colour');
+  const line = () => find(card, 'foot').map(text).find(t => t.includes('old'));
+  assert.match(line(), /active \d+m ago · 25% · 0\.6 GB$/, 'a quarter of the Mac, 615 MB as 0.6 GB: the same unit whatever the size');
+  assert.strictEqual(find(card, 'use')[0].querySelectorAll('svg').length, 2, 'the chip and the RAM stick stand for the words');
+  assert.strictEqual(find(card, 'bar').length + find(card, 'track').length + find(card, 'sw').length, 0, 'no bars or swatches on the card');
+  const tint = document.createElement('div'); tint.style.color = tintFor(session()); // the colour its moth has, as the browser spells it
+  assert.strictEqual(find(card, 'name')[0].style.color, tint.style.color, 'the title is the session\'s colour');
   store.usage = { ...store.usage, sessions: { s1: { cpu: 200, mem: 3072, n: 3 } } };
   await nextTick();
-  assert.deepStrictEqual(row().map(text), ['50%3.0 GB'], 'follows each sample');
+  assert.match(line(), /· 50% · 3\.0 GB$/, 'follows each sample');
   store.usage = { ...store.usage, sessions: { s1: { cpu: 0, mem: 0, n: 0 } } };
   await nextTick();
-  assert.strictEqual(row().length, 0, 'no processes, no row');
+  assert.strictEqual(find(card, 'use').length, 0, 'no processes, nothing');
 });
 
 test('a session\'s row in the usage dropdown shows its moth\'s card on hover, puts it away on leaving, and pins it open on a click', async () => {

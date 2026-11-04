@@ -3,7 +3,7 @@
 import { chrome, live } from './live';
 import { $, titlebar } from './scene';
 import { sessionMoth } from './state';
-import type { Agent, CardAt, Hovered, PR, Session, Zone } from '../types';
+import type { Agent, CardAt, Hovered, PR, Session, Usage, Zone } from '../types';
 
 // ---- hover card ------------------------------------------------------------------
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
@@ -22,6 +22,11 @@ export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 
 export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
 /** This Mac's core count: a group of processes' CPU is percent of one core, the usage readout's percents are of all of them. */
 export const cores = () => navigator.hardwareConcurrency || 1;
+/** A session's processes for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB; null with no sample or no processes. */
+export function sessionUse(usage: Usage | null, id: string) {
+  const g = usage?.sessions[id];
+  return g && g.n ? { cpu: `${Math.round(g.cpu / cores())}%`, mem: `${(g.mem / 1024).toFixed(1)} GB` } : null;
+}
 export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 
 // Hover areas show their card on entering, hide it a moment after leaving (so it doesn't flicker as things drift), and on a

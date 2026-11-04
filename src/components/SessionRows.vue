@@ -10,7 +10,8 @@
 // edges) and an inner .face that's the visible pill or hover, the size it always was (index.html). Each keeps its element
 // through a re-render (stable keys, no swapping a control out), since WebKit drops a click whose pressed button is replaced.
 import { computed, reactive, ref } from 'vue';
-import { AGENT_CAP, cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, project, running, sideRow, stateLine } from '../scene/card';
+import { AGENT_CAP, cycleSnooze, footLine, openSession, pillClass, pillNext, pillWord, project, running, sideRow, sessionUse, stateLine } from '../scene/card';
+import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
 import type { Session } from '../types';
 import AgentRow from './AgentRow.vue';
@@ -39,6 +40,9 @@ const counts = computed(() => {
   const n = (k: number, one: string) => k ? `${k} ${one}${k > 1 ? 's' : ''}` : '';
   return [run.value.count, n(side.value.length, 'side session'), n(props.s.github?.length ?? 0, 'PR')].filter(Boolean).join(' · ');
 });
+// its processes' CPU and RAM, from the usage event (not in the sidebar's pins that have ended, or with the setting off)
+const use = computed(() => sessionUse(store.usage, props.s.id));
+const tint = computed(() => tintFor(props.s)); // the session's colour, shared with its moth and the usage dropdown
 const toggleAgent = (id: string) => { if (!openAgents.delete(id)) openAgents.add(id); };
 // In the sidebar the PRs are listed or chips, per pin; the card only shows chips (listed stays undefined: no toggle).
 const listed = computed(() => props.dock ? !pin.value?.chips : undefined);
@@ -46,11 +50,10 @@ const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id
 </script>
 
 <template>
-  <h3><button class="open" title="Open this session" @click="openSession(s.id, $event.shiftKey)"><span class="face name">{{ name }}<span v-if="!compact" class="go"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg></span></span></button><button :class="['chip', pillClass(s)]" :title="next" :aria-label="`${pillWord(s)}: ${next.toLowerCase()}`" @click="cycleSnooze(s.id)"><span class="face">{{ pillWord(s) }}</span></button><button v-if="dock || store.pinnable" :class="['pin', { on: pin }]" :aria-label="pin ? `Unpin ${name}` : `Pin ${name} to the sidebar`" :title="pin ? 'Unpin' : 'Pin to the sidebar'" @click="store.togglePin(s.id)"><span class="face"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg></span></button></h3>
+  <h3><button class="open" title="Open this session" @click="openSession(s.id, $event.shiftKey)"><span class="face name" :style="{ color: tint }">{{ name }}<span v-if="!compact" class="go"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg></span></span></button><button :class="['chip', pillClass(s)]" :title="next" :aria-label="`${pillWord(s)}: ${next.toLowerCase()}`" @click="cycleSnooze(s.id)"><span class="face">{{ pillWord(s) }}</span></button><button v-if="dock || store.pinnable" :class="['pin', { on: pin }]" :aria-label="pin ? `Unpin ${name}` : `Pin ${name} to the sidebar`" :title="pin ? 'Unpin' : 'Pin to the sidebar'" @click="store.togglePin(s.id)"><span class="face"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg></span></button></h3>
   <template v-if="compact">
     <div v-if="gist" class="gist">{{ gist }}</div>
-    <div v-if="counts" class="foot counts">{{ counts }}</div>
-    <UsageLine :id="s.id" />
+    <div v-if="counts || use" class="foot counts">{{ counts }}<template v-if="counts && use"> · </template><UsageLine v-if="use" :use /></div>
     <div class="hint">Click for details, double click to open session</div>
   </template>
   <div v-else class="cardBody">
@@ -64,9 +67,8 @@ const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id
       <div v-if="run.rows.length" class="agentZone"><div class="head">Running<span class="r">{{ run.count }}</span></div><AgentRow v-for="r in agents" :key="r.id" :row="r" :now :open="dock || openAgents.has(r.id)" :plain="dock" @toggle="toggleAgent(r.id)" /><button v-if="agents.length < run.rows.length" class="more" @click="allAgents = true"><span class="face">{{ `${run.rows.length - agents.length} more` }}</span></button></div>
       <template v-if="side.length"><div class="head">Side sessions<span class="r">{{ side.length }}</span></div><AgentRow v-for="o in side" :key="o.id" :row="sideRow(o)" :now :open="dock || openAgents.has(o.id)" :plain="dock" @toggle="toggleAgent(o.id)" /></template>
       <PrBlock v-if="s.github?.length" :prs="s.github" :listed :now @toggle="toggleList" />
-      <div class="foot">{{ footLine(s, now) }}</div>
+      <div class="foot">{{ footLine(s, now) }}<template v-if="use"> · <UsageLine :use /></template></div>
     </div>
-    <div v-else class="foot">{{ footLine(s, now) }}</div>
-    <UsageLine :id="s.id" />
+    <div v-else class="foot">{{ footLine(s, now) }}<template v-if="use"> · <UsageLine :use /></template></div>
   </div>
 </template>
