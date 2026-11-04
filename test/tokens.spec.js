@@ -15,7 +15,7 @@ const ROOT = path.join(import.meta.dirname, '..'), SRC = path.join(ROOT, 'src'),
 const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const style = html.match(/<style>([\s\S]*?)<\/style>/)[1].replace(/\/\*[\s\S]*?\*\//g, '');
 const UI = ['dev.ts', 'events.ts', 'expose.ts', 'main.ts', 'types.ts', 'wiring.ts', 'scene/card.ts', 'scene/github.ts', 'scene/notify.ts', 'scene/recap.ts', 'scene/stats.ts'];
-const SCENE = ['scene/background.ts', 'scene/fireflies.ts', 'scene/flash.ts', 'scene/frame.ts', 'scene/lanterns.ts', 'scene/live.ts', 'scene/pages.ts', 'scene/pencil.ts', 'scene/scene.ts', 'scene/stale.ts', 'scene/state.ts'];
+const SCENE = ['scene/background.ts', 'scene/fireflies.ts', 'scene/flash.ts', 'scene/frame.ts', 'scene/lanterns.ts', 'scene/live.ts', 'scene/messages.ts', 'scene/pages.ts', 'scene/pencil.ts', 'scene/scene.ts', 'scene/stale.ts', 'scene/state.ts'];
 
 const RAW_COLOUR = /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\(/i;
 const SIZED = /^(?:padding|margin|gap|row-gap|column-gap|inset|top|right|bottom|left|border-radius|font-size|font|box-shadow|backdrop-filter)(?:-[a-z-]+)?$/;

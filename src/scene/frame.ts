@@ -6,7 +6,8 @@ import { devSlider, devToggle } from '../dev';
 import { COOL, FACET_TONES, GUST, HOP, LAG, MOTH_CALL, MOTH_IDLE, MOTH_SINGED, WARM, bakeCutouts, drawHang, fakeFlame, fakeLamp, flickerFollow, hash, mix, paperBounce, paperSoft, paperWind, perchAt, seeded, style, sway, tintFor, wobble } from './lanterns';
 import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
 import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background';
-import { FLY, byUrgency, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
+import { FIREFLY_BLOOM, FLY, addFlyLight, byUrgency, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
+import { GOLD, goldLook, stepMessages } from './messages';
 import { drawStale, settle } from './stale';
 import { hideCard, hoverZone, placeCard, zones } from './card';
 import type { Light } from './background';
@@ -188,6 +189,7 @@ export function frame(t: number) {
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
   if (!AMBIENT) { swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); reviewZones(); }
+  stepMessages(t); // where messages' gold pulses are, for the moths and threads below
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
@@ -949,6 +951,10 @@ function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number
   const backlit = m.fold || 0;
   let wing = mix(mix(mix(m.tint ? mix(MOTH_IDLE, m.tint, 0.16) : MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
+  if (m.shine) { // glowing gold for a message it sent or got (messages.ts), with an aura of light behind it
+    wing = mix(wing, GOLD, 0.75 * m.shine);
+    addFlyLight(m.x, m.y, FIREFLY_BLOOM * (0.8 + 0.5 * m.shine), 1.2 * goldLook.aura * m.shine, GOLD);
+  }
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
@@ -1014,10 +1020,15 @@ export function threadEnds(m: SessionMoth): [Point, Point] {
 export let threadBow = devSlider('Moths', 'bow', 'thread bow', 0, 0.4, 0.01, 0.24, 'How far the moths\' threads bow, as a share of their length (0 is straight). Swaying slowly', v => { threadBow = v; });
 // A busy lantern bows gentler: full up to 4 moths, easing down to half by 12 (m.bowK follows it, so a session joining doesn't jump)
 const crowd = () => 1 - 0.5 * Math.max(0, Math.min(1, ([...live.moths.values()].filter(o => !(o.parentId === undefined && o.satellite) && !o.leaving).length - 4) / 8));
-export const bowed = (ax: number, ay: number, bx: number, by: number, m: { bowK?: number, phase: number }, s: number, k: number) => {
+// the bowed line's control point
+const bowAt = (ax: number, ay: number, bx: number, by: number, m: { bowK?: number, phase: number }, s: number, k: number): Point => {
   k *= m.bowK ?? crowd();
   const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, bow = k * len * Math.sin(s * 0.25 + m.phase);
-  return `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${(ax + dx / 2 - dy / len * bow).toFixed(1)} ${(ay + dy / 2 + dx / len * bow).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;
+  return [ax + dx / 2 - dy / len * bow, ay + dy / 2 + dx / len * bow];
+};
+export const bowed = (ax: number, ay: number, bx: number, by: number, m: { bowK?: number, phase: number }, s: number, k: number) => {
+  const [cx, cy] = bowAt(ax, ay, bx, by, m, s, k);
+  return `M${ax.toFixed(1)} ${ay.toFixed(1)} Q${cx.toFixed(1)} ${cy.toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}`;
 };
 // Each session moth's thread (threadEnds). Satellites fly untethered.
 function mothThread(m: Moth, dt: number, s: number) {
@@ -1051,6 +1062,14 @@ function mothThread(m: Moth, dt: number, s: number) {
     lit = mix(base, pal('core'), glow);
     if (m.pulse.at >= 1) m.pulse = null;
   }
+  // A message's gold pulse (messages.ts) takes the band while it runs, on a thicker thread, with an aura of light behind it
+  // drawn by the background shader, like a firefly's.
+  if (m.gold) {
+    at = m.gold.at; lit = GOLD; glow = 1;
+    const [cx, cy] = bowAt(ax, ay, bx, by, m, s, threadBow), u = 1 - at;
+    addFlyLight(u * u * ax + 2 * u * at * cx + at * at * bx, u * u * ay + 2 * u * at * cy + at * at * by, FIREFLY_BLOOM, 1.4 * goldLook.aura, GOLD);
+    put(m.thread, 'stroke-width', 1.5 + goldLook.width); // #threads draws them 1.5 wide
+  } else m.thread.removeAttribute('stroke-width');
   if (!m.grad) {
     m.grad = el('linearGradient', { id: `thread-${++pulseIds}`, gradientUnits: 'userSpaceOnUse' });
     for (let i = 0; i <= 16; i++) m.grad.append(el('stop', { offset: i / 16 }));
@@ -1059,7 +1078,7 @@ function mothThread(m: Moth, dt: number, s: number) {
   }
   put(m.grad, 'x1', ax.toFixed(1)); put(m.grad, 'y1', ay.toFixed(1)); put(m.grad, 'x2', bx.toFixed(1)); put(m.grad, 'y2', by.toFixed(1));
   [...m.grad.children].forEach((st, i) => {
-    const o = i / 16, band = Math.max(0, 1 - Math.abs(o - at) / 0.12), faint = m.leaving ? 0.1 : 0.25;
+    const o = i / 16, band = Math.max(0, 1 - Math.abs(o - at) / (m.gold ? 0.2 : 0.12)), faint = m.leaving ? 0.1 : 0.25;
     put(st, 'stop-color', mix(base, lit, band));
     // the thread itself is faint, the passing pulse nearly full; both fade out toward the ends
     put(st, 'stop-opacity', (Math.min(1, o / 0.25, (1 - o) / 0.25) * (faint + (0.9 - faint) * band * glow)).toFixed(2));
