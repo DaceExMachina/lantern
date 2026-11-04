@@ -17,13 +17,17 @@ test.before(() => execFileSync('swiftc', ['-Onone', '-o', BIN, ...fs.readdirSync
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
-// Polls `fn` until it returns something truthy and returns that, or throws `what` after `timeout` ms. Tests wait on the
-// condition they mean, never on a fixed sleep, so a slow or loaded machine only makes them slower, not red.
+// Polls `fn` until it returns something truthy and returns that, or throws after `timeout` ms. Tests wait on the
+// condition they mean, never on a fixed sleep, so a slow or loaded machine only makes them slower, not red. A throw
+// (a file the server hasn't written yet) counts as "not yet"; on timeout the last one is rethrown, else `what` is.
 async function until(fn, what, timeout = 20000) {
+  let err;
   for (const end = Date.now() + timeout; ; await wait(25)) {
-    const v = await fn();
-    if (v) return v;
-    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+    try {
+      const v = await fn();
+      if (v) return v;
+    } catch (e) { err = e; }
+    if (Date.now() > end) throw err ?? new Error(`timed out waiting for ${what}`);
   }
 }
 
@@ -2386,7 +2390,7 @@ test('the pinned sessions are a list in the settings: toggled, kept in order wit
   assert.deepStrictEqual(await pinned(), [], 'an empty list unpins them all');
   await pin([{ id: 's3' }, { id: 's1', chips: true }]);
   const file = path.join(home, 'data/settings.json'), want = [{ id: 's3' }, { id: 's1', chips: true }];
-  await until(() => { try { assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).pinned, want); return true; } catch { return false; } }, 'the pins to be saved');
+  await until(() => { assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).pinned, want); return true; }, 'the pins to be saved');
   // a restart: one pinned session comes back from its transcript, the other ended while Lantern was closed
   const back = '00000001-0000-4000-8000-000000000000', transcript = { [`.claude/projects/-work/${back}.jsonl`]: jsonl([user('Fix it'), answer('Fixed.'), turnEnd]) };
   const settings = { 'data/settings.json': JSON.stringify({ style: 'barrel', pinned: [{ id: 'gone' }, { id: back, chips: true }] }) };
@@ -2404,7 +2408,7 @@ test('a snooze survives a restart, and new activity after it still ends the snoo
   const first = await serve(t, files, h => home = h);
   await until(async () => (await session(first))?.state === 'waiting', 'the transcript to be seeded as waiting');
   assert.strictEqual((await post(first, '/snooze', { id, snoozed: true })).status, 204);
-  const saved = await until(() => { try { const s = fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8'); return JSON.parse(s).snoozed?.length && s; } catch {} }, 'the snooze to be saved');
+  const saved = await until(() => { const s = fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8'); return JSON.parse(s).snoozed?.length && s; }, 'the snooze to be saved');
   let home2;
   const second = await serve(t, { ...files, 'data/settings.json': saved }, h => home2 = h);
   const back = await until(() => session(second), 'the transcript to be seeded again');
