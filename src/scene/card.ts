@@ -150,8 +150,10 @@ export function pinAnchor(zone: Zone, x: number, y: number, gap: number) {
   return held;
 }
 export function placeCard() {
-  const h = live.hovered, svg = document.querySelector('svg'), ctm = svg?.getScreenCTM();
-  if (!h || !svg || !ctm) return;
+  const h = live.hovered;
+  if (!h) return; // before getScreenCTM, which lays out the page: every frame, with no card to place, that was a tenth of the frame's time
+  const svg = document.querySelector('svg'), ctm = svg?.getScreenCTM();
+  if (!svg || !ctm) return;
   const pt = svg.createSVGPoint();
   const zone = 'session' in h && h.cardAt === 'flies' && h.flyZone ? h.flyZone : h.zone; // beside whichever area was hovered
   pt.x = zone.x; pt.y = zone.y;
