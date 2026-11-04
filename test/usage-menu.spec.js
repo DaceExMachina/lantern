@@ -35,7 +35,7 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
   expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of the Mac', '12.0of 32 GB']);
   expect(w.findAll('#usage .kh span').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
-  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'Lantern1%300 MB', 'quiet one0%900 MB', 'everything else13%8.8 GB']); // busiest first, Lantern among them, a session with no processes left out, then the rest of the Mac
+  expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'Lantern1%0.3 GB', 'quiet one0%0.9 GB', 'everything else13%8.8 GB']); // in GB, as the processes are; busiest first, Lantern among them, a session with no processes left out, then the rest of the Mac
   store.settings = { ...store.settings, systemStats: false };
   await w.vm.$nextTick();
   expect(w.find('#usageButton').exists()).toBe(false);

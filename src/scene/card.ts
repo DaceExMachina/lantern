@@ -19,14 +19,14 @@ export function tipSpot(tip: HTMLElement, el: Element) {
 export const short = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : ms < 48 * 3600e3 ? `${Math.floor(ms / 3600e3)}h` : `${Math.floor(ms / 86400e3)}d`;
 
 // The session's PRs as GitHub sees them: "PRs: #6776 ready to merge, #6801 checks failing"
-/** Memory in MB as a person reads it. */
-export const memText = (mb: number) => mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${mb} MB`;
+/** Memory in MB as a person reads it: always GB, so the digits don't jump between MB and GB, and under a tenth of one "<0.1 GB". */
+export const memText = (mb: number) => mb < 102.4 ? '<0.1 GB' : `${(mb / 1024).toFixed(1)} GB`;
 /** This Mac's core count: a group of processes' CPU is percent of one core, the usage readout's percents are of all of them. */
 export const cores = () => navigator.hardwareConcurrency || 1;
-/** A group of processes' numbers for a card: CPU as a percent of the Mac, RAM always in GB so the digits don't jump between MB and GB (under 0.1, "<0.1 GB"), each with how hot it runs (heat.ts, by `key`). */
+/** A group of processes' numbers for a card: CPU as a percent of the Mac, RAM in GB (memText), each with how hot it runs (heat.ts, by `key`). */
 function useText(key: string, g: UsageGroup) {
   const h = heatOf(key, g), tip = heatTip(h, g);
-  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: g.mem < 102.4 ? '<0.1 GB' : `${(g.mem / 1024).toFixed(1)} GB`, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
+  return { cpu: `${Math.round(g.cpu / cores())}%`, mem: memText(g.mem), cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem };
 }
 /** A session's processes for its card: the totals and each group by name (the expanded card's Processes); null with no sample or no processes. */
 export function sessionUse(usage: Usage | null, id: string) {
