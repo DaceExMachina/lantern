@@ -364,3 +364,12 @@ test('PRs in one repo name it after "PRs"; across repos a "PRs" heading with the
   const one = await show(session({ github: [pr(1, 'ready', 'api'), pr(2, 'draft', 'api')] }));
   assert.deepStrictEqual(find(one, 'phead').map(text), ['PRs · api · 1 ready · 1 draft'], 'a single repo is baked into the one heading');
 });
+
+test('a long title shortens to one line with an ellipsis; the open arrow and the pin stay on its row', async () => {
+  const card = await show(session({ title: 'free trial, develop '.repeat(12) }));
+  const [nm, go] = [card.querySelector('h3 .nm'), card.querySelector('h3 .go')], style = el => getComputedStyle(el);
+  assert.ok(nm && go && nm.parentElement === go.parentElement, 'the title text and the arrow share one row');
+  assert.deepStrictEqual([style(nm.parentElement).display, style(nm).whiteSpace, style(nm).textOverflow], ['flex', 'nowrap', 'ellipsis']);
+  assert.strictEqual(style(go).flexShrink, '0', 'the arrow never shrinks or wraps');
+  for (const el of [card.querySelector('h3 .chip'), card.querySelector('h3 .pin')].filter(Boolean)) assert.strictEqual(style(el).flexShrink, '0');
+});
