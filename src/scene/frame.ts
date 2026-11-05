@@ -892,6 +892,61 @@ export function mothMove(m: Moth, { tx, ty, ease, needsMe }: Aim, dt: number, s:
 const wingRate = (key: string) => 0.88 + seeded(hash(key + ':wings'))() * 0.24;
 const wingLift = (beat: number, lag: number, height = 1) => height * 80 * Math.PI / 180 * (0.7 * Math.sin(beat - lag) + 0.3);
 
+// A moth on the lantern keeps its session's colour, and says what its session is doing other ways (the dev panel's
+// "Moth states" knobs, to try them in combination): a soft pulsing halo in the state's colour, how it holds its wings
+// (a session that needs you flutters now and then, an idle one rests with them open, a snoozed one folds them), idle and
+// snoozed ones dimmed a little, and a thin rim of the state's colour round the wings. "violet wings" brings back the
+// old look, where the wings turned violet (or grey for an error) and went dark against the paper.
+export const mothLook = {
+  recolour: devToggle('Moth states', 'mothviolet', 'violet wings', false, 'The old look: a moth that needs you turns violet on the lantern (grey for an error), and landed moths go dark against the paper', v => { mothLook.recolour = v; }),
+  halo: devToggle('Moth states', 'mothhalo', 'halo', true, 'A soft glow behind a landed moth in its state\'s colour: violet when it needs you, coral for an error, faint lilac when snoozed', v => { mothLook.halo = v; }),
+  haloStrength: devSlider('Moth states', 'mothhalostr', 'halo strength', 0, 2, 0.05, 1, 'How bright the halo is', v => { mothLook.haloStrength = v; }),
+  haloPulse: devSlider('Moth states', 'mothhalopulse', 'halo pulse', 0, 2, 0.05, 0.35, 'Pulses a second of the halo of a moth that needs you (0 holds it steady)', v => { mothLook.haloPulse = v; }),
+  pose: devToggle('Moth states', 'mothpose', 'wing pose', true, 'Needs you: a flutter of the wings now and then. Idle: wings open and still. Snoozed: wings folded', v => { mothLook.pose = v; }),
+  flutterRate: devSlider('Moth states', 'mothflutter', 'flutter rate', 2, 14, 0.5, 7, 'Wingbeats a second in the flutter of a moth that needs you', v => { mothLook.flutterRate = v; }),
+  flutterGap: devSlider('Moth states', 'mothfluttergap', 'flutter every', 1.5, 12, 0.5, 4, 'Seconds from one flutter to the next', v => { mothLook.flutterGap = v; }),
+  dim: devSlider('Moth states', 'mothdim', 'dim idle and snoozed', 0, 0.8, 0.05, 0.3, 'How far idle and snoozed moths on the lantern dim (one that needs you stays bright)', v => { mothLook.dim = v; }),
+  rim: devToggle('Moth states', 'mothrim', 'rim light', false, 'A thin edge of the state\'s colour round a landed moth\'s wings', v => { mothLook.rim = v; }),
+  rimStrength: devSlider('Moth states', 'mothrimstr', 'rim strength', 0, 1, 0.05, 0.7, 'How bold the rim is', v => { mothLook.rimStrength = v; }),
+};
+// What a session moth heading for or sitting on the lantern shows: its state's colour, how much halo (1 pulses), and how far it dims.
+const REST = {
+  call: { col: MOTH_CALL, halo: 1, dim: 0 },
+  error: { col: FLY.failing, halo: 0.8, dim: 0 },
+  snoozed: { col: '#C9BDF5', halo: 0.3, dim: 1 }, // the sleeping z's lilac
+  idle: { col: '#B8B0C8', halo: 0, dim: 1 },
+} as const;
+type Rest = keyof typeof REST;
+const restOf = (m: Moth): Rest | undefined => {
+  const s = m.session;
+  if (m.parentId !== undefined || m.leaving || !m.wasLanded || !s || (s.state !== 'waiting' && s.state !== 'idle')) return;
+  return s.snoozed ? 'snoozed' : s.state === 'idle' ? 'idle' : s.error ? 'error' : 'call';
+};
+// A halo is a soft disc of the state's colour under the wings, in the moths' own SVG layer: the background's lights
+// (addFlyLight) sit under the lantern's paper, where a landed moth's would be hidden. Made the first time a moth needs
+// one, with one gradient per state shared by every moth.
+function mothHalo(m: Moth) {
+  const svg = $('moths', SVGGElement).ownerSVGElement;
+  if (svg && !document.getElementById('mothHalo-call')) {
+    const defs = svg.insertBefore(el('defs'), svg.firstChild);
+    for (const [k, { col }] of Object.entries(REST)) {
+      const g = defs.appendChild(el('radialGradient', { id: `mothHalo-${k}` }));
+      g.append(el('stop', { offset: 0, 'stop-color': col, 'stop-opacity': 0.85 }), el('stop', { offset: 0.45, 'stop-color': col, 'stop-opacity': 0.35 }), el('stop', { offset: 1, 'stop-color': col, 'stop-opacity': 0 }));
+    }
+  }
+  // centred on the middle of the wings (they hinge 2,6 off the moth's position and reach about 18 up and right), in the moth's own units
+  return m.g.insertBefore(el('circle', { cx: 3, cy: -13, r: 26, opacity: 0 }), m.g.firstChild);
+}
+// A flutter: once every flutterGap seconds, off the wall clock (and the moth's own phase) so every window agrees, a second
+// of quick wingbeats that swell and settle. How far it opens the wings, 0 to 1, or 0 between flutters.
+function flutter(key: string) {
+  const gap = mothLook.flutterGap, into = (Date.now() / 1000 + fidgetPhase(key) * gap) % gap;
+  if (into >= 1) return 0;
+  // ponytail: no live.brisk, so it plays at the calm frame rate (about four frames a beat at 30 fps and 7 a second); mark
+  // it brisk if it looks choppy, at the cost of 60 fps for a second in every flutterGap per moth that needs you
+  return Math.sin(Math.PI * into) * Math.abs(Math.sin(Math.PI * mothLook.flutterRate * into));
+}
+
 // The wings in 3D: flapping in flight, folding as the moth lands, and turned onto the lantern's paper once it has.
 // Returns both wings' points, for their shading.
 function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: number): [Wing, Wing] {
@@ -926,8 +981,10 @@ function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: numbe
   // one slow breath: open over 3s, hold for 2s, close over 3s, eased at both ends
   const smooth = (t: number) => t * t * (3 - 2 * t), i = m.into || 0;
   const breath = m.fidget === 'breathe' ? (i < 3 ? smooth(i / 3) : i < 5 ? 1 : smooth(Math.max(0, (8 - i) / 3))) : 0;
-  // at rest the wings sit nearly together
-  const landOpen = 0.05 + 0.05 * m.open + 0.75 * breath;
+  // at rest the wings sit nearly together; with the wing pose on, an idle moth opens them out and holds them, a snoozed
+  // one folds them flat, and one that needs you flutters instead of breathing
+  const rest = mothLook.pose ? restOf(m) : undefined;
+  const landOpen = rest === 'idle' ? 0.05 + 0.75 * m.open : rest === 'snoozed' ? 0.03 : rest ? 0.1 + 0.05 * m.open + (resting ? 0.55 * flutter(m.key) : 0) : 0.05 + 0.05 * m.open + 0.75 * breath;
   const openAt = (lag: number, extra: number) => (Math.PI / 2 - wingLift(beat, lag, height)) * (1 - f) + (landOpen + extra) * f;
   const upPts = wing3d(WING_UP, T, N, openAt(0, 0), sweep * (1 - f)), sidePts = wing3d(WING_SIDE, T, N, openAt(0.18, 0.06), sweep * (1 - f));
   // The nearer wing paints on top: the front path takes whichever it is. Moving a path to the end of its group instead
@@ -946,13 +1003,19 @@ function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: numbe
 // the lantern in a paler indigo, idle ones nearly grey; agents circling a landed moth take on its colour too.
 export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number) {
   const host = m.parentId === undefined ? m : live.moths.get(m.parentId), calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
-  m.cool += ((calling ? (host?.session?.snoozed ? 0.5 : 1) : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3; // idle and landed: a hint of violet (MOTH_RESTING)
-  const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330);
+  const old = mothLook.recolour, fold = m.fold || 0, now = restOf(m);
+  if (now) m.restAs = now; // the last state it showed, so taking off fades the halo, dim and rim out rather than dropping them
+  const look = m.restAs && REST[m.restAs];
+  m.cool += ((!old ? 0 : calling ? (host?.session?.snoozed ? 0.5 : 1) : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3; // idle and landed: a hint of violet (MOTH_RESTING)
+  m.rest = (m.rest ?? 0) + ((now ? 1 : 0) - (m.rest ?? 0)) * Math.min(1, dt * 3); // eases the halo, dim and rim in and out
+  // the lantern's light warms a moth near it, but not one on the paper (which keeps its swatch) unless it's the old look
+  const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330) * (old ? 1 : 1 - fold);
   m.tint ||= m.parentId !== undefined ? live.moths.get(m.parentId)?.tint : m.session && tintFor(m.session); // subagents share their session's tint
   const singed = needsMe && m.session?.error;
-  // Landed, the flame is behind the moth: it turns to a darker silhouette against the glowing paper.
-  const backlit = m.fold || 0;
-  let wing = mix(mix(mix(m.tint ?? MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit);
+  // The old look: landed, the flame is behind the moth, and it turns to a darker silhouette against the glowing paper.
+  // Now only idle and snoozed ones dim, toward the same shade.
+  const dark = (old ? 0.45 * fold : 0) + (look ? mothLook.dim * look.dim * m.rest : 0);
+  let wing = mix(mix(mix(m.tint ?? MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', dark);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
     wing = mix(wing, GOLD, goldLook.tint * m.shine);
@@ -964,10 +1027,19 @@ export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt:
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
-  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
+  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - fold);
   for (const [path, pts] of [[m.back, far], [m.front, near]] as const) {
     const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
     if (path.style.fill !== tone) path.style.fill = tone;
+  }
+  // the state's halo and rim, while it's on its way to the lantern or on it
+  const glow = look && mothLook.halo ? Math.min(1, mothLook.haloStrength * look.halo * m.rest * (look.halo === 1 && mothLook.haloPulse ? 0.7 + 0.3 * Math.sin(Date.now() / 1000 * 2 * Math.PI * mothLook.haloPulse + m.phase) : 1)) : 0;
+  if (look && glow > 0.01) m.halo ??= mothHalo(m);
+  if (m.halo) { put(m.halo, 'opacity', glow > 0.01 ? glow.toFixed(2) : 0); if (m.restAs) put(m.halo, 'fill', `url(#mothHalo-${m.restAs})`); }
+  const rim = look && mothLook.rim && m.rest > 0.01 ? mix(wing, look.col, m.rest) : 'none', rimW = (0.4 + 1.2 * mothLook.rimStrength).toFixed(2);
+  for (const path of [m.back, m.front]) {
+    if (path.style.stroke !== rim) path.style.stroke = rim; // ponytail: compared as written; WebKit may respell it, then it rewrites (cheap)
+    if (rim !== 'none' && path.style.strokeWidth !== rimW) path.style.strokeWidth = rimW;
   }
   const st = m.g.style;
   st.setProperty('--wing', wing);
