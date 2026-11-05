@@ -2947,10 +2947,11 @@ test('usage: WebKit\'s helper services are named for what they do', async t => {
 
 test('usage: a tool a session started that daemonized stays with it, by the variable Claude Code sets on what it starts; another session\'s, or one without it, does not', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
-  const WAIT = 'setTimeout(() => {}, 60000)';
+  const WAIT = 'setTimeout(() => {}, 60000)', dir = fs.mkdtempSync(path.join(tmp, 'daemons-'));
   // a live tool of the session (it carries the variable), then three tools that start a node of their own and exit, so it's launchd's child: the session's, another's and one with no variable
   // (node, not sleep: macOS withholds the environment of its own signed tools, which is why a daemonized `sleep` can't be claimed)
-  const daemon = name => `require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { argv0: '${name}', detached: true, stdio: 'ignore' }).unref()`;
+  // each daemon records its pid, so the test can tell when it has really started
+  const daemon = name => `const d = require('child_process').spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { argv0: '${name}', detached: true, stdio: 'ignore' }); require('fs').writeFileSync(${JSON.stringify(path.join(dir, name))}, String(d.pid)); d.unref()`;
   const tool = (socket, js) => `spawn(process.execPath, ['-e', ${JSON.stringify(js)}], { env: Object.fromEntries(Object.entries({ ...process.env, CLAUDE_CODE_MESSAGING_SOCKET: ${JSON.stringify(socket)} }).filter(([, v]) => v)), stdio: 'ignore' });`;
   // the session itself carries another session's value (it was started from one): that mustn't be taken for its own
   const code = `const { spawn } = require('child_process'); ${tool('/s/mine', WAIT)} setTimeout(() => { ${tool('/s/mine', daemon('mine-daemon'))} ${tool('/s/other', daemon('other-daemon'))} ${tool('', daemon('bare-daemon'))} }, 500); ${WAIT}`;
@@ -2962,8 +2963,12 @@ test('usage: a tool a session started that daemonized stays with it, by the vari
   await streamed(base, async blocks => {
     const names = () => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]?.procs?.map(p => p.name) ?? []);
     await until(() => names().find(n => n.includes('mine-daemon')), 'the session\'s own daemon in its processes');
-    await new Promise(r => setTimeout(r, 1000)); // long enough for the others to have shown, were they going to
-    assert.ok(names().every(n => !n.includes('other-daemon') && !n.includes('bare-daemon')), 'only the session\'s own, by its variable');
+    // all three started and are launchd's now (until the tool that started one exits, it's that tool's child, so the session's by its tree, rightly)
+    const adrift = n => { try { return execFileSync('ps', ['-o', 'ppid=', '-p', fs.readFileSync(path.join(dir, n), 'utf8')], { encoding: 'utf8' }).trim() === '1'; } catch { return false; } };
+    await until(() => ['mine-daemon', 'other-daemon', 'bare-daemon'].every(adrift), 'all three daemons started and reparented to launchd');
+    const from = names().length;
+    await until(() => names().length >= from + 5, 'five samples with them all running');
+    assert.ok(names().slice(from).every(n => !n.includes('other-daemon') && !n.includes('bare-daemon')), 'only the session\'s own, by its variable');
   });
 });
 
