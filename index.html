@@ -295,8 +295,13 @@
   #usage button.krow:hover .n, #usage button.krow:focus-visible .n { color: var(--ink-strong); }
   #usage .bar button:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
   #usage button.krow:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
-  #usage .kh span:first-child { grid-column: 1 / 3; }
-  #usage .kh span + span, #usage .krow span + span { text-align: right; }
+  #usage .kh > :first-child { grid-column: 1 / 3; }
+  #usage .kh > * + *, #usage .krow span + span { text-align: right; }
+  #usage .kh button { all: unset; position: relative; justify-self: end; cursor: pointer; text-align: right; text-transform: uppercase; letter-spacing: var(--tracking-label); }
+  #usage .kh button:hover { color: var(--ink-hover); }
+  #usage .kh button[aria-pressed=true] { color: var(--ink-strong); }
+  #usage .kh button svg { position: absolute; right: calc(100% + var(--space-0-5)); top: 50%; width: var(--space-3); height: var(--space-3); transform: translateY(-50%); } /* the sort key's caret, outside the label so the numbers' column stays put */
+  #usage .kh button:focus-visible { outline: 1px solid var(--focus); }
   #usage .krow .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #usage .krow:not(.session) { color: var(--ink-dim); } /* everything else and Lantern's own use */
   #usage .sw { width: 8px; height: 8px; border-radius: var(--radius-sm); }

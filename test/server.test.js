@@ -2932,6 +2932,64 @@ test('usage: a session\'s processes go out grouped by name, a known tool by its 
   assert.ok(s.procs.every(p => typeof p.cpu === 'number' && p.mem >= 0), 'each with its CPU and RAM');
 });
 
+test('usage: everything outside every row\'s tree goes out as "else", and a session\'s processes leave it when they become its own', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  // The test's own processes are told apart from the Mac's others by two fingerprints at once, 120 processes and 600 MB (else's names are by app,
+  // so what else runs moves its totals; it would take both moving together, for as long as the wait lasts, to fool this). They are in no session's
+  // tree until the session event, so they are in everything else first and in the session after: what leaves it is what the session took.
+  const code = `const { spawn } = require('child_process'); for (let i = 0; i < 119; i++) spawn('sleep', ['60']); const b = require('crypto').randomBytes(600e6); setTimeout(() => console.log('ready'), 2000); setTimeout(() => b, 60000)`;
+  const N = 120, MB = 400, usages = blocks => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000014';
+  let was, now;
+  await streamed(base, async blocks => {
+    const child = spawn(process.execPath, ['-e', code], { stdio: ['ignore', 'pipe', 'ignore'], detached: true });
+    t.after(() => process.kill(-child.pid));
+    await new Promise(r => child.stdout.once('data', r)); // all started, its memory settled
+    const seen = usages(blocks).length;
+    was = await until(() => usages(blocks).length > seen + 1 ? usages(blocks).at(-1) : null, 'a sample with them in everything else'); // (they have no session yet, so that is where they are)
+    await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+      body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+    now = await until(() => usages(blocks).find(v => v.sessions[id]?.n >= N && v.sessions[id].mem >= MB && v.else.n <= was.else.n - N + 30 && v.else.mem <= was.else.mem - MB), 'the processes in the session and out of everything else');
+  });
+  assert.ok(now.else.procs.length <= 8 && now.else.n === now.else.procs.reduce((a, p) => a + p.n, 0), 'eight groups at most, every process counted once');
+  assert.ok(now.else.cpu >= 0, 'with its totals');
+});
+
+test('usage: in everything else a process is named for the app it works for, not by itself', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  // a busy helper in no session's tree: its responsible process (what it inherited from the test run: a terminal, an app) is its app, so it tops
+  // the groups under that name, never as "helper-x"
+  const helper = spawn(process.execPath, ['-e', 'for (;;);'], { argv0: 'helper-x', detached: true, stdio: 'ignore' });
+  t.after(() => process.kill(-helper.pid));
+  let u;
+  await streamed(base, async blocks => {
+    u = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1])).filter(v => v.else?.procs?.[0]?.cpu >= 50)[1], 'a sample where something busy tops everything else');
+  });
+  assert.ok(!u.else.procs.some(p => p.name === 'helper-x'), `helper-x is grouped under its app: ${JSON.stringify(u.else.procs.map(p => p.name))}`);
+});
+
+test('usage: past eight groups the shown ones are the four busiest and the biggest of the rest by memory, so an idle big process is not lost in "other"', async t => {
+  const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
+  // seven half-busy ones (each its own name), an idle one holding 300 MB, and the session's node: nine groups
+  const busy = [1, 2, 3, 4, 5, 6, 7].map(i => `spawn(process.execPath, ['-e', 'setInterval(() => { const t = Date.now(); while (Date.now() - t < 50); }, 100)'], { argv0: 'busy${i}' });`).join(' ');
+  const code = `const { spawn } = require('child_process'); ${busy} spawn(process.execPath, ['-e', 'const b = Buffer.alloc(300e6, 1); setTimeout(() => b, 60000)'], { argv0: 'idle-hog' }); setTimeout(() => {}, 60000)`;
+  const child = spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  t.after(() => process.kill(-child.pid));
+  const id = 'aaaaaaaa-0000-4000-8000-000000000015';
+  await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': String(child.pid) },
+    body: JSON.stringify({ session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/work', prompt: 'go' }) });
+  let s;
+  await streamed(base, async blocks => {
+    s = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1]).sessions[id]).filter(g => g?.n === 9 && g.procs.some(p => p.name === 'busy7' && p.cpu > 0))[1], 'a sample with all nine busy');
+  });
+  const names = s.procs.map(p => p.name);
+  assert.ok(names.includes('idle-hog'), `the idle 300 MB one is named: ${JSON.stringify(names)}`);
+  assert.strictEqual(names.at(-1), 'other');
+  assert.strictEqual(s.procs.length, 8);
+  const rows = s.procs.slice(0, -1);
+  assert.ok(rows.every((p, i) => i === 0 || p.cpu < rows[i - 1].cpu || p.cpu === rows[i - 1].cpu && p.mem <= rows[i - 1].mem), 'shown in the usual order, by CPU then RAM');
+});
+
 test('usage: WebKit\'s helper services are named for what they do', async t => {
   const base = await serve(t, {}, () => {}, { LANTERN_USAGE_SECONDS: '0.2' });
   const code = `const { spawn } = require('child_process'); spawn('sleep', ['60'], { argv0: '/x/com.apple.WebKit.GPU.xpc/Contents/MacOS/com.apple.WebKit.GPU' }); setTimeout(() => {}, 60000)`;
