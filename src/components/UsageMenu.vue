@@ -119,7 +119,7 @@ const rowEvents = (key: string, id: string, btn: boolean) => {
       </section>
       <hr>
       <div class="key">
-        <div class="kh"><span>Session</span><button v-for="k in (['cpu', 'mem'] as const)" :key="k" :aria-pressed="sort === k" :title="`Sort by ${k === 'cpu' ? 'CPU' : 'RAM'}`" @click="setSort(k)">{{ k === 'cpu' ? 'CPU' : 'MEM' }}</button></div>
+        <div class="kh"><span>Session</span><button v-for="k in (['cpu', 'mem'] as const)" :key="k" :aria-pressed="sort === k" :title="`Sort by ${k === 'cpu' ? 'CPU' : 'RAM'}`" @click="setSort(k)"><svg v-if="sort === k" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 6.5 8 10l3.5-3.5"/></svg>{{ k === 'cpu' ? 'CPU' : 'MEM' }}</button></div>
         <template v-for="r in popup.rows" :key="r.name">
         <hr v-if="r.app">
         <component :is="r.btn ? 'button' : 'div'" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"

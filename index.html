@@ -297,9 +297,10 @@
   #usage button.krow:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
   #usage .kh > :first-child { grid-column: 1 / 3; }
   #usage .kh > * + *, #usage .krow span + span { text-align: right; }
-  #usage .kh button { all: unset; cursor: pointer; text-align: right; text-transform: uppercase; letter-spacing: var(--tracking-label); border-radius: var(--radius-sm); padding: 0 var(--space-1); margin-right: calc(-1 * var(--space-1)); } /* the pill gets room without moving the column */
+  #usage .kh button { all: unset; position: relative; cursor: pointer; text-align: right; text-transform: uppercase; letter-spacing: var(--tracking-label); }
   #usage .kh button:hover { color: var(--ink-hover); }
-  #usage .kh button[aria-pressed=true] { background: var(--surface-selected); color: var(--ink-strong); } /* the sort key, as the segmented pills mark theirs */
+  #usage .kh button[aria-pressed=true] { color: var(--ink-strong); }
+  #usage .kh button svg { position: absolute; right: calc(100% - .2em); top: 50%; width: 1.1em; height: 1.1em; margin-top: -.45em; } /* the sort key's caret, outside the label so the numbers' column stays put */
   #usage .kh button:focus-visible { outline: 1px solid var(--focus); }
   #usage .krow .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #usage .krow:not(.session) { color: var(--ink-dim); } /* everything else and Lantern's own use */

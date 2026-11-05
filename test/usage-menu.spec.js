@@ -216,6 +216,7 @@ test('the CPU and MEM headers pick the sort key: sessions and the open processes
   expect(names()).toEqual(['busy', 'quiet one', 'everything else', 'Lantern']); // CPU by default
   expect(head('CPU').attributes('aria-pressed')).toBe('true');
   expect(head('MEM').attributes('aria-pressed')).toBe('false');
+  expect([head('CPU'), head('MEM')].map(b => b.find('svg').exists())).toEqual([true, false]); // the active key carries the caret
   await w.findAll('#usage .krow')[0].trigger('click'); // busy opens: its processes by CPU, and the rows' order is held
   expect(w.findAll('#usage .pn').map(n => n.text())).toEqual(['vitest', 'claude']);
   await head('MEM').trigger('click');
@@ -223,6 +224,7 @@ test('the CPU and MEM headers pick the sort key: sessions and the open processes
   expect(names()).toEqual(['quiet one', 'busy', 'everything else', 'Lantern']); // sorted again, with its row still open
   expect(w.findAll('#usage .pn').map(n => n.text())).toEqual(['claude', 'vitest']); // its processes by RAM
   expect(localStorage.getItem('lantern-usage-sort')).toBe('mem');
+  expect([head('CPU'), head('MEM')].map(b => b.find('svg').exists())).toEqual([false, true]);
   w.unmount();
   const again = await mounted(sorted); // a new dropdown remembers it
   expect(again.w.findAll('#usage .krow .n').map(n => n.text())).toEqual(['quiet one', 'busy', 'everything else', 'Lantern']);
