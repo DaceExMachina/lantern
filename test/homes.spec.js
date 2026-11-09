@@ -294,8 +294,7 @@ test('landed moths spread up and down the paper, in their homes\' order, never o
       assert.ok(Math.max(...ys) - Math.min(...ys) > 0.4 * height, `${where}: they span ${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} of ${height.toFixed(0)}`);
     }
   }
-});
-
+}, 300_000); // ponytail: 216 lantern/size/skip combinations of 300 frames each, about 26s here and over 100s on a CI runner, past vitest's 120s default; trim the grid if it grows
 // A landed moth rides its spot exactly (mothMove), so its spot has to glide, never jump. Landing depends on nothing but
 // the moth's own home, and a home glides round the ring (glideHome), so its spot glides with it. On main, a home gliding
 // across the top took its spot over to the other side in a single frame, 87 units.
