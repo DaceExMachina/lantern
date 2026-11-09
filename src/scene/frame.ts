@@ -941,21 +941,21 @@ function mothWings(m: Moth, { tx, ty, flap, needsMe }: Aim, dt: number, s: numbe
 }
 
 // Moths near the lantern catch its light, and a scorched one is charred a little, healing as its episode runs out.
-// A moth's wings are its session's colour (the swatch in the usage dropdown and on its cards), so the two match, and an
-// idle one keeps it on the lantern. One that needs you turns violet (half violet when snoozed) and, landed, darkens
-// toward a neutral against the paper, with an edge in its own colour so you can still tell whose it is. Agents
-// circling a landed moth take on its colour too.
-let edgeWidth = devSlider('Moths', 'edge', 'landed edge', 0, 3, 0.1, 1.2, 'Width, in moth units, of the edge in its own colour on a landed moth that needs you (0 for none)', v => { edgeWidth = v; });
+// A moth's wings are its session's colour (the swatch in the usage dropdown and on its cards), so the two match, and a moth that
+// needs you keeps it on the lantern. Landed and not needing you, it goes plain: a snoozed one rests in a paler indigo, an idle
+// one nearly grey, both darkened against the glowing paper. Agents circling a landed moth take on its colour too.
 export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt: number) {
   const host = m.parentId === undefined ? m : live.moths.get(m.parentId), calling = !m.leaving && !host?.leaving && host?.session?.state === 'waiting';
-  m.cool += ((calling ? (host?.session?.snoozed ? 0.5 : 1) : 0) - m.cool) * dt * 3;
+  const needsYou = calling && !host?.session?.snoozed, plain = needsMe && m.wasLanded && !(needsYou && !m.session?.error); // plain: the uncoloured resting look
+  // violet: a snoozed wait half, an idle moth a hint (MOTH_RESTING), a singed one all the way (grey); a moth that needs you stays its colour
+  m.cool += ((needsYou ? (m.session?.error ? 1 : 0) : calling ? 0.5 : needsMe && m.wasLanded ? 0.15 : 0) - m.cool) * dt * 3;
+  m.plain = (m.plain ?? 0) + ((plain ? 1 : 0) - (m.plain ?? 0)) * Math.min(1, dt * 3);
   const lit = Math.max(level, cool * 0.5) * Math.max(0, 1 - Math.hypot(m.x - CX, m.y - CY) / 330);
   m.tint ||= m.parentId !== undefined ? live.moths.get(m.parentId)?.tint : m.session && tintFor(m.session); // subagents share their session's tint
   const singed = needsMe && m.session?.error;
-  // Landed, the flame is behind the moth: one that needs you turns to a darker silhouette against the glowing paper, and
-  // an idle one stays as it is. The edge fades in and out with the violet.
-  const backlit = m.fold || 0, edge = Math.min(1, m.cool * 2) * backlit; // snoozed (half violet) darkens and edges as much as needs-you
-  let wing = mix(mix(mix(m.tint ?? MOTH_IDLE, pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2A2A2A', 0.45 * edge);
+  // Landed, the flame is behind the moth: a plain one turns to a darker silhouette against the glowing paper.
+  const backlit = m.fold || 0;
+  let wing = mix(mix(mix(mix(m.tint ?? MOTH_IDLE, MOTH_IDLE, m.plain), pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit * m.plain);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
   if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
     wing = mix(wing, GOLD, goldLook.tint * m.shine);
@@ -974,8 +974,6 @@ export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt:
   }
   const st = m.g.style;
   st.setProperty('--wing', wing);
-  st.setProperty('--edge', m.tint ?? MOTH_IDLE);
-  st.setProperty('--edge-width', (edgeWidth * edge).toFixed(2));
 }
 
 // Each z has a faint grey shadow, one unit down and right: a second copy of the glyph drawn behind it (free per frame,

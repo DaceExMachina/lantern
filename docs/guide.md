@@ -19,7 +19,7 @@ Each big moth is a session. It keeps its own patch of the dark, trails a thread 
 
 Side sessions orbit their parent. When the Claude desktop app starts one session from another, the new one flies as a slightly smaller, untethered satellite around its parent's moth. While the parent is alive, the side session reports to it instead of to you. So when it finishes, it keeps orbiting, its card says "reported back", and it never turns the lantern violet. The parent's card lists its side sessions alongside its agents.
 
-When a session needs you, its moth lands on the lantern, folds its wings and turns violet, with a thin edge in its own colour so you can still tell whose it is, and the flame, paper and glow all shift to violet. A session that's only waiting on its own background agents stays in the air. Once that work goes quiet (no agent heard from for five minutes, no background task younger than half an hour), it lands like any finished turn. If it also asked you something, it lands.
+When a session needs you, its moth lands on the lantern, folds its wings and keeps its own colour, and the flame, paper and glow all shift to violet. A session that's only waiting on its own background agents stays in the air. Once that work goes quiet (no agent heard from for five minutes, no background task younger than half an hour), it lands like any finished turn. If it also asked you something, it lands.
 
 Landed moths get fidgety. Now and then one takes a slow breath, opening its wings and closing them again. After 15 minutes it gets restless and sometimes hops off the paper.
 
@@ -46,7 +46,7 @@ To keep a session in view, click the pin on its card. It opens in full in a side
 
 Click the header of a moth's full card to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. "N need you" in the footer opens whichever session has waited longest, then the next one. "N snoozed" and "N sleeping" step through their sessions the same way.
 
-Right-click a waiting moth, or shift-click it, to snooze it. It rests on the lantern half violet, still edged in its own colour, breathing out the odd z, and stops turning the light violet until the session does something new. Right-click or shift-click again and it's sleeping: snoozed for good, so new activity never wakes it. That's handy for a chat you only drop into now and then. (A sleeping moth looks like an idle one, in its own colour, plus the z's.) A third one wakes it. On a moth that isn't waiting, the first one puts it to sleep. The footer counts snoozed and sleeping sessions separately.
+Right-click a waiting moth, or shift-click it, to snooze it. It rests on the lantern in a plain, pale indigo (its own colour is for moths that need you), breathing out the odd z, and stops turning the light violet until the session does something new. Right-click or shift-click again and it's sleeping: snoozed for good, so new activity never wakes it. That's handy for a chat you only drop into now and then. A third one wakes it. On a moth that isn't waiting, the first one puts it to sleep. The footer counts snoozed and sleeping sessions separately.
 
 Forgot what something means? "What's what?" at the bottom of the settings menu has the short version of this page.
 
