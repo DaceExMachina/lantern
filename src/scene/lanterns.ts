@@ -864,8 +864,7 @@ export const WARM = { halo: '#FF9F45', outer: '#F7913F', mid: '#FFC266', core: '
 export const COOL = { halo: '#8C6CFF', outer: '#7A63F0', mid: '#9FB6FF', core: '#F0F2FF', base: '#D2B4FF', glow: '#9D7CF5',
   paper: '#A99BFF', thread: '#B6A6F5', rings: ['#2E2E58', '#3A3A6E', '#4E4A86'] };
 export const MOTH_IDLE = '#E9DCF0', MOTH_CALL = '#7B5CFF', MOTH_SINGED = '#8C8494'; // singed: the turn ended in an API error
-// An idle session's moth resting on the lantern: a touch of the calling violet (frame.ts eases it 0.15 of the way), then
-// backlit against the paper. Mostly grey: mix(mix(MOTH_IDLE, MOTH_CALL, 0.15), '#2B2440', 0.45).
+// The stats ribbon's colour for idle sessions, a near-grey (an idle moth on the lantern is its own tint).
 export const MOTH_RESTING = '#8B7FA2';
 
 // A tint per session: one of 12 hues thirty degrees apart (so pinks, reds and purples turn up beside the greens), picked from its id alone

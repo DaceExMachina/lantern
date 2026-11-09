@@ -16,16 +16,21 @@ test('a flying moth is its session\'s colour', async () => {
   expect(g.style.getPropertyValue('--wing')).not.toBe(mix(MOTH_IDLE, tintFor(session), 0.45));
 });
 
-// on the lantern too: a moth that needs you keeps its swatch (its state shows in its halo, wings and rim instead), even sat
-// right by the flame with the paper glowing behind it
-test('a moth that needs you keeps its session\'s colour on the lantern', async () => {
+// landed on the lantern, an idle session's moth is still its swatch with no edge; one that needs you is violet,
+// darker toward a neutral, with an edge in its own tint
+test('a landed idle moth is its tint, and one that needs you is violet with a tint edge', async () => {
   const { layOut } = await import('./page.js'); layOut();
-  const { mothColour } = await import('../src/scene/frame'), { CX, CY } = await import('../src/scene/scene');
-  const session = { id: id, cwd: '/w', state: 'waiting' }, wing = { normal: [0, 0, 1], depth: 0 };
-  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g'), path = () => document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  const m = { x: CX, y: CY, size: 1, g, back: path(), front: path(), session, cool: 0, tint: undefined, wasLanded: true, fold: 1, phase: 0 };
-  for (let i = 0; i < 60; i++) mothColour(m, true, wing, wing, 1 / 30); // two seconds landed, for anything that eases in
-  expect(m.rest).toBeGreaterThan(0.9); // it did reach its landed state
-  expect(g.style.getPropertyValue('--wing')).toBe(tintFor(session));
-  expect(m.front.style.fill).toBe(g.style.getPropertyValue('--wing')); // and its wings are painted that colour, unshaded
+  const { mothColour } = await import('../src/scene/frame'), { mix, MOTH_CALL } = await import('../src/scene/lanterns');
+  const wing = { normal: [0, 0, 1], depth: 0 }, svg = tag => document.createElementNS('http://www.w3.org/2000/svg', tag);
+  const landed = state => {
+    const session = { id, cwd: '/w', state }, m = { x: 0, y: 0, size: 1, g: svg('g'), back: svg('path'), front: svg('path'), session, cool: 0, fold: 1, wasLanded: true };
+    for (let i = 0; i < 200; i++) mothColour(m, true, wing, wing, 1 / 60);
+    return m.g.style;
+  };
+  const idle = landed('idle'), calling = landed('waiting'), tint = tintFor({ id, cwd: '/w', state: 'idle' });
+  expect(idle.getPropertyValue('--wing')).toBe(tint);
+  expect(idle.getPropertyValue('--edge-width')).toBe('0.00');
+  expect(calling.getPropertyValue('--wing')).toBe(mix(MOTH_CALL, '#2A2A2A', 0.45));
+  expect(calling.getPropertyValue('--edge')).toBe(tint);
+  expect(calling.getPropertyValue('--edge-width')).toBe('1.20');
 });

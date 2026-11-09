@@ -537,7 +537,7 @@
   #dock .pr2 .ti { white-space: normal; overflow-wrap: anywhere; } /* an agent's row is already open there */
   #dock .agent { box-sizing: border-box; } /* a plain row there, not a button, so it doesn't get the buttons' reset */
   #dock .ended > :not(h3), #dock .ended h3 :is(.open, .chip) { opacity: var(--faded); } /* its session has ended: as it last was, until unpinned */
-  .moth .wing { fill: var(--wing); }
+  .moth .wing { fill: var(--wing); stroke: var(--edge); stroke-width: var(--edge-width, 0); stroke-linejoin: round; } /* the edge: a landed moth that needs you (frame.ts mothColour) */
 </style>
 </head>
 <body>

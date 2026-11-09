@@ -209,7 +209,6 @@ interface MothBase {
   fidget?: '' | 'hop' | 'breathe'; into?: number; landJitter?: number; rand?: () => number;
   // a fresh snooze's puff and the sleeping z's it breathes out
   puff?: Puff | null; zStart?: number | undefined; zOff?: number;
-  rest?: number; halo?: SVGCircleElement; restAs?: 'call' | 'error' | 'snoozed' | 'idle'; // how far its lantern state shows (0 to 1), and which (frame.ts mothColour)
   shine?: number; // how strongly it glows gold for a message it sent or got, 0 to 1 (messages.ts)
 }
 /** A session's moth. It wanders round its `home` (a spot on the ring, `spot`, or circling its parent's as a satellite),
