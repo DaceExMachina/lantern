@@ -26,7 +26,7 @@ function go(id: string, live: boolean) {
 
 <template>
   <template v-if="roomy">
-    <button id="bookmarksButton" class="corner" popovertarget="bookmarks" :aria-label="`Bookmarks (${rows.length})`" title="Bookmarks"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4 1.5h8v13l-4-3.2-4 3.2z"/></svg></button>
+    <button id="bookmarksButton" class="corner" popovertarget="bookmarks" :aria-label="`Bookmarks (${rows.length})`" title="Bookmarks"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linejoin="round"><path d="M4 1.5h8v13l-4-3.2-4 3.2z"/></svg></button>
     <div id="bookmarks" ref="menu" class="flyup" popover aria-label="Bookmarks">
       <div v-for="r in rows" :key="r.b.id" class="row">
         <button class="go" :title="r.live ? 'Go to this session' : 'Resume this session in iTerm2'" @click="go(r.b.id, r.live)">

@@ -270,10 +270,12 @@
   #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 320px; max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; max-height: calc(100vh - max(var(--space-2), var(--titlebar)) - var(--space-1) - var(--hud) * 1.5 - var(--space-3) - var(--space-6)); padding: var(--space-4); /* below its top, it stops clear of the footer and scrolls inside */ gap: var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
   /* the bookmarks (src/components/BookmarksMenu.vue): a footer corner button beside stats, its list flying up like the reviews' */
   #bookmarks { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
-  #bookmarks .row { display: flex; }
+  /* a row is its go button, the full width, with the remove cross over the right end of its face, so the row's hover takes in the cross */
+  #bookmarks .row { position: relative; }
   #bookmarks button { all: unset; box-sizing: border-box; cursor: pointer; }
-  #bookmarks .go { flex: 1; min-width: 0; padding: 0 0 0 var(--space-2); }
-  #bookmarks .rm { flex: none; display: flex; padding: 0 var(--space-2) 0 0; }
+  #bookmarks .go { display: block; width: 100%; padding: 0 var(--space-2); }
+  #bookmarks .go .face { padding-right: var(--space-6); } /* room for the cross */
+  #bookmarks .rm { position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
   #bookmarks .rm .face { display: flex; align-items: center; padding: 0 var(--space-1-5); border-radius: var(--radius-sm); color: var(--ink-faint); }
   #bookmarks .rm:hover .face { color: var(--ink-hover); }
   #bookmarks :is(.go, .rm):focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
@@ -321,7 +323,7 @@
   #usage .track { display: block; height: 3px; border-radius: var(--radius-pill); overflow: hidden; background: var(--line-soft); }
   #reviews a { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
   :is(#reviews a, #bookmarks .go) .face { display: block; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); }
-  :is(#reviews a, #bookmarks .go):is(:hover, :focus-visible) .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
+  :is(#reviews a:is(:hover, :focus-visible), #bookmarks .row:is(:hover, :focus-within) .go) .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
   #reviews a:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   :is(#reviews, #bookmarks) .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#reviews, #bookmarks) .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }

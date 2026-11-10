@@ -198,7 +198,16 @@
       page.$('usage').scrollTop = 1e4;
     }, snap('usage-rows'), () => { page.$('usage').hidePopover(); },
     // the bookmarks dropdown, flying up from its corner button: the running session and the one that has ended
-    () => { page.$('bookmarks').showPopover(); }, snap('bookmarks'), () => { page.$('bookmarks').hidePopover(); }],
+    // its remove cross sits inside the row's face (so the row's highlight takes it in) and is its own button; the rest of the row is the
+    // go button.
+    () => {
+      page.$('bookmarks').showPopover();
+      const row = page.$('bookmarks').querySelector('.row'), go = row.querySelector('.go'), rm = row.querySelector('.rm');
+      const face = go.querySelector('.face').getBoundingClientRect(), x = rm.querySelector('.face').getBoundingClientRect(), at = (px, py) => document.elementFromPoint(px, py)?.closest('button');
+      if (x.left < face.left || x.right > face.right || x.top < face.top || x.bottom > face.bottom) errs.push(`the bookmark's cross (${x.left}-${x.right}) sits outside its row's face (${face.left}-${face.right})`);
+      if (at((x.left + x.right) / 2, (x.top + x.bottom) / 2) !== rm) errs.push('the bookmark\'s cross isn\'t its own button');
+      if (at(face.left + 4, (face.top + face.bottom) / 2) !== go) errs.push('the bookmark\'s row isn\'t its go button');
+    }, snap('bookmarks'), () => { page.$('bookmarks').hidePopover(); }],
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
   // lands on that control, the header's out to the card's own corners.
