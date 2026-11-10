@@ -1,9 +1,9 @@
 <script setup lang="ts">
-// The bookmarked sessions (a card's bookmark toggles one): a button beside the CPU and RAM readout at the top left, opening a dropdown
-// (a native popover, like the reviews menu) that lists them, the most recently active first, each with its folder, whether it's running and
-// when it was last active. A click on a running one brings it to the front, as the card's header does; on one that has ended it resumes it
-// in a new iTerm2 tab, as a double click on a ghost moth does (the server keeps its title, folder and last activity for that). The cross
-// removes it. Not in the iTerm panel or the screensavers, which have no room.
+// The bookmarked sessions (a card's bookmark toggles one): a corner button in the footer beside stats, opening a dropdown that flies up
+// from it (a native popover, like the reviews menu) listing them, the most recently active first, each with its folder, whether it's
+// running and when it was last active. A click on a running one brings it to the front, as the card's header does; on one that has ended it
+// resumes it in a new iTerm2 tab, as a double click on a ghost moth does (the server keeps its title, folder and last activity for that).
+// The cross removes it. Not in the iTerm panel or the screensavers, whose footers have no room.
 import { computed, useTemplateRef } from 'vue';
 import { project, short } from '../scene/card';
 import { post } from '../scene/scene';
@@ -26,9 +26,7 @@ function go(id: string, live: boolean) {
 
 <template>
   <template v-if="roomy">
-    <button id="bookmarksButton" popovertarget="bookmarks" :aria-label="`Bookmarks (${rows.length})`" title="Bookmarks">
-      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4 1.5h8v13l-4-3.2-4 3.2z"/></svg>
-    </button>
+    <button id="bookmarksButton" class="corner" popovertarget="bookmarks" :aria-label="`Bookmarks (${rows.length})`" title="Bookmarks"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"><path d="M4 1.5h8v13l-4-3.2-4 3.2z"/></svg></button>
     <div id="bookmarks" ref="menu" class="flyup" popover aria-label="Bookmarks">
       <div v-for="r in rows" :key="r.b.id" class="row">
         <button class="go" :title="r.live ? 'Go to this session' : 'Resume this session in iTerm2'" @click="go(r.b.id, r.live)">

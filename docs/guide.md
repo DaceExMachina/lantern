@@ -29,7 +29,7 @@ A few smaller things to watch for:
 
 - Threads pulse with a little glow each time a session or one of its agents runs a tool.
 - When one session sends another a message, the sender glows gold, a gold pulse runs down its thread to the lantern and up the other's, and the receiver glows gold too. Only that a message went is shown, never what it said.
-- Each session gets its own colour, one of twelve spread around the colour wheel, so you can tell moths apart. The same colour marks it in the usage dropdown and on its cards.
+- Each session gets its own colour, one of twelve spread around the colour wheel, so you can tell moths apart. The same colour marks it in the system dropdown (the CPU and RAM readout at the top left) and on its cards.
 - A singed moth (grey) means the turn ended with an API error.
 
 The scene stretches to fill any window shape, wide, tall or square, and the lantern stays the same size in the middle.
@@ -44,7 +44,7 @@ Double-click the moth, or click the card's header, to open the session. Click th
 
 To keep a session in view, click the pin on its card. It opens in full in a sidebar on the right, and you can pin as many as you like. Click a pin again to let that session go. When a pinned session ends, it stays there, dimmed. Pins need a window at least 800 pixels wide.
 
-To come back to a session later, click the bookmark beside the pin. Your bookmarks are listed under the bookmark icon at the top left, next to the CPU and RAM readout, the most recently active first, each with its folder, whether it's running, and when it was last active. Click a running one to bring it to the front, or one that has ended to resume it in a new iTerm2 tab with `claude --resume` in its folder, the way double-clicking a ghost moth does. The cross removes a bookmark. Bookmarks are shared by every window and survive a restart. The iTerm2 panel and the screensaver have no room for the list.
+To come back to a session later, click the bookmark beside the pin. Your bookmarks are listed under the bookmark button at the bottom right, beside stats, the most recently active first, each with its folder, whether it's running, and when it was last active. Click a running one to bring it to the front, or one that has ended to resume it in a new iTerm2 tab with `claude --resume` in its folder, the way double-clicking a ghost moth does. The cross removes a bookmark. Bookmarks are shared by every window and survive a restart. The iTerm2 panel and the screensaver have no room for the button.
 
 Click the header of a moth's full card to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. "N need you" in the footer opens whichever session has waited longest, then the next one. "N snoozed" and "N sleeping" step through their sessions the same way.
 

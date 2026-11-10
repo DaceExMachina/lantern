@@ -61,7 +61,7 @@
   #scene > [hidden] { display: none; } /* the rule above would otherwise beat the hidden attribute (pages.ts hides the ink canvas on lanterns with no paper) */
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
      so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (StatusLine.vue) */
-  footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
+  footer { --corners: 138px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
   #statusSlot { display: contents; } /* StatusLine.vue mounts here; its #status is the footer's grid item */
   #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 var(--space-3); } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
@@ -252,14 +252,9 @@
   #reviewsButton:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   #reviews { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); /* stops below the drag strip, like #stats and #recap; scrolls inside (.flyup's 52px is its bottom inset) */ left: var(--space-3); right: auto; width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
   /* the CPU and memory readout (src/components/UsageMenu.vue): fixed at the top left, below the drag strip, quiet until hovered; its dropdown opens under it */
-  /* #hud: the readout and the bookmarks button (BookmarksMenu.vue) side by side, their hit areas touching */
-  #hud { position: fixed; z-index: var(--z-tip); top: calc(max(var(--space-2), var(--titlebar)) + var(--space-1)); left: var(--space-3); max-width: calc(100vw - 2 * var(--space-3)); display: flex; align-items: stretch; }
-  #usageButton { all: unset; cursor: pointer; min-width: 0; box-sizing: border-box; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #usageButton { all: unset; cursor: pointer; position: fixed; z-index: var(--z-tip); top: calc(max(var(--space-2), var(--titlebar)) + var(--space-1)); left: var(--space-3); max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
   #usageButton:hover, #usageButton[aria-expanded="true"] { color: var(--ink-dim); }
-  #usageButton:focus-visible, #bookmarksButton:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
-  #bookmarksButton { all: unset; cursor: pointer; display: flex; align-items: center; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); color: var(--ink-faint); }
-  #bookmarksButton:hover { color: var(--ink-dim); }
-  #bookmarksButton svg { width: calc(var(--hud, var(--space-4)) * .5); height: calc(var(--hud, var(--space-4)) * .5); }
+  #usageButton:focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
   /* the readout is neutral: which is CPU and which is RAM comes from position and the icons; only memory pressure adds colour, to the Mac's RAM. In the dropdown, colour belongs to sessions */
   #usageButton .meter { --m: var(--ink-dim); }
   #usageButton.warning .mem { --m: var(--accent-warm); }
@@ -273,7 +268,8 @@
   .uring circle { stroke: var(--lantern-quiet); }
   .uring .arc { stroke: var(--m); stroke-linecap: round; }
   #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 320px; max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; max-height: calc(100vh - max(var(--space-2), var(--titlebar)) - var(--space-1) - var(--hud) * 1.5 - var(--space-3) - var(--space-6)); padding: var(--space-4); /* below its top, it stops clear of the footer and scrolls inside */ gap: var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
-  #bookmarks { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); max-height: calc(100vh - max(var(--space-2), var(--titlebar)) - var(--space-1) - var(--hud) * 1.5 - var(--space-3) - var(--space-6)); padding: var(--space-2) 0; gap: 0; }
+  /* the bookmarks (src/components/BookmarksMenu.vue): a footer corner button beside stats, its list flying up like the reviews' */
+  #bookmarks { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
   #bookmarks .row { display: flex; }
   #bookmarks button { all: unset; box-sizing: border-box; cursor: pointer; }
   #bookmarks .go { flex: 1; min-width: 0; padding: 0 0 0 var(--space-2); }
@@ -584,13 +580,14 @@
 <aside id="dock" aria-label="Pinned sessions" inert><div class="stack"></div></aside>
 <div id="card" role="tooltip"></div>
 <div id="prTip" class="badgeTip" role="tooltip"></div>
-<div id="hud"><span id="usageSlot"></span><span id="bookmarksSlot"></span></div>
+<span id="usageSlot"></span>
 <footer>
   <span id="statusSlot"></span>
   <span id="nowPlayingSlot"></span>
   <span id="reviewsSlot"></span>
   <div class="corners">
   <button id="quiet" class="corner" aria-label="Quiet" title="Treat everything as snoozed until 8am"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M10.5 2.6a5.6 5.6 0 1 0 3 9.8 4.6 4.6 0 0 1-3-9.8z"/><path d="M13 2.5v2.4M11.8 3.7h2.4"/></svg></button>
+  <span id="bookmarksSlot"></span>
   <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 1.2 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M1.6 14.3h12.8v.8H1.6z"/><path d="M3.7 14.3V9.6c0-.5-.4-.7-.9-.8V8.4h3v.4c-.5.1-.9.3-.9.8v4.7zM7.4 14.3V4.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v9.9zM11.1 14.3V7.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v6.9z"/></svg></button>
   <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="21" height="21" aria-hidden="true" fill="currentColor"><circle cx="8" cy="8" r="1.3"/><path d="M8 1.2l.9 4.9L8 6.6l-.9-.5zM8 14.8l-.9-4.9.9-.5.9.5zM1.2 8l4.9-.9.5.9-.5.9zM14.8 8l-4.9.9-.5-.9.5-.9z"/><path d="M3.2 3.2l3.4 2.6-.3.5-.5.3zM12.8 12.8l-3.4-2.6.3-.5.5-.3zM3.2 12.8l2.6-3.4.5.3.3.5zM12.8 3.2l-2.6 3.4-.5-.3-.3-.5z" opacity=".7"/></svg></button>
   </div>

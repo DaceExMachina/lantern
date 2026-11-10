@@ -133,6 +133,17 @@
       }
       if (Math.round(page.$('nowPlaying').lastElementChild.getBoundingClientRect().right) !== Math.round(w.right) - 1) errs.push('now playing\'s last button stops short of its right edge');
     }, snap('playing'), () => { emit('nowPlaying', null); },
+    // the corner buttons, bookmarks among them (not in the iTerm panel), fill the footer's height and meet, with no gap, and fit the room the status keeps clear for them (--corners)
+    () => {
+      const foot = document.querySelector('footer').getBoundingClientRect(), bs = [...document.querySelectorAll('.corners .corner')], rs = bs.map(b => b.getBoundingClientRect());
+      if (!Q.has('panel') && bs[1]?.id !== 'bookmarksButton' || bs.at(-2)?.id !== 'statsButton') errs.push(`the corner buttons are ${bs.map(b => b.id)}: bookmarks belongs beside stats`);
+      rs.forEach((r, i) => {
+        if (Math.round(r.top) !== Math.round(foot.top) || Math.round(r.bottom) !== Math.round(foot.bottom)) errs.push(`${bs[i].id} doesn't fill the footer's height`);
+        if (i && Math.round(r.left) !== Math.round(rs[i - 1].right)) errs.push(`${bs[i].id} doesn't meet ${bs[i - 1].id}`);
+      });
+      const room = parseFloat(getComputedStyle(document.querySelector('footer')).getPropertyValue('--corners'));
+      if (rs.at(-1).right - rs[0].left > room) errs.push(`the corner buttons are ${rs.at(-1).right - rs[0].left} px wide, more than --corners (${room})`);
+    },
     () => { page.$('menu').showPopover(); page.$('help').open = true; }, snap('menu'),
     () => { emit('github', { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
     async () => { page.$('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { page.$('stats').hidePopover(); },
@@ -186,7 +197,7 @@
       await new Promise(r => realSetTimeout(r, 100));
       page.$('usage').scrollTop = 1e4;
     }, snap('usage-rows'), () => { page.$('usage').hidePopover(); },
-    // the bookmarks dropdown, beside the rings: the running session and the one that has ended
+    // the bookmarks dropdown, flying up from its corner button: the running session and the one that has ended
     () => { page.$('bookmarks').showPopover(); }, snap('bookmarks'), () => { page.$('bookmarks').hidePopover(); }],
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
