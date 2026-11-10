@@ -8,7 +8,7 @@ import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import SessionCard from '../src/components/SessionCard.vue';
 import { tintFor } from '../src/scene/lanterns';
-import { $ } from '../src/scene/scene';
+import { $, post } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
@@ -329,6 +329,25 @@ test('a wisp whose session has gone quiet shows that session\'s ghost card', asy
     assert.ok(text(card).includes('gone quiet'), 'the ghost card');
     assert.ok(text(card).includes('PRs (1)'));
     assert.ok(!text(card).includes('Made by'), 'not the PR-only card');
+  } finally { ghosts.delete('quiet'); }
+});
+
+test('a ghost card\'s title is the same link a session\'s is, and clicking it resumes the session', async () => {
+  const o = { id: 'quiet', title: 'Imageproxy PR 11', cwd: '/w/imageproxy', last: now - 9 * 864e5 };
+  const ghost = { o, prs: [{ ...wisp, owner: o }] };
+  ghost.zone = hoverZone(() => ({ ghost, zone: ghost.zone }), () => post('/resume', { id: o.id }), 20); // what stale.ts makes
+  ghosts.set('quiet', ghost);
+  try {
+    enterZone(ghost.zone);
+    await nextTick();
+    let open = find($('card'), 'open');
+    assert.deepStrictEqual([open.length, open[0].tagName, text(open[0]), find(open[0], 'go').length], [1, 'BUTTON', 'Imageproxy PR 11', 0], 'a title link, its arrow only once expanded');
+    expandCard(ghost.zone);
+    await nextTick();
+    open = find($('card'), 'open');
+    assert.strictEqual(find(open[0], 'go').length, 1, 'the arrow');
+    open[0].click();
+    assert.deepStrictEqual(posts, [['/resume', { id: 'quiet' }]], 'it resumes the session');
   } finally { ghosts.delete('quiet'); }
 });
 
