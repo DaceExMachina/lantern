@@ -5,11 +5,12 @@
 // only fills it. Relative times count from store.now, which ticks every second. Once hidden, the card keeps showing what it
 // last showed while it fades out; each time it opens it starts afresh (its agents closed, scrolled to the top).
 import { computed, onBeforeUpdate, onUpdated, ref, shallowRef, watch } from 'vue';
-import { NEED, dropTip } from '../scene/card';
+import { NEED, clickZone, dropTip } from '../scene/card';
 import { flyColour } from '../scene/fireflies';
 import { ghosts } from '../scene/stale';
 import { useLanternStore } from '../stores/lantern';
 import type { Ghost, Hovered, Session } from '../types';
+import GoArrow from './GoArrow.vue';
 import SessionRows from './SessionRows.vue';
 
 const store = useLanternStore();
@@ -60,7 +61,7 @@ onUpdated(() => {
       <div v-if="!full" class="hint">Click for details, double click to open PR</div>
     </template>
     <template v-else-if="ghost">
-      <h3><span class="title"><span class="face">{{ ghost.o.title || ghost.o.id.slice(0, 8) }}</span></span><span class="chip idle"><span class="face">gone quiet</span></span></h3>
+      <h3><button class="open" title="Resume this session" @click="clickZone(ghost.zone, false)"><span class="face name"><span class="nm">{{ ghost.o.title || ghost.o.id.slice(0, 8) }}</span><GoArrow v-if="full" /></span></button><span class="chip idle"><span class="face">gone quiet</span></span></h3>
       <div :class="full ? 'dim' : 'gist'">{{ `${where(ghost.o.cwd) ? where(ghost.o.cwd) + ' · ' : ''}last active ${days(store.now - ghost.o.last) ? `${days(store.now - ghost.o.last)} days ago` : 'today'}` }}</div>
       <template v-if="full">
         <div class="agents">{{ `PRs (${ghost.prs.length})` }}</div>
