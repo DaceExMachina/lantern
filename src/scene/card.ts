@@ -4,11 +4,11 @@ import { heatOf, heatTip } from './heat';
 import { chrome, live } from './live';
 import { $, titlebar } from './scene';
 import { sessionMoth } from './state';
-import type { Agent, CardAt, Hovered, PR, ProcGroup, Session, Usage, UsageGroup, Zone } from '../types';
+import type { Agent, CardAt, Hovered, Opt, PR, ProcGroup, Session, Usage, UsageGroup, Zone } from '../types';
 
 // ---- hover card ------------------------------------------------------------------
 export const ago = (ms: number) => ms < 60e3 ? `${Math.max(0, Math.round(ms / 1e3))}s` : ms < 3600e3 ? `${Math.round(ms / 60e3)} min` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
-export const project = (s: Session) => (s.cwd ?? '').split('/').filter(Boolean).pop() || '(unknown)';
+export const project = (s: { cwd?: Opt<string> }) => (s.cwd ?? '').split('/').filter(Boolean).pop() || '(unknown)';
 // Where a floating tip goes beside `el`, in window px: centred above it, or below when there's no room, and kept 8px
 // inside the window. A badge's tip and a PR chip's or cut-short row's both use it.
 export function tipSpot(tip: HTMLElement, el: Element) {

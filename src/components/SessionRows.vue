@@ -2,7 +2,7 @@
 // A session on the hover card, or (dock) in the pinned sidebar. Hovered (compact), just the header, one line of what it's
 // doing or wants, a count of its work, and a hint at the moth's clicks. Otherwise in full: the whole prompt, agents open, in the sidebar every PR listed until
 // that pin's own toggle (kept with the pin) turns them into chips; the card only ever shows chips. The header opens the session (shift-click snoozes, as on its moth), its
-// pill cycles the snooze as a right-click on the moth does, and its pin pins it to the sidebar; the header stays put and the
+// pill cycles the snooze as a right-click on the moth does, its bookmark lists it in the bookmarks dropdown (BookmarksMenu), and its pin pins it to the sidebar; the header stays put and the
 // body below scrolls when the card would be taller than the window. The top of the body is what it wants from me (a state
 // line only where it says more than the pill, its questions, its "You:" message as a quote), then the work in its tray:
 // agents (the first AGENT_CAP, until "more" lists the rest; all of them in the sidebar), side sessions (each with its own CPU and RAM), PRs.
@@ -25,6 +25,7 @@ const waiting = computed(() => props.s.state === 'waiting');
 const name = computed(() => props.s.title || project(props.s));
 const next = computed(() => pillNext(props.s));
 const pin = computed(() => store.pinned.find(p => p.id === props.s.id));
+const marked = computed(() => store.bookmarks.some(b => b.id === props.s.id));
 const run = computed(() => running(props.s));
 const side = computed(() => store.sessions.filter(o => o.parent === props.s.id));
 const prompt = computed(() => { const p = props.s.prompt ?? ''; return `“${props.dock || p.length <= 110 ? p : p.slice(0, 110) + '…'}”`; });
@@ -51,7 +52,7 @@ const toggleList = () => store.setPins(store.pinned.map(p => p.id === props.s.id
 </script>
 
 <template>
-  <h3><button class="open" title="Open this session" @click="openSession(s.id, $event.shiftKey)"><span class="face name"><i class="sw" :style="{ background: tint }"></i><span class="nm" :title="name">{{ name }}</span><span v-if="!compact" class="go"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg></span></span></button><button :class="['chip', pillClass(s)]" :title="next" :aria-label="`${pillWord(s)}: ${next.toLowerCase()}`" @click="cycleSnooze(s.id)"><span class="face">{{ pillWord(s) }}</span></button><button v-if="dock || store.pinnable" :class="['pin', { on: pin }]" :aria-label="pin ? `Unpin ${name}` : `Pin ${name} to the sidebar`" :title="pin ? 'Unpin' : 'Pin to the sidebar'" @click="store.togglePin(s.id)"><span class="face"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg></span></button></h3>
+  <h3><button class="open" title="Open this session" @click="openSession(s.id, $event.shiftKey)"><span class="face name"><i class="sw" :style="{ background: tint }"></i><span class="nm" :title="name">{{ name }}</span><span v-if="!compact" class="go"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5h6.5V10M12.5 3.5l-8 8"/></svg></span></span></button><button :class="['chip', pillClass(s)]" :title="next" :aria-label="`${pillWord(s)}: ${next.toLowerCase()}`" @click="cycleSnooze(s.id)"><span class="face">{{ pillWord(s) }}</span></button><button :class="['mark', { on: marked }]" :aria-label="marked ? `Remove the bookmark on ${name}` : `Bookmark ${name}`" :title="marked ? 'Remove bookmark' : 'Bookmark'" @click="store.toggleBookmark(s)"><span class="face"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" :fill="marked ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M4 1.5h8v13l-4-3.2-4 3.2z"/></svg></span></button><button v-if="dock || store.pinnable" :class="['pin', { on: pin }]" :aria-label="pin ? `Unpin ${name}` : `Pin ${name} to the sidebar`" :title="pin ? 'Unpin' : 'Pin to the sidebar'" @click="store.togglePin(s.id)"><span class="face"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M10 1l5 5-2 1-3 3 .5 3.5L9 15l-3-3-4 4-1-1 4-4-3-3 1.5-1.5L7 7l3-3z"/></svg></span></button></h3>
   <template v-if="compact">
     <div v-if="gist" class="gist">{{ gist }}</div>
     <StatsFoot :id="s.id" :text="counts" :use compact />

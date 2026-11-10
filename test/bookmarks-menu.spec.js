@@ -1,0 +1,48 @@
+// The bookmarks button beside the CPU and RAM readout (src/components/BookmarksMenu.vue) and its dropdown: the bookmarked sessions,
+// most recently active first, a running one's click bringing it to the front and an ended one's resuming it, each removable.
+import { mount } from '@vue/test-utils';
+import { createPinia } from 'pinia';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import BookmarksMenu from '../src/components/BookmarksMenu.vue';
+import { useLanternStore } from '../src/stores/lantern';
+
+const posts = [];
+beforeEach(() => { posts.length = 0; vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(); }); });
+afterEach(() => vi.restoreAllMocks());
+
+const now = Date.now(), A = '00000000-0000-4000-8000-00000000000a', B = '00000000-0000-4000-8000-00000000000b';
+const mounted = async () => {
+  const pinia = createPinia(), store = useLanternStore(pinia);
+  store.now = now;
+  store.sessions = [{ id: A, title: 'live title', cwd: '/w/alpha', state: 'working', last: now - 5 * 60e3, subagents: [] }];
+  store.settings = { ...store.settings, bookmarks: [{ id: B, title: null, cwd: '/w/beta', last: now - 3 * 864e5 }, { id: A, title: 'old title', cwd: '/w/alpha', last: now - 864e5 }] };
+  const w = mount(BookmarksMenu, { global: { plugins: [pinia] } });
+  await w.vm.$nextTick();
+  return { w, store };
+};
+
+test('it lists the bookmarks, most recently active first, a running one as it is now and an ended one as the server kept it', async () => {
+  const { w } = await mounted();
+  expect(w.find('#bookmarksButton').attributes('aria-label')).toBe('Bookmarks (2)');
+  expect(w.findAll('#bookmarks .go').map(r => r.text())).toEqual(['live titlealpha · running · 5m ago', 'betabeta · ended · 3d ago']);
+  w.unmount();
+});
+
+test('a click brings a running session to the front and resumes an ended one; the cross removes a bookmark', async () => {
+  const { w, store } = await mounted();
+  const [live, ended] = w.findAll('#bookmarks .go');
+  await live.trigger('click');
+  await ended.trigger('click');
+  expect(posts).toEqual([['/focus', { id: A }], ['/resume', { id: B }]]);
+  await w.findAll('#bookmarks .rm')[1].trigger('click');
+  expect(posts.at(-1)).toEqual(['/settings', { bookmarks: [A] }]);
+  expect(store.bookmarks.map(b => b.id)).toEqual([A]);
+  w.unmount();
+});
+
+test('with none it says how to add one', async () => {
+  const w = mount(BookmarksMenu, { global: { plugins: [createPinia()] } });
+  expect(w.findAll('#bookmarks .go')).toHaveLength(0);
+  expect(w.find('#bookmarks .empty').text()).toContain('Bookmark a session from its card');
+  w.unmount();
+});

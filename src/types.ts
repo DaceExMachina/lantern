@@ -95,23 +95,26 @@ export const isNowPlaying = (x: unknown): x is NowPlaying => isRecord(x)
 /** A session pinned to the sidebar, with whether its PRs show as chips. */
 export interface Pin { id: string; chips?: Opt<boolean> }
 const isPin = (x: unknown): x is Pin => isRecord(x) && isString(x['id']) && opt(isBoolean)(x['chips']);
+/** A bookmarked session, with its title, folder and last activity as the server last saw them (live, or when it ended). */
+export interface Bookmark { id: string; title?: Opt<string>; cwd?: Opt<string>; last?: Opt<number> }
+const isBookmark = (x: unknown): x is Bookmark => isRecord(x) && isString(x['id']) && optString(x['title']) && optString(x['cwd']) && optNumber(x['last']);
 /** The settings the page reads, each undefined when settings.json doesn't hold one of the right type. */
 export interface Settings {
   style?: string | undefined; ribbon?: string | undefined; lanternText?: string | undefined; quietUntil?: number | undefined;
   quietEnd?: string | undefined; quietEndOn?: boolean | undefined; quietFrom?: string | undefined; dayStart?: string | undefined;
   supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined; nowPlaying?: boolean | undefined; reviews?: boolean | undefined; systemStats?: boolean | undefined;
-  pinned?: Pin[] | undefined;
+  pinned?: Pin[] | undefined; bookmarks?: Bookmark[] | undefined;
 }
 export function parseSettings(x: unknown): Settings {
   const o = isRecord(x) ? x : {};
   const str = (k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
   const bool = (k: string) => { const v = o[k]; return isBoolean(v) ? v : undefined; };
-  const quietUntil = o['quietUntil'], pinned = o['pinned'];
+  const quietUntil = o['quietUntil'], pinned = o['pinned'], bookmarks = o['bookmarks'];
   return {
     style: str('style'), ribbon: str('ribbon'), lanternText: str('lanternText'), quietUntil: isNumber(quietUntil) ? quietUntil : undefined,
     quietEnd: str('quietEnd'), quietEndOn: bool('quietEndOn'), quietFrom: str('quietFrom'), dayStart: str('dayStart'),
     supervisorPattern: str('supervisorPattern'), recapSeen: str('recapSeen'), github: bool('github'), stale: bool('stale'), nowPlaying: bool('nowPlaying'), reviews: bool('reviews'), systemStats: bool('systemStats'),
-    pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined,
+    pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined, bookmarks: Array.isArray(bookmarks) ? bookmarks.filter(isBookmark) : undefined,
   };
 }
 

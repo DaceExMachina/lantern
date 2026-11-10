@@ -2399,6 +2399,41 @@ test('the pinned sessions are a list in the settings: toggled, kept in order wit
   await until(async () => { try { assert.deepStrictEqual((await snapshot(again)).settings.pinned, [{ id: back, chips: true }]); return true; } catch { return false; } }, 'the ended pin to go and the other to stay'); // in any key order
 });
 
+// Bookmarks are a shared setting like the pins, but each keeps what the bookmarks dropdown needs once its session ends: its
+// title, folder and last activity, following the live session and saved when it ends, so an ended one can be listed and resumed.
+test('a bookmark keeps its session\'s title, folder and last activity after it ends, outlasts a restart, and can be resumed', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  const A = UUID(7), B = UUID(8);
+  for (const [id, cwd] of [[A, '/w/7'], [B, '/w/8']]) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd, prompt: 'go' });
+  const marks = async () => (await snapshot(base)).settings.bookmarks;
+  const mark = async ids => (await post(base, '/settings', { bookmarks: ids })).status;
+  assert.strictEqual(await mark([A]), 204);
+  const first = (await marks())[0];
+  assert.deepStrictEqual([first.id, first.cwd, typeof first.last], [A, '/w/7', 'number'], 'from the live session');
+  assert.strictEqual(await mark([A, 'nobody']), 400, 'an unknown session is refused');
+  assert.strictEqual(await mark([A, 3]), 400, 'so is an id that isn\'t a string');
+  assert.strictEqual(await mark({ id: A }), 400, 'or bookmarks that aren\'t a list');
+  await wait(20);
+  await post(base, '/event', { session_id: A, hook_event_name: 'UserPromptSubmit', cwd: '/w/7', prompt: 'more' });
+  await until(async () => (await marks())[0].last > first.last, 'its last activity to follow the session');
+  await post(base, '/event', { session_id: A, hook_event_name: 'SessionEnd', cwd: '/w/7' });
+  await until(async () => !(await snapshot(base)).sessions.some(s => s.id === A), 'A to end');
+  const ended = (await marks())[0];
+  assert.deepStrictEqual([ended.id, ended.cwd], [A, '/w/7'], 'kept after it ends');
+  assert.strictEqual(await mark([B, A]), 204, 'an ended session already bookmarked stays as more are added');
+  assert.notStrictEqual((await post(base, '/resume', { id: A })).status, 404, 'an ended bookmark can be resumed (no osascript here, so it fails past the lookup)');
+  await post(base, '/event', { session_id: B, hook_event_name: 'SessionEnd', cwd: '/w/8' });
+  await until(async () => !(await snapshot(base)).sessions.some(s => s.id === B), 'B to end');
+  assert.strictEqual(await mark([B]), 204);
+  assert.strictEqual((await post(base, '/resume', { id: A })).status, 404, 'once removed, it can\'t be resumed');
+  assert.strictEqual(await mark([B, A]), 400, 'or come back');
+  const file = path.join(home, 'data/settings.json');
+  await until(() => JSON.parse(fs.readFileSync(file, 'utf8')).bookmarks?.[0]?.cwd === '/w/8', 'the bookmarks to be saved');
+  const again = await serve(t, { 'data/settings.json': fs.readFileSync(file, 'utf8') });
+  assert.deepStrictEqual((await snapshot(again)).settings.bookmarks.map(b => [b.id, b.cwd]), [[B, '/w/8']], 'an ended bookmark outlasts a restart (unlike a pin)');
+});
+
 // A snooze lasts until the session does something new, and a restart doesn't end it: the second server starts from the
 // settings.json the first one saved, and finds the same session on disk.
 test('a snooze survives a restart, and new activity after it still ends the snooze', async t => {

@@ -1,9 +1,10 @@
 <script lang="ts">
-import { ref } from 'vue';
 import { devSlider } from '../dev';
 
-// registered when the module loads, not when the readout first mounts, so the dev panel (which lists its rows once) has it
-const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring size in px (the number and the sparklines scale with it)', v => { size.value = v; }));
+// registered when the module loads, not when the readout first mounts, so the dev panel (which lists its rows once) has it.
+// The size goes on #hud, the readout's and the bookmarks button's row, so both, and their dropdowns, scale with it.
+const hud = (v: number) => document.getElementById('hud')?.style.setProperty('--hud', `${v}px`);
+hud(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring size in px (the number and the sparklines scale with it)', hud));
 </script>
 
 <script setup lang="ts">
@@ -12,7 +13,7 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // dropdown (a native popover, like the reviews menu): the Mac's CPU and RAM each with a bar split by who uses it and a line of the last two minutes (a fixed scale: CPU 0 to 100%, RAM 0 to the Mac's total), and a key of
 // the busiest sessions, everything else and Lantern in the colours of those splits. The numbers come from the usage event every few seconds
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
-import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue';
+import { computed, nextTick, ref, shallowRef, useTemplateRef, watch } from 'vue';
 import type { UsageGroup as Group } from '../types';
 import { cores, groupUse, memText, peekSession, pinSession, project, sessionUse, unpeekSession, type UsageSort } from '../scene/card';
 import { heatOf, heatTip } from '../scene/heat';
@@ -103,13 +104,13 @@ const rowEvents = (key: string, id: string, btn: boolean) => {
 
 <template>
   <template v-if="u">
-    <button id="usageButton" popovertarget="usage" :class="u.mac.pressure" title="CPU and RAM" :style="{ '--hud': `${size}px` }"
+    <button id="usageButton" popovertarget="usage" :class="u.mac.pressure" title="CPU and RAM"
       :aria-label="`CPU and RAM: this Mac ${Math.round(u.mac.cpu)}% CPU, ${memText(u.mac.used)} used`">
       <span v-for="m in meters" :key="m.kind" :class="['meter', m.kind]" :title="m.tip">
         <span class="top"><UsageRing :pct="m.pct" :kind="m.kind" /><span class="v">{{ m.text }}</span></span>
       </span>
     </button>
-    <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover @toggle="(e: Event) => 'newState' in e && e.newState === 'closed' && setOpen(null)" :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
+    <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover @toggle="(e: Event) => 'newState' in e && e.newState === 'closed' && setOpen(null)" aria-label="CPU and RAM">
       <section v-for="b in popup.blocks" :key="b.kind">
         <div class="big"><UsageIcon :kind="b.kind" /><b>{{ b.num }}</b><span>{{ b.of }}</span></div>
         <div class="bar"><component :is="s.btn ? 'button' : 'i'" v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c }" v-on="rowEvents(s.key, s.id, s.btn)"></component></div>
