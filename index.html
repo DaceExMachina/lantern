@@ -61,7 +61,7 @@
   #scene > [hidden] { display: none; } /* the rule above would otherwise beat the hidden attribute (pages.ts hides the ink canvas on lanterns with no paper) */
   /* the status sits centred on the window while it fits; as the window narrows the empty left track gives way first,
      so the text slides left, and once all the room left of the buttons (--corners wide) is used it shrinks (StatusLine.vue) */
-  footer { --corners: 110px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
+  footer { --corners: 138px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(var(--corners), 1fr); align-items: center; padding: var(--space-3) 0; position: relative; }
   #statusSlot { display: contents; } /* StatusLine.vue mounts here; its #status is the footer's grid item */
   #status { grid-column: 2; min-width: 0; white-space: nowrap; text-align: center; padding: 0 var(--space-3); } /* the padding keeps the text off the window edge once it has slid all the way left */
   /* the settings button in the corner, and the menu that flies up from it */
@@ -243,7 +243,7 @@
   #nowPlaying button:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   /* The review requests (src/components/ReviewsMenu.vue): a button at the footer's bottom left, like the corner buttons at the right: its
      click area runs the bar's full height, and the dropdown above it lists the PRs, each row's click area its full width. */
-  #reviewsSlot, #usageSlot { display: contents; }
+  #reviewsSlot, #usageSlot, #bookmarksSlot { display: contents; }
   footer:has(#reviewsButton) { grid-template-columns: minmax(calc(2 * var(--space-6)), 1fr) auto minmax(var(--corners), 1fr); } /* the status keeps clear of the button */
   #reviewsButton { all: unset; cursor: pointer; position: absolute; top: 0; bottom: 0; left: 0; display: flex; align-items: center; padding: 0 var(--space-1-5) 0 var(--space-4); color: var(--accent-violet); }
   #reviewsButton .face { display: flex; align-items: center; gap: var(--space-1); }
@@ -268,6 +268,18 @@
   .uring circle { stroke: var(--lantern-quiet); }
   .uring .arc { stroke: var(--m); stroke-linecap: round; }
   #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 320px; max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; max-height: calc(100vh - max(var(--space-2), var(--titlebar)) - var(--space-1) - var(--hud) * 1.5 - var(--space-3) - var(--space-6)); padding: var(--space-4); /* below its top, it stops clear of the footer and scrolls inside */ gap: var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
+  /* the bookmarks (src/components/BookmarksMenu.vue): a footer corner button beside stats, its list flying up like the reviews' */
+  #bookmarks { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
+  /* a row is its go button, the full width, with the remove cross over the right end of its face, so the row's hover takes in the cross */
+  #bookmarks .row { position: relative; }
+  #bookmarks button { all: unset; box-sizing: border-box; cursor: pointer; }
+  #bookmarks .go { display: block; width: 100%; padding: 0 var(--space-2); }
+  #bookmarks .go .face { padding-right: var(--space-6); } /* room for the cross */
+  #bookmarks .rm { position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
+  #bookmarks .rm .face { display: flex; align-items: center; padding: 0 var(--space-1-5); border-radius: var(--radius-sm); color: var(--ink-faint); }
+  #bookmarks .rm:hover .face { color: var(--ink-hover); }
+  #bookmarks :is(.go, .rm):focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
+  #bookmarks .empty { margin: 0; padding: var(--space-1) var(--space-4); color: var(--ink-dim); }
   #usage section { display: flex; flex-direction: column; gap: var(--space-2); }
   #usage .big { display: flex; align-items: baseline; gap: var(--space-2); color: var(--ink-dim); }
   #usage .big svg { width: var(--space-4); height: var(--space-4); align-self: center; color: var(--ink-dim); }
@@ -310,13 +322,14 @@
   #usage .tracks { grid-column: 1 / -1; display: grid; gap: var(--space-0-5); } /* CPU's bar, and RAM's right under it */
   #usage .track { display: block; height: 3px; border-radius: var(--radius-pill); overflow: hidden; background: var(--line-soft); }
   #reviews a { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
-  #reviews a .face { display: block; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); }
-  #reviews a:hover .face, #reviews a:focus-visible .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
+  :is(#reviews a, #bookmarks .go) .face { display: block; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); }
+  :is(#reviews a:is(:hover, :focus-visible), #bookmarks .row:is(:hover, :focus-within) .go) .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
   #reviews a:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
-  #reviews .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #reviews .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
+  :is(#reviews, #bookmarks) .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :is(#reviews, #bookmarks) .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }
   #reviews .me i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
-  #reviews .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
+  :is(#reviews, #bookmarks) .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
+  #bookmarks .me { display: block; } /* one run of text: its folder, running or ended, and when it was last active */
   /* compact layout for iTerm2's toolbelt panel (opened with ?panel) */
   .panel footer { --corners: 86px; font-size: var(--text-xs); padding: var(--space-1-5) 0; } /* room for the quiet, stats and menu buttons */
   .panel .corner { padding: 0 var(--space-1); }
@@ -382,7 +395,7 @@
   /* Every control on the card is an outer button or link that fills its zone: the padding around it, out to the card's
      edges and up to its neighbours, so the hit areas touch with no dead space. Its .face inside is the visible part
      (the pill, the hover tint), the size it always was, lit while the pointer is anywhere in the zone. */
-  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .more, .tog, .pr2, .pin, .stat), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
+  :where(:is(#card, #dock) :is(button, a):is(.open, .chip, .agent, .more, .tog, .pr2, .mark, .pin, .stat), :is(#card, #dock) .chips a) { all: unset; box-sizing: border-box; cursor: pointer; } /* :where, so the rules below win */
   :is(#card, #dock) :is(button, a):focus-visible .face { outline: 1px solid var(--focus); outline-offset: 0; }
   :is(#card, #dock) .face { display: block; border-radius: var(--radius-md); }
   /* the header: its padding (the card's, above and beside it) belongs to its two buttons, the title and the pill (a stale PR's or a ghost's has a plain .title and pill, same layout) */
@@ -516,13 +529,13 @@
   #card button.more { display: block; width: 100%; } /* the agents' "n more": its zone is the band's width */
   #card button.more .face { padding: var(--space-0-5) var(--space-1-5); }
   #card button.more:hover .face { color: var(--ink-hover); background: color-mix(in srgb, var(--accent-violet) 8%, transparent); }
-  /* The pin: a third header button after the pill. Its zone runs from the pill to the header's right edge, the header's
-     full height; its .face is the bare icon, faint at rest and the accent while pinned. */
-  :is(#card, #dock) h3 .chip:has(+ .pin) { padding-right: 0; }
-  :is(#card, #dock) h3 .pin { flex: none; display: flex; align-items: flex-start; padding: var(--space-3) var(--space-3) 0 var(--space-2); }
-  :is(#card, #dock) .pin .face { display: flex; margin-top: var(--space-0-5); color: var(--ink-faint); }
-  :is(#card, #dock) .pin.on .face { color: var(--accent); }
-  :is(#card, #dock) .pin:hover .face { color: var(--ink-hover); }
+  /* The bookmark and the pin: header buttons after the pill. Their zones run from the pill to the header's right edge,
+     the header's full height, meeting each other; each .face is the bare icon, faint at rest and the accent while on. */
+  :is(#card, #dock) h3 :is(.chip, .mark):has(+ :is(.mark, .pin)) { padding-right: 0; }
+  :is(#card, #dock) h3 :is(.mark, .pin) { flex: none; display: flex; align-items: flex-start; padding: var(--space-3) var(--space-3) 0 var(--space-2); }
+  :is(#card, #dock) :is(.mark, .pin) .face { display: flex; margin-top: var(--space-0-5); color: var(--ink-faint); }
+  :is(#card, #dock) :is(.mark, .pin).on .face { color: var(--accent); }
+  :is(#card, #dock) :is(.mark, .pin):hover .face { color: var(--ink-hover); }
   /* The pinned sidebar (src/components/PinnedDock.vue): a column right of the scene, opening as the scene narrows, with one
      section per pinned session, scrolling as a whole. A section is a card's body without the card: the same padding, so
      the shared header and tray rules fit it. Its content keeps its full width while the column slides, so nothing
@@ -576,6 +589,7 @@
   <span id="reviewsSlot"></span>
   <div class="corners">
   <button id="quiet" class="corner" aria-label="Quiet" title="Treat everything as snoozed until 8am"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"><path d="M10.5 2.6a5.6 5.6 0 1 0 3 9.8 4.6 4.6 0 0 1-3-9.8z"/><path d="M13 2.5v2.4M11.8 3.7h2.4"/></svg></button>
+  <span id="bookmarksSlot"></span>
   <button id="statsButton" class="corner" popovertarget="stats" aria-label="Stats" title="Stats"><svg viewBox="0 1.2 16 16" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M1.6 14.3h12.8v.8H1.6z"/><path d="M3.7 14.3V9.6c0-.5-.4-.7-.9-.8V8.4h3v.4c-.5.1-.9.3-.9.8v4.7zM7.4 14.3V4.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v9.9zM11.1 14.3V7.4c0-.5-.4-.7-.9-.8v-.4h3v.4c-.5.1-.9.3-.9.8v6.9z"/></svg></button>
   <button id="menuButton" class="corner" popovertarget="menu" aria-label="Settings" title="Settings"><svg viewBox="0 0 16 16" width="21" height="21" aria-hidden="true" fill="currentColor"><circle cx="8" cy="8" r="1.3"/><path d="M8 1.2l.9 4.9L8 6.6l-.9-.5zM8 14.8l-.9-4.9.9-.5.9.5zM1.2 8l4.9-.9.5.9-.5.9zM14.8 8l-4.9.9-.5-.9.5-.9z"/><path d="M3.2 3.2l3.4 2.6-.3.5-.5.3zM12.8 12.8l-3.4-2.6.3-.5.5-.3zM3.2 12.8l2.6-3.4.5.3.3.5zM12.8 3.2l-2.6 3.4-.5-.3-.3-.5z" opacity=".7"/></svg></button>
   </div>

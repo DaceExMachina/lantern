@@ -404,6 +404,7 @@ final class LanternServer {
     }
     func sendState() {
         keepSnoozes()
+        keepBookmarks()
         observe()
         var msg = ""
         let r = jsonText(reviews), g = jsonText(staleOut())
@@ -432,6 +433,18 @@ final class LanternServer {
         guard let pins = settings["pinned"] as? [JSON] else { return }
         let kept = pins.filter { sessions[str($0["id"])] != nil }
         if kept.count != pins.count { settings["pinned"] = kept; settingsChanged() }
+    }
+    /// A bookmark keeps what the bookmarks dropdown needs once its session ends: its title, folder and last activity. They
+    /// follow the live session as the sessions go out (in memory, saved with the next save), and one that just ended is
+    /// saved and sent to every window. One that ended while Lantern was closed keeps what was last saved.
+    var liveBookmarks = Set<String>()
+    func bookmark(_ id: String, _ s: JSON) -> JSON { ["id": id, "title": s["title"] ?? NSNull(), "cwd": s["cwd"] ?? NSNull(), "last": s["last"] ?? NSNull()] }
+    func keepBookmarks() {
+        guard let marks = settings["bookmarks"] as? [JSON] else { return }
+        settings["bookmarks"] = marks.map { b in sessions[str(b["id"])].map { bookmark(str(b["id"]), $0) } ?? b }
+        let live = Set(marks.map { str($0["id"]) }.filter { sessions[$0] != nil })
+        if !liveBookmarks.subtracting(live).isEmpty { settingsChanged() }
+        liveBookmarks = live
     }
     /// Saves the settings and tells every open window.
     func settingsChanged() {
@@ -973,14 +986,15 @@ final class LanternServer {
             }
             return
         }
-        // Resume the old session behind a dead moth: a new iTerm tab in its folder running `claude --resume <id>`.
-        // Only sessions that own something on the stale list can be resumed this way.
+        // Resume an old session, behind a dead moth or a bookmark: a new iTerm tab in its folder running `claude --resume <id>`.
+        // Only sessions that own something on the stale list, or are bookmarked, can be resumed this way.
         if json && req.url == "/resume" {
             guard let id = body?["id"] as? String, UUID_RE.test(id),
-                  let o = owners.values.compactMap({ $0 as? JSON }).first(where: { str($0["id"]) == id }) else { return respond(c, 404) }
+                  let o = (owners.values.compactMap { $0 as? JSON } + (settings["bookmarks"] as? [JSON] ?? [])).first(where: { str($0["id"]) == id }),
+                  let cwd = o["cwd"] as? String, !cwd.isEmpty else { return respond(c, 404) }
             if let t = resuming[id], now() - t < RESUME_MS { return respond(c, 204) } // a second click while it's starting
             resuming = resuming.filter { now() - $0.value < RESUME_MS }; resuming[id] = now(); broadcast() // the ghosts fly off at the click, in every window
-            let shell = "cd '\(str(o["cwd"]).replacingOccurrences(of: "'", with: "'\\''"))' && claude --resume \(id)"
+            let shell = "cd '\(cwd.replacingOccurrences(of: "'", with: "'\\''"))' && claude --resume \(id)"
             let script = shell.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
             DispatchQueue.global().async {
                 let r = run("osascript", ["-e", """
@@ -1133,6 +1147,18 @@ final class LanternServer {
                     if pins.count == given.count {
                         settings["pinned"] = pins.reduce(into: [JSON]()) { kept, p in if !kept.contains(where: { str($0["id"]) == str(p["id"]) }) { kept.append(p) } }; ok = true
                     }
+                }
+                // the bookmarked sessions, as a list of ids each time: a live session (which gives its title, folder and last
+                // activity) or one already bookmarked, which stays after it ends until it's removed. Any other id is dropped,
+                // not refused, so the settings event puts right a window that bookmarked a session that had already ended.
+                if let given = j["bookmarks"] as? [Any] {
+                    let was = settings["bookmarks"] as? [JSON] ?? []
+                    let marks: [JSON] = given.compactMap { x in
+                        guard let id = x as? String else { return nil }
+                        return sessions[id].map { bookmark(id, $0) } ?? was.first { str($0["id"]) == id }
+                    }
+                    settings["bookmarks"] = marks.reduce(into: [JSON]()) { kept, b in if !kept.contains(where: { str($0["id"]) == str(b["id"]) }) { kept.append(b) } }; ok = true
+                    liveBookmarks = Set(marks.map { str($0["id"]) }.filter { sessions[$0] != nil }) // so one that ends before the next sendState is still caught
                 }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }

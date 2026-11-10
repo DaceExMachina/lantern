@@ -187,7 +187,7 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
   const pill = async o => find(await show(session(o)), 'chip')[0];
   const p = await pill({});
   assert.strictEqual(p.localName, 'button');
-  assert.deepStrictEqual([...(await show(session({}))).children[0].children].map(c => c.className), ['open', 'chip waiting', 'pin'], 'beside the open button, not inside it, so its click can\'t reach it (then the pin)');
+  assert.deepStrictEqual([...(await show(session({}))).children[0].children].map(c => c.className), ['open', 'chip waiting', 'mark', 'pin'], 'beside the open button, not inside it, so its click can\'t reach it (then the bookmark and the pin)');
   p.click();
   assert.deepStrictEqual([calls, snoozes], [[], ['/snooze']], 'the snooze, and not the open');
   assert.deepStrictEqual([(await pill({})).title, (await pill({ snoozed: true })).title, (await pill({ snoozed: true, forGood: true })).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
@@ -431,13 +431,24 @@ test('a card shown from the usage dropdown goes in the top layer after it, so it
   } finally { delete document.querySelector; menu.remove(); delete c.showPopover; delete c.hidePopover; delete c.matches; delete footer.getBoundingClientRect; delete svg.getScreenCTM; delete svg.createSVGPoint; }
 });
 
+test('the bookmark beside the pin bookmarks the session, saving its id, and a second click removes it', async () => {
+  const mark = async () => (await show(session({}))).querySelector('h3 .mark');
+  assert.deepStrictEqual([(await mark()).title, (await mark()).classList.contains('on')], ['Bookmark', false]);
+  (await mark()).click();
+  assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { bookmarks: ['s1'] }]));
+  assert.deepStrictEqual([(await mark()).title, (await mark()).classList.contains('on')], ['Remove bookmark', true], 'shown at once, before the settings event confirms it');
+  (await mark()).click();
+  assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { bookmarks: [] }]));
+  assert.strictEqual((await mark()).classList.contains('on'), false);
+});
+
 test('a long title shortens to one line with an ellipsis; the open arrow and the pin stay on its row', async () => {
   const card = await show(session({ title: 'free trial, develop '.repeat(12) }));
   const [nm, go] = [card.querySelector('h3 .nm'), card.querySelector('h3 .go')], style = el => getComputedStyle(el);
   assert.ok(nm && go && nm.parentElement === go.parentElement, 'the title text and the arrow share one row');
   assert.deepStrictEqual([style(nm.parentElement).display, style(nm).whiteSpace, style(nm).textOverflow], ['flex', 'nowrap', 'ellipsis']);
   assert.strictEqual(style(go).flexShrink, '0', 'the arrow never shrinks or wraps');
-  for (const el of [card.querySelector('h3 .chip'), card.querySelector('h3 .pin')].filter(Boolean)) assert.strictEqual(style(el).flexShrink, '0');
+  for (const el of [card.querySelector('h3 .chip'), card.querySelector('h3 .mark'), card.querySelector('h3 .pin')].filter(Boolean)) assert.strictEqual(style(el).flexShrink, '0');
 });
 
 test('a session\'s CPU and RAM on its card turn yellow, orange, then red as it uses more, each with its reason, the icon along with the number', async () => {

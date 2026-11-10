@@ -110,6 +110,7 @@ test('a pinned session that ends stays in its place, dimmed, as it last was, unt
   assert.deepStrictEqual(docked(), ['alpha', 'bravo'], 'still docked, in its place');
   assert.deepStrictEqual(sections().map(n => n.className), ['ended', ''], 'dimmed');
   assert.deepStrictEqual(find(sections()[0], 'state').map(text), ['Last step'], 'as it last was');
+  assert.deepStrictEqual(sections().map(n => !!n.querySelector('h3 .mark')), [false, true], 'no bookmark once it has ended: the server only bookmarks a live session');
   pinOf(sections()[0]).click(); await nextTick();
   assert.deepStrictEqual(docked(), ['bravo']);
   // a window that never saw it leaves it out

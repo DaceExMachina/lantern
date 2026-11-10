@@ -2399,6 +2399,88 @@ test('the pinned sessions are a list in the settings: toggled, kept in order wit
   await until(async () => { try { assert.deepStrictEqual((await snapshot(again)).settings.pinned, [{ id: back, chips: true }]); return true; } catch { return false; } }, 'the ended pin to go and the other to stay'); // in any key order
 });
 
+// Bookmarks are a shared setting like the pins, but each keeps what the bookmarks dropdown needs once its session ends: its
+// title, folder and last activity, following the live session and saved when it ends, so an ended one can be listed and resumed.
+test('a bookmark keeps its session\'s title, folder and last activity after it ends, outlasts a restart, and can be resumed', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  const A = UUID(7), B = UUID(8);
+  for (const [id, cwd] of [[A, '/w/7'], [B, '/w/8']]) await post(base, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd, prompt: 'go' });
+  const marks = async () => (await snapshot(base)).settings.bookmarks;
+  const mark = async ids => (await post(base, '/settings', { bookmarks: ids })).status;
+  assert.strictEqual(await mark([A]), 204);
+  const first = (await marks())[0];
+  assert.deepStrictEqual([first.id, first.cwd, typeof first.last], [A, '/w/7', 'number'], 'from the live session');
+  assert.strictEqual(await mark([A, 'nobody', 3]), 204, 'an unknown session, or an id that isn\'t a string, is dropped, not refused');
+  assert.deepStrictEqual((await marks()).map(b => b.id), [A], 'so the settings event puts the window that sent it right');
+  assert.strictEqual(await mark({ id: A }), 400, 'bookmarks that aren\'t a list are refused');
+  await wait(20);
+  await post(base, '/event', { session_id: A, hook_event_name: 'UserPromptSubmit', cwd: '/w/7', prompt: 'more' });
+  await until(async () => (await marks())[0].last > first.last, 'its last activity to follow the session');
+  await post(base, '/event', { session_id: A, hook_event_name: 'SessionEnd', cwd: '/w/7' });
+  await until(async () => !(await snapshot(base)).sessions.some(s => s.id === A), 'A to end');
+  const ended = (await marks())[0];
+  assert.deepStrictEqual([ended.id, ended.cwd], [A, '/w/7'], 'kept after it ends');
+  assert.strictEqual(await mark([B, A]), 204, 'an ended session already bookmarked stays as more are added');
+  assert.notStrictEqual((await post(base, '/resume', { id: A })).status, 404, 'an ended bookmark can be resumed (no osascript here, so it fails past the lookup)');
+  await post(base, '/event', { session_id: B, hook_event_name: 'SessionEnd', cwd: '/w/8' });
+  await until(async () => !(await snapshot(base)).sessions.some(s => s.id === B), 'B to end');
+  assert.strictEqual(await mark([B]), 204);
+  assert.strictEqual((await post(base, '/resume', { id: A })).status, 404, 'once removed, it can\'t be resumed');
+  assert.strictEqual(await mark([B, A]), 204);
+  assert.deepStrictEqual((await marks()).map(b => b.id), [B], 'or come back');
+  const file = path.join(home, 'data/settings.json');
+  await until(() => JSON.parse(fs.readFileSync(file, 'utf8')).bookmarks?.[0]?.cwd === '/w/8', 'the bookmarks to be saved');
+  const again = await serve(t, { 'data/settings.json': fs.readFileSync(file, 'utf8') });
+  assert.deepStrictEqual((await snapshot(again)).settings.bookmarks.map(b => [b.id, b.cwd]), [[B, '/w/8']], 'an ended bookmark outlasts a restart (unlike a pin)');
+});
+
+// A bookmarked session that ends is saved and sent to every window then, with nothing posted: what it last did, for the
+// dropdown to show. Also when it ends before any update has gone out since it was bookmarked.
+test('a bookmarked session that ends is sent to every window and saved, with its latest activity', async t => {
+  let home;
+  const base = await serve(t, {}, h => home = h);
+  await until(() => t.output().includes('Seeded'), 'seeding to finish'); // it sends settings once it has
+  const A = UUID(5), B = UUID(6), file = path.join(home, 'data/settings.json');
+  const sent = []; // every settings event, and every session list, as the window gets them
+  let lists = [];
+  const req = http.get(base + '/events', res => {
+    let text = '';
+    res.on('data', chunk => {
+      text += chunk;
+      const blocks = text.split('\n\n'); text = blocks.pop();
+      for (const block of blocks) {
+        const event = block.match(/^event: (.+)$/m)?.[1], data = block.match(/^data: (.*)$/m)?.[1];
+        if (event === 'settings') sent.push(JSON.parse(data).bookmarks);
+        if (!event && data) lists.push(JSON.parse(data));
+      }
+    });
+  });
+  t.after(() => req.destroy());
+  const live = id => until(() => lists.at(-1)?.some(s => s.id === id), `${id} to go out`);
+  const gone = id => until(() => lists.length && !lists.at(-1).some(s => s.id === id), `${id} to end`);
+  const event = (id, name) => post(base, '/event', { session_id: id, hook_event_name: name, cwd: '/w', prompt: 'go' });
+  // ended straight after it was bookmarked, before any update went out
+  await event(A, 'UserPromptSubmit'); await live(A);
+  await until(() => sent.length, 'the opening settings');
+  const before = sent.length;
+  assert.strictEqual((await post(base, '/settings', { bookmarks: [A] })).status, 204);
+  await event(A, 'SessionEnd'); await gone(A);
+  await until(() => sent.length >= before + 2, 'the ended bookmark to be sent, after the settings the post sent');
+  // ended after more activity: the latest of it is saved
+  await event(B, 'UserPromptSubmit'); await live(B);
+  assert.strictEqual((await post(base, '/settings', { bookmarks: [B, A] })).status, 204);
+  const first = sent.at(-1)[0].last;
+  await wait(20);
+  await event(B, 'UserPromptSubmit');
+  await until(() => lists.at(-1)?.find(s => s.id === B)?.last > first, 'B to do more');
+  const latest = lists.at(-1).find(s => s.id === B).last, count = sent.length;
+  await event(B, 'SessionEnd'); await gone(B);
+  await until(() => sent.length > count, 'the ended bookmark to be sent');
+  assert.strictEqual(sent.at(-1)[0].last, latest, 'with its latest activity');
+  await until(() => JSON.parse(fs.readFileSync(file, 'utf8')).bookmarks[0].last === latest, 'and saved');
+});
+
 // A snooze lasts until the session does something new, and a restart doesn't end it: the second server starts from the
 // settings.json the first one saved, and finds the same session on disk.
 test('a snooze survives a restart, and new activity after it still ends the snooze', async t => {

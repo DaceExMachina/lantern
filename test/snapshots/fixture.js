@@ -66,6 +66,8 @@
   // stale PRs: every colour, some made by old sessions (ghost moths), the rest loose wisps
   const owners = [0, 1, 2].map(i => ({ id: `old-${i}`, title: `Old session ${i}`, cwd: `/Users/x/projects/old${i}`, last: Date.now() - (10 + i) * 864e5 }));
   const needs = ['ready', 'failing', 'changes', 'draft', 'waiting'];
+  // bookmarks: a running session and one that has ended, kept as the server saved it
+  const bookmarks = [{ id: 'sess-alpha' }, { id: 'old-9', title: 'Tidy the release notes', cwd: '/Users/x/projects/docs', last: Date.now() - 2 * 864e5 }];
   const stale = drop => Array.from({ length: 34 }, (_, i) => ({ ...pr(100 + i, needs[i % 5]), updatedAt: new RealDate(BASE - (8 + i) * 864e5).toISOString(),
     owner: i % 4 === 0 ? owners[i % 3] : undefined })).filter((_, i) => !drop || i !== 33);
 
@@ -131,6 +133,17 @@
       }
       if (Math.round(page.$('nowPlaying').lastElementChild.getBoundingClientRect().right) !== Math.round(w.right) - 1) errs.push('now playing\'s last button stops short of its right edge');
     }, snap('playing'), () => { emit('nowPlaying', null); },
+    // the corner buttons, bookmarks among them (not in the iTerm panel), fill the footer's height and meet, with no gap, and fit the room the status keeps clear for them (--corners)
+    () => {
+      const foot = document.querySelector('footer').getBoundingClientRect(), bs = [...document.querySelectorAll('.corners .corner')], rs = bs.map(b => b.getBoundingClientRect());
+      if (!Q.has('panel') && bs[1]?.id !== 'bookmarksButton' || bs.at(-2)?.id !== 'statsButton') errs.push(`the corner buttons are ${bs.map(b => b.id)}: bookmarks belongs beside stats`);
+      rs.forEach((r, i) => {
+        if (Math.round(r.top) !== Math.round(foot.top) || Math.round(r.bottom) !== Math.round(foot.bottom)) errs.push(`${bs[i].id} doesn't fill the footer's height`);
+        if (i && Math.round(r.left) !== Math.round(rs[i - 1].right)) errs.push(`${bs[i].id} doesn't meet ${bs[i - 1].id}`);
+      });
+      const room = parseFloat(getComputedStyle(document.querySelector('footer')).getPropertyValue('--corners'));
+      if (rs.at(-1).right - rs[0].left > room) errs.push(`the corner buttons are ${rs.at(-1).right - rs[0].left} px wide, more than --corners (${room})`);
+    },
     () => { page.$('menu').showPopover(); page.$('help').open = true; }, snap('menu'),
     () => { emit('github', { accounts: [], signIn: { url: 'https://github.com/login/device', code: 'WDJB-MJHT' } }); }, snap('menu-github'), () => { page.$('menu').hidePopover(); },
     async () => { page.$('stats').showPopover(); await new Promise(r => realSetTimeout(r, 100)); }, snap('stats'), () => { page.$('stats').hidePopover(); },
@@ -144,7 +157,7 @@
     () => {
       emit('github', { accounts: [{ login: 'dace', error: '' }, { login: 'acme', error: 'bad credentials' }], signIn: null });
       emit('settings', { style: Q.get('style') || 'barrel', ribbon: 'plum', lanternText: 'off', stale: false, github: true, quietUntil: 0, quietFrom: '22:30',
-        quietEnd: '7:15', quietEndOn: false, dayStart: '4:00', recapSeen: '9999-12-31' });
+        quietEnd: '7:15', quietEndOn: false, dayStart: '4:00', recapSeen: '9999-12-31', bookmarks });
       page.$('menu').showPopover();
     }, snap('menu-alt'), () => { page.$('menu').hidePopover(); page.toggleDevPanel(); },
     // a session's CPU and RAM: its full card with its processes closed (scrolled to the info line, its side session's own
@@ -183,7 +196,18 @@
       [...page.$('usage').querySelectorAll('.krow.session')].find(r => r.textContent.startsWith('sess-alpha')).click();
       await new Promise(r => realSetTimeout(r, 100));
       page.$('usage').scrollTop = 1e4;
-    }, snap('usage-rows'), () => { page.$('usage').hidePopover(); }],
+    }, snap('usage-rows'), () => { page.$('usage').hidePopover(); },
+    // the bookmarks dropdown, flying up from its corner button: the running session and the one that has ended
+    // its remove cross sits inside the row's face (so the row's highlight takes it in) and is its own button; the rest of the row is the
+    // go button.
+    () => {
+      page.$('bookmarks').showPopover();
+      const row = page.$('bookmarks').querySelector('.row'), go = row.querySelector('.go'), rm = row.querySelector('.rm');
+      const face = go.querySelector('.face').getBoundingClientRect(), x = rm.querySelector('.face').getBoundingClientRect(), at = (px, py) => document.elementFromPoint(px, py)?.closest('button');
+      if (x.left < face.left || x.right > face.right || x.top < face.top || x.bottom > face.bottom) errs.push(`the bookmark's cross (${x.left}-${x.right}) sits outside its row's face (${face.left}-${face.right})`);
+      if (at((x.left + x.right) / 2, (x.top + x.bottom) / 2) !== rm) errs.push('the bookmark\'s cross isn\'t its own button');
+      if (at(face.left + 4, (face.top + face.bottom) / 2) !== go) errs.push('the bookmark\'s row isn\'t its go button');
+    }, snap('bookmarks'), () => { page.$('bookmarks').hidePopover(); }],
   ];
   // Hit areas fill their zones (CONTRIBUTING.md, "Button bars"): each corner of the header's buttons and an agent row
   // lands on that control, the header's out to the card's own corners.
@@ -192,7 +216,7 @@
     const probe = (el, what, points) => { for (const [where, x, y] of points) if (document.elementFromPoint(x, y)?.closest('a, button') !== el) errs.push(`${what}'s hit area misses its ${where}`); };
     const c = card.getBoundingClientRect();
     probe(card.querySelector('h3 .open'), 'the header\'s open button', [['card\'s top-left corner', c.left + 3, c.top + 3]]);
-    probe(card.querySelector('h3 .chip'), 'the status pill', [['card\'s top-right corner', c.right - 3, c.top + 3]]);
+    probe(card.querySelector('h3 > :last-child'), 'the header\'s last button', [['card\'s top-right corner', c.right - 3, c.top + 3]]);
     // a row's zone runs out to the edges of the band or tray it sits in
     const el = card.querySelector('.agent'), face = el.querySelector('.face').getBoundingClientRect(), edge = el.closest('.tray').getBoundingClientRect();
     probe(el, 'an agent row', [['tray\'s left edge', edge.left + 1, face.top + 2], ['tray\'s right edge', edge.right - 1, face.top + 2]]);
@@ -208,11 +232,13 @@
     if (Math.abs(w / h - r.width / r.height) > 1e-3) errs.push(`the viewBox is ${w}x${h} in a ${r.width}x${r.height} scene: not refitted`);
     if (Math.abs(page.$('bg').width - r.width * devicePixelRatio * page.bgScale) > 1) errs.push(`the background is ${page.$('bg').width} px wide for a ${r.width} scene`);
     if (at.x > r.right || page.zoneAtPoint({ clientX: at.x, clientY: at.y }) !== zone) errs.push(`sess-bravo's hover area at ${at.x}, ${at.y} isn't its own`);
-    // each section's pin owns the rest of its header: its top-right corner and just right of the pill
+    // each section's bookmark and pin own the rest of its header, touching: the bookmark from just right of the pill, the pin
+    // from just right of the bookmark to the top-right corner
     for (const h3 of document.querySelectorAll('#dock h3')) {
-      const head = h3.getBoundingClientRect(), chip = h3.querySelector('.chip').getBoundingClientRect(), pin = h3.querySelector('.pin');
-      for (const [where, x, y] of [['top-right corner', head.right - 1, head.top + 1], ['bottom, just right of the pill', chip.right + 1, head.bottom - 1]])
-        if (document.elementFromPoint(x, y)?.closest('.pin') !== pin) errs.push(`the pin's hit area misses its header's ${where}`);
+      const head = h3.getBoundingClientRect(), chip = h3.querySelector('.chip').getBoundingClientRect(), mark = h3.querySelector('.mark'), pin = h3.querySelector('.pin');
+      for (const [el, where, x, y] of [[pin, 'top-right corner', head.right - 1, head.top + 1], [mark, 'bottom, just right of the pill', chip.right + 1, head.bottom - 1],
+        [pin, 'bottom, just right of the bookmark', mark.getBoundingClientRect().right + 1, head.bottom - 1]])
+        if (document.elementFromPoint(x, y)?.closest('button') !== el) errs.push(`the ${el.className}'s hit area misses its header's ${where}`);
     }
   };
   // A big card (6 agents, 10 PRs) re-rendered the way a server update or the store's one-second tick does, checked to keep
@@ -343,7 +369,7 @@
   const steps = [
     () => {
       catchScorch();
-      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31' });
+      emit('settings', { style: Q.get('style') || 'barrel', lanternText: 'sessions', stale: true, github: true, quietUntil: 0, goals: {}, recapSeen: '9999-12-31', bookmarks });
       emit('reviews', [{ url: 'https://github.com/acme/app/pull/90', label: 'app#90', title: 'Review me', need: 'failing' }, { url: 'https://github.com/acme/app/pull/91', label: 'app#91', title: 'Me too', need: 'waiting' }]);
       emit('stale', stale(false));
       emit('prose', words(3));
