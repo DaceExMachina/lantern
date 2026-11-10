@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { post } from '../scene/scene';
 import { parseSettings } from '../types';
-import type { Bookmark, GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, Stats, Usage } from '../types';
+import type { GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, Stats, Usage } from '../types';
 
 // No pinning where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
@@ -51,13 +51,13 @@ export const useLanternStore = defineStore('lantern', () => {
   }
   // the card's pin and the sidebar's: pins or unpins a session, newest at the bottom
   const togglePin = (id: string) => setPins(pinned.value.some(p => p.id === id) ? pinned.value.filter(p => p.id !== id) : [...pinned.value, { id }]);
-  // ---- bookmarks: sessions to come back to, a setting like the pins. The server keeps each one's title, folder and last
-  // activity, so one that has ended can still be listed and resumed; it takes only the ids, newest first.
+  // ---- bookmarks: sessions to come back to, a setting like the pins. It takes only the ids, newest first; the server keeps
+  // each one's title, folder and last activity (its settings event fills them in), so one that has ended can still be listed and resumed.
   const bookmarks = computed(() => settings.value.bookmarks ?? []);
-  function toggleBookmark(b: Bookmark) {
-    const next = bookmarks.value.some(o => o.id === b.id) ? bookmarks.value.filter(o => o.id !== b.id) : [{ id: b.id, title: b.title, cwd: b.cwd, last: b.last }, ...bookmarks.value];
+  function toggleBookmark(id: string) {
+    const next = bookmarks.value.some(b => b.id === id) ? bookmarks.value.filter(b => b.id !== id) : [{ id }, ...bookmarks.value];
     settings.value = { ...settings.value, bookmarks: next };
-    post('/settings', { bookmarks: next.map(o => o.id) });
+    post('/settings', { bookmarks: next.map(b => b.id) });
   }
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
   return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, now, settings, reviews, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };

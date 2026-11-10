@@ -437,7 +437,6 @@ test('the bookmark beside the pin bookmarks the session, saving its id, and a se
   (await mark()).click();
   assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { bookmarks: ['s1'] }]));
   assert.deepStrictEqual([(await mark()).title, (await mark()).classList.contains('on')], ['Remove bookmark', true], 'shown at once, before the settings event confirms it');
-  assert.strictEqual(store.bookmarks[0].cwd, '/w/proj', 'kept with what the dropdown lists until the server sends its own');
   (await mark()).click();
   assert.strictEqual(JSON.stringify(posts.at(-1)), JSON.stringify(['/settings', { bookmarks: [] }]));
   assert.strictEqual((await mark()).classList.contains('on'), false);

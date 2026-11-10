@@ -34,7 +34,7 @@ function go(id: string, live: boolean) {
         <button class="go" :title="r.live ? 'Go to this session' : 'Resume this session in iTerm2'" @click="go(r.b.id, r.live)">
           <span class="face"><span class="ti">{{ r.name }}</span><span class="me">{{ `${r.folder} · ` }}<b v-if="r.live">running</b><template v-else>ended</template>{{ ` · ${short(store.now - r.last)} ago` }}</span></span>
         </button>
-        <button class="rm" :aria-label="`Remove the bookmark on ${r.name}`" title="Remove bookmark" @click="store.toggleBookmark(r.b)">
+        <button class="rm" :aria-label="`Remove the bookmark on ${r.name}`" title="Remove bookmark" @click="store.toggleBookmark(r.b.id)">
           <span class="face"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></span>
         </button>
       </div>
