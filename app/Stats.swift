@@ -1,9 +1,10 @@
 // The event log: what the lantern saw, kept in stats.sqlite for the stats panel (report(), served as GET /stats).
 // Three tables, times in ms since 1970:
 //   spans  (kind, session, began, ended, data): stretches of time. kind is server (the app running), alive (a session),
-//          waiting (a session waiting on me; data.snoozed says if it was snoozed during the wait), snoozed (the part of
-//          a wait it was snoozed for a while, by hand or by quiet hours), sleeping (the part snoozed for good; before
-//          sleeping spans were written, snoozed spans covered that too), violet (the lantern calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
+//          waiting (a session waiting on me; data.snoozed is true if it was snoozed by hand during the wait, and was
+//          "temporary" or "forGood" back when there were two snoozes), snoozed (the part of a wait it was snoozed, by hand
+//          or by quiet hours), sleeping (old logs only: the part snoozed for good, which is just a snooze now), violet (the
+//          lantern calling me) or quiet (quiet hours). An open span has ended NULL; data.how says how it ended.
 //   events (time, kind, session, data): moments. kind is pr (data.change: appeared, need, merged, closed, stray, gone),
 //          stale (data.change: entered, or left with data.how: merged, closed, revived, gone), api_error (the
 //          singed moth) or compact.
@@ -167,7 +168,7 @@ final class Stats {
                 let c = cover[d], answered = waits[d].filter(\.answered).map(\.ms).sorted()
                 let at = { (q: Double) -> Any in answered.isEmpty ? NSNull() : answered[min(answered.count - 1, Int(Double(answered.count) * q))] }
                 let end = lastGauge(day.1), start = lastGauge(day.0)
-                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0, "snoozedMs": c["snoozed"] ?? 0, "sleepingMs": c["sleeping"] ?? 0,
+                return ["start": day.0, "end": day.1, "mothMs": c["alive"] ?? 0, "snoozedMs": (c["snoozed"] ?? 0) + (c["sleeping"] ?? 0),
                         "warmMoths": pct(c["waiting"] ?? 0, c["alive"] ?? 0),
                         // the lantern's warm share of the time it ran outside quiet hours (it's never violet in quiet hours)
                         "warmLantern": pct(c["violet"] ?? 0, (c["server"] ?? 0) - (c["quiet"] ?? 0)),
@@ -208,10 +209,11 @@ final class Stats {
                 let day = self.dayKey(f), over = i < days.count - 1 // a finished day can be judged as a whole
                 let yes = { (sql: String) in (self.run(sql, [f, e, t]).first?[0] ?? "0") != "0" } // ?1 day start, ?2 day end, ?3 now
                 var got: [String] = []
-                // Purple Rain: the lantern violet for a whole hour. Ghosted: a wait of three hours or more (not one snoozed for good).
+                // Purple Rain: the lantern violet for a whole hour. Ghosted: a wait of three hours or more, not snoozed (the old
+                // snooze that new activity ended, "temporary", still counts).
                 if yes("SELECT count(*) FROM spans WHERE kind = 'violet' AND coalesce(ended, ?3) - began >= 3600000 AND coalesce(ended, ?3) BETWEEN ?1 AND ?2") { got.append("purple_rain") }
                 if yes("""
-                    SELECT count(*) FROM spans WHERE kind = 'waiting' AND coalesce(json_extract(data, '$.snoozed'), '') != 'forGood'
+                    SELECT count(*) FROM spans WHERE kind = 'waiting' AND coalesce(json_extract(data, '$.snoozed'), 'temporary') = 'temporary'
                     AND coalesce(ended, ?3) - began >= 3 * 3600000 AND coalesce(ended, ?3) BETWEEN ?1 AND ?2
                     """) { got.append("ghosted") }
                 // Snooze Button Champion: ten waits snoozed in a day

@@ -56,7 +56,6 @@
             "Moths drift a little further from the lantern before they turn home.",
             "The paper glows warmer now, and the shadows fall where the flame sits. Every quiet session dims slowly until something new wakes it again."
           ],
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],

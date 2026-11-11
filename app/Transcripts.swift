@@ -594,9 +594,6 @@ extension LanternServer {
                 if self.add(seeded) == 0 { self.refreshGitHub() } // none to read back, so none to refresh it after
                 if !mirroring {
                     print("Seeded \(self.sessions.count) session(s) from disk"); self.dropEndedPins()
-                    for id in self.settings["snoozed"] as? [String] ?? [] where self.sessions[id] != nil { self.sessions[id]!["snoozed"] = true }
-                    self.snoozesBack = true
-                    self.keepSnoozes()
                 }
                 self.linkSpawned()
                 // last known PR status, until the first refresh replaces it

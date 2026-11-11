@@ -994,18 +994,18 @@ export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt:
 
 // Each z has a faint grey shadow, one unit down and right: a second copy of the glyph drawn behind it (free per frame,
 // unlike a blur filter), so the pale z reads on the paper. Its strength is dialled with ?zshadow.
-let zShadow = devSlider('Moths', 'zshadow', 'z shadow', 0, 1, 0.05, 0.4, 'Opacity of the grey shadow behind the sleeping z\'s', v => { zShadow = v; });
+let zShadow = devSlider('Moths', 'zshadow', 'z shadow', 0, 1, 0.05, 0.4, 'Opacity of the grey shadow behind a snoozed moth\'s z\'s', v => { zShadow = v; });
 
 // A sleeping moth (landed and snoozed) breathes out z's: one at a time, each fading in as it floats up, growing a
 // little, and fading out, 0.6s apart, so three or four show at once. They come in spells, about half the time, on
-// the moth's own rhythm. A fresh snooze starts a spell right away, with a brief settling dim; for good, a longer one.
+// the moth's own rhythm. A fresh snooze starts a longer spell right away, with a brief settling dim.
 function mothZs(m: Moth, s: number) {
   const asleep = !m.leaving && m.wasLanded && m.session?.snoozed && !quiet(), pf = m.puff;
   if (asleep || pf) {
     const gap = 0.6, life = 1.8, cycle = 9;
-    if (pf && m.zStart !== pf.at) { m.zStart = pf.at; m.zOff = 0; } // a fresh snooze: a spell starts now
+    if (pf && m.zStart !== pf) { m.zStart = pf; m.zOff = 0; } // a fresh snooze: a spell starts now
     if (m.zStart === undefined) { m.zStart = s; m.zOff = seeded(hash(m.key))() * cycle; } // already asleep: its own rhythm
-    const since = s - m.zStart, spell = pf?.kind === 'always' ? 0.6 : 0.5; // share of each cycle spent breathing z's
+    const since = s - m.zStart, spell = pf ? 0.6 : 0.5; // share of each cycle spent breathing z's
     m.zz ??= Array.from({ length: 4 }, () => { // each is a group at the z's spot: the shadow copy, then the z
       const g = $('moths', SVGGElement).appendChild(el('g', { 'font-style': 'italic', 'text-anchor': 'middle', 'pointer-events': 'none' }));
       g.append(el('text', { x: 1, y: 1, fill: '#8A8A99' }), el('text', { fill: '#C9BDF5' }));
@@ -1023,7 +1023,7 @@ function mothZs(m: Moth, s: number) {
       put(t, 'opacity', (0.85 * Math.sin(Math.PI * u) ** 0.8).toFixed(2));
     });
     if (pf) {
-      const settle = (s - pf.at) / 1.6;
+      const settle = (s - pf) / 1.6;
       if (settle >= 1) { m.puff = null; m.g.style.opacity = ''; } else m.g.style.opacity = (1 - 0.3 * Math.sin(Math.PI * Math.max(0, settle))).toFixed(2);
     }
   } else if (m.zz) { m.zz.forEach(t => t.remove()); m.zz = null; m.zStart = undefined; }

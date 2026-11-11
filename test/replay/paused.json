@@ -76,7 +76,6 @@
           "last": "<time>",
           "note": "Waiting on 2 agents",
           "prompt": "Audit everything",
-          "snoozed": false,
           "started": "<time>",
           "state": "paused",
           "subagents": [
@@ -146,7 +145,6 @@
           "last": "<time>",
           "note": "Waiting on 2 agents",
           "prompt": "Audit everything",
-          "snoozed": false,
           "started": "<time>",
           "state": "paused",
           "subagents": [
@@ -214,7 +212,6 @@
           "last": "<time>",
           "note": "Asks: Ship it?",
           "prompt": "Audit everything",
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [

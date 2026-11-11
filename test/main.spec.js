@@ -110,6 +110,15 @@ test('double-clicking a moth opens its session, and shift-click and right-click 
   assert.deepStrictEqual(fetch.mock.calls, [], 'a shift double click or one off the moth opens nothing');
 });
 
+// Right-click snoozes, and again wakes, whatever the session is doing. A wait snoozed only by quiet hours (sync marks it
+// quiet) isn't snoozed by hand, so the right-click snoozes it.
+test('right-click snoozes a moth, again wakes it, and snoozes one only quiet hours snoozed', async () => {
+  const { fetch, moth } = await withMoth();
+  const next = s => { moth.session = { id: 'api', ...s }; fetch.mockClear(); moth.zone.menu(); return JSON.parse(fetch.mock.calls[0][1].body).snoozed; };
+  assert.deepStrictEqual([next({ state: 'waiting' }), next({ state: 'working' }), next({ state: 'waiting', snoozed: true }), next({ state: 'working', snoozed: true }),
+    next({ state: 'waiting', snoozed: true, quiet: true })], [true, true, false, false, true]);
+});
+
 test('a hover card is a tooltip: the pointer passes through it, and it goes the moment the pointer leaves the moth', async () => {
   const { live, scene, cardEl, moth, fire } = await withMoth();
   fire(scene, 'pointermove', 110, 205);

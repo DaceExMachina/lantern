@@ -79,7 +79,7 @@ const leave = (e: PointerEvent) => { onStar = false; if (e.pointerType === 'mous
 const unpin = () => { picked.value = null; showStar(null); };
 const facts = (s: Star, ongoing: number) => [
   [`${clock(s.from)} to ${s.to >= ongoing - MIN ? 'now' : clock(s.to)}, ran ${ago(s.ms)}`, ''],
-  [`${Math.round(100 * s.warm)}% warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs - s.sleepingMs)} waiting, ${ago(s.snoozedMs)} snoozed${s.sleepingMs ? `, ${ago(s.sleepingMs)} sleeping` : ''}`, ''],
+  [`${Math.round(100 * s.warm)}% warm: ${ago(s.ms - s.waitMs)} not waiting, ${ago(s.waitMs - s.snoozedMs)} waiting, ${ago(s.snoozedMs)} snoozed`, ''],
   [s.waits ? `Waited on you ${s.waits === 1 ? 'once' : `${s.waits} times`}, the longest ${ago(s.longest)}` : 'Never waited on you', 'dim'],
   // ponytail: the log keeps Claude's folder name for the project, so a dash in a real folder name reads as a slash
   ...(s.project ? [[String(s.project).replace(/-/g, '/').replace(/^\/Users\/[^/]+/, '~'), 'dim']] : []),

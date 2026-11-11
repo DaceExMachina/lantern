@@ -14,9 +14,9 @@ import { timeLabel } from '../types';
 const store = useLanternStore();
 const sessions = computed(() => store.sessions);
 const working = computed(() => sessions.value.filter(s => s.state === 'working' || s.state === 'paused' && !s.reported).length); // a session waiting on its own agents counts as working: the footer is short on room in the iTerm panel
-// each count's sessions, longest waiting first (sleeping ones that aren't waiting after, in a fixed order)
+// each count's sessions, longest waiting first (snoozed ones that aren't waiting after, in a fixed order)
 const of = (rest: string) => sessions.value.filter(s => restOf(s) === rest).sort((a, b) => (a.waitingSince || Infinity) - (b.waitingSince || Infinity) || (a.id < b.id ? -1 : 1));
-const waiting = computed(() => of('need').length), snoozed = computed(() => of('snoozed').length), sleeping = computed(() => of('sleeping').length);
+const waiting = computed(() => of('need').length), snoozed = computed(() => of('snoozed').length);
 // a count that opens its sessions one at a time: each click moves on to the next one
 const nextUp: Record<string, number> = {};
 const cycle = (rest: string) => { const q = of(rest), s = q[nextUp[rest] = ((nextUp[rest] ?? -1) + 1) % q.length]; if (s) post('/focus', { id: s.id }); };
@@ -51,5 +51,5 @@ onUnmounted(() => removeEventListener('resize', fit));
 
 <template>
   <!-- no whitespace between the pieces: every space in the line is spelled out -->
-  <span id="status" ref="status" :class="klass"><template v-if="store.link === 'connecting'">connecting…</template><template v-else-if="store.link === 'offline'">server offline, retrying…</template><template v-else-if="!sessions.length">quiet night, no sessions</template><template v-else>{{ `${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working` }}<template v-if="waiting">{{ ' · ' }}<button class="next" title="Open the session that has waited longest" @click="cycle('need')">{{ `${waiting} need${waiting > 1 ? '' : 's'} you` }}</button></template><template v-if="snoozed">{{ ' · ' }}<button class="next" title="Open the snoozed sessions one at a time" @click="cycle('snoozed')">{{ `${snoozed} snoozed` }}</button>{{ until }}</template><template v-else-if="quiet">{{ ` · snoozed${until}` }}</template><template v-if="sleeping">{{ ' · ' }}<button class="next" title="Open the sleeping sessions one at a time" @click="cycle('sleeping')">{{ `${sleeping} sleeping` }}</button></template><template v-if="warm">{{ ' · ' }}<span class="warm">{{ warm }}</span></template></template></span>
+  <span id="status" ref="status" :class="klass"><template v-if="store.link === 'connecting'">connecting…</template><template v-else-if="store.link === 'offline'">server offline, retrying…</template><template v-else-if="!sessions.length">quiet night, no sessions</template><template v-else>{{ `${sessions.length} session${sessions.length > 1 ? 's' : ''} · ${working} working` }}<template v-if="waiting">{{ ' · ' }}<button class="next" title="Open the session that has waited longest" @click="cycle('need')">{{ `${waiting} need${waiting > 1 ? '' : 's'} you` }}</button></template><template v-if="snoozed">{{ ' · ' }}<button class="next" title="Open the snoozed sessions one at a time" @click="cycle('snoozed')">{{ `${snoozed} snoozed` }}</button>{{ until }}</template><template v-else-if="quiet">{{ ` · snoozed${until}` }}</template><template v-if="warm">{{ ' · ' }}<span class="warm">{{ warm }}</span></template></template></span>
 </template>

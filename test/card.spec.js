@@ -179,7 +179,21 @@ test('agents sit in a band of their own in the tray, apart from the side session
   assert.deepStrictEqual(find(zone, 'phead'), [], 'the PRs are outside it');
 });
 
-test('the status pill does what a right-click on the moth does (snooze, sleep, wake), and doesn\'t open the session', async () => {
+// Quiet hours mark only the waits they snooze as quiet, so a snooze by hand stays one (its pill still offers to wake it),
+// and a fresh snooze by hand puffs a "zz" off the moth while the first sync only records where it stands.
+test('quiet hours leave a snooze by hand as it is, and a fresh snooze puffs', () => {
+  live.quietUntil = Date.now() + 3600e3;
+  try {
+    setSessions(session({ id: 'a' }), session({ id: 'b', snoozed: true }));
+    assert.deepStrictEqual(sessions.map(s => [s.id, !!s.snoozed, !!s.quiet]), [['a', true, true], ['b', true, false]]);
+  } finally { live.quietUntil = 0; }
+  setSessions(session({ id: 'c' }));
+  assert.strictEqual(sessionMoth('c').puff, undefined, 'no puff for where it stands');
+  setSessions(session({ id: 'c', snoozed: true }));
+  assert.strictEqual(typeof sessionMoth('c').puff, 'number', 'a puff for the fresh snooze');
+});
+
+test('the status pill does what a right-click on the moth does (snooze, wake), and doesn\'t open the session', async () => {
   const calls = [], m = { key: 's1' }, snoozes = [];
   m.zone = hoverZone(() => m, () => calls.push('open'), 48);
   m.zone.menu = () => snoozes.push('/snooze'); // state.ts's menu posts the next snooze
@@ -190,7 +204,7 @@ test('the status pill does what a right-click on the moth does (snooze, sleep, w
   assert.deepStrictEqual([...(await show(session({}))).children[0].children].map(c => c.className), ['open', 'chip waiting', 'mark', 'pin'], 'beside the open button, not inside it, so its click can\'t reach it (then the bookmark and the pin)');
   p.click();
   assert.deepStrictEqual([calls, snoozes], [[], ['/snooze']], 'the snooze, and not the open');
-  assert.deepStrictEqual([(await pill({})).title, (await pill({ snoozed: true })).title, (await pill({ snoozed: true, forGood: true })).title], ['Snooze', 'Sleep until you wake it', 'Wake']);
+  assert.deepStrictEqual([(await pill({})).title, (await pill({ snoozed: true })).title, (await pill({ snoozed: true, quiet: true })).title], ['Snooze', 'Wake', 'Snooze'], 'a snooze by quiet hours alone can still be snoozed');
   assert.strictEqual((await pill({})).getAttribute('aria-label'), 'needs you: snooze');
 });
 

@@ -30,5 +30,4 @@ test('a landed moth that needs you keeps its tint; idle and snoozed ones go plai
   expect(landed({ state: 'waiting' })).toBe(tintFor({ id }));
   expect(landed({ state: 'idle' })).toBe(plain(0.15));
   expect(landed({ state: 'waiting', snoozed: true })).toBe(plain(0.5));
-  expect(landed({ state: 'waiting', snoozed: true, forGood: true })).toBe(plain(0.5));
 });

@@ -46,7 +46,7 @@
   const pr = (n, need, repo = 'app') => ({ url: `https://github.com/acme/${repo}/pull/${n}`, need, label: `${repo}#${n}`, title: `PR ${n}: ${need} change` });
   const words = i => [`The lantern hangs over the desk and every session is a moth around it, number ${i}.`,
     'When one of them needs an answer it lands on the paper and waits there quietly until somebody looks.'];
-  // phase 0 at the start, phase 1 later: a PR merged, a snooze made permanent, an idle session gone
+  // phase 0 at the start, phase 1 later: a PR merged, an idle session gone
   const sessionsAt = phase => {
     const now = Date.now();
     const s = (id, o) => ({ id, cwd: `/Users/x/projects/${id.split('-')[1]}`, title: id, started: now - 50 * MIN, last: now - 30000, subagents: [], ...o });
@@ -56,7 +56,7 @@
         github: [pr(1, 'ready'), pr(2, 'failing'), pr(3, 'changes'), pr(4, 'draft'), pr(5, 'waiting')] }),
       s('sess-bravo', { state: 'waiting', waitingSince: now - 20 * MIN, note: 'Needs approval', prose: words(2), // waited 15+ min: restless, hops
         github: phase ? [pr(6, 'ready')] : [pr(6, 'ready'), pr(7, 'changes'), pr(9, 'draft', 'lantern-pr')], forYou: { you: ['Merge ', { label: 'app#6', url: pr(6).url }], prs: [], questions: ['q'] } }),
-      s('sess-charlie', { state: 'waiting', snoozed: true, forGood: !!phase, waitingSince: now - 3 * MIN, subagents: [{ id: 'c1', type: 'Explore', description: 'Agent' }] }),
+      s('sess-charlie', { state: 'waiting', snoozed: true, waitingSince: now - 3 * MIN, subagents: [{ id: 'c1', type: 'Explore', description: 'Agent' }] }),
       s('sess-delta', { state: 'working', parent: 'sess-alpha', activity: 'Side work' }), // a satellite
       s('sess-golf', { state: 'waiting', parent: 'sess-bravo', waitingSince: now - 2 * MIN }), // a satellite waiting: paused
       ...(phase ? [] : [s('sess-echo', { state: 'idle', created: [pr(8).url], forYou: { you: [{ label: 'app#8', url: pr(8).url }] } })]),
@@ -96,14 +96,14 @@
     }
     errs.push(`no scorch for sess-alpha within ${slots} slots`);
   };
-  // GET /stats for the chrome scenes: today and the week before, each with four sessions that work, wait, snooze, sleep
-  // and idle, the lantern violet and quiet for a while, a couple of PRs and badges
+  // GET /stats for the chrome scenes: today and the week before, each with four sessions that work, wait, snooze (once
+  // in an old log's sleeping span) and idle, the lantern violet and quiet for a while, a couple of PRs and badges
   const statsLog = () => {
     const H = 3600000, now = Date.now(), days = [], spans = [], gauges = [], prs = [];
     for (let i = 7; i >= 0; i--) {
       const start = now - 10 * H - i * 864e5, end = now - i * 864e5, at = h => start + h * H, id = n => `day${i}-${n}`;
       days.push({ start, end, warmMoths: 58 + 4 * i, warmLantern: 66 + 3 * i, medianWait: (3 + i) * MIN, slowWait: (20 + i) * MIN, waits: 9 + i,
-        snoozedMs: 30 * MIN, sleepingMs: H, merged: i % 4, open: 5, stale: 12 + i, staleChange: i % 3 - 1, mothMs: 18 * H });
+        snoozedMs: 30 * MIN + H, merged: i % 4, open: 5, stale: 12 + i, staleChange: i % 3 - 1, mothMs: 18 * H });
       spans.push(['server', start, end], ['violet', at(2), at(3)], ['quiet', at(8), at(9)]);
       [['alpha', 0, 10], ['bravo', 1, 9], ['charlie', 3.5, 8], ['delta', 6, 7.5]].forEach(([n, b, e]) =>
         spans.push(['alive', at(b), at(e), false, id(n), `Session ${n}`, `/Users/x/projects/${n}`]));
