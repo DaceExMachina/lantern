@@ -20,6 +20,8 @@ export const flyColour = (need: string) => FLY_BY_NEED.get(need) ?? FLY.quiet;
 export const FIREFLY_BLOOM = 50; // the bloom's radius, in scene units, at a swell's midpoint
 export const FLY_LIGHTS_MAX = 128, flyLights = new Float32Array(FLY_LIGHTS_MAX * 7);
 // A negative `glow` is a haze without the hot centre (background.ts), for a glow made of many overlapping lights.
+/** Scales the brightness of every light added since index `from` (live.flyLightN before them) by `k`. */
+export function dimLights(from: number, k: number) { if (k !== 1) for (let i = from; i < live.flyLightN; i++) flyLights[7 * i + 3] = (flyLights[7 * i + 3] ?? 0) * k; }
 export const addFlyLight = (x: number, y: number, r: number, glow: number, col: string) => { if (live.flyLightN < FLY_LIGHTS_MAX) flyLights.set([x, y, r, glow, ...hex(col).map(v => v / 255)], 7 * live.flyLightN++); };
 // Always lit, easing a bit brighter over a second or two and back, on each firefly's own slow, uneven rhythm (two waves
 // that never line up the same way twice); failing checks swell faster. 0 to 1, at `s` seconds.

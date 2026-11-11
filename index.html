@@ -452,9 +452,12 @@
   .sd .proc > * { text-align: right; white-space: nowrap; }
   .sd .proc .pn { text-align: left; overflow: hidden; text-overflow: ellipsis; color: var(--ink-soft); }
   .sd .proc .x { color: var(--ink-faint); }
-  .sd .acts { display: flex; margin-top: var(--space-1); }
-  .sd .acts button { all: unset; box-sizing: border-box; flex: 1; cursor: pointer; text-align: center; font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
-  .sd .acts .face { display: block; padding: var(--space-0-5) var(--space-1-5); border-radius: var(--radius-md); }
+  /* left-aligned and as wide as their content, touching so there's no dead spot between them; the first's face sits flush with the processes' names */
+  .sd .acts { display: flex; margin: var(--space-1) 0 0 calc(-1 * var(--space-1-5)); }
+  .sd .acts button { all: unset; box-sizing: border-box; flex: none; cursor: pointer; font-size: var(--text-xs); color: var(--ink-dim); padding-top: var(--space-0-5); }
+  .sd .acts .face { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-0-5) var(--space-1-5); border-radius: var(--radius-md); }
+  .sd .acts .moth { width: var(--space-3); height: var(--space-3); }
+  .sd .acts .go { display: flex; }
   .sd .acts button:hover .face { color: var(--ink-hover); background: color-mix(in srgb, var(--accent-violet) 8%, transparent); }
   .sd .acts button:focus-visible .face { outline: 1px solid var(--focus); }
   #card .stat + .sd { margin-top: var(--space-2); }

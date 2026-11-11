@@ -7,5 +7,5 @@ defineProps<{ use: { cpu: string; mem: string; cpuHot: number; memHot: number; c
 </script>
 
 <template>
-  <span class="use"><span :class="`hot${use.cpuHot}`" :title="use.cpuTip || `CPU ${use.cpu} of the Mac`"><UsageIcon kind="cpu" />{{ use.cpu }}</span> · <span :class="`hot${use.memHot}`" :title="use.memTip || `${use.mem} RAM`"><UsageIcon kind="mem" />{{ use.mem }}</span></span>
+  <span class="use"><span :class="`hot${use.cpuHot}`" :title="use.cpuTip || `${use.cpu} of all cores`"><UsageIcon kind="cpu" />{{ use.cpu }}</span> · <span :class="`hot${use.memHot}`" :title="use.memTip || `${use.mem} RAM`"><UsageIcon kind="mem" />{{ use.mem }}</span></span>
 </template>

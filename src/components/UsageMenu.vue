@@ -14,7 +14,7 @@ const size = ref(devSlider('HUD', 'hudsize', 'ring size', 10, 48, 1, 32, 'Ring s
 // (app/Usage.swift) and are gone with settings.systemStats off. Not in the iTerm panel or the screensavers, which have no room.
 import { computed, nextTick, shallowRef, useTemplateRef, watch } from 'vue';
 import type { UsageGroup as Group } from '../types';
-import { cores, groupUse, memText, peekSession, pinSession, project, sessionUse, unpeekSession, type UsageSort } from '../scene/card';
+import { cores, groupUse, memText, openCard, pointAt, project, sessionUse, type UsageSort } from '../scene/card';
 import { heatOf, heatTip } from '../scene/heat';
 import { tintFor } from '../scene/lanterns';
 import { useLanternStore } from '../stores/lantern';
@@ -72,13 +72,14 @@ const popup = computed(() => {
   return {
     rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), btn: !!(r.id || r.app || r.rest), use: r.id ? sessionUse(v, r.id, sort.value) : r.app ? groupUse('lantern', v.lantern, sort.value) : r.rest ? elseUse : null })),
     blocks: [
-      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of the Mac', segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
+      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of all cores', segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
       { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.memPct), tip: `${r.name} · ${gb(r.mem)} RAM` })) }],
   };
 });
 
 // One highlighted session, by row key, shared by the split bars and the key: hovering or focusing either lights its segments and row and dims the rest.
-// A session's row, and its segment in the bars, is also a button standing in for its moth: hover or focus shows the moth's card. A click opens the session's processes under
+// A session's row, and its segment in the bars, is also a button standing in for its moth: hover or focus lights it in the scene, as a bookmark does
+// (card.ts pointAt, spot.ts). A click opens the session's processes under
 // its row (StatsDetail), one row at a time, and another click closes them; a double click opens the moth's card in full and puts the dropdown
 // away, as the processes' Open card and Go to session do. (A double click's two clicks open and close the row on the way.)
 const hot = ref<string | null>(null);
@@ -93,14 +94,14 @@ async function setSort(k: UsageSort) {
 }
 function setOpen(key: string | null) { held.value = key ? (popup.value?.rows ?? []).map(r => r.key) : null; open.value = key; }
 const close = () => menu.value?.hidePopover?.();
-// The open row's processes count as its row for hovering, so the moth's card stays up over them (the dropdown, in the top layer, is never under it).
-const hover = (key: string, id: string) => ({ pointerenter: () => { hot.value = key; if (id) peekSession(id); }, pointerleave: () => { hot.value = null; if (id) unpeekSession(); } });
+// The open row's processes count as its row for hovering, so its moth stays lit over them.
+const hover = (key: string, id: string) => ({ pointerenter: () => { hot.value = key; if (id) pointAt(id); }, pointerleave: () => { hot.value = null; if (id) pointAt(null); } });
 const rowEvents = (key: string, id: string, btn: boolean) => {
   const { pointerenter: on, pointerleave: off } = hover(key, id);
   return btn ? {
     pointerenter: on, focus: on, pointerleave: off, blur: off,
     click: async () => { setOpen(open.value === key ? null : key); await nextTick(); menu.value?.querySelector('.sd')?.scrollIntoView({ block: 'nearest' }); },
-    ...id && { dblclick: () => { close(); pinSession(id); } }, // Lantern's own row and everything else have processes to open but no card
+    ...id && { dblclick: () => { close(); openCard(id); } }, // Lantern's own row and everything else have processes to open but no card
   } : { pointerenter: on, pointerleave: off };
 };
 </script>
@@ -113,7 +114,7 @@ const rowEvents = (key: string, id: string, btn: boolean) => {
         <span class="top"><UsageRing :pct="m.pct" :kind="m.kind" /><span class="v">{{ m.text }}</span></span>
       </span>
     </button>
-    <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover @toggle="(e: Event) => 'newState' in e && e.newState === 'closed' && setOpen(null)" :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
+    <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover @toggle="(e: Event) => { if ('newState' in e && e.newState === 'closed') { setOpen(null); hot = null; pointAt(null); } }" :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
       <section v-for="b in popup.blocks" :key="b.kind">
         <div class="big"><UsageIcon :kind="b.kind" /><b>{{ b.num }}</b><span>{{ b.of }}</span></div>
         <div class="bar"><component :is="s.btn ? 'button' : 'i'" v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c }" v-on="rowEvents(s.key, s.id, s.btn)"></component></div>
