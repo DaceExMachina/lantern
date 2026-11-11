@@ -12,7 +12,7 @@ const act = (f: () => void) => { f(); emit('done'); };
 <template>
   <div class="sd">
     <div class="head">Processes<span class="r">{{ use.n }}</span></div>
-    <div class="procs"><div v-for="p in use.procs" :key="p.name" class="proc"><span class="pn" :title="p.name">{{ p.name }}</span><span class="x">{{ p.n > 1 ? `×${p.n}` : '' }}</span><span :class="`hot${p.cpuHot}`" :title="p.cpuTip || `CPU ${p.cpu} of the Mac`">{{ p.cpu }}</span><span :class="`hot${p.memHot}`" :title="p.memTip || `${p.mem} RAM`">{{ p.mem }}</span></div></div>
+    <div class="procs"><div v-for="p in use.procs" :key="p.name" class="proc"><span class="pn" :title="p.help || p.name">{{ p.name }}</span><span class="x">{{ p.n > 1 ? `×${p.n}` : '' }}</span><span :class="`hot${p.cpuHot}`" :title="p.cpuTip || `CPU ${p.cpu} of the Mac`">{{ p.cpu }}</span><span :class="`hot${p.memHot}`" :title="p.memTip || `${p.mem} RAM`">{{ p.mem }}</span></div></div>
     <div v-if="!card" class="acts"><button @click="act(() => pinSession(props.id))"><span class="face">Open card</span></button><button @click="act(() => openSession(props.id, false))"><span class="face">Go to session</span></button></div>
   </div>
 </template>

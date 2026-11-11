@@ -61,8 +61,12 @@ const popup = computed(() => {
   const row = (r: { id: string; name: string; g: Group; c: string }) => { const h = heatOf(r.id || 'lantern', r.g), tip = heatTip(h, r.g); return { id: r.id, name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, memPct: r.g.mem / total * 100, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem, app: false, rest: false }; };
   const rows = sessions.sort((a, b) => order ? at(order, a.id) - at(order, b.id) : byUse(a.g, b.g)).map(row);
   const app = { ...row({ id: '', name: 'Lantern', g: v.lantern, c: LANTERN }), app: true };
-  const cpuElse = Math.max(0, v.mac.cpu - [...rows, app].reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(0, used - [...rows, app].reduce((a, r) => a + r.mem, 0));
-  const elseUse = groupUse('else', v.else, sort.value); // an older server sends none: the row is then plain
+  // everything else is what's left of the Mac, but never less than its own process rows add up to; the "macOS" row is the gap between the two (kernel, GPU and compressed
+  // memory, system processes Lantern can't read), so the rows always add up to the header
+  const procs = v.else?.procs ?? [], procCpu = procs.reduce((a, p) => a + p.cpu, 0) / cores(), procMem = procs.reduce((a, p) => a + p.mem, 0);
+  const cpuElse = Math.max(procCpu, v.mac.cpu - [...rows, app].reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(procMem, used - [...rows, app].reduce((a, r) => a + r.mem, 0));
+  const mac = { name: 'macOS', n: 1, cpu: (cpuElse - procCpu) * cores(), mem: memElse - procMem, help: "The kernel, the GPU and compressed memory, plus system processes Lantern can't read" };
+  const elseUse = groupUse('else', v.else, sort.value, Math.round(cpuElse - procCpu) || mac.mem >= 102.4 ? mac : undefined); // an older server sends none: the row is then plain
   const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '', app: false, rest: !!elseUse }, app];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
