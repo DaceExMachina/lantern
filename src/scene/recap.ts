@@ -15,23 +15,22 @@ import type { Day, Opt, PR, PrEvent, Span } from '../types';
 
 /** A session's day, from the log (daySessions). */
 export interface Star {
-  id: string; began: number; from: number; to: number; ms: number; waitMs: number; snoozedMs: number; sleepingMs: number; waits: number; longest: number;
+  id: string; began: number; from: number; to: number; ms: number; waitMs: number; snoozedMs: number; waits: number; longest: number;
   prs: Map<string, PR>; title?: Opt<string>; project?: Opt<string>; warm: number;
 }
 
 // Each session alive that day, from the log: when it ran, how long it waited on me (snoozed waits too, as in warm
-// moths), how much of that was snoozed or sleeping, how many waits began that day and the longest, and what its PRs did.
+// moths), how much of that was snoozed (old logs' sleeping too), how many waits began that day and the longest, and what its PRs did.
 export function daySessions(day: Day, spans: Span[], prs: PrEvent[]): Star[] {
   const runs = new Map<string, Omit<Star, 'warm'>>(), clip = (b: number, e: number) => Math.max(0, Math.min(e, day.end) - Math.max(b, day.start));
   for (const [kind, b, e, , id, title, project] of spans) {
     if (!id || e <= day.start || b >= day.end) continue;
     let r = runs.get(id);
-    if (!r) runs.set(id, r = { id, began: Infinity, from: Infinity, to: 0, ms: 0, waitMs: 0, snoozedMs: 0, sleepingMs: 0, waits: 0, longest: 0, prs: new Map() });
+    if (!r) runs.set(id, r = { id, began: Infinity, from: Infinity, to: 0, ms: 0, waitMs: 0, snoozedMs: 0, waits: 0, longest: 0, prs: new Map() });
     const ms = clip(b, e);
     if (kind === 'alive') { r.began = Math.min(r.began, b); r.from = Math.min(r.from, Math.max(b, day.start)); r.to = Math.max(r.to, Math.min(e, day.end)); r.ms += ms; r.title ||= title; r.project ||= project; }
     if (kind === 'waiting') { r.waitMs += ms; r.longest = Math.max(r.longest, ms); if (b >= day.start) r.waits++; }
-    if (kind === 'snoozed') r.snoozedMs += ms;
-    if (kind === 'sleeping') r.sleepingMs += ms;
+    if (kind === 'snoozed' || kind === 'sleeping') r.snoozedMs += ms;
   }
   for (const [t, id, url, change, need, title] of prs) {
     const r = t >= day.start && t < day.end && url && id !== null ? runs.get(id) : undefined;

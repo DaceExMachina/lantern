@@ -113,7 +113,6 @@
           "id": "s1",
           "last": "<time>",
           "note": "Finished its turn",
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],
@@ -186,7 +185,6 @@
           "id": "s1",
           "last": "<time>",
           "note": "Finished its turn",
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],
@@ -265,7 +263,6 @@
           "prose": [
             "Every quiet session dims slowly until something new wakes it again."
           ],
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],
@@ -335,7 +332,6 @@
           "id": "s1",
           "last": "<time>",
           "note": "Finished its turn",
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],

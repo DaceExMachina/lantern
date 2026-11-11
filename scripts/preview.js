@@ -5,7 +5,7 @@
 // app's sessions as the app streams them; without the app, it finds them once from their processes and transcripts.
 // Your ~/.claude is only read, and the copy is thrown away when you stop it, so settings changed in the preview never
 // reach the app. Three things do reach the world: it polls GitHub itself while it runs (on top of the app's polling),
-// clicking a moth really focuses that terminal, and snoozing, sleeping or waking a moth changes it in the app (one the
+// clicking a moth really focuses that terminal, and snoozing or waking a moth changes it in the app (one the
 // app doesn't answer fails).
 // After changing app/*.swift, stop it and run it again; changes to the page reload by themselves.
 const fs = require('fs');

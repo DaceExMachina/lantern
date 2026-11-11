@@ -141,7 +141,7 @@
   :is(#stats, #recap) .axis [data-v] { min-width: 6em; text-align: center; }
   :is(#stats, #recap) :is(.axis, .legend) { display: flex; justify-content: space-between; color: var(--ink-dim); font-size: var(--text-xs); margin-top: calc(-1 * var(--space-1)); }
   /* The legend's four moth states in a plain grid, 2 by 2 when there's room, else 1 across. A column is 16em: the swatch,
-     "snoozed / sleeping" (the longest label) and a 5.4em slot that fits "188h 58m", the longest value, so nothing wraps.
+     the label and a 5.4em slot that fits "188h 58m", the longest value, with room to spare, so nothing wraps.
      Four across would need about 700px, more than the panel has. */
   :is(#stats, #recap) .dayRibbon { display: flex; flex-direction: column; gap: var(--space-2); }
   :is(#stats, #recap) .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(16em, 1fr)); gap: var(--space-1) var(--space-3); margin-top: 0; }

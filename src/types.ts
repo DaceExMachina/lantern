@@ -38,11 +38,11 @@ export interface Agent {
 }
 export interface Session {
   id: string; state: string; subagents: Agent[]; cwd?: Opt<string>; started?: Opt<number>; last?: Opt<number>;
-  parent?: Opt<string>; title?: Opt<string>; snoozed?: Opt<boolean>; forGood?: Opt<boolean>; error?: Opt<boolean>;
+  parent?: Opt<string>; title?: Opt<string>; snoozed?: Opt<boolean>; error?: Opt<boolean>;
   waitingSince?: Opt<number>; note?: Opt<string>; activity?: Opt<string>; prompt?: Opt<string>;
   forYou?: Opt<ForYou>; github?: Opt<PR[]>; created?: Opt<string[]>; ticks?: Opt<number>;
   tasks?: Opt<string[]>; taskStarted?: Opt<Record<string, number>>; prose?: Opt<string[]>;
-  // the page's own, from state.ts sync: reporting back to its parent session, and snoozed for quiet hours
+  // the page's own, from state.ts sync: reporting back to its parent session, and snoozed only by quiet hours
   reported?: boolean; quiet?: boolean;
 }
 
@@ -56,7 +56,7 @@ const isAgent = (x: unknown): x is Agent => isRecord(x) && isString(x['id']) && 
   && optString(x['model']) && optString(x['activity']) && optNumber(x['started']) && optNumber(x['last']);
 export const isSession = (x: unknown): x is Session => isRecord(x)
   && isString(x['id']) && isString(x['state']) && arrayOf(isAgent)(x['subagents']) && optString(x['cwd']) && optNumber(x['started']) && optNumber(x['last'])
-  && optString(x['parent']) && optString(x['title']) && optBoolean(x['snoozed']) && optBoolean(x['forGood']) && optBoolean(x['error'])
+  && optString(x['parent']) && optString(x['title']) && optBoolean(x['snoozed']) && optBoolean(x['error'])
   && optNumber(x['waitingSince']) && optString(x['note']) && optString(x['activity']) && optString(x['prompt'])
   && opt(isForYou)(x['forYou']) && opt(arrayOf(isPR))(x['github']) && opt(isStrings)(x['created']) && optNumber(x['ticks'])
   && opt(isStrings)(x['tasks']) && opt(isNumberRecord)(x['taskStarted']) && opt(isStrings)(x['prose']);
@@ -191,8 +191,6 @@ export interface Firefly {
 }
 
 // ---- the scene's moths and hover areas
-/** A "zz" off a moth that just got snoozed: when, and whether until it does something new or for good. */
-interface Puff { at: number; kind: 'once' | 'always' }
 /** A scorch in progress (frame.ts scorchStep): its slot and seconds in, whether the flame has touched it yet, where it
  * aims and from which side, and the smoke trail it leaves as it flies off ([x, y, seconds, how far along]). */
 export interface Scorch {
@@ -210,8 +208,8 @@ interface MothBase {
   // where it lands (perchAt), its hops and breaths, the landing's own dice, and the last target it eased toward
   perch?: [x: number, y: number, normal: Vec3]; perchAim?: string; lastAim?: string | undefined; lastT?: Point;
   fidget?: '' | 'hop' | 'breathe'; into?: number; landJitter?: number; rand?: () => number;
-  // a fresh snooze's puff and the sleeping z's it breathes out
-  puff?: Puff | null; zStart?: number | undefined; zOff?: number;
+  // a fresh snooze's "zz" puff (when, in seconds) and the sleeping z's it breathes out
+  puff?: number | null; zStart?: number | undefined; zOff?: number;
   plain?: number; // how far it has gone to the plain resting look on the lantern, 0 to 1 (frame.ts mothColour)
   shine?: number; // how strongly it glows gold for a message it sent or got, 0 to 1 (messages.ts)
   lit?: number; // how far a bookmark row pointing at its session has lit it, 0 to 1 (spot.ts)
@@ -220,7 +218,7 @@ interface MothBase {
  * lands on the lantern when its session waits, and is tied to the lantern by its thread. */
 export interface SessionMoth extends MothBase {
   parentId?: undefined; thread: SVGPathElement; gilt: SVGPathElement[]; zone: Zone; flyZone?: Zone; cardAt?: CardAt;
-  satellite?: string | null; spot?: Point; home?: Point; snooze?: '' | 'once' | 'always';
+  satellite?: string | null; spot?: Point; home?: Point; snooze?: boolean;
   // which spot on its line it lands on, and the hop it landed from (frame.ts mothTarget)
   along?: number; perchKey?: string; hopSlot?: number | undefined;
   // its hover areas' spots, its thread's gradient, bow and pulses, and its fireflies' line

@@ -8,9 +8,9 @@ import { ago, tipSpot } from './card';
 import type { Day, Gauge, Span } from '../types';
 
 /** A slice of a day's ribbon: its span (ms), and the share of it the app ran, was violet or quiet, and moths were
- * alive, waiting, snoozed or sleeping; the share of moth time flying, and the working gauge (null where unknown). */
+ * alive, waiting or snoozed; the share of moth time flying, and the working gauge (null where unknown). */
 interface Slice {
-  a: number; b: number; ran: number; violet: number; quiet: number; alive: number; waiting: number; snoozed: number; sleeping: number;
+  a: number; b: number; ran: number; violet: number; quiet: number; alive: number; waiting: number; snoozed: number;
   flying: number | null; working: number | null;
 }
 /** A day's ribbon: from and to (ms), its slices, and when sessions started. */
@@ -20,8 +20,7 @@ type MothState = typeof MOTH_STATES[number];
 
 export const MIN = 60 * 1000;
 // The middle and bottom strips use the moths' own colours (lanterns.ts, as frame.ts's mothColour blends them): working
-// in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour; snoozed for good,
-// sleeping, counts as snoozed here, since the two can't be told apart on the graph).
+// in flight, waiting on the lantern, and snoozed (a landed moth only half way to the calling colour).
 export const MOTHS: Record<MothState, string> = { working: MOTH_IDLE, waiting: MOTH_CALL, snoozed: mix(MOTH_IDLE, MOTH_CALL, 0.5), idle: MOTH_RESTING };
 export const RIBBON = { warm: WARM.outer, violet: COOL.outer, quiet: '#3A3050' };
 
@@ -33,7 +32,7 @@ export const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: '
 // Each slice blends what overlapped it: how much the app ran, was violet or quiet, and how much moth time was waiting.
 // The working band comes from the five-minute gauges (the latest one at the slice's middle), so it's coarser than the rest.
 // So does the snoozed share of waiting before the log first wrote a snoozed span (it only counts snoozes by hand).
-// Before the log wrote sleeping spans, sleeping waits count as snoozed.
+// Old logs' sleeping spans (snoozed for good, back when there were two snoozes) count as snoozed.
 export function slices(day: Pick<Day, 'start' | 'end'>, spans: Span[], gauges: Gauge[], count: number): Ribbon | null {
   const since = Math.min(Infinity, ...spans.filter(s => s[0] === 'snoozed').map(s => s[1]));
   const alive = spans.filter(s => s[0] === 'alive' && s[2] > day.start && s[1] < day.end);
@@ -47,10 +46,9 @@ export function slices(day: Pick<Day, 'start' | 'end'>, spans: Span[], gauges: G
     for (const [kind, s, e] of mine) if (s < b && e > a) covered.set(kind, (covered.get(kind) || 0) + Math.min(e, b) - Math.max(s, a));
     const cover = (kind: string) => covered.get(kind) || 0;
     const g = gauges.filter(g => g[0] <= mid && g[0] > mid - 6 * MIN).pop();
-    const snoozed = b <= since && g && g[3] > 0 ? cover('waiting') * Math.max(0, g[4]) / g[3] : cover('snoozed');
+    const snoozed = b <= since && g && g[3] > 0 ? cover('waiting') * Math.max(0, g[4]) / g[3] : cover('snoozed') + cover('sleeping');
     out.push({ a, b, ran: cover('server') / (b - a), violet: cover('violet') / (b - a), quiet: cover('quiet') / (b - a),
       alive: cover('alive') / (b - a), waiting: cover('waiting') / (b - a), snoozed: Math.min(cover('waiting'), snoozed) / (b - a),
-      sleeping: Math.min(cover('waiting') - Math.min(cover('waiting'), snoozed), cover('sleeping')) / (b - a),
       flying: cover('alive') ? 1 - cover('waiting') / cover('alive') : null, working: g ? g[2] : null });
   }
   return { from, to, slices: out, starts: alive.filter(s => !s[3] && s[1] >= from).map(s => s[1]) };
@@ -61,14 +59,14 @@ const lampOf = (s: Slice) => s.ran < .5 ? null : s.quiet > .5 ? 'quiet' : s.viol
 // A slice's sessions alive by state. The working count is a gauge, so it only fills what the waits leave.
 export function states(s: Slice): Record<MothState, number> {
   const working = Math.max(0, Math.min(s.working ?? 0, s.alive - s.waiting));
-  return { working, waiting: s.waiting - s.snoozed - s.sleeping, snoozed: s.snoozed + s.sleeping, idle: Math.max(0, s.alive - s.waiting - working) };
+  return { working, waiting: s.waiting - s.snoozed, snoozed: s.snoozed, idle: Math.max(0, s.alive - s.waiting - working) };
 }
 
 // The colour of a slice's landed moths: waiting and snoozed blended by their shares.
-const landed = (s: Slice) => mix(MOTHS.waiting, MOTHS.snoozed, s.waiting ? (s.snoozed + s.sleeping) / s.waiting : 0);
+const landed = (s: Slice) => mix(MOTHS.waiting, MOTHS.snoozed, s.waiting ? s.snoozed / s.waiting : 0);
 
 // Three strips a hair apart, top to bottom: the sessions alive stacked by state in the moths' colours (working, waiting,
-// snoozed (sleeping too), then the idle rest, rising from the strip below), the share of moths flying vs landed (blending the same
+// snoozed, then the idle rest, rising from the strip below), the share of moths flying vs landed (blending the same
 // colours by share), and the lantern (warm or violet, quiet dim) as tall as the moths strip. Small ticks under the
 // lantern strip mark sessions starting.
 export function ribbonBody(r: Ribbon, w: number, h: number) {
@@ -91,14 +89,14 @@ export function ribbonBody(r: Ribbon, w: number, h: number) {
 }
 const ribbon = (r: Ribbon, w: number, h: number) => `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" shape-rendering="crispEdges" aria-hidden="true">${ribbonBody(r, w, h)}</svg>`;
 
-// A day's ribbon with its axis and a legend of the moth states (snoozed counts sleeping too) with their times, for the stats panel and the recap. `end` labels the right edge.
+// A day's ribbon with its axis and a legend of the moth states with their times, for the stats panel and the recap. `end` labels the right edge.
 export const dayRibbon = (r: Ribbon, end: string) => `<div class="dayRibbon"><div class="ribbon">${ribbon(r, 600, 50)}<i class="cursor" hidden></i></div>
   <div class="axis"><span>${clock(r.from)}</span><b data-v="at"></b><span>${end}</span></div>
-  <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background: var(--state-${k})"></i>${k === 'snoozed' ? 'snoozed / sleeping' : k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
+  <div class="legend">${['working', 'waiting', 'snoozed', 'idle'].map(k => `<span><i style="background: var(--state-${k})"></i>${k}<b data-v="${k}"></b></span>`).join('')}</div></div>`;
 
 // The two headline stats, for the stats panel and the recap. They measure different things: the lantern's warm share
-// is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed and sleeping
-// ones aside), moths flying is of all session time summed over the sessions (waiting, snoozed and sleeping count as landed).
+// is of the time the app ran outside quiet hours (it's violet while any session waits on you, snoozed ones
+// aside), moths flying is of all session time summed over the sessions (waiting and snoozed count as landed).
 // Hovering the ribbon swaps them for that moment's lantern state and share of moths flying (see followRibbon).
 export const pct = (v: number | null | undefined) => v == null ? '–' : `${v}%`;
 const LAMP_WORD: Record<string, string | undefined> = { warm: 'warm', violet: 'waiting', quiet: 'quiet' }; // the lantern's headline while hovering (no lamp at all reads "off")

@@ -97,7 +97,7 @@ export function expandCard(zone: Zone) {
 export function clickZone(a: Zone, shift: boolean) { (shift && a.menu || a.onClick).call(a); clearTimeout(live.hideTimer); hideCard(); }
 export function hideCard() { live.hovered = held = shown = null; live.expanded = false; chrome.update(); $('card').classList.remove('show'); $('card').removeAttribute('popover'); hidePrTip(); }
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
-// right-click on the moth does (its `menu`, state.ts): snooze, then sleep, then wake.
+// right-click on the moth does (its `menu`, state.ts): snooze, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
 // The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
 // it was clicked open. A click opens the session's processes in the dropdown itself (UsageMenu.vue); a double click, or the processes' Open card,
@@ -109,9 +109,9 @@ export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.
 const STATE_WORDS: Record<string, string | undefined> = { working: 'working', waiting: 'needs you', paused: 'waiting on agents', idle: 'idle' };
-export const pillWord = (s: Session) => { const waiting = s.state === 'waiting'; return s.reported ? 'reported back' : s.error && waiting ? 'error' : s.snoozed && waiting ? (s.forGood ? 'sleeping' : 'snoozed') : STATE_WORDS[s.state] || s.state; };
+export const pillWord = (s: Session) => { const waiting = s.state === 'waiting'; return s.reported ? 'reported back' : s.error && waiting ? 'error' : s.snoozed && waiting ? 'snoozed' : STATE_WORDS[s.state] || s.state; };
 export const pillClass = (s: Session) => { const waiting = s.state === 'waiting'; return s.error && waiting ? 'error' : s.snoozed && waiting ? 'idle' : s.state; };
-export const pillNext = (s: Session) => s.forGood ? 'Wake' : s.state === 'waiting' && !s.snoozed ? 'Snooze' : 'Sleep until you wake it';
+export const pillNext = (s: Session) => s.snoozed && !s.quiet ? 'Wake' : 'Snooze';
 // a state line only where it says more than the pill (a permission, an error; not "Finished its turn", "Waiting on…", or
 // "Asks:" with the question boxed below)
 export const stateLine = (s: Session) => s.state === 'working' ? s.activity || '' : s.note && !/^(Finished its turn|Waiting on|Asks:)/.test(s.note) ? s.note : '';

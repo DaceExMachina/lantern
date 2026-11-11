@@ -84,7 +84,7 @@
           "id": "s1",
           "last": "<time>",
           "note": "Finished its turn",
-          "snoozed": false,
+          "snoozed": true,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],
@@ -92,13 +92,6 @@
           "waitingSince": "<time>"
         }
       ]
-    }
-  },
-  {
-    "post": "/snooze",
-    "body": {
-      "id": "s1",
-      "snoozed": "always"
     }
   },
   {
@@ -125,7 +118,6 @@
           "activity": "Thinking about your message",
           "cwd": "/work/s1",
           "error": false,
-          "forGood": true,
           "forYou": {
             "prs": [],
             "questions": [],
@@ -170,7 +162,6 @@
           "id": "s1",
           "last": "<time>",
           "note": "Finished its turn",
-          "snoozed": false,
           "started": "<time>",
           "state": "waiting",
           "subagents": [],

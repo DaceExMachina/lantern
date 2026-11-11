@@ -168,11 +168,12 @@ After a restart, sessions come back from their transcripts (recent ones) and fro
 | A side session whose parent is alive | app session files | waiting, `parent` set (the page and stats treat it as reporting back, not waiting on me) | `a side session with a live parent points at it` |
 | Its parent ends | parent SessionEnd | waiting, `parent` gone (waiting on me again) | `a side session whose parent ended stops pointing at it` |
 
-## Snooze and sleep
+## Snooze
 
-Snoozing doesn't change the state: a snoozed session is still waiting, with `snoozed` (and `forGood` for sleep) set.
+Snoozing doesn't change the state: a snoozed session is still waiting, with `snoozed` set until it's woken.
 
 | Situation | Inputs | Shows | Test |
 |---|---|---|---|
-| Snooze, then a new turn ends the snooze; sleep outlasts turns; wake | /snooze true, UPS, Stop, /snooze always, /snooze false | waiting with snoozed, then not; asleep stays snoozed | `snooze, snooze for good, and wake` |
-| A snooze survives a restart, and new activity still ends it | /snooze, restart, UPS | waiting snoozed, then snoozed false | `a snooze survives a restart, and new activity after it still ends the snooze` |
+| A snooze outlasts new turns until it's woken | /snooze true, UPS, Stop, /snooze false | waiting with snoozed through the new turn, then not | `snooze outlasts new turns, and wake` |
+| A snooze survives a restart and new activity | /snooze, restart, UPS | waiting snoozed, still snoozed after the turn | `a snooze survives a restart and new activity` |
+| An old settings.json's two snooze lists come back as one | `snoozed` and `snoozedForGood` | both snoozed, one list saved | `old snooze lists come back as snoozed until woken` |

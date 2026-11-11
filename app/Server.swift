@@ -225,7 +225,7 @@ final class LanternServer {
     var pageMtime = 0.0
     // The event log (Stats.swift), and what it last saw, so it only records changes.
     let stats: Stats
-    struct Seen { var waiting = false, snoozed: String?, rest: String?, title: String? }
+    struct Seen { var waiting = false, snoozed = false, rest: String?, title: String? }
     var seen: [String: Seen] = [:]
     var seeded = Set<String>() // sessions rebuilt from disk, not started while the lantern watched
     var recentProse: [String] = [] // runs of prose from the newest transcripts, ended sessions too, for the pages; memory only
@@ -244,6 +244,9 @@ final class LanternServer {
         githubCache = data + "/github-cache.json"
         if let d = FileManager.default.contents(atPath: settingsFile), let j = parse(d) as? JSON { settings.merge(j) { $1 } }
         if let old = settings.removeValue(forKey: "graveyard") { settings["stale"] = settings["stale"] ?? old } // the old name of "stale"
+        // Snoozes used to come two ways: "snoozed" (live sessions, until they did something new) and "snoozedForGood". Both are
+        // the one snooze now, until it's woken.
+        if let old = settings.removeValue(forKey: "snoozedForGood") as? [Any] { settings["snoozed"] = (settings["snoozed"] as? [Any] ?? []) + old }
         settings["prList"] = nil // the card's old per-session PR list setting, dropped with the card's list view (goes from the file at the next save)
         if let dir = settings["claudeDir"] as? String, !dir.isEmpty { CLAUDE_CONFIG_DIR = (dir as NSString).expandingTildeInPath }
         EXTRA_CLAUDE_DIRS += (settings["claudeDirs"] as? [String]) ?? []
@@ -366,15 +369,15 @@ final class LanternServer {
 
     // MARK: state out
 
-    // Sessions snoozed for good stay snoozed through new activity and restarts, until they're woken by hand.
+    // Snoozed sessions stay snoozed through new activity and restarts, until they're woken by hand.
     // ponytail: the list is never pruned; ids are small and a resumed session keeps its id.
     // A preview following the app takes the app's word, which comes with each session.
-    func forGood(_ id: String) -> Bool { mirror != nil ? truthy(sessions[id]?["forGood"]) : (settings["snoozedForGood"] as? [Any] ?? []).contains { str($0) == id } }
+    func snoozed(_ id: String) -> Bool { mirror != nil ? truthy(sessions[id]?["snoozed"]) : (settings["snoozed"] as? [Any] ?? []).contains { str($0) == id } }
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
             for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
-            if forGood(id) { out["snoozed"] = true; out["forGood"] = true }
+            if snoozed(id) { out["snoozed"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 }.filter { $0.key != "inTool" } }
             return out
         })
@@ -392,18 +395,7 @@ final class LanternServer {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { self.broadcastDue = false; self.sendState() }
     }
     // The sessions go out every time; the PR lists only when they differ from what the pages last got.
-    /// A snooze outlives a restart: the snoozed ids are kept in settings (a preview keeps none, its sessions are the app's), and
-    /// put back once the sessions are back from disk. Rebuilding the list from the sessions drops a snooze when the session
-    /// does something new, is woken or goes, so none is left to meet a later session with the same id.
-    /// ponytail: a hook that reaches a restarted app before the sessions are seeded keeps its snooze; it's the same session.
-    var snoozesBack = false
-    func keepSnoozes() {
-        guard snoozesBack else { return }
-        let ids = sessions.items.filter { truthy($0.1["snoozed"]) }.map { $0.0 }
-        if ids != settings["snoozed"] as? [String] ?? [] { settings["snoozed"] = ids; saveSettings() }
-    }
     func sendState() {
-        keepSnoozes()
         keepBookmarks()
         observe()
         var msg = ""
@@ -671,7 +663,6 @@ final class LanternServer {
             s["tasks"] = [Any]()
             s["taskStarted"] = nil
             s["error"] = false
-            s["snoozed"] = false // a snooze only covers the wait it was set on
             if ev == "UserPromptSubmit" && truthy(e["prompt"]) { s["prompt"] = cleanPrompt(str(e["prompt"])) }
             if ev == "UserPromptSubmit", let p = e["prompt_id"] as? String, p != s["promptId"] as? String { s["replacedPrompt"] = s["promptId"]; s["promptId"] = p }
             if ev == "PreToolUse" { s["activity"] = describe(e["tool_name"] as? String, e["tool_input"] as? JSON ?? [:]) }
@@ -785,13 +776,13 @@ final class LanternServer {
             if waiting != was.waiting {
                 if waiting { stats.begin("waiting", id, ["title": title ?? NSNull(), "project": project], at: t) } else { stats.end("waiting", id, ["how": str(s["state"]) == "paused" ? "resumed" : "answered"], at: t) } // resumed: an agent woke it, not me
                 was.waiting = waiting
-                was.snoozed = nil
+                was.snoozed = false
             }
-            // snoozed during the wait: for a while (until it does something new) or for good
-            let snoozed = forGood(id) ? "forGood" : truthy(s["snoozed"]) ? "temporary" : nil
-            if waiting, let snoozed, snoozed != was.snoozed { stats.note("waiting", id, ["snoozed": snoozed]); was.snoozed = snoozed }
-            // the stretches of the wait it was sleeping (snoozed for good) or snoozed (for a while, or by quiet hours)
-            let rest = !waiting ? nil : snoozed == "forGood" ? "sleeping" : snoozed != nil || quietNow ? "snoozed" : nil
+            // snoozed during the wait (by hand; quiet hours don't count)
+            let byHand = snoozed(id)
+            if waiting && byHand && !was.snoozed { stats.note("waiting", id, ["snoozed": true]); was.snoozed = true }
+            // the stretches of the wait it was snoozed, by hand or by quiet hours
+            let rest = waiting && (byHand || quietNow) ? "snoozed" : nil
             if rest != was.rest { if let r = was.rest { stats.end(r, id, at: t) }; if let rest { stats.begin(rest, id, at: t) }; was.rest = rest }
             seen[id] = was
         }
@@ -802,7 +793,7 @@ final class LanternServer {
             seen[id] = nil
         }
         // the lantern's colour, worked out the way the page does it
-        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !reportsBack($0.1) && !truthy($0.1["snoozed"]) && !forGood($0.0) }
+        let violetNow = !quietNow && sessions.items.contains { str($0.1["state"]) == "waiting" && !reportsBack($0.1) && !snoozed($0.0) }
         if quietNow != quiet { if quietNow { stats.begin("quiet", at: t) } else { stats.end("quiet", at: t) }; quiet = quietNow }
         if violetNow != violet { if violetNow { stats.begin("violet", at: t) } else { stats.end("violet", at: t) }; violet = violetNow }
         // badges for what's on screen right now (Stats.earn gives each once a day): ten agents in one session, ten open PRs
@@ -876,7 +867,7 @@ final class LanternServer {
         let waiting = sessions.items.filter { str($0.1["state"]) == "waiting" }
         let fireflies = Set(sessions.items.flatMap { ($0.1["github"] as? [JSON] ?? []).filter { !["merged", "closed"].contains(str($0["need"])) }.map { str($0["url"]) } })
         stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { ["working", "paused"].contains(str($0.1["state"])) }.count),
-                     ("waiting", waiting.count), ("snoozed", waiting.filter { truthy($0.1["snoozed"]) || forGood($0.0) }.count),
+                     ("waiting", waiting.count), ("snoozed", waiting.filter { snoozed($0.0) }.count),
                      ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("stale", stale.count)])
         stats.award(warmGoal: warmGoal)
     }
@@ -1050,7 +1041,7 @@ final class LanternServer {
                 focus(tab)
             }
         }
-        // Snooze or wake a session: it stops counting as needing me until it does something new, or with "always" for good.
+        // Snooze or wake a session: snoozed, it stops counting as needing me until it's woken.
         if json && req.url == "/snooze" {
             // A preview's sessions are the app's, so it snoozes them there and shows the app's next list; the app answers.
             if let mirror {
@@ -1063,9 +1054,8 @@ final class LanternServer {
                 return
             }
             guard let j = body, let id = j["id"] as? String, sessions[id] != nil else { return respond(c, 404) }
-            sessions[id]!["snoozed"] = truthy(j["snoozed"])
-            let rest = (settings["snoozedForGood"] as? [Any] ?? []).filter { str($0) != id }
-            settings["snoozedForGood"] = (j["snoozed"] as? String) == "always" ? rest + [id] : rest
+            let rest = (settings["snoozed"] as? [Any] ?? []).filter { str($0) != id }
+            settings["snoozed"] = truthy(j["snoozed"]) ? rest + [id] : rest
             saveSettings()
             broadcast()
             return respond(c, 204)

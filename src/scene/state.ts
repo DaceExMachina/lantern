@@ -12,19 +12,20 @@ export let sessions: Session[] = [];
 let seenWaiting = new Set<string>();
 // what the server sends, and the settings, are in live.ts
 export const quietEndLabel = () => timeLabel(live.quietEnd);
-// quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges
+// quiet hours: until quietEnd (8am unless settings.json says otherwise) every waiting session counts as snoozed, so nothing turns violet, notifies or badges.
+// sync marks those `quiet` too, unless they were snoozed already, so `snoozed && !quiet` is a snooze by hand.
 export const quiet = () => live.quietUntil > Date.now();
 export const QUIET_FOREVER = 8.64e15; // quietUntil for quiet hours with no end (quiet until switched off), as the server sets it
-// Which of the status line's (StatusLine.vue) counts a session is in: sleeping (snoozed for good, whatever it's doing), or, while it
-// waits, snoozed (until it does something new, or for quiet hours) or needing me.
-export const restOf = (s: Session) => s.forGood ? 'sleeping' : s.state !== 'waiting' ? '' : s.snoozed ? 'snoozed' : 'need';
+// Which of the status line's (StatusLine.vue) counts a session is in: snoozed (by hand, whatever it's doing, or waiting in
+// quiet hours) or, while it waits, needing me.
+export const restOf = (s: Session) => s.snoozed ? 'snoozed' : s.state === 'waiting' ? 'need' : '';
 
 export function sync() {
   // A side session whose parent is still alive reports back to that session, not to me: when its turn ends it keeps
   // orbiting (like agents do) and doesn't count as needing me.
   const alive = new Set(live.raw.map(s => s.id));
   const base = live.raw.map(s => s.state === 'waiting' && s.parent && alive.has(s.parent) ? { ...s, state: 'paused', reported: true } : s);
-  sessions = quiet() ? base.map(s => s.state === 'waiting' ? { ...s, snoozed: true, quiet: true } : s) : base;
+  sessions = quiet() ? base.map(s => s.state === 'waiting' && !s.snoozed ? { ...s, snoozed: true, quiet: true } : s) : base;
   $('quiet').classList.toggle('on', quiet());
   const kept = new Set(), shown = AMBIENT ? [] : sessions; // the ambient view only needs the sessions for the glow's colour
   for (const s of shown) {
@@ -38,8 +39,8 @@ export function sync() {
     m.satellite = s.parent && alive.has(s.parent) ? s.parent : null;
     m.size = m.satellite ? SIZE.supervisor : SIZE.session; // like a supervisor agent
     // a fresh snooze (not quiet hours, not waking) puffs a "zz" off the moth; the first sync only records where it stands
-    const snooze = s.forGood ? 'always' : s.snoozed && !s.quiet ? 'once' : '';
-    if (m.snooze !== undefined && snooze && snooze !== m.snooze) m.puff = { at: performance.now() / 1000, kind: snooze };
+    const snooze = !!s.snoozed && !s.quiet;
+    if (m.snooze === false && snooze) m.puff = performance.now() / 1000;
     m.snooze = snooze;
     for (const a of s.subagents) {
       const k = s.id + '/' + a.id;
@@ -100,14 +101,11 @@ function mothNode() {
 export function hoverArea(moth: () => SessionMoth, at: CardAt): Zone {
   // its click action, which the card's header runs, brings the session's terminal tab (or Claude app session) to the front
   const zone = hoverZone(moth, () => post('/focus', { id: moth().key }), 48, at);
-  // Right-click cycles a session's snooze: a waiting one snoozes until it does something new, then for good (new activity
-  // never wakes it, say for a chat you only drop into now and then), then wakes. One that isn't waiting goes straight
-  // to for good. A snoozed moth rests on the lantern without turning it violet.
+  // Right-click snoozes a session, and again wakes it. Snoozed, new activity never wakes it (say for a chat you only drop
+  // into now and then), and a snoozed moth rests on the lantern without turning it violet.
   zone.menu = () => {
     const s = moth().session;
-    if (!s) return;
-    const next = s.forGood ? false : s.state === 'waiting' && !s.snoozed ? true : 'always';
-    post('/snooze', { id: s.id, snoozed: next });
+    if (s) post('/snooze', { id: s.id, snoozed: !s.snoozed || !!s.quiet });
   };
   return zone;
 }

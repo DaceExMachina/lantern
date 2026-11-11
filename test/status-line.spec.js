@@ -43,13 +43,13 @@ test('it says connecting, then offline, then what the sessions are doing', async
 test('each count that wants me is a button that opens its sessions one at a time, longest waiting first', async () => {
   const posts = [];
   vi.mocked(fetch).mockImplementation((url, o) => { posts.push(JSON.parse(o.body).id); return Promise.resolve(); });
-  await set([session('w2', { state: 'waiting', waitingSince: 2 }), session('w1', { state: 'waiting', waitingSince: 1 }), session('z', { state: 'waiting', snoozed: true }), session('s', { state: 'waiting', snoozed: true, forGood: true })]);
-  assert.strictEqual(line(), '4 sessions · 0 working · 2 need you · 1 snoozed · 1 sleeping');
+  await set([session('w2', { state: 'waiting', waitingSince: 2 }), session('w1', { state: 'waiting', waitingSince: 1 }), session('z', { state: 'waiting', snoozed: true, waitingSince: 3 }), session('s', { state: 'idle', snoozed: true })]);
+  assert.strictEqual(line(), '4 sessions · 0 working · 2 need you · 2 snoozed', 'a snoozed session counts whatever it\'s doing');
   assert.strictEqual(status().className, 'waiting');
-  const [need, snoozed, sleeping] = [...status().querySelectorAll('button.next')];
-  assert.deepStrictEqual([need.title, snoozed.title, sleeping.title], ['Open the session that has waited longest', 'Open the snoozed sessions one at a time', 'Open the sleeping sessions one at a time']);
-  need.click(); need.click(); need.click(); snoozed.click(); sleeping.click();
-  assert.deepStrictEqual(posts, ['w1', 'w2', 'w1', 'z', 's'], 'each click moves on to the next, round and round');
+  const [need, snoozed] = [...status().querySelectorAll('button.next')];
+  assert.deepStrictEqual([need.title, snoozed.title], ['Open the session that has waited longest', 'Open the snoozed sessions one at a time']);
+  need.click(); need.click(); need.click(); snoozed.click(); snoozed.click();
+  assert.deepStrictEqual(posts, ['w1', 'w2', 'w1', 'z', 's'], 'each click moves on to the next, round and round (waiting ones first)');
   await set([session('w1', { state: 'waiting', waitingSince: 1 })]);
   assert.strictEqual(line(), '1 session · 0 working · 1 needs you');
 });

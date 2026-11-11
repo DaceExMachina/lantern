@@ -103,7 +103,7 @@ async function replay(t, name, files) {
 test('a turn: start, prompt, tool, stop leaves it waiting with its card', t => replay(t, 'turn'));
 test('a turn that ends with background agents running is paused, and their activity keeps it paused', t => replay(t, 'paused'));
 test('a turn that asks a question or names a Blocker is waiting, with the question as its note', t => replay(t, 'question'));
-test('snooze, snooze for good, and wake', t => replay(t, 'snooze'));
+test('snooze outlasts new turns, and wake', t => replay(t, 'snooze'));
 test('a manual /compact ends idle, an automatic one leaves the session as it was', t => replay(t, 'compact'));
 
 // Auto-compaction fires hooks whether or not a turn is running (PreCompact, PostCompact, then SessionStart with source
@@ -1436,9 +1436,8 @@ test('stats: a snooze is logged as a snoozed span, from the snooze to the end of
   assert.strictEqual(snoozed[0].ended, waiting.ended);
 });
 
-// Snoozed for good, a wait is sleeping: it logs a 'sleeping' span, not a 'snoozed' one, and waking it ends the span
-// while the wait goes on.
-test('stats: a wait snoozed for good is logged as a sleeping span, which waking ends', async t => {
+// Waking a snoozed wait ends its 'snoozed' span while the wait goes on.
+test('stats: waking a snoozed wait ends its snoozed span', async t => {
   let home;
   const base = await serve(t, {}, h => home = h);
   const spans = () => JSON.parse(execFileSync('sqlite3', ['-json', path.join(home, 'data/stats.sqlite'),
@@ -1447,11 +1446,11 @@ test('stats: a wait snoozed for good is logged as a sleeping span, which waking 
   await turn('UserPromptSubmit');
   await turn('Stop');
   await until(() => spans().some(s => s.kind === 'waiting'), 'the wait to be logged');
-  await post(base, '/snooze', { id: 's1', snoozed: 'always' });
-  await until(() => spans().some(s => s.kind === 'sleeping'), 'a sleeping span');
+  await post(base, '/snooze', { id: 's1', snoozed: true });
+  await until(() => spans().some(s => s.kind === 'snoozed'), 'a snoozed span');
   await post(base, '/snooze', { id: 's1', snoozed: false });
-  const done = await until(() => { const all = spans(); return all.find(s => s.kind === 'sleeping').ended && all; }, 'waking to end the sleeping span');
-  assert.deepStrictEqual(done.map(s => [s.kind, !!s.ended]), [['waiting', false], ['sleeping', true]]);
+  const done = await until(() => { const all = spans(); return all.find(s => s.kind === 'snoozed').ended && all; }, 'waking to end the snoozed span');
+  assert.deepStrictEqual(done.map(s => [s.kind, !!s.ended]), [['waiting', false], ['snoozed', true]]);
 });
 
 // The stale switch used to be saved as "graveyard"; a settings.json from then must still turn the stale PRs off.
@@ -1904,16 +1903,16 @@ test('a preview shows the live app\'s sessions as they change', async t => {
   await until(async () => (await shows()).length === 0, 'the preview to drop the ended session');
 });
 
-// A preview's sessions are the app's, so snoozing, sleeping and waking in a preview happen in the app, and the preview
-// shows them in the app's next list like anything else. (A server not following an app snoozes its own: the snooze replay.)
-test('a preview snoozes, sleeps and wakes sessions in the app, and shows the app\'s word', async t => {
+// A preview's sessions are the app's, so snoozing and waking in a preview happen in the app, and the preview shows them
+// in the app's next list like anything else. (A server not following an app snoozes its own: the snooze replay.)
+test('a preview snoozes and wakes sessions in the app, and shows the app\'s word', async t => {
   const live = await serve(t);
-  // a preview starts with a copy of the app's settings, here from a day s1 was asleep: the app's word wins over it
-  const preview = await serve(t, { 'data/settings.json': JSON.stringify({ snoozedForGood: ['s1'] }) }, () => {}, { LANTERN_MIRROR: live + '/events' });
-  const shows = async base => (await snapshot(base)).sessions.map(s => `${s.id} ${s.state}${s.snoozed ? ' snoozed' : ''}${s.forGood ? ' forGood' : ''}`).join();
+  // a preview starts with a copy of the app's settings, here from a day s1 was snoozed: the app's word wins over it
+  const preview = await serve(t, { 'data/settings.json': JSON.stringify({ snoozed: ['s1'] }) }, () => {}, { LANTERN_MIRROR: live + '/events' });
+  const shows = async base => (await snapshot(base)).sessions.map(s => `${s.id} ${s.state}${s.snoozed ? ' snoozed' : ''}`).join();
   await post(live, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' });
   await until(async () => await shows(preview) === 's1 waiting', 'the preview to show the waiting session');
-  for (const [snoozed, after, next] of [[true, 's1 waiting snoozed', 's2'], ['always', 's1 waiting snoozed forGood', 's3'], [false, 's1 waiting', 's4']]) {
+  for (const [snoozed, after, next] of [[true, 's1 waiting snoozed', 's2'], [false, 's1 waiting', 's3']]) {
     assert.strictEqual((await post(preview, '/snooze', { id: 's1', snoozed })).status, 204, `snoozed: ${snoozed}`);
     assert.strictEqual((await shows(live)).split(',')[0], after, `the app after snoozed: ${snoozed}`);
     await until(async () => (await shows(preview)).split(',')[0] === after, `the preview to show ${after}`);
@@ -2494,9 +2493,9 @@ test('a bookmarked session that ends is sent to every window and saved, with its
   await until(() => JSON.parse(fs.readFileSync(file, 'utf8')).bookmarks[0].last === latest, 'and saved');
 });
 
-// A snooze lasts until the session does something new, and a restart doesn't end it: the second server starts from the
-// settings.json the first one saved, and finds the same session on disk.
-test('a snooze survives a restart, and new activity after it still ends the snooze', async t => {
+// A snooze lasts until it's woken: a restart doesn't end it (the second server starts from the settings.json the first one
+// saved, and finds the same session on disk), and neither does new activity.
+test('a snooze survives a restart and new activity', async t => {
   const id = UUID(4), files = transcript(id, [user('Look'), answer('The glow sits a little higher on the paper than before.'), turnEnd]);
   const session = async base => (await snapshot(base)).sessions.find(s => s.id === id);
   let home;
@@ -2509,8 +2508,24 @@ test('a snooze survives a restart, and new activity after it still ends the snoo
   const back = await until(() => session(second), 'the transcript to be seeded again');
   assert.deepStrictEqual([back.state, back.snoozed], ['waiting', true], 'still snoozed after the restart');
   await post(second, '/event', { session_id: id, hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
-  await until(async () => (await session(second)).snoozed === false, 'new activity to end the snooze');
-  await until(() => JSON.parse(fs.readFileSync(path.join(home2, 'data/settings.json'), 'utf8')).snoozed?.length === 0, 'the ended snooze to leave settings.json');
+  await until(async () => (await session(second)).state === 'working', 'the new activity to land');
+  assert.strictEqual((await session(second)).snoozed, true, 'still snoozed after new activity');
+  await post(second, '/snooze', { id, snoozed: false });
+  await until(() => JSON.parse(fs.readFileSync(path.join(home2, 'data/settings.json'), 'utf8')).snoozed?.length === 0, 'the woken session to leave settings.json');
+});
+
+// There used to be two snoozes: "snoozed" (live sessions, until they did something new) and "snoozedForGood". An old
+// settings.json's ids in either come back snoozed until woken, in the one list.
+test('old snooze lists come back as snoozed until woken', async t => {
+  let home;
+  const base = await serve(t, { 'data/settings.json': JSON.stringify({ snoozed: ['s1'], snoozedForGood: ['s2'] }) }, h => home = h);
+  for (const id of ['s1', 's2', 's3']) await post(base, '/event', { session_id: id, hook_event_name: 'Stop', cwd: '/w', last_assistant_message: 'Done.' });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: '/w', prompt: 'go' });
+  const shows = async () => (await snapshot(base)).sessions.map(s => `${s.id} ${s.state}${s.snoozed ? ' snoozed' : ''}`).sort().join();
+  await until(async () => await shows() === 's1 working snoozed,s2 waiting snoozed,s3 waiting', 'both old lists to come back snoozed');
+  await post(base, '/snooze', { id: 's3', snoozed: true });
+  const saved = await until(() => { const s = JSON.parse(fs.readFileSync(path.join(home, 'data/settings.json'), 'utf8')); return s.snoozed?.includes('s3') && s; }, 'the snooze to be saved');
+  assert.deepStrictEqual([saved.snoozed.sort(), saved.snoozedForGood], [['s1', 's2', 's3'], undefined]);
 });
 
 // The harness (also the preview's server) must not reach the real lantern-pr on this Mac. Listen on its default address if
