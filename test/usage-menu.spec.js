@@ -13,7 +13,7 @@ import { useLanternStore } from '../src/stores/lantern';
 
 const usage = { mac: { cpu: 41.6, used: 12288, total: 32768, pressure: 'warning' }, lantern: { cpu: 1.2, mem: 300, n: 4, procs: [{ name: 'WebKit GPU', n: 1, cpu: 1, mem: 150 }, { name: 'Lantern', n: 3, cpu: 0.2, mem: 200 }] },
   sessions: { a: { cpu: 0.4, mem: 900, n: 2 }, b: { cpu: 55.5, mem: 2048, n: 5, procs: [{ name: 'vitest', n: 3, cpu: 50, mem: 1500 }, { name: 'claude', n: 1, cpu: 5.5, mem: 500 }, { name: 'zsh', n: 1, cpu: 0, mem: 48 }] }, gone: { cpu: 0, mem: 0, n: 0 } },
-  else: { cpu: 20, mem: 8000, n: 300, procs: [{ name: 'Docker', n: 1, cpu: 0, mem: 5000 }, { name: 'Slack Helper', n: 4, cpu: 12, mem: 2500 }, { name: 'other', n: 296, cpu: 8, mem: 5500 }, { name: 'kernel_task', n: 1, cpu: 0, mem: 40 }] } };
+  else: { cpu: 20, mem: 8000, n: 300, procs: [{ name: 'Docker', n: 1, cpu: 0, mem: 5000 }, { name: 'Slack Helper', n: 4, cpu: 12, mem: 2500 }, { name: 'other', n: 296, cpu: 8, mem: 460 }, { name: 'kernel_task', n: 1, cpu: 0, mem: 40 }] } };
 
 Object.defineProperty(navigator, 'hardwareConcurrency', { value: 2, configurable: true }); // a session's CPU is of one core, the dropdown's percents of the Mac's two
 
@@ -188,11 +188,13 @@ test('everything else opens its processes like Lantern\'s, with no card to open 
   await row().trigger('pointerenter');
   await row().trigger('click');
   expect(row().attributes('aria-expanded')).toBe('true');
-  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['Docker', '', '0%', '4.9 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '5.4 GB']]); // CPU as shown, "other" last
+  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['Docker', '', '0%', '4.9 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '0.4 GB'], ['macOS', '', '3%', '1.0 GB']]); // CPU as shown, "other" then the gap to the header
   expect(w.find('#usage .sd .head').text()).toBe('Processes300');
   const heat = name => w.findAll('#usage .proc').find(r => r.text().startsWith(name)).findAll('span').flatMap(c => c.classes());
   expect(heat('Docker')).toContain('hot1'); // 4.9 GB is yellow (so the colours work here)...
-  expect(heat('other').filter(c => c.startsWith('hot') && c !== 'hot0')).toEqual([]); // ...but "other", 5.4 GB of small things, never gets one
+  expect(heat('other').filter(c => c.startsWith('hot') && c !== 'hot0')).toEqual([]); // ...but "other", many small things, never gets one
+  expect(heat('macOS').filter(c => c.startsWith('hot') && c !== 'hot0')).toEqual([]);
+  expect(w.find('#usage .proc:last-child .pn').attributes('title')).toMatch(/kernel, the GPU and compressed memory.*can't read/);
   expect(w.findAll('#usage .acts')).toHaveLength(0);
   await row().trigger('dblclick');
   expect([card.peekSession, card.pinSession].map(f => f.mock.calls.length)).toEqual([0, 0]);
@@ -201,6 +203,30 @@ test('everything else opens its processes like Lantern\'s, with no card to open 
   w.unmount();
 });
 
+const elseRows = async u => { // [header, process rows] of everything else, as shown, with its processes open
+  const { w } = await mounted(u);
+  const row = w.findAll('#usage .krow').find(r => r.text().startsWith('everything else'));
+  await row.trigger('click');
+  const nums = el => el.findAll('span').slice(-2).map(c => c.text());
+  return { header: nums(row), procs: w.findAll('#usage .proc').map(r => [r.find('.pn').text(), ...nums(r)]) };
+};
+test('the macOS row is the gap between everything else and its process rows, so the rows add up to the header', async () => {
+  const { header, procs } = await elseRows();
+  expect(header).toEqual(['13%', '8.8 GB']); // the Mac's 41.6% and 12 GB, less the sessions and Lantern
+  expect(procs.map(p => p[0])).toEqual(['Slack Helper', 'Docker', 'kernel_task', 'other', 'macOS']);
+  expect(procs.slice(0, 4).reduce((a, p) => a + parseInt(p[1]), 0) + parseInt(procs[4][1])).toBe(parseInt(header[0])); // 6 + 0 + 0 + 4 + 3 = 13 of 13
+  expect(procs[4]).toEqual(['macOS', '3%', '1.0 GB']);
+});
+test('everything else is never less than its own rows: the header rises to their sum when the Mac\'s remainder is smaller, and macOS is then hidden', async () => {
+  const small = { ...usage, mac: { ...usage.mac, cpu: 5, used: 3500 } }; // the sessions and Lantern already take more than this Mac's remainder leaves
+  const { header, procs } = await elseRows(small);
+  expect(header).toEqual(['10%', '7.8 GB']); // the rows' 20 of 2 cores and 8000 MB, not 0% and 0.0 GB
+  expect(procs.map(p => p[0])).toEqual(['Slack Helper', 'Docker', 'kernel_task', 'other']);
+});
+test('the macOS row is left out when it would show nothing', async () => {
+  const { procs } = await elseRows({ ...usage, mac: { ...usage.mac, cpu: 27.75 + 0.6 + 10.2, used: 900 + 2048 + 300 + 8000 + 50 } });
+  expect(procs.map(p => p[0])).not.toContain('macOS');
+});
 test('with no processes from the server for everything else (an older one), its row stays a plain row', async () => {
   const { w } = await mounted({ ...usage, else: undefined });
   const row = w.findAll('#usage .krow').find(r => r.text().startsWith('everything else'));

@@ -31,14 +31,14 @@ function useText(key: string, g: UsageGroup) {
 /** A session's processes for its card: the totals and each group by name (its Processes); null with no sample or no processes. The groups
  * sort by CPU as shown (whole percents of the Mac, where the server's order is by tenths of a core), then RAM, then name, "other" last; `by` 'mem' puts RAM first. */
 export const sessionUse = (usage: Usage | null, id: string, by?: UsageSort) => groupUse(id, usage?.sessions[id], by);
-/** The same for any group of processes, by the key its heat is kept under (Lantern's own use, in the usage dropdown). */
+/** The same for any group of processes, by the key its heat is kept under (Lantern's own use, in the usage dropdown); `last` is a row added after "other", calm like it, with a `help` tooltip. */
 const CALM = { cpuHot: 0, memHot: 0, cpuTip: '', memTip: '' }; // "other" is many small things, never a hog: no heat colours
 export type UsageSort = 'cpu' | 'mem';
-export function groupUse(id: string, g: UsageGroup | undefined, by: UsageSort = 'cpu') {
+export function groupUse(id: string, g: UsageGroup | undefined, by: UsageSort = 'cpu', last?: ProcGroup & { help: string }) {
   if (!g || !g.n) return null;
   const shown = (p: ProcGroup) => Math.round(p.cpu / cores()), other = (p: ProcGroup) => p.name === 'other';
   const procs = [...g.procs ?? []].sort((a, b) => Number(other(a)) - Number(other(b)) || (by === 'cpu' ? shown(b) - shown(a) || b.mem - a.mem : b.mem - a.mem || shown(b) - shown(a)) || a.name.localeCompare(b.name));
-  return { ...useText(id, g), n: g.n, procs: procs.map(p => ({ name: p.name, n: p.n, ...useText(`${id}/${p.name}`, p), ...other(p) && CALM })) };
+  return { ...useText(id, g), n: g.n, procs: [...procs.map(p => ({ ...p, help: '' })), ...last ? [last] : []].map(p => ({ name: p.name, n: p.n, help: p.help, ...useText(`${id}/${p.name}`, p), ...(other(p) || p === last) && CALM })) };
 }
 export const NEED: Record<string, string | undefined> = { ready: 'ready to merge', failing: 'checks failing', changes: 'changes requested', feedback: 'feedback waiting', waiting: 'in review', draft: 'draft', merged: 'merged', closed: 'closed' };
 
