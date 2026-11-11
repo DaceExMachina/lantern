@@ -188,13 +188,13 @@ test('everything else opens its processes like Lantern\'s, with no card to open 
   await row().trigger('pointerenter');
   await row().trigger('click');
   expect(row().attributes('aria-expanded')).toBe('true');
-  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['Docker', '', '0%', '4.9 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '0.4 GB'], ['macOS', '', '3%', '1.0 GB']]); // CPU as shown, "other" then the gap to the header
+  expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['Slack Helper', '×4', '6%', '2.4 GB'], ['macOS', '', '3%', '1.0 GB'], ['Docker', '', '0%', '4.9 GB'], ['kernel_task', '', '0%', '<0.1 GB'], ['other', '×296', '4%', '0.4 GB']]); // CPU as shown, the gap to the header (macOS) sorted in with them, "other" last
   expect(w.find('#usage .sd .head').text()).toBe('Processes300');
   const heat = name => w.findAll('#usage .proc').find(r => r.text().startsWith(name)).findAll('span').flatMap(c => c.classes());
   expect(heat('Docker')).toContain('hot1'); // 4.9 GB is yellow (so the colours work here)...
   expect(heat('other').filter(c => c.startsWith('hot') && c !== 'hot0')).toEqual([]); // ...but "other", many small things, never gets one
   expect(heat('macOS').filter(c => c.startsWith('hot') && c !== 'hot0')).toEqual([]);
-  expect(w.find('#usage .proc:last-child .pn').attributes('title')).toMatch(/kernel, the GPU and compressed memory.*can't read/);
+  expect(w.findAll('#usage .proc').find(r => r.text().startsWith('macOS')).find('.pn').attributes('title')).toMatch(/kernel, the GPU and compressed memory.*can't read/);
   expect(w.findAll('#usage .acts')).toHaveLength(0);
   await row().trigger('dblclick');
   expect([card.peekSession, card.pinSession].map(f => f.mock.calls.length)).toEqual([0, 0]);
@@ -213,9 +213,18 @@ const elseRows = async u => { // [header, process rows] of everything else, as s
 test('the macOS row is the gap between everything else and its process rows, so the rows add up to the header', async () => {
   const { header, procs } = await elseRows();
   expect(header).toEqual(['13%', '8.8 GB']); // the Mac's 41.6% and 12 GB, less the sessions and Lantern
-  expect(procs.map(p => p[0])).toEqual(['Slack Helper', 'Docker', 'kernel_task', 'other', 'macOS']);
-  expect(procs.slice(0, 4).reduce((a, p) => a + parseInt(p[1]), 0) + parseInt(procs[4][1])).toBe(parseInt(header[0])); // 6 + 0 + 0 + 4 + 3 = 13 of 13
-  expect(procs[4]).toEqual(['macOS', '3%', '1.0 GB']);
+  expect(procs.reduce((a, p) => a + parseInt(p[1]), 0)).toBe(parseInt(header[0])); // 6 + 3 + 0 + 0 + 4 = 13 of 13
+  expect(procs.find(p => p[0] === 'macOS')).toEqual(['macOS', '3%', '1.0 GB']);
+});
+test('the macOS row sorts in with the other processes by its value under either sort, and "other" stays last', async () => {
+  const order = async by => {
+    const { w } = await mounted(); // CPU: Slack 6%, macOS 3%, Docker 0% (4.9 GB), kernel_task 0%; by RAM: Docker 4.9, Slack 2.4, macOS 1.0, kernel_task
+    if (by === 'mem') await w.findAll('#usage .kh button')[1].trigger('click');
+    await w.findAll('#usage .krow').find(r => r.text().startsWith('everything else')).trigger('click');
+    return w.findAll('#usage .proc .pn').map(n => n.text());
+  };
+  expect(await order('cpu')).toEqual(['Slack Helper', 'macOS', 'Docker', 'kernel_task', 'other']);
+  expect(await order('mem')).toEqual(['Docker', 'Slack Helper', 'macOS', 'kernel_task', 'other']);
 });
 test('everything else is never less than its own rows: the header rises to their sum when the Mac\'s remainder is smaller, and macOS is then hidden', async () => {
   const small = { ...usage, mac: { ...usage.mac, cpu: 5, used: 3500 } }; // the sessions and Lantern already take more than this Mac's remainder leaves
