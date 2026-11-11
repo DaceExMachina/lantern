@@ -46,8 +46,6 @@ To keep a session in view, click the pin on its card. It opens in full in a side
 
 To come back to a session later, click the bookmark beside the pin. Your bookmarks are listed under the bookmark button at the bottom right, beside stats, the most recently active first, each with its folder, whether it's running, and when it was last active. Click a running one to bring it to the front, or one that has ended to resume it in a new iTerm2 tab with `claude --resume` in its folder, the way double-clicking a ghost moth does. The cross removes a bookmark. Bookmarks are shared by every window and survive a restart. The iTerm2 panel and the screensaver have no room for the button.
 
-The speech bubble before the bookmark opens the review desk's list, newest first. The desk is a Claude session you start with `/review-desk`: it audits each PR asked of you before you review it, and notes the comments that mention you with a draft reply. Each row shows the PR's title (a link), who asked and how the audit went (queued, auditing, ready with its findings by severity, or failed); click the line under the title for the summary and findings. The cross dismisses a row for good, until the PR gets a new head or a new mention; the desk's own file is never deleted. The button shows how many are ready.
-
 Click the header of a moth's full card to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. "N need you" in the footer opens whichever session has waited longest, then the next one. "N snoozed" and "N sleeping" step through their sessions the same way.
 
 Right-click a waiting moth, or shift-click it, to snooze it. It rests on the lantern in a plain, pale indigo (its own colour is for moths that need you), breathing out the odd z, and stops turning the light violet until the session does something new. Right-click or shift-click again and it's sleeping: snoozed for good, so new activity never wakes it. That's handy for a chat you only drop into now and then. A third one wakes it. On a moth that isn't waiting, the first one puts it to sleep. The footer counts snoozed and sleeping sessions separately.
@@ -82,6 +80,8 @@ Ghost moths drift behind the wisps: pale, nearly see-through moths for the old s
 Stale PRs need GitHub status, and "show stale PRs" in the settings menu hides them.
 
 The fireflies circling the lantern itself, and the reviews button at the footer's left, are PRs waiting on your review. Switch "review requests" off in the settings menu to hide them. Lantern then stops asking GitHub for them too.
+
+The reviews list can also hold your review desk's notes. The desk is a Claude session you start with `/review-desk`: it audits each PR asked of you before you review it, and notes the comments that mention you with a draft reply. A request's row then shows, under its title, who asked and how the audit went (queued, auditing, ready with its findings by severity, or failed); click that line for the summary and findings. A mention, or a review you've since handled, gets a row of its own. A PR already flying as a moth's firefly joins the list too once the desk has something on it. The cross dismisses the desk's notes on a PR until it gets a new head or a new mention; the desk's own file is never deleted.
 
 ## Session text on the paper
 

@@ -6,7 +6,6 @@ import { createApp } from 'vue';
 import DevPanel from './components/DevPanel.vue';
 import ReviewsMenu from './components/ReviewsMenu.vue';
 import UsageMenu from './components/UsageMenu.vue';
-import ReviewDesk from './components/ReviewDesk.vue';
 import BookmarksMenu from './components/BookmarksMenu.vue';
 import RecapPanel from './components/RecapPanel.vue';
 import NowPlaying from './components/NowPlaying.vue';
@@ -32,7 +31,6 @@ createApp(StatusLine).use(pinia).mount('#statusSlot'); // display: contents, so 
 createApp(NowPlaying).use(pinia).mount('#nowPlayingSlot'); // display: contents; the widget places itself above the footer
 createApp(UsageMenu).use(pinia).mount('#usageSlot'); // display: contents; the readout places itself at the top left, its dropdown opens under it
 createApp(BookmarksMenu).use(pinia).mount('#bookmarksSlot'); // display: contents, so the button is a corner button beside stats; its dropdown flies up
-createApp(ReviewDesk).use(pinia).mount('#deskSlot'); // display: contents, so the button is a corner button before bookmarks; its dropdown flies up
 createApp(ReviewsMenu).use(pinia).mount('#reviewsSlot'); // display: contents; the button places itself at the footer's left, its dropdown flies up from it
 const store = useLanternStore(pinia);
 // the scene's side of the store: copied over after a sync and when the card's target changes, never per frame
