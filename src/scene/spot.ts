@@ -1,7 +1,7 @@
 // Pointing at a session from the bookmarks dropdown (BookmarksMenu sets live.spot while a row is hovered or focused) shows
 // which moth or ghost moth it is: the flame is turned down to the idle ember (the slider goes lower, to out), so the lantern, its light and
 // the paper go dark with it; the other moths dull toward grey and fade, each as a whole (ghosts fade); every other light
-// that flies (fireflies, the lamp's review fireflies, wisps) drops to half; and the one pointed at keeps its look, its own
+// that flies (fireflies, the lamp's review fireflies, wisps) drops to a third; and the one pointed at keeps its look, its own
 // fireflies included, in a bloom of the colour it shows. The knobs are the dev panel's, under
 // Bookmarks. Everything eases in and out: `on` for the scene as a whole, and each moth's or ghost's own `lit` toward
 // whether it's the one, so moving from row to row hands the light over smoothly.
@@ -13,9 +13,9 @@ import { devSlider } from '../dev';
 
 export const spotLook = {
   flame: devSlider('Bookmarks', 'bmflame', 'flame', 0, 0.3, 0.01, 0.3, 'How big the flame burns while a bookmark is hovered, the lantern\'s light and paper following it (0.3 is the idle ember; 0 is out)', v => { spotLook.flame = v; }),
-  grey: devSlider('Bookmarks', 'bmgrey', 'grey the rest', 0, 1, 0.05, 0.7, 'How far the other moths dull toward grey', v => { spotLook.grey = v; }),
-  fade: devSlider('Bookmarks', 'bmfade', 'fade the rest', 0, 1, 0.05, 0.4, 'How see-through the other moths, their threads and the ghosts go (each moth as a whole)', v => { spotLook.fade = v; }),
-  halo: devSlider('Bookmarks', 'bmhalo', 'bloom', 0, 1, 0.05, 0.3, 'How bright the bloom of its own colour round the bookmarked moth or ghost is', v => { spotLook.halo = v; }),
+  grey: devSlider('Bookmarks', 'bmgrey', 'grey the rest', 0, 1, 0.05, 1, 'How far the other moths dull toward grey', v => { spotLook.grey = v; }),
+  fade: devSlider('Bookmarks', 'bmfade', 'fade the rest', 0, 1, 0.05, 0.6, 'How see-through the other moths, their threads and the ghosts go (each moth as a whole)', v => { spotLook.fade = v; }),
+  halo: devSlider('Bookmarks', 'bmhalo', 'bloom', 0, 1, 0.05, 0.5, 'How bright the bloom of its own colour round the bookmarked moth or ghost is', v => { spotLook.halo = v; }),
 };
 
 const EASE = 5; // a little under half a second to come in or go
@@ -48,8 +48,9 @@ export const fadeAt = (lit: number) => 1 - spotLook.fade * back(lit);
 /** How far its colour dulls toward DULL. */
 export const greyAt = (lit: number) => spotLook.grey * back(lit);
 export const DULL = '#6E6878'; // a dull grey, between the night and the idle moths' pale
-/** What a light that flies is multiplied by: half, unless it's the one pointed at's (`lit`; 0 for one that's nobody's). */
-export const flyFadeAt = (lit: number) => 1 - 0.5 * back(lit);
+const FLY_LEFT = 0.33; // how much of its light a fly keeps while it isn't the one pointed at's
+/** What a light that flies is multiplied by: FLY_LEFT, unless it's the one pointed at's (`lit`; 0 for one that's nobody's). */
+export const flyFadeAt = (lit: number) => 1 - (1 - FLY_LEFT) * back(lit);
 // The bloom's colour from the colour a moth shows (a snoozed one's paler, a landed one's silhouette and all): brought up to full
 // brightness, since light that dark adds nothing, then deepened the way the fireflies' haze is (background.ts FLIES), so a pale
 // tint doesn't wash out to white. Only the one pointed at asks, once a frame.

@@ -64,9 +64,9 @@ test('pointing at a bookmark can turn the flame right down, below the idle ember
   assert.strictEqual(spot.turnDown(0.7).by, 1, 'nothing turned down once it has let go');
 });
 
-// Every other light that flies drops to half: the other moth's fireflies and the review fireflies round the lamp, while the
+// Every other light that flies drops to a third: the other moth's fireflies and the review fireflies round the lamp, while the
 // one pointed at keeps its own. Told apart by colour (each PR need has its own), with the clock held so nothing swells.
-test('pointing at a bookmark halves every other light that flies, and leaves its own fireflies full', async () => {
+test('pointing at a bookmark drops every other light that flies to a third, and leaves its own fireflies full', async () => {
   const pr = (n, need) => ({ url: `https://github.com/o/r/pull/${n}`, label: `#${n}`, title: null, need });
   const { live, play, fireflies } = await load({ api: { github: [pr(1, 'ready')] }, blog: { github: [pr(2, 'failing')] }, reviews: [pr(3, 'draft')] });
   play(6); // flown in
@@ -87,8 +87,8 @@ test('pointing at a bookmark halves every other light that flies, and leaves its
   play(2);
   const after = glow(), { ready, failing, draft } = fireflies.FLY, k = c => after[c] / before[c];
   assert.ok(Math.abs(k(ready) - 1) < 0.02, `its own stay full: ${k(ready)}`);
-  assert.ok(Math.abs(k(failing) - 0.5) < 0.02, `the other moth's halve: ${k(failing)}`);
-  assert.ok(Math.abs(k(draft) - 0.5) < 0.02, `and the lamp's: ${k(draft)}`);
+  assert.ok(Math.abs(k(failing) - 0.33) < 0.02, `the other moth's drop to a third: ${k(failing)}`);
+  assert.ok(Math.abs(k(draft) - 0.33) < 0.02, `and the lamp's: ${k(draft)}`);
 });
 
 // The bloom is in the colour the moth shows, here a snoozed moth's that waits (part violet, part plain), not its own tint.

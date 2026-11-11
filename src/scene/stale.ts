@@ -186,7 +186,7 @@ export function drawStale(dt: number, s: number) {
     // a faint steady glow, and now and then a slow brightening
     const spark = Math.max(0, Math.sin(now * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
-    if (show) addFlyLight(x, y, 40, lit * fade * flyFadeAt(moth?.lit ?? 0), pale); // drawn as light by the background shader, like the fireflies; half while a bookmark points elsewhere (spot.ts)
+    if (show) addFlyLight(x, y, 40, lit * fade * flyFadeAt(moth?.lit ?? 0), pale); // drawn as light by the background shader, like the fireflies; a third while a bookmark points elsewhere (spot.ts)
     Object.assign(d.zone, { x, y, off: !show || d.gone !== undefined || !!moth?.out });
   }
   // the overflow: everything past 30 as a faint cloud low on the right, with a count

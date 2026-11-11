@@ -194,7 +194,7 @@ export function frame(t: number) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) { const n = live.flyLightN; swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); dimLights(n, flyFadeAt(0)); reviewZones(); } // half while a bookmark's hovered (spot.ts)
+  if (!AMBIENT) { const n = live.flyLightN; swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); dimLights(n, flyFadeAt(0)); reviewZones(); } // a third while a bookmark's hovered (spot.ts)
   stepMessages(t); // where messages' gold pulses are, for the moths and threads below
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
@@ -824,7 +824,7 @@ export function mothFireflies(m: SessionMoth, dt: number, s: number) {
   }
   const home = stretch(m.home ?? [CX, CY]), flies = m.flies ??= new Map(), n = live.flyLightN;
   swarm(flies, new Map([...want].slice(0, 10)), home, [34, 55], dt);
-  dimLights(n, flyFadeAt(m.lit ?? 0)); // half while a bookmark points at another session (spot.ts)
+  dimLights(n, flyFadeAt(m.lit ?? 0)); // a third while a bookmark points at another session (spot.ts)
   // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
   // middle of the swarm straight toward its perch, along its line (perchAt), which crosses no other at rest
   if (!m.flyLine) { const box = $('flies', SVGGElement); m.flyLine = box.insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), box.firstChild); }
