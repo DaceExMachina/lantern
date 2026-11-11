@@ -12,7 +12,7 @@ import { $, post } from '../src/scene/scene';
 import { chrome, live } from '../src/scene/live';
 import { sessionMoth, sessions, sync } from '../src/scene/state';
 import { ghosts } from '../src/scene/stale';
-import { enterZone, expandCard, hideCard, hoverZone, peekSession, placeCard, pinSession, sessionUse, unpeekSession } from '../src/scene/card';
+import { enterZone, expandCard, goToSession, hideCard, hoverZone, openCard, placeCard, pointAt, sessionUse } from '../src/scene/card';
 import { useLanternStore } from '../src/stores/lantern';
 
 const text = n => n.textContent;
@@ -441,19 +441,31 @@ test('the card\'s dim info line ends with its session\'s CPU and RAM, in GB, and
   assert.strictEqual(find(card, 'use').length, 0, 'no processes, nothing');
 });
 
-test('a session\'s row in the usage dropdown shows its moth\'s card on hover, puts it away on leaving, and pins it open on a click', async () => {
-  const s = session();
-  live.raw = [s]; sync();
-  peekSession('s1'); await nextTick();
-  assert.strictEqual(live.hovered, sessionMoth('s1'), 'hovering the row hovers the moth');
-  assert.ok($('card').classList.contains('show') && $('card').classList.contains('compact'), 'a compact card');
-  unpeekSession();
-  assert.strictEqual(live.hovered, null, 'leaving puts it away');
-  pinSession('s1'); await nextTick();
-  assert.strictEqual(live.expanded, true, 'a click expands it, as clicking the moth does');
-  unpeekSession();
-  assert.strictEqual(live.hovered, sessionMoth('s1'), 'and leaving the row leaves a pinned card be');
-  peekSession('nobody'); // a session with no moth is quietly nothing
+// A menu row standing in for a session (bookmarks, CPU and RAM): pointing at it lights the moth in the scene and shows no card; opening
+// its card shows it in full, a moth's or a ghost's; going to the session puts the card away. One with neither on screen has no card.
+test('a menu row points at its moth without a card, opens its moth\'s or ghost\'s card in full, and going to the session puts it away', async () => {
+  live.raw = [session()]; sync();
+  pointAt('s1'); await nextTick();
+  assert.deepStrictEqual([live.spot, live.hovered], ['s1', null], 'pointing lights it in the scene, with no card');
+  pointAt(null);
+  openCard('s1'); await nextTick();
+  assert.deepStrictEqual([live.hovered, live.expanded], [sessionMoth('s1'), true], 'its card, in full, as clicking the moth does');
+  openCard('s1');
+  assert.strictEqual(live.hovered, sessionMoth('s1'), 'opening it again leaves it open (no toggling shut)');
+  goToSession('s1', true);
+  assert.deepStrictEqual([live.hovered, posts.at(-1)], [null, ['/focus', { id: 's1' }]], 'going to the session puts the card away');
+  const o = { id: 'quiet', title: 'Old', cwd: '/w/old', last: now - 9 * 864e5 }, ghost = { o, prs: [] };
+  ghost.zone = hoverZone(() => ({ ghost, zone: ghost.zone }), () => {}, 20);
+  ghosts.set('quiet', ghost);
+  try {
+    openCard('quiet');
+    assert.strictEqual(live.hovered?.ghost, ghost, 'a ghost\'s card too');
+    goToSession('quiet', false);
+    assert.deepStrictEqual(posts.at(-1), ['/resume', { id: 'quiet' }], 'and an ended one resumes');
+  } finally { ghosts.delete('quiet'); }
+  hideCard();
+  openCard('nobody');
+  assert.strictEqual(live.hovered, null, 'one with no moth or ghost has no card');
 });
 
 test('a card shown from the usage dropdown goes in the top layer after it, so it draws above it, and stays at its moth', async () => {
@@ -464,22 +476,22 @@ test('a card shown from the usage dropdown goes in the top layer after it, so it
   const layer = [];
   c.showPopover = () => { layer.push('card'); }; c.hidePopover = () => { layer.length = 0; };
   const matches = c.matches.bind(c); c.matches = sel => sel === ':popover-open' ? layer.length > 0 : matches(sel);
-  document.querySelector = (q => sel => sel === '#usage:popover-open' ? (open ? menu : null) : q.call(document, sel))(document.querySelector);
+  document.querySelector = (q => sel => sel === ':is(#usage, #bookmarks):popover-open' ? (open ? menu : null) : q.call(document, sel))(document.querySelector);
   const footer = document.querySelector('footer'); footer.getBoundingClientRect = () => ({ top: 700 }); // no layout or SVG matrices in happy-dom
   const svg = document.querySelector('svg');
   svg.getScreenCTM = () => ({ a: 1 }); svg.createSVGPoint = () => ({ matrixTransform: () => ({ x: 100, y: 200 }) });
   try {
-    peekSession('s1');
+    openCard('s1');
     assert.strictEqual(c.getAttribute('popover'), null, 'with the dropdown closed the card stays in the page');
-    unpeekSession();
+    hideCard();
     open = true;
-    peekSession('s1');
+    openCard('s1');
     assert.strictEqual(c.getAttribute('popover'), 'manual', 'with it open the card is a popover of its own');
     assert.deepStrictEqual(layer, ['card'], 'shown, after the dropdown');
     placeCard();
     const gap = sessionMoth('s1').zone.r * 0.7;
     assert.strictEqual(c.style.transform, `translate(${100 + gap}px, ${200 + gap}px)`, 'and placed at its moth\'s anchor, as ever');
-    unpeekSession();
+    hideCard();
     assert.strictEqual(c.getAttribute('popover'), null, 'putting the card away takes it out of the top layer');
   } finally { delete document.querySelector; menu.remove(); delete c.showPopover; delete c.hidePopover; delete c.matches; delete footer.getBoundingClientRect; delete svg.getScreenCTM; delete svg.createSVGPoint; }
 });
@@ -514,7 +526,7 @@ test('a session\'s CPU and RAM on its card turn yellow, orange, then red as it u
     const parts = [...find(card, 'use')[0].children];
     assert.deepStrictEqual(parts.map(p => p.className), [c, m], `${cpu}% of a core, ${mem} MB`);
     assert.ok(parts.every(p => p.querySelector('svg')), 'the icon is inside the coloured part, so it takes the colour too');
-    assert.strictEqual(parts[0].title !== '' && /^(high CPU: about|CPU )/.test(parts[0].title), true);
+    assert.strictEqual(parts[0].title !== '' && /^(high CPU: about|\d+% of all cores$)/.test(parts[0].title), true);
   }
   assert.strictEqual(find(card, 'use')[0].children[1].title, 'high RAM: 16.0 GB');
 });
@@ -547,9 +559,9 @@ test('a card\'s processes sit behind its info line: a click opens them in place,
 
 test('opening a card from the usage dropdown (a double click, or Open card) never puts away one already open', async () => {
   live.raw = [session()]; sync();
-  pinSession('s1'); await nextTick();
+  openCard('s1'); await nextTick();
   assert.deepStrictEqual([live.hovered === sessionMoth('s1'), live.expanded], [true, true], 'the moth\'s card, in full');
-  pinSession('s1'); await nextTick();
+  openCard('s1'); await nextTick();
   assert.deepStrictEqual([live.hovered === sessionMoth('s1'), live.expanded], [true, true], 'again: still open, where a click on the moth would close it');
 });
 

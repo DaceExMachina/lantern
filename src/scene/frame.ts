@@ -6,9 +6,9 @@ import { devSlider, devToggle } from '../dev';
 import { COOL, FACET_TONES, GUST, HOP, LAG, MOTH_CALL, MOTH_IDLE, MOTH_SINGED, WARM, bakeCutouts, drawHang, fakeFlame, fakeLamp, flickerFollow, hash, mix, paperBounce, paperSoft, paperWind, perchAt, seeded, style, sway, tintFor, wobble } from './lanterns';
 import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
 import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background';
-import { FIREFLY_BLOOM, FLY, addFlyLight, byUrgency, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
+import { FIREFLY_BLOOM, FLY, addFlyLight, byUrgency, dimLights, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
 import { GOLD, goldLook, stepMessages } from './messages';
-import { bloomColour, fadeAt, haloAt, stepLit, stepSpot, turnDown } from './spot';
+import { DULL, bloomColour, fadeAt, flyFadeAt, greyAt, haloAt, stepLit, stepSpot, turnDown } from './spot';
 import { drawStale, ghosts, settle } from './stale';
 import { hideCard, hoverZone, placeCard, zones } from './card';
 import type { Light } from './background';
@@ -194,7 +194,7 @@ export function frame(t: number) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) { swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); reviewZones(); }
+  if (!AMBIENT) { const n = live.flyLightN; swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); dimLights(n, flyFadeAt(0)); reviewZones(); } // half while a bookmark's hovered (spot.ts)
   stepMessages(t); // where messages' gold pulses are, for the moths and threads below
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
@@ -822,8 +822,9 @@ export function mothFireflies(m: SessionMoth, dt: number, s: number) {
     const youLinks = new Set((m.session?.forYou?.you || []).map(p => typeof p === 'string' ? undefined : p.url).filter(Boolean));
     for (const url of m.session?.created || []) if (youLinks.has(url)) want.set(url, { need: 'mention' });
   }
-  const home = stretch(m.home ?? [CX, CY]), flies = m.flies ??= new Map();
+  const home = stretch(m.home ?? [CX, CY]), flies = m.flies ??= new Map(), n = live.flyLightN;
   swarm(flies, new Map([...want].slice(0, 10)), home, [34, 55], dt);
+  dimLights(n, flyFadeAt(m.lit ?? 0)); // half while a bookmark points at another session (spot.ts)
   // while the moth is landed, a faint dotted line ties its fireflies (still at its home spot) to where it sits: from the
   // middle of the swarm straight toward its perch, along its line (perchAt), which crosses no other at rest
   if (!m.flyLine) { const box = $('flies', SVGGElement); m.flyLine = box.insertBefore(el('path', { fill: 'none', stroke: FLY.mention, 'stroke-width': 1.2, 'stroke-dasharray': '2 5', 'stroke-linecap': 'round' }), box.firstChild); }
@@ -968,26 +969,27 @@ export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt:
   const backlit = m.fold || 0;
   let wing = mix(mix(mix(mix(m.tint ?? MOTH_IDLE, MOTH_IDLE, m.plain), pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit * m.plain);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
-  // A halo's centre is the moth as drawn: its wings hinge at (-2, -6) from m.x, m.y and reach about 18 up and to the right, so
-  // their middle sits about (3, -13) off, scaled and turned with the moth. Haze only: no hot centre.
-  const spotLit = stepLit(m, m.parentId ?? m.key, dt), halo = m.parentId === undefined ? haloAt(spotLit) : 0; // a bookmark row pointing at it (spot.ts)
-  if (m.shine || halo > 0.01) {
-    const ta = (m.tilt ?? 0) * Math.PI / 180, ox = 3 * m.size, oy = -13 * m.size, hx = m.x + ox * Math.cos(ta) - oy * Math.sin(ta), hy = m.y + ox * Math.sin(ta) + oy * Math.cos(ta);
-    if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
-      wing = mix(wing, GOLD, goldLook.tint * m.shine);
-      addFlyLight(hx, hy, FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
-    }
-    if (halo > 0.01) addFlyLight(hx, hy, FIREFLY_BLOOM * 2.2, -halo, bloomColour(m.tint ?? MOTH_IDLE)); // in its own colour, deepened so it isn't washed white
+  // A point (ox, oy) on the moth as drawn, scaled and turned with it: its wings hinge at (-2, -6) from m.x, m.y and reach about
+  // 18 up and to the right, so their middle sits about (3, -13) off. Halos are haze only: no hot centre.
+  const ta = (m.tilt ?? 0) * Math.PI / 180, on = (ox: number, oy: number): Point => [m.x + m.size * (ox * Math.cos(ta) - oy * Math.sin(ta)), m.y + m.size * (ox * Math.sin(ta) + oy * Math.cos(ta))];
+  if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo round the wings' middle
+    wing = mix(wing, GOLD, goldLook.tint * m.shine);
+    addFlyLight(...on(3, -13), FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
   }
+  // a bookmark row pointing at it (spot.ts): a bloom in the colour it shows, centred where its wings meet
+  const spotLit = stepLit(m, m.parentId ?? m.key, dt), halo = m.parentId === undefined ? haloAt(spotLit) : 0;
+  if (halo > 0.01) addFlyLight(...on(-2, -6), FIREFLY_BLOOM * 2.2, -halo, bloomColour(wing));
+  const grey = greyAt(spotLit); // pointing at another session dulls it (spot.ts), and fades it as a whole below
+  if (grey) wing = mix(wing, DULL, grey);
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
-  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit), fade = fadeAt(spotLit).toFixed(2);
+  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
   for (const [path, pts] of [[m.back, far], [m.front, near]] as const) {
     const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
     if (path.style.fill !== tone) path.style.fill = tone;
-    put(path, 'fill-opacity', fade);
   }
+  put(m.back.parentElement, 'opacity', fadeAt(spotLit).toFixed(2)); // the wings' group, so one wing doesn't show through the other
   const st = m.g.style;
   st.setProperty('--wing', wing);
 }

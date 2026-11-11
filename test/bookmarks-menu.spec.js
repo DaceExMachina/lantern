@@ -5,6 +5,7 @@ import { createPinia } from 'pinia';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import BookmarksMenu from '../src/components/BookmarksMenu.vue';
 import { live } from '../src/scene/live';
+import { sync } from '../src/scene/state';
 import { useLanternStore } from '../src/stores/lantern';
 
 const posts = [];
@@ -29,12 +30,20 @@ test('it lists the bookmarks, most recently active first, a running one as it is
   w.unmount();
 });
 
-test('a click brings a running session to the front and resumes an ended one; the cross removes a bookmark', async () => {
+test('a click opens the moth\'s card, a double click or Enter brings a running session to the front and resumes an ended one; the cross removes a bookmark', async () => {
   const { w, store } = await mounted();
-  const [live, ended] = w.findAll('#bookmarks .go');
-  await live.trigger('click');
+  live.raw = [{ id: A, title: 'live title', cwd: '/w/alpha', state: 'working', subagents: [] }]; sync(); // A's moth (B has none, nor a ghost)
+  const [running, ended] = w.findAll('#bookmarks .go');
+  await running.trigger('click');
+  expect([live.hovered?.key, live.expanded]).toEqual([A, true]); // its card, in full
   await ended.trigger('click');
-  expect(posts).toEqual([['/focus', { id: A }], ['/resume', { id: B }]]);
+  expect([live.hovered?.key, posts]).toEqual([A, []]); // no moth or ghost: no card, and nothing goes anywhere on a click
+  await running.trigger('dblclick');
+  expect(live.hovered).toBe(null); // the card the first click opened goes with the double click
+  await ended.trigger('dblclick');
+  await running.trigger('keydown', { key: 'Enter' });
+  expect(posts).toEqual([['/focus', { id: A }], ['/resume', { id: B }], ['/focus', { id: A }]]);
+  live.raw = []; sync();
   await w.findAll('#bookmarks .rm')[1].trigger('click');
   expect(posts.at(-1)).toEqual(['/settings', { bookmarks: [A] }]);
   expect(store.bookmarks.map(b => b.id)).toEqual([A]);

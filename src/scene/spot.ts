@@ -1,7 +1,8 @@
 // Pointing at a session from the bookmarks dropdown (BookmarksMenu sets live.spot while a row is hovered or focused) shows
-// which moth or ghost moth it is: the flame is turned right down, well below the idle ember, so the lantern, its light and
-// the paper go dark with it; the other moths and ghosts fade; and the one pointed at keeps its look in a bloom of its own
-// colour. The fireflies stay as they are, so they and it read against the dark. The knobs are the dev panel's, under
+// which moth or ghost moth it is: the flame is turned down to the idle ember (the slider goes lower, to out), so the lantern, its light and
+// the paper go dark with it; the other moths dull toward grey and fade, each as a whole (ghosts fade); every other light
+// that flies (fireflies, the lamp's review fireflies, wisps) drops to half; and the one pointed at keeps its look, its own
+// fireflies included, in a bloom of the colour it shows. The knobs are the dev panel's, under
 // Bookmarks. Everything eases in and out: `on` for the scene as a whole, and each moth's or ghost's own `lit` toward
 // whether it's the one, so moving from row to row hands the light over smoothly.
 // Per frame this is a few multiplies per moth; the DOM only changes while something is easing (frame.ts put skips the rest).
@@ -11,9 +12,10 @@ import { hex } from './lanterns';
 import { devSlider } from '../dev';
 
 export const spotLook = {
-  flame: devSlider('Bookmarks', 'bmflame', 'flame', 0, 0.3, 0.01, 0.06, 'How big the flame burns while a bookmark is hovered, the lantern\'s light and paper following it (0.3 is the idle ember; 0 is out)', v => { spotLook.flame = v; }),
-  dim: devSlider('Bookmarks', 'bmdim', 'dim the rest', 0, 1, 0.05, 0.6, 'How far the other moths and ghosts fade', v => { spotLook.dim = v; }),
-  halo: devSlider('Bookmarks', 'bmhalo', 'bloom', 0, 1, 0.05, 0.6, 'How bright the bloom of its own colour round the bookmarked moth or ghost is', v => { spotLook.halo = v; }),
+  flame: devSlider('Bookmarks', 'bmflame', 'flame', 0, 0.3, 0.01, 0.3, 'How big the flame burns while a bookmark is hovered, the lantern\'s light and paper following it (0.3 is the idle ember; 0 is out)', v => { spotLook.flame = v; }),
+  grey: devSlider('Bookmarks', 'bmgrey', 'grey the rest', 0, 1, 0.05, 0.7, 'How far the other moths dull toward grey', v => { spotLook.grey = v; }),
+  fade: devSlider('Bookmarks', 'bmfade', 'fade the rest', 0, 1, 0.05, 0.4, 'How see-through the other moths, their threads and the ghosts go (each moth as a whole)', v => { spotLook.fade = v; }),
+  halo: devSlider('Bookmarks', 'bmhalo', 'bloom', 0, 1, 0.05, 0.3, 'How bright the bloom of its own colour round the bookmarked moth or ghost is', v => { spotLook.halo = v; }),
 };
 
 const EASE = 5; // a little under half a second to come in or go
@@ -39,17 +41,19 @@ export function stepLit(o: { lit?: number }, id: string, dt: number) {
 }
 /** How bright its bloom is, 0 to 1, at that `lit`. */
 export const haloAt = (lit: number) => lit * spotLook.halo;
-/** What its opacity is multiplied by: the rest fade as the highlight comes in, the one pointed at doesn't (nor as both fade out). */
-export const fadeAt = (lit: number) => 1 - spotLook.dim * Math.max(0, on - lit);
-// A colour deepened the way the fireflies' haze is (background.ts FLIES): the pale wing tints added as light wash out to
-// white, so their bloom pushes each channel away from the brightest. Worked out once per colour.
-const deepened = new Map<string, string>();
+// How far a moth or ghost at that `lit` is set back: the rest as the highlight comes in, not the one pointed at (nor as both fade out)
+const back = (lit: number) => Math.max(0, on - lit);
+/** What its opacity is multiplied by. */
+export const fadeAt = (lit: number) => 1 - spotLook.fade * back(lit);
+/** How far its colour dulls toward DULL. */
+export const greyAt = (lit: number) => spotLook.grey * back(lit);
+export const DULL = '#6E6878'; // a dull grey, between the night and the idle moths' pale
+/** What a light that flies is multiplied by: half, unless it's the one pointed at's (`lit`; 0 for one that's nobody's). */
+export const flyFadeAt = (lit: number) => 1 - 0.5 * back(lit);
+// The bloom's colour from the colour a moth shows (a snoozed one's paler, a landed one's silhouette and all): brought up to full
+// brightness, since light that dark adds nothing, then deepened the way the fireflies' haze is (background.ts FLIES), so a pale
+// tint doesn't wash out to white. Only the one pointed at asks, once a frame.
 export function bloomColour(col: string) {
-  let d = deepened.get(col);
-  if (!d) {
-    const v = hex(col), m = Math.max(...v);
-    d = '#' + v.map(x => Math.round(Math.max(0, m - (m - x) * 1.8)).toString(16).padStart(2, '0')).join('');
-    deepened.set(col, d);
-  }
-  return d;
+  const v = hex(col), m = Math.max(1, ...v);
+  return '#' + v.map(x => Math.round(Math.max(0, 255 - (255 - x * 255 / m) * 1.8)).toString(16).padStart(2, '0')).join('');
 }

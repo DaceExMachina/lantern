@@ -6,8 +6,10 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 beforeEach(() => localStorage.removeItem('lantern-usage-sort')); // the sort pick is kept per viewer, so no test inherits another's
 import { tintFor } from '../src/scene/lanterns';
-vi.mock('../src/scene/card', async orig => ({ ...await orig(), peekSession: vi.fn(), unpeekSession: vi.fn(), pinSession: vi.fn(), openSession: vi.fn() }));
+vi.mock('../src/scene/card', async orig => ({ ...await orig(), pointAt: vi.fn(), openCard: vi.fn(), openSession: vi.fn() }));
 import * as card from '../src/scene/card';
+// how many times a row pointed the scene at a moth (pointAt with an id; leaving points at nothing)
+const pointed = () => card.pointAt.mock.calls.filter(([id]) => id !== null).length;
 import UsageMenu from '../src/components/UsageMenu.vue';
 import { useLanternStore } from '../src/stores/lantern';
 
@@ -36,7 +38,7 @@ test('it shows nothing until a sample comes, then the Mac meters (no Lantern) an
   await w.vm.$nextTick();
   expect(w.find('#usageButton').text()).toBe('42%12.0 GB'); // icons and numbers, no words, nothing of Lantern's own
   expect(w.find('#usageButton').classes()).toContain('warning'); // memory pressure
-  expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of the Mac', '12.0of 32 GB']);
+  expect(w.findAll('#usage .big').map(b => b.text())).toEqual(['42%of all cores', '12.0of 32 GB']);
   expect(w.findAll('#usage .kh > *').map(s => s.text())).toEqual(['Session', 'CPU', 'MEM']);
   expect(w.findAll('#usage .krow').map(r => r.text())).toEqual(['busy28%2.0 GB', 'quiet one0%0.9 GB', 'everything else13%8.8 GB', 'Lantern1%0.3 GB']); // in GB, as the processes are; busiest first, a session with no processes left out, then the rest of the Mac, then Lantern's own use apart
   store.settings = { ...store.settings, systemStats: false };
@@ -104,13 +106,13 @@ test('a session row is a button that stands in for its moth; Lantern and everyth
   const rows = w.findAll('#usage .krow');
   expect(rows.map(r => r.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON']); // busy, quiet one, everything else, Lantern (whose processes open, but there's no card)
   await rows[0].trigger('pointerenter');
-  expect(card.peekSession).toHaveBeenCalledWith('b');
+  expect(card.pointAt).toHaveBeenCalledWith('b');
   await rows[0].trigger('pointerleave');
-  expect(card.unpeekSession).toHaveBeenCalledTimes(1);
+  expect(card.pointAt).toHaveBeenLastCalledWith(null);
   await rows[1].trigger('focus');
-  expect(card.peekSession).toHaveBeenLastCalledWith('a');
+  expect(card.pointAt).toHaveBeenLastCalledWith('a');
   await rows[2].trigger('pointerenter'); await rows[3].trigger('pointerenter'); // everything else, Lantern: highlight only
-  expect(card.peekSession).toHaveBeenCalledTimes(2);
+  expect(pointed()).toBe(2);
   w.unmount();
 });
 
@@ -124,29 +126,30 @@ test('a click opens a session\'s processes under its row, in the dropdown, one r
   expect(krow('busy').attributes('aria-expanded')).toBe('true');
   expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['vitest', '×3', '25%', '1.5 GB'], ['claude', '', '3%', '0.5 GB'], ['zsh', '', '0%', '<0.1 GB']]);
   expect(w.findAll('#usage .acts button').map(b => b.text())).toEqual(['Open card', 'Go to session']);
-  expect([card.pinSession, card.openSession, hide].map(f => f.mock.calls.length)).toEqual([0, 0, 0]); // no card held, the dropdown stays
+  expect(w.findAll('#usage .acts button').map(b => b.find('svg').classes().join() || b.find('.go').exists())).toEqual(['moth', true]); // a moth before Open card, the cards' arrow before Go to session
+  expect([card.openCard, card.openSession, hide].map(f => f.mock.calls.length)).toEqual([0, 0, 0]); // no card held, the dropdown stays
   await krow('quiet one').trigger('click');
   expect(key()).toEqual(['SessionCPUMEM', 'busy', 'quiet one', 'detail', 'everything else', '', 'Lantern']); // another row: it opens and the first closes
   await krow('quiet one').trigger('click');
   expect(w.findAll('#usage .sd')).toHaveLength(0); // its second click closes it
   await krow('busy').trigger('click');
   await w.find('#usage .acts button').trigger('click');
-  expect(card.pinSession).toHaveBeenLastCalledWith('b'); // Open card
+  expect(card.openCard).toHaveBeenLastCalledWith('b'); // Open card
   expect(hide).toHaveBeenCalledTimes(1);
   await w.findAll('#usage .acts button')[1].trigger('click');
   expect(card.openSession).toHaveBeenLastCalledWith('b', false); // Go to session
   expect(hide).toHaveBeenCalledTimes(2);
-  // hovering the open row's processes (busy's, still open) counts as hovering its row: the moth's card stays up, and goes once the pointer leaves them
-  card.peekSession.mockClear(); card.unpeekSession.mockClear();
+  // hovering the open row's processes (busy's, still open) counts as hovering its row: its moth stays lit, and lets go once the pointer leaves them
+  card.pointAt.mockClear();
   await krow('busy').trigger('pointerenter'); await krow('busy').trigger('pointerleave');
   await w.find('#usage .sd').trigger('pointerenter');
-  expect(card.peekSession).toHaveBeenLastCalledWith('b'); // back on the card it just left
-  expect(card.peekSession).toHaveBeenCalledTimes(2);
+  expect(card.pointAt).toHaveBeenLastCalledWith('b'); // back on the moth it just left
+  expect(pointed()).toBe(2);
   await w.find('#usage .sd').trigger('pointerleave');
-  expect(card.unpeekSession).toHaveBeenCalledTimes(2);
+  expect(card.pointAt).toHaveBeenLastCalledWith(null);
   await krow('busy').trigger('click');
   await krow('quiet one').trigger('dblclick');
-  expect(card.pinSession).toHaveBeenLastCalledWith('a'); // a double click: the card in full
+  expect(card.openCard).toHaveBeenLastCalledWith('a'); // a double click: the card in full
   expect(hide).toHaveBeenCalledTimes(3);
   w.unmount();
 });
@@ -166,24 +169,24 @@ test('each row has a CPU bar with a RAM bar right under it, scaled like the Mac\
   w.unmount();
 });
 
-test('Lantern\'s row opens its processes like a session\'s, with no card to open and no peeking at a moth', async () => {
+test('Lantern\'s row opens its processes like a session\'s, with no card to open and no pointing at a moth', async () => {
   const { w } = await mounted();
-  card.peekSession.mockClear();
+  card.pointAt.mockClear();
   const row = () => w.findAll('#usage .krow').find(r => r.text().startsWith('Lantern'));
   await row().trigger('pointerenter');
   await row().trigger('click');
   expect(row().attributes('aria-expanded')).toBe('true');
   expect(w.findAll('#usage .proc').map(r => r.findAll('span').map(c => c.text()))).toEqual([['WebKit GPU', '', '1%', '0.1 GB'], ['Lantern', '×3', '0%', '0.2 GB']]);
   expect(w.findAll('#usage .acts')).toHaveLength(0);
-  expect(card.peekSession).not.toHaveBeenCalled();
+  expect(pointed()).toBe(0);
   await row().trigger('dblclick');
-  expect(card.pinSession).not.toHaveBeenCalled();
+  expect(card.openCard).not.toHaveBeenCalled();
   w.unmount();
 });
 
-test('everything else opens its processes like Lantern\'s, with no card to open and no peeking at a moth', async () => {
+test('everything else opens its processes like Lantern\'s, with no card to open and no pointing at a moth', async () => {
   const { w } = await mounted();
-  card.peekSession.mockClear(); card.pinSession.mockClear();
+  card.pointAt.mockClear(); card.openCard.mockClear();
   const row = () => w.findAll('#usage .krow').find(r => r.text().startsWith('everything else'));
   await row().trigger('pointerenter');
   await row().trigger('click');
@@ -197,7 +200,7 @@ test('everything else opens its processes like Lantern\'s, with no card to open 
   expect(w.findAll('#usage .proc').find(r => r.text().startsWith('macOS')).find('.pn').attributes('title')).toMatch(/kernel, the GPU and compressed memory.*can't read/);
   expect(w.findAll('#usage .acts')).toHaveLength(0);
   await row().trigger('dblclick');
-  expect([card.peekSession, card.pinSession].map(f => f.mock.calls.length)).toEqual([0, 0]);
+  expect([pointed(), card.openCard.mock.calls.length]).toEqual([0, 0]);
   await row().trigger('click');
   expect(w.findAll('#usage .sd')).toHaveLength(0);
   w.unmount();
@@ -268,26 +271,26 @@ test('the CPU and MEM headers pick the sort key: sessions and the open processes
   again.w.unmount();
 });
 
-test('a session segment in the bars behaves like its row: a button that peeks, opens its processes and, double clicked, opens the card; everything else and Lantern are highlight only', async () => {
+test('a session segment in the bars behaves like its row: a button that points at its moth, opens its processes and, double clicked, opens the card; everything else and Lantern are highlight only', async () => {
   vi.clearAllMocks();
   const { w } = await mounted();
   const segs = w.findAll('#usage .bar')[0].findAll(':scope > *');
   expect(segs.map(s => s.element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON', 'BUTTON']); // busy, quiet one, everything else, Lantern (their processes open, they have no moth)
   const hide = w.find('#usage').element.hidePopover = vi.fn();
   await segs[0].trigger('pointerenter');
-  expect(card.peekSession).toHaveBeenCalledWith('b');
+  expect(card.pointAt).toHaveBeenCalledWith('b');
   await segs[0].trigger('pointerleave');
-  expect(card.unpeekSession).toHaveBeenCalledTimes(1);
+  expect(card.pointAt).toHaveBeenLastCalledWith(null);
   await w.findAll('#usage .bar')[1].findAll(':scope > *')[1].trigger('focus'); // quiet one's RAM segment
-  expect(card.peekSession).toHaveBeenLastCalledWith('a');
+  expect(card.pointAt).toHaveBeenLastCalledWith('a');
   await segs[2].trigger('pointerenter'); await segs[3].trigger('pointerenter'); // everything else, Lantern
-  expect(card.peekSession).toHaveBeenCalledTimes(2);
+  expect(pointed()).toBe(2);
   await segs[0].trigger('click');
   expect(w.findAll('#usage .sd')).toHaveLength(1); // its row's processes open
   expect(w.find('#usage .krow[aria-expanded="true"]').text()).toContain('busy');
-  expect(card.pinSession).not.toHaveBeenCalled();
+  expect(card.openCard).not.toHaveBeenCalled();
   await segs[0].trigger('dblclick');
-  expect(card.pinSession).toHaveBeenCalledWith('b');
+  expect(card.openCard).toHaveBeenCalledWith('b');
   expect(hide).toHaveBeenCalledTimes(1);
   w.unmount();
 });

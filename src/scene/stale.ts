@@ -13,7 +13,7 @@ import { FIREFLY_BLOOM, addFlyLight, flyColour } from './fireflies';
 import { put } from './frame';
 import { hoverZone, zones } from './card';
 import { sessionMoth } from './state';
-import { bloomColour, fadeAt, haloAt, stepLit } from './spot';
+import { bloomColour, fadeAt, flyFadeAt, haloAt, stepLit } from './spot';
 import type { Drifter, Ghost, GhostTarget, Owner, Point, StalePR, StaleTarget, Wisp } from '../types';
 
 const STALE_MAX = 30;
@@ -160,7 +160,7 @@ export function drawStale(dt: number, s: number) {
     const k = 1 - m.back * 0.3, at = ([x, y]: Point): Point => [m.x + (x - 2) * k, m.y + (y - 6) * k]; // the wings sit 2 left of and 6 above the moth's position
     // a bookmark row pointing at it (spot.ts) brings it forward in a pale halo, its wings more solid; pointing elsewhere fades it
     const lit = stepLit(m, id, dt), halo = haloAt(lit), alpha = 0.14 * (1 - m.back * 0.5) * fadeAt(lit) + 0.3 * halo;
-    if (show && m.out < 1 && halo > 0.01) addFlyLight(m.x + 3 * k, m.y - 13 * k, FIREFLY_BLOOM * 2.2, -halo, bloomColour(WISP_TINT)); // the wings' middle, as a moth's bloom
+    if (show && m.out < 1 && halo > 0.01) addFlyLight(...at([0, 0]), FIREFLY_BLOOM * 2.2, -halo, bloomColour(WISP_TINT)); // centred where its wings meet, as a moth's bloom
     if (show && m.out < 1) { addGhostWing(flapWing(WING_SIDE, liftAt(0.18), sweep, roll), at, alpha); addGhostWing(flapWing(WING_UP, liftAt(0), sweep, roll), at, alpha); }
     Object.assign(m.zone, { x: m.x, y: m.y, off: !show || m.out > 0 });
   }
@@ -186,7 +186,7 @@ export function drawStale(dt: number, s: number) {
     // a faint steady glow, and now and then a slow brightening
     const spark = Math.max(0, Math.sin(now * 6.283 / d.period + d.ph)) ** 8;
     const lit = 0.18 + 0.32 * Math.min(1, spark + (d.gone !== undefined ? 1 - d.gone : 0));
-    if (show) addFlyLight(x, y, 40, lit * fade, pale); // drawn as light by the background shader, like the fireflies
+    if (show) addFlyLight(x, y, 40, lit * fade * flyFadeAt(moth?.lit ?? 0), pale); // drawn as light by the background shader, like the fireflies; half while a bookmark points elsewhere (spot.ts)
     Object.assign(d.zone, { x, y, off: !show || d.gone !== undefined || !!moth?.out });
   }
   // the overflow: everything past 30 as a faint cloud low on the right, with a count

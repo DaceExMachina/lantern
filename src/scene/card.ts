@@ -2,8 +2,9 @@
 
 import { heatOf, heatTip } from './heat';
 import { chrome, live } from './live';
-import { $, titlebar } from './scene';
+import { $, post, titlebar } from './scene';
 import { sessionMoth } from './state';
+import { ghosts } from './stale';
 import type { Agent, CardAt, Hovered, Opt, PR, ProcGroup, Session, Usage, UsageGroup, Zone } from '../types';
 
 // ---- hover card ------------------------------------------------------------------
@@ -73,8 +74,8 @@ export function zoneAt(zones: Iterable<Zone>, x: number, y: number) {
 function paint() {
   chrome.update();
   const c = $('card');
-  // while the usage dropdown (a popover, so in the top layer) is open the card goes in the top layer too, shown after it, which puts it above
-  if (document.querySelector('#usage:popover-open')) { c.popover = 'manual'; if (c.matches(':popover-open')) c.hidePopover(); c.showPopover(); }
+  // while the usage or bookmarks dropdown (a popover, so in the top layer) is open the card goes in the top layer too, shown after it, which puts it above
+  if (document.querySelector(':is(#usage, #bookmarks):popover-open')) { c.popover = 'manual'; if (c.matches(':popover-open')) c.hidePopover(); c.showPopover(); }
   c.classList.add('show');
   c.classList.toggle('compact', !live.expanded);
 }
@@ -99,12 +100,17 @@ export function hideCard() { live.hovered = held = shown = null; live.expanded =
 // The card's header opens its session (shift-click snoozes, as shift-click on the moth does), and its pill does what a
 // right-click on the moth does (its `menu`, state.ts): snooze, then wake.
 export function openSession(id: string, shift: boolean) { const m = sessionMoth(id); if (m) clickZone(m.zone, shift); }
-// The usage dropdown's session rows stand in for the moth: hovering or focusing one shows the moth's card (compact, a tooltip), leaving puts it away unless
-// it was clicked open. A click opens the session's processes in the dropdown itself (UsageMenu.vue); a double click, or the processes' Open card,
-// expands the card (pinSession), which never puts it away, so a card already open stays open.
-export function peekSession(id: string) { const m = sessionMoth(id); if (m) enterZone(m.zone); }
-export function unpeekSession() { if (!live.expanded) hideCard(); }
-export function pinSession(id: string) { const m = sessionMoth(id); if (m) { enterZone(m.zone); live.expanded = true; paint(); } }
+// A menu row standing in for a session (the bookmarks and the CPU and RAM dropdowns, BookmarksMenu.vue and UsageMenu.vue) works the
+// same way in both: hovering or focusing it points the scene at its moth or ghost (pointAt, spot.ts), a click opens that one's card in
+// full as a click on it does (openCard, which never toggles it shut, so one already open stays open), and a double click or Enter goes
+// to the session (goToSession), putting the card away. One with neither on screen has no card, so its click does nothing.
+export const pointAt = (id: string | null) => { live.spot = id; };
+export function openCard(id: string) {
+  const z = sessionMoth(id)?.zone ?? ghosts.get(id)?.zone;
+  if (z && !z.off) { enterZone(z); live.expanded = true; paint(); }
+}
+/** A running session comes to the front, as its moth's double click does; an ended one resumes in a new iTerm2 tab, as its ghost's does. */
+export function goToSession(id: string, running: boolean) { hideCard(); post(running ? '/focus' : '/resume', { id }); }
 export function cycleSnooze(id: string) { sessionMoth(id)?.zone.menu?.(); }
 
 // What a session's rows show, for the card (SessionCard.vue) and the sidebar (PinnedDock.vue) alike.
