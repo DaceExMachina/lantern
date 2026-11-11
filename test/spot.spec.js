@@ -1,6 +1,5 @@
-// Hovering a bookmark lights its moth (src/scene/spot.ts): a halo round it, the other moths and their threads dimmed, all
-// easing back once the row lets go. A bookmark with no moth or ghost on screen changes nothing. In spotlight the lantern's
-// drawing and flame darken too.
+// Hovering a bookmark lights its moth (src/scene/spot.ts): the flame turned right down with the light and paper, the other
+// moths and their threads dimmed, all easing back once the row lets go. A bookmark with no moth or ghost on screen changes nothing.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
 import { layOut } from './page.js';
@@ -41,14 +40,18 @@ test('a bookmark whose session has no moth or ghost on screen dims nothing', asy
   assert.deepStrictEqual([look(live, 'api'), look(live, 'blog')], [{ wings: [1, 1], thread: 1 }, { wings: [1, 1], thread: 1 }]);
 });
 
-test('in spotlight the lantern\'s drawing and flame darken while it\'s pointed at, and light again after', async () => {
+test('pointing at a bookmark turns the flame right down, below the idle ember, the paper and light with it, then back up', async () => {
   const { live, spot, play } = await load();
-  spot.spotLook.style = 'spotlight';
-  const layers = ['lanternBack', 'pagesInk', 'flame', 'lanternLayer'].map(id => document.getElementById(id));
+  const paper = () => ({ glow: Number(document.getElementById('paperGlow').getAttribute('opacity')), tint: document.getElementById('paperTint').getAttribute('fill') });
+  const before = paper();
   live.spot = 'api';
   play(1.5);
-  for (const e of layers) assert.match(e.style.filter, /^brightness\(0\.[0-9]+\)$/, `${e.id} darkened`);
+  const down = paper();
+  // the idle ember's paper glow is (0.3 + 0.7 * 0.3) * flick * pulse, about 0.5; turned down it's well under that
+  assert.ok(down.glow < 0.1 && down.glow < before.glow / 5, `the paper's glow drops below the ember's: ${before.glow} to ${down.glow}`);
+  assert.notStrictEqual(down.tint, before.tint, 'and the paper goes dark');
   live.spot = null;
   play(4);
-  assert.deepStrictEqual(layers.map(e => e.style.filter), ['', '', '', ''], 'lit again, filter gone');
+  assert.ok(Math.abs(paper().glow - before.glow) < 0.15 && paper().tint === before.tint, `and back up: ${JSON.stringify(paper())} after ${JSON.stringify(before)}`);
+  assert.strictEqual(spot.turnDown(0.7).by, 1, 'nothing turned down once it has let go');
 });
