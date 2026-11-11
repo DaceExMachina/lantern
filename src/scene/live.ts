@@ -13,7 +13,7 @@ interface Live {
   recapSeen: string | null;
   moths: Map<string, Moth>; hovered: Hovered | null; expanded: boolean; hideTimer: ReturnType<typeof setTimeout> | undefined;
   tally: Stats['tally']; pinnedBadge: string | null; cdLeaves: Leaf[] | null; farWall: HTMLCanvasElement | null;
-  flyLightN: number; ghostWingN: number; brisk: boolean;
+  flyLightN: number; ghostWingN: number; brisk: boolean; spot: string | null;
 }
 
 export const live: Live = {
@@ -45,6 +45,7 @@ export const live: Live = {
   // whether this frame drew something moving fast (a moth's wings in flight, a firefly flying in or off), which wants the
   // display's full frame rate (frame.ts frameDue); frame() clears it
   brisk: false,
+  spot: null, // the session a bookmark row is pointing at, while it's hovered or focused (BookmarksMenu, spot.ts)
 };
 
 // The chrome's view of the scene: src/main.ts points `update` at the Pinia store, which it copies the sessions, the card's

@@ -8,7 +8,8 @@ import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
 import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background';
 import { FIREFLY_BLOOM, FLY, addFlyLight, byUrgency, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
 import { GOLD, goldLook, stepMessages } from './messages';
-import { drawStale, settle } from './stale';
+import { bloomColour, fadeAt, haloAt, stepLit, stepSpot, turnDown } from './spot';
+import { drawStale, ghosts, settle } from './stale';
 import { hideCard, hoverZone, placeCard, zones } from './card';
 import type { Light } from './background';
 import type { FlyState, Moth, Point, ReviewTarget, Scorch, SessionMoth, Style, Vec3 } from '../types';
@@ -181,7 +182,10 @@ export function frame(t: number) {
   cool += ((calling ? 1 : 0) - cool) * dt * 2;
   // the flame's size (ember-small when idle) and its slow violet pulse (its flicker comes from its own height, stepFlame) while someone needs me
   swingLantern(elapsed, s);
-  const flame = stepFlame(dt, s, { size: 0.3 + 0.7 * Math.max(level, cool * 0.45), pulse: 1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4)) });
+  // a bookmark row pointing at a moth or ghost (spot.ts) turns the flame down, below the ember, and the light with it
+  stepSpot(dt, !!live.spot && (!!sessionMoth(live.spot) || live.staleOn && !AMBIENT && ghosts.has(live.spot)));
+  const turned = turnDown(0.3 + 0.7 * Math.max(level, cool * 0.45));
+  const flame = stepFlame(dt, s, { size: turned.size, pulse: (1 - 0.3 * cool * (0.5 + 0.5 * Math.sin(s * 2.4))) * turned.by, turned: turned.by });
   // the outer tongue in the scene, for scorched moths to aim at: its middle, half its widest (0.72 of its 34, background.ts
   // tongue) and its height
   tongue = style.scorches ? { cx: (flame.base[0] + flame.tip[0]) / 2, half: 0.72 * 34 * flame.size * style.flame[2], height: flame.base[1] - flame.tip[1] } : null;
@@ -309,7 +313,10 @@ export const feelAt = (size: number): Record<keyof typeof FEEL, number> => {
 const bent = (i: number) => (i / CHAIN) ** 1.6;
 export const flameChain: { pts: { x: number, y: number, vx: number, vy: number }[], bx: number, by: number, bvx: number, bvy: number, style: Style | null } = { pts: [], bx: 0, by: 0, bvx: 0, bvy: 0, style: null };
 /** How the flame burns this frame (frame), and with stepFlame its flicker, base and tip in the scene, spine, turbulence, tearing and blue root. */
-interface Burn { size: number; pulse: number }
+interface Burn {
+  size: number; pulse: number;
+  turned?: number; // how far it's turned down, 1 as it burns by itself (spot.ts turnDown): what lights up with no flame to speak of goes with it
+}
 export interface Flame extends Burn {
   flick: number; base: Point; tip: Point; spine: number[]; tear: number; turb: number;
   blue: [x: number, y: number, rx: number, ry: number, alpha: number];
@@ -392,13 +399,17 @@ export function drawSparks(dt: number, s: number, { size, tip }: Flame) {
   });
 }
 
-// the lit paper, tinting with the flame
-function lightPaper({ size, flick, pulse }: Flame) {
+// the lit paper, tinting with the flame. Unlit (the flame turned right down), paper is this dark, nearly covered by it
+const UNLIT = '#1A1626', UNLIT_A = 0.93;
+let sheenAt = 1;
+function lightPaper({ size, flick, pulse, turned = 1 }: Flame) {
   document.querySelectorAll('.paperStop').forEach(n => put(n, 'stop-color', pal('paper')));
   put(byId('paperGlow', SVGElement), 'opacity', ((0.3 + 0.7 * size) * flick * pulse).toFixed(3));
-  // the paper takes on the flame's colour, more so the brighter it burns
-  put(byId('paperTint', SVGElement), 'fill', pal('paper'));
-  put(byId('paperTint', SVGElement), 'opacity', ((0.25 + 0.45 * size) * flick * pulse).toFixed(3));
+  // the paper takes on the flame's colour, more so the brighter it burns; turned down (spot.ts), it goes dark with no light behind it
+  const lit = (0.25 + 0.45 * size) * flick * pulse;
+  put(byId('paperTint', SVGElement), 'fill', turned < 1 ? mix(UNLIT, pal('paper'), turned) : pal('paper'));
+  put(byId('paperTint', SVGElement), 'opacity', (lit + (UNLIT_A - lit) * (1 - turned)).toFixed(3));
+  if (turned !== sheenAt) { sheenAt = turned; document.querySelectorAll('.paperSheen').forEach(n => put(n, 'fill-opacity', turned.toFixed(3))); } // the paper's pale sheen over it all goes too (looked up only while that changes)
   // where a lantern's caps face the paper, they catch the flame's light
   document.querySelectorAll('.paperLit').forEach(n => { put(n, 'color', pal('paper')); put(n, 'opacity', ((0.35 + 0.55 * size) * flick * pulse).toFixed(3)); });
 }
@@ -548,7 +559,7 @@ export function drawLeaves(s: number) {
 
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
 // dust, and the moths' shadows.
-export function drawLight(dt: number, s: number, { size, flick, pulse, base, tip, spine, turb, tear, blue }: Flame) {
+export function drawLight(dt: number, s: number, { size, flick, pulse, turned = 1, base, tip, spine, turb, tear, blue }: Flame) {
   const [gx, gy] = lightAt();
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
@@ -566,14 +577,14 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, base, tip
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18, [wx, wy] = blow(p, 14);
     const x = gx + wx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, y = gy + wy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6;
     dustData.set([x, y - liftDust(p, x, y, dt), p.r,
-      (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph))], i * 4); // no fading with ?dustdebug
+      (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph)) * turned], i * 4); // no fading with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22, [wx, wy] = blow(p, 16);
     const x = CX + wx + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, y = CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + wy + Math.cos(s * 0.45 + p.ph) * 10;
     dustData.set([x, y - liftDust(p, x, y, dt), p.r,
-      (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (dust.length + i) * 4);
+      (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph) * turned], (dust.length + i) * 4);
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
   const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
@@ -584,7 +595,7 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, base, tip
   const casters = AMBIENT ? [] : [...live.moths.values()].flatMap(m => m.shade ? [m.shade] : []);
   const holder = style.holder;
   drawBackground({
-    ringC: style.stands ? [gx, gy] : rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim,
+    ringC: style.stands ? [gx, gy] : rot(340, 330), ringR, ringA: (0.55 + 0.45 * Math.max(level, cool * 0.5)) * dim * turned,
     ringCol: [0, 1, 2].map(i => mix(nth(WARM.rings, i), nth(COOL.rings, i), cool)),
     // on a second display the glow centres on the lantern's light off its edge (it's only drawn there as the dust's light)
     glowC: remote ? remote.c : [gx, gy], glowR: (150 + 90 * level + 25 * cool + 14 * breathe) * (remote ? remote.scale : 1), glowA: (0.12 + 0.45 * Math.max(level, cool * 0.6)) * flick * pulse * dim, glowCol: pal('glow'),
@@ -957,20 +968,25 @@ export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt:
   const backlit = m.fold || 0;
   let wing = mix(mix(mix(mix(m.tint ?? MOTH_IDLE, MOTH_IDLE, m.plain), pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit * m.plain);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
-  if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
-    wing = mix(wing, GOLD, goldLook.tint * m.shine);
-    // centred on the moth as drawn: its wings hinge at (-2, -6) from m.x, m.y and reach about 18 up and to the right, so
-    // their middle sits about (3, -13) off, scaled and turned with the moth. Haze only: no hot centre.
-    const a = (m.tilt ?? 0) * Math.PI / 180, ox = 3 * m.size, oy = -13 * m.size;
-    addFlyLight(m.x + ox * Math.cos(a) - oy * Math.sin(a), m.y + ox * Math.sin(a) + oy * Math.cos(a), FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
+  // A halo's centre is the moth as drawn: its wings hinge at (-2, -6) from m.x, m.y and reach about 18 up and to the right, so
+  // their middle sits about (3, -13) off, scaled and turned with the moth. Haze only: no hot centre.
+  const spotLit = stepLit(m, m.parentId ?? m.key, dt), halo = m.parentId === undefined ? haloAt(spotLit) : 0; // a bookmark row pointing at it (spot.ts)
+  if (m.shine || halo > 0.01) {
+    const ta = (m.tilt ?? 0) * Math.PI / 180, ox = 3 * m.size, oy = -13 * m.size, hx = m.x + ox * Math.cos(ta) - oy * Math.sin(ta), hy = m.y + ox * Math.sin(ta) + oy * Math.cos(ta);
+    if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
+      wing = mix(wing, GOLD, goldLook.tint * m.shine);
+      addFlyLight(hx, hy, FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
+    }
+    if (halo > 0.01) addFlyLight(hx, hy, FIREFLY_BLOOM * 2.2, -halo, bloomColour(m.tint ?? MOTH_IDLE)); // in its own colour, deepened so it isn't washed white
   }
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
-  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
+  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit), fade = fadeAt(spotLit).toFixed(2);
   for (const [path, pts] of [[m.back, far], [m.front, near]] as const) {
     const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
     if (path.style.fill !== tone) path.style.fill = tone;
+    put(path, 'fill-opacity', fade);
   }
   const st = m.g.style;
   st.setProperty('--wing', wing);
@@ -1046,6 +1062,7 @@ function mothThread(m: Moth, dt: number, s: number) {
   if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : '';
   if (!m.thread || orbit && !orbit.leaving || !m.perch) return;
   const [[ax, ay], [bx, by]] = threadEnds(m);
+  put(m.thread, 'stroke-opacity', fadeAt(m.lit ?? 0).toFixed(2)); // dimmed with its moth (spot.ts; mothColour eased m.lit)
   m.bowK = (m.bowK ?? crowd()) + (crowd() - (m.bowK ?? crowd())) * Math.min(1, dt * 2);
   put(m.thread, 'd', bowed(ax, ay, bx, by, m, s, threadBow));
   // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from

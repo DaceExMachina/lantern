@@ -10,6 +10,7 @@ import { flyColour } from '../scene/fireflies';
 import { ghosts } from '../scene/stale';
 import { useLanternStore } from '../stores/lantern';
 import type { Ghost, Hovered, Session } from '../types';
+import BookmarkToggle from './BookmarkToggle.vue';
 import GoArrow from './GoArrow.vue';
 import SessionRows from './SessionRows.vue';
 
@@ -61,7 +62,7 @@ onUpdated(() => {
       <div v-if="!full" class="hint">Click for details, double click to open PR</div>
     </template>
     <template v-else-if="ghost">
-      <h3><button class="open" title="Resume this session" @click="clickZone(ghost.zone, false)"><span class="face name"><span class="nm">{{ ghost.o.title || ghost.o.id.slice(0, 8) }}</span><GoArrow v-if="full" /></span></button><span class="chip idle"><span class="face">gone quiet</span></span></h3>
+      <h3><button class="open" title="Resume this session" @click="clickZone(ghost.zone, false)"><span class="face name"><span class="nm">{{ ghost.o.title || ghost.o.id.slice(0, 8) }}</span><GoArrow v-if="full" /></span></button><span class="chip idle"><span class="face">gone quiet</span></span><BookmarkToggle :id="ghost.o.id" :name="ghost.o.title || ghost.o.id.slice(0, 8)" /></h3>
       <div :class="full ? 'dim' : 'gist'">{{ `${where(ghost.o.cwd) ? where(ghost.o.cwd) + ' · ' : ''}last active ${days(store.now - ghost.o.last) ? `${days(store.now - ghost.o.last)} days ago` : 'today'}` }}</div>
       <template v-if="full">
         <div class="agents">{{ `PRs (${ghost.prs.length})` }}</div>

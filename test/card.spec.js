@@ -351,6 +351,26 @@ test('a ghost card\'s title is the same link a session\'s is, and clicking it re
   } finally { ghosts.delete('quiet'); }
 });
 
+// someone looking at an ended session's ghost wants to come back to it: its card bookmarks it, as a live session's does
+test('a ghost card has the bookmark toggle, which bookmarks its session and takes the bookmark off again', async () => {
+  const o = { id: 'quiet', title: 'Imageproxy PR 11', cwd: '/w/imageproxy', last: now - 9 * 864e5 };
+  const ghost = { o, prs: [{ ...wisp, owner: o }] };
+  ghost.zone = hoverZone(() => ({ ghost, zone: ghost.zone }), () => {}, 20);
+  ghosts.set('quiet', ghost);
+  try {
+    enterZone(ghost.zone);
+    await nextTick();
+    const mark = () => find($('card'), 'mark')[0];
+    assert.strictEqual(mark()?.getAttribute('aria-label'), 'Bookmark Imageproxy PR 11');
+    mark().click();
+    await nextTick();
+    assert.deepStrictEqual(posts.at(-1), ['/settings', { bookmarks: ['quiet'] }]);
+    assert.deepStrictEqual([mark().classList.contains('on'), mark().getAttribute('aria-label')], [true, 'Remove the bookmark on Imageproxy PR 11']);
+    mark().click();
+    assert.deepStrictEqual(posts.at(-1), ['/settings', { bookmarks: [] }]);
+  } finally { ghosts.delete('quiet'); }
+});
+
 test('hovering a ghost or a wisp shows a compact card with a hint that names its double click', async () => {
   const hint = card => find(card, 'hint').map(text);
   setSessions({ id: 'known', state: 'idle', subagents: [], title: 'My session', last: now });
