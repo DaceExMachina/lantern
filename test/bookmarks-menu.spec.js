@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils';
 import { createPinia } from 'pinia';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import BookmarksMenu from '../src/components/BookmarksMenu.vue';
+import { live } from '../src/scene/live';
 import { useLanternStore } from '../src/stores/lantern';
 
 const posts = [];
@@ -44,5 +45,23 @@ test('with none it says how to add one', async () => {
   const w = mount(BookmarksMenu, { global: { plugins: [createPinia()] } });
   expect(w.findAll('#bookmarks .go')).toHaveLength(0);
   expect(w.find('#bookmarks .empty').text()).toContain('Bookmark a session from its card');
+  w.unmount();
+});
+
+// the scene lights the moth or ghost of the row the pointer or focus is on (src/scene/spot.ts), and lets go when it leaves or the menu closes
+test('hovering or focusing a row points the scene at its session; leaving it or closing the menu lets go', async () => {
+  const { w } = await mounted();
+  const [first, second] = w.findAll('#bookmarks .row');
+  await first.trigger('pointerenter');
+  expect(live.spot).toBe(A);
+  await first.trigger('pointerleave');
+  expect(live.spot).toBe(null);
+  await second.trigger('focusin');
+  expect(live.spot).toBe(B);
+  await second.trigger('focusout');
+  expect(live.spot).toBe(null);
+  await first.trigger('pointerenter');
+  await w.find('#bookmarks').trigger('toggle');
+  expect(live.spot).toBe(null);
   w.unmount();
 });

@@ -9,10 +9,11 @@
 import { live } from './live';
 import { $, CX, CY, VIEW, WING_SIDE, WING_UP, flapWing, nth, post, roof, stretch } from './scene';
 import { GUST, hash, mix, seeded, style } from './lanterns';
-import { addFlyLight, flyColour } from './fireflies';
+import { FIREFLY_BLOOM, addFlyLight, flyColour } from './fireflies';
 import { put } from './frame';
 import { hoverZone, zones } from './card';
 import { sessionMoth } from './state';
+import { fadeAt, haloAt, stepLit } from './spot';
 import type { Drifter, Ghost, GhostTarget, Owner, Point, StalePR, StaleTarget, Wisp } from '../types';
 
 const STALE_MAX = 30;
@@ -157,7 +158,9 @@ export function drawStale(dt: number, s: number) {
     const roll = 0.7 * Math.sin(now * 0.17 + m.ph); // drifting between seen from above and side-on, like the live ones
     // both wings are the same flat colour, so the order they're drawn in doesn't show
     const k = 1 - m.back * 0.3, at = ([x, y]: Point): Point => [m.x + (x - 2) * k, m.y + (y - 6) * k]; // the wings sit 2 left of and 6 above the moth's position
-    const alpha = 0.14 * (1 - m.back * 0.5);
+    // a bookmark row pointing at it (spot.ts) brings it forward in a pale halo, its wings more solid; pointing elsewhere fades it
+    const lit = stepLit(m, id, dt), halo = haloAt(lit), alpha = 0.14 * (1 - m.back * 0.5) * fadeAt(lit) + 0.3 * halo;
+    if (show && m.out < 1 && halo > 0.01) addFlyLight(m.x + 3 * k, m.y - 13 * k, FIREFLY_BLOOM * 2.2, -halo, WISP_TINT); // the wings' middle, as a moth's halo
     if (show && m.out < 1) { addGhostWing(flapWing(WING_SIDE, liftAt(0.18), sweep, roll), at, alpha); addGhostWing(flapWing(WING_UP, liftAt(0), sweep, roll), at, alpha); }
     Object.assign(m.zone, { x: m.x, y: m.y, off: !show || m.out > 0 });
   }

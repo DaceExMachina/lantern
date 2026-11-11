@@ -8,7 +8,8 @@ import { el, hoverArea, quiet, sessionMoth, sessions } from './state';
 import { DUST_DEBUG, REMOTE, bgScale, drawBackground, dust, dustData, farDust, remoteLight } from './background';
 import { FIREFLY_BLOOM, FLY, addFlyLight, byUrgency, lampVary, lanternFlies, offBoard, swarm } from './fireflies';
 import { GOLD, goldLook, stepMessages } from './messages';
-import { drawStale, settle } from './stale';
+import { darkness, fadeAt, haloAt, stepLit, stepSpot } from './spot';
+import { drawStale, ghosts, settle } from './stale';
 import { hideCard, hoverZone, placeCard, zones } from './card';
 import type { Light } from './background';
 import type { FlyState, Moth, Point, ReviewTarget, Scorch, SessionMoth, Style, Vec3 } from '../types';
@@ -192,6 +193,7 @@ export function frame(t: number) {
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
   if (!AMBIENT) { swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); reviewZones(); }
   stepMessages(t); // where messages' gold pulses are, for the moths and threads below
+  stepSpot(dt, !!live.spot && (!!sessionMoth(live.spot) || live.staleOn && !AMBIENT && ghosts.has(live.spot))); // a bookmark row pointing at a moth or ghost (spot.ts)
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);
     if (!aim) continue; // it flew off and is gone
@@ -546,10 +548,16 @@ export function drawLeaves(s: number) {
   }
 }
 
+// The lantern's drawing and flame, which a bookmark's spotlight darkens: a brightness filter on their composited layers, set
+// only while it changes (an opacity would let the rings and dust show through the paper)
+let shownFilter = '', layers: (SVGSVGElement | HTMLCanvasElement)[] | null = null;
+const lanternLayers = () => layers ??= [byId('lanternBack', SVGSVGElement), byId('pagesInk', HTMLCanvasElement), byId('flame', HTMLCanvasElement), byId('lanternLayer', SVGSVGElement)].flatMap(e => e ? [e] : []);
+
 // The light around the lantern, drawn by the WebGL background: a breathing halo, the rings tinting with the flame, the
 // dust, and the moths' shadows.
 export function drawLight(dt: number, s: number, { size, flick, pulse, base, tip, spine, turb, tear, blue }: Flame) {
   const [gx, gy] = lightAt();
+  const dark = darkness(); // a bookmark's spotlight (spot.ts): the light and dust go down, and the lantern's art and flame with it
   const breathe = Math.sin(s * 1.1) * 0.5 + 0.5, strength = Math.max(level, cool * 0.6);
   // rings ripple outward (the inner one swells first) and swing with the lantern, centred where its body hangs (round a
   // standing candle's flame instead, since its body runs down below)
@@ -566,17 +574,19 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, base, tip
     const d = p.d + Math.sin(s * 0.3 + p.ph) * 18, [wx, wy] = blow(p, 14);
     const x = gx + wx + Math.cos(p.a) * d + Math.sin(s * 0.7 + p.ph) * 6, y = gy + wy + Math.sin(p.a) * d * 0.9 + Math.cos(s * 0.5 + p.ph) * 6;
     dustData.set([x, y - liftDust(p, x, y, dt), p.r,
-      (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph))], i * 4); // no fading with ?dustdebug
+      (0.15 + 0.75 * strength) * (DUST_DEBUG || fadeOut(s * 0.15, p.ph)) * (1 - dark)], i * 4); // no fading with ?dustdebug
   });
   farDust.forEach((p, i) => {
     p.a += p.w * dt;
     const d = p.d + Math.sin(s * 0.25 + p.ph) * 22, [wx, wy] = blow(p, 16);
     const x = CX + wx + Math.cos(p.a) * d * VIEW.kx + Math.sin(s * 0.6 + p.ph) * 10, y = CY + Math.sin(p.a) * d * 0.9 * VIEW.ky + wy + Math.cos(s * 0.45 + p.ph) * 10;
     dustData.set([x, y - liftDust(p, x, y, dt), p.r,
-      (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph)], (dust.length + i) * 4);
+      (0.2 + 0.25 * strength) * fadeOut(s * 0.11, p.ph) * (1 - dark)], (dust.length + i) * 4);
   });
   const remote = AMBIENT && REMOTE ? remoteLight() : null;
-  const dim = style.dim ?? 1; // a pierced brass lantern lets out less light than paper
+  const dim = (style.dim ?? 1) * (1 - dark); // a pierced brass lantern lets out less light than paper
+  const filter = dark ? `brightness(${(1 - 0.6 * dark).toFixed(3)})` : ''; // less than the light, so it reads as dimmed, not snuffed out
+  if (filter !== shownFilter) { shownFilter = filter; for (const e of lanternLayers()) e.style.filter = filter; }
   // the edge below the flame that bounds its light (holder: its height and half-width, a burner cup or a candle's rim)
   // throws a fan straight down, seen from the flame core's middle (18 up its 40), in the lantern's own units, so the fan
   // breathes with it
@@ -957,20 +967,25 @@ export function mothColour(m: Moth, needsMe: boolean, far: Wing, near: Wing, dt:
   const backlit = m.fold || 0;
   let wing = mix(mix(mix(mix(m.tint ?? MOTH_IDLE, MOTH_IDLE, m.plain), pal('glow'), lit * 0.45), singed ? MOTH_SINGED : MOTH_CALL, m.cool), '#2B2440', 0.45 * backlit * m.plain);
   if (m.scorch?.hit) wing = mix(wing, SCORCH_CHAR, scorchFlight(m.scorch.t).char);
-  if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
-    wing = mix(wing, GOLD, goldLook.tint * m.shine);
-    // centred on the moth as drawn: its wings hinge at (-2, -6) from m.x, m.y and reach about 18 up and to the right, so
-    // their middle sits about (3, -13) off, scaled and turned with the moth. Haze only: no hot centre.
-    const a = (m.tilt ?? 0) * Math.PI / 180, ox = 3 * m.size, oy = -13 * m.size;
-    addFlyLight(m.x + ox * Math.cos(a) - oy * Math.sin(a), m.y + ox * Math.sin(a) + oy * Math.cos(a), FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
+  // A halo's centre is the moth as drawn: its wings hinge at (-2, -6) from m.x, m.y and reach about 18 up and to the right, so
+  // their middle sits about (3, -13) off, scaled and turned with the moth. Haze only: no hot centre.
+  const spotLit = stepLit(m, m.parentId ?? m.key, dt), halo = m.parentId === undefined ? haloAt(spotLit) : 0; // a bookmark row pointing at it (spot.ts)
+  if (m.shine || halo > 0.01) {
+    const ta = (m.tilt ?? 0) * Math.PI / 180, ox = 3 * m.size, oy = -13 * m.size, hx = m.x + ox * Math.cos(ta) - oy * Math.sin(ta), hy = m.y + ox * Math.sin(ta) + oy * Math.cos(ta);
+    if (m.shine) { // gold for a message it sent or got (messages.ts), in a faint warm halo
+      wing = mix(wing, GOLD, goldLook.tint * m.shine);
+      addFlyLight(hx, hy, FIREFLY_BLOOM * (2.4 + 0.6 * m.shine), -goldLook.glow * m.shine, GOLD);
+    }
+    if (halo > 0.01) addFlyLight(hx, hy, FIREFLY_BLOOM * 2.2, -halo, m.tint ?? MOTH_IDLE); // in its own colour
   }
   // In flight each wing is lit in two flat tones: paler when the face we see is toward the flame, darker when the
   // flame is behind it, with a little of its warmth glowing through the thin wing.
   const a = -(m.tilt ?? 0) * Math.PI / 180, [lx, ly] = lightAt(), fx = lx - m.x, fy = ly - m.y;
-  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit);
+  const dx = fx * Math.cos(a) - fy * Math.sin(a), dy = fx * Math.sin(a) + fy * Math.cos(a), shading = (0.4 + 0.6 * lit) * (1 - backlit), fade = fadeAt(spotLit).toFixed(2);
   for (const [path, pts] of [[m.back, far], [m.front, near]] as const) {
     const tone = facesFlame(pts.normal, dx, dy) ? mix(wing, '#FFFFFF', 0.18 * shading) : mix(mix(wing, '#2B2440', 0.22 * shading), pal('glow'), 0.12 * shading);
     if (path.style.fill !== tone) path.style.fill = tone;
+    put(path, 'fill-opacity', fade);
   }
   const st = m.g.style;
   st.setProperty('--wing', wing);
@@ -1046,6 +1061,7 @@ function mothThread(m: Moth, dt: number, s: number) {
   if (m.thread) m.thread.style.display = orbit && !orbit.leaving ? 'none' : '';
   if (!m.thread || orbit && !orbit.leaving || !m.perch) return;
   const [[ax, ay], [bx, by]] = threadEnds(m);
+  put(m.thread, 'stroke-opacity', fadeAt(m.lit ?? 0).toFixed(2)); // dimmed with its moth (spot.ts; mothColour eased m.lit)
   m.bowK = (m.bowK ?? crowd()) + (crowd() - (m.bowK ?? crowd())) * Math.min(1, dt * 2);
   put(m.thread, 'd', bowed(ax, ay, bx, by, m, s, threadBow));
   // The thread's stroke is a gradient from the lantern to the moth, see-through at both ends so it fades in from

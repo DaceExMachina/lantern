@@ -1149,13 +1149,14 @@ final class LanternServer {
                     }
                 }
                 // the bookmarked sessions, as a list of ids each time: a live session (which gives its title, folder and last
-                // activity) or one already bookmarked, which stays after it ends until it's removed. Any other id is dropped,
-                // not refused, so the settings event puts right a window that bookmarked a session that had already ended.
+                // activity), an ended one shown as a ghost moth (its owner entry gives them), or one already bookmarked, which
+                // stays after it ends until it's removed. Any other id is dropped, not refused, so the settings event puts right
+                // a window that bookmarked a session it no longer knows.
                 if let given = j["bookmarks"] as? [Any] {
-                    let was = settings["bookmarks"] as? [JSON] ?? []
+                    let was = settings["bookmarks"] as? [JSON] ?? [], ghosts = owners.values.compactMap { $0 as? JSON }
                     let marks: [JSON] = given.compactMap { x in
                         guard let id = x as? String else { return nil }
-                        return sessions[id].map { bookmark(id, $0) } ?? was.first { str($0["id"]) == id }
+                        return sessions[id].map { bookmark(id, $0) } ?? was.first { str($0["id"]) == id } ?? ghosts.first { str($0["id"]) == id }.map { bookmark(id, $0) }
                     }
                     settings["bookmarks"] = marks.reduce(into: [JSON]()) { kept, b in if !kept.contains(where: { str($0["id"]) == str(b["id"]) }) { kept.append(b) } }; ok = true
                     liveBookmarks = Set(marks.map { str($0["id"]) }.filter { sessions[$0] != nil }) // so one that ends before the next sendState is still caught

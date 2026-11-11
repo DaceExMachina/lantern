@@ -214,6 +214,7 @@ interface MothBase {
   puff?: Puff | null; zStart?: number | undefined; zOff?: number;
   plain?: number; // how far it has gone to the plain resting look on the lantern, 0 to 1 (frame.ts mothColour)
   shine?: number; // how strongly it glows gold for a message it sent or got, 0 to 1 (messages.ts)
+  lit?: number; // how far a bookmark row pointing at its session has lit it, 0 to 1 (spot.ts)
 }
 /** A session's moth. It wanders round its `home` (a spot on the ring, `spot`, or circling its parent's as a satellite),
  * lands on the lantern when its session waits, and is tied to the lantern by its thread. */
@@ -248,6 +249,7 @@ export interface Zone {
 /** A ghost moth: an old session that made some of the stale PRs, drifting faintly (stale.ts). */
 export interface Ghost extends Drifter {
   o: Owner & { prs: StalePR[] }; zone: Zone; prs: StalePR[]; beat: number; back: number; x: number; y: number; rate: number; out: number; woke?: number;
+  lit?: number; // how far a bookmark row pointing at its session has lit it, 0 to 1 (spot.ts)
 }
 /** A stale PR's wisp (stale.ts). */
 export interface Wisp extends Drifter { p: StalePR; zone: Zone; wob: number; a: number; w: number; period: number; born: number; gone: number | undefined }

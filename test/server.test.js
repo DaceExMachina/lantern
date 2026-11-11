@@ -2435,6 +2435,19 @@ test('a bookmark keeps its session\'s title, folder and last activity after it e
   assert.deepStrictEqual((await snapshot(again)).settings.bookmarks.map(b => [b.id, b.cwd]), [[B, '/w/8']], 'an ended bookmark outlasts a restart (unlike a pin)');
 });
 
+// An ended session shown as a ghost moth (it made a stale PR) can be bookmarked from the ghost's card: the server takes its
+// title, folder and last activity from the ghost's owner entry, so the dropdown can list it and resume it.
+test('a ghost moth\'s ended session can be bookmarked, with its title, folder and last activity', async t => {
+  const G = UUID(9), url = 'https://github.com/o/r/pull/9';
+  const cache = { reviews: [], stale: [{ url, label: 'r#9', title: 'Old work', need: 'draft', updatedAt: '2020-01-01T00:00:00Z' }],
+    owners: { [url]: { id: G, title: 'Old work', cwd: '/w/9', last: 1700000000000 } }, bySession: {} };
+  const base = await serve(t, { 'data/settings.json': JSON.stringify({ github: true }), 'data/github-cache.json': JSON.stringify(cache) });
+  await until(() => t.output().includes('Seeded'), 'seeding, which loads the cache, to finish');
+  assert.strictEqual((await post(base, '/settings', { bookmarks: [G] })).status, 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.bookmarks, [{ id: G, title: 'Old work', cwd: '/w/9', last: 1700000000000 }]);
+  assert.notStrictEqual((await post(base, '/resume', { id: G })).status, 404, 'and resumed from the dropdown');
+});
+
 // A bookmarked session that ends is saved and sent to every window then, with nothing posted: what it last did, for the
 // dropdown to show. Also when it ends before any update has gone out since it was bookmarked.
 test('a bookmarked session that ends is sent to every window and saved, with its latest activity', async t => {
