@@ -69,6 +69,7 @@ const snapshot = base => new Promise((done, fail) => {
         if (event === 'prose') out.prose = JSON.parse(data);
         if (event === 'name') out.name = JSON.parse(data);
         if (event === 'reviews') out.reviews = JSON.parse(data);
+        if (event === 'desk') out.desk = JSON.parse(data);
         if (!event && data) { out.sessions = JSON.parse(data); req.destroy(); return done(out); }
       }
     });
@@ -3166,4 +3167,31 @@ test('usage: with systemStats off nothing is sampled or sent', async t => {
   await post(base, '/settings', { systemStats: false });
   const blocks = await streamed(base, () => wait(1000));
   assert.deepStrictEqual(blocks.concat(blocks.opening).filter(b => b.startsWith('event: usage')), []);
+});
+
+// The review desk (the review-desk skill) leaves one record per PR in ~/.ghbus/reviews. The server sends them newest first, each with an id
+// (repo#pr@head, a mention has no head so its time), skips a file that isn't a whole record, notices a new file, and keeps which ids
+// were dismissed in the settings, leaving the desk's files alone.
+test('the review desk\'s records are read, newest first, with half files skipped, and dismissing one is remembered without touching its file', async t => {
+  const rec = (pr, at, more = {}) => JSON.stringify({ repo: 'o/app', pr, title: `PR ${pr}`, kind: 'review', status: 'ready', head: `h${pr}`, at, ...more });
+  let home;
+  const base = await serve(t, {
+    '.ghbus/reviews/o__app__1.json': rec(1, '2026-11-01T10:00:00Z'),
+    '.ghbus/reviews/o__app__2.json': rec(2, '2026-11-03T10:00:00Z', { kind: 'mention', head: undefined, ask: 'thoughts?' }),
+    '.ghbus/reviews/o__app__3.json': '{"repo": "o/app", "pr": 3, "sta',
+    '.ghbus/reviews/o__app__4.json': '[1, 2]',
+    '.ghbus/reviews/notes.txt': 'not a record',
+  }, h => home = h);
+  const desk = async () => (await snapshot(base)).desk;
+  assert.deepStrictEqual((await desk()).map(r => r.id), ['o/app#2@2026-11-03T10:00:00Z', 'o/app#1@h1'], 'newest first; the half file, the non-record and the .txt are skipped');
+  fs.writeFileSync(path.join(home, '.ghbus/reviews/o__app__5.json'), rec(5, '2026-11-04T10:00:00Z'));
+  await until(async () => (await desk())[0].id === 'o/app#5@h5', 'a new file to show up');
+  const dismiss = async ids => (await post(base, '/settings', { dismissedReviews: ids })).status;
+  assert.strictEqual(await dismiss(['o/app#1@h1']), 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.dismissedReviews, ['o/app#1@h1']);
+  assert.strictEqual(await dismiss(['o/app#1@h1', 7]), 400, 'ids that aren\'t all strings are refused');
+  assert.ok(fs.existsSync(path.join(home, '.ghbus/reviews/o__app__1.json')), 'the desk\'s file is still there');
+  assert.ok((await desk()).some(r => r.id === 'o/app#1@h1'), 'the record is still sent: the page hides it by id');
+  fs.writeFileSync(path.join(home, '.ghbus/reviews/o__app__1.json'), rec(1, '2026-11-05T10:00:00Z', { head: 'new' }));
+  await until(async () => (await desk())[0].id === 'o/app#1@new', 'the new head to show up under a new id, which the dismissal doesn\'t cover');
 });

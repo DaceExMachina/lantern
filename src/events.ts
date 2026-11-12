@@ -1,7 +1,7 @@
 import { recordUsage } from './scene/heat';
 import { Q } from './scene/scene';
 import { useLanternStore } from './stores/lantern';
-import { fetchStats, isGitHub, isNowPlaying, isReview, isUsage, parseJson, parseSettings } from './types';
+import { fetchStats, isDeskRecord, isGitHub, isNowPlaying, isReview, isUsage, parseJson, parseSettings } from './types';
 
 // The chrome's line to the server. The scene still opens its own EventSource (src/wiring.ts),
 // so for now there are two connections.
@@ -17,6 +17,7 @@ export function connect(store = useLanternStore()) {
   es.onmessage = up;
   es.onerror = () => { store.link = 'offline'; };
   listen('reviews', t => { const v = parseJson(t); store.reviews = Array.isArray(v) ? v.filter(isReview) : []; });
+  listen('desk', t => { const v = parseJson(t); store.desk = Array.isArray(v) ? v.filter(isDeskRecord) : []; });
   // ?style= previews one lantern, whatever the settings say (the scene does the same)
   listen('settings', t => { up(); const settings = parseSettings(parseJson(t)); store.settings = { ...settings, style: Q.get('style') ?? settings.style }; if (settings.systemStats === false) store.usage = null; });
   listen('usage', t => { const v = parseJson(t); if (isUsage(v)) { recordUsage(v); store.usage = v; } });

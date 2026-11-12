@@ -81,6 +81,8 @@ Stale PRs need GitHub status, and "show stale PRs" in the settings menu hides th
 
 The fireflies circling the lantern itself, and the reviews button at the footer's left, are PRs waiting on your review. Switch "review requests" off in the settings menu to hide them. Lantern then stops asking GitHub for them too.
 
+The reviews list can also hold your review desk's notes. The desk is a Claude session you start with `/review-desk`: it audits each PR asked of you before you review it, and notes the comments that mention you with a draft reply. A request's row then shows, under its title, who asked and how the audit went (queued, auditing, ready with its findings by severity, or failed); click that line for the summary and findings. A mention, or a review you've since handled, gets a row of its own. A PR already flying as a moth's firefly joins the list too once the desk has something on it. The cross dismisses the desk's notes on a PR until it gets a new head or a new mention; the desk's own file is never deleted.
+
 ## Session text on the paper
 
 On the book-page barrel and the round chōchin, paragraphs your sessions wrote wrap round the paper like print on a drum or a globe. They squeeze as they turn toward the sides and vanish round the back, on the rows between the wires. On the chōchin they also squash toward the top and bottom, where the paper curves away. A new one fades in every twenty seconds or so and lingers for about a minute, overlapping the others. Some are printed on the inside, mirrored. They read best near the flame.

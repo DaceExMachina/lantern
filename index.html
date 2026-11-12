@@ -251,6 +251,33 @@
   #reviewsButton:hover { color: var(--ink-hover); }
   #reviewsButton:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   #reviews { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); /* stops below the drag strip, like #stats and #recap; scrolls inside (.flyup's 52px is its bottom inset) */ left: var(--space-3); right: auto; width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
+  /* the review desk's notes under a request's row (or on a row of their own): who asked and where the audit stands, a click opening the summary
+     and findings; the dismiss cross sits at the right end of that line */
+  #reviews .desk { position: relative; padding: 0 var(--space-2); }
+  #reviews .desk + a { margin-top: var(--space-2); } /* the next request starts clear of this one's notes */
+  #reviews .tg { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-items: center; gap: var(--space-1-5); width: 100%; padding: 0 var(--space-6) var(--space-1) var(--space-1-5); font-size: var(--text-xs); color: var(--ink-dim); }
+  #reviews .tg .car { flex: none; color: var(--ink-faint); transition: transform var(--fade); }
+  #reviews .tg[aria-expanded=true] .car { transform: rotate(90deg); }
+  #reviews .desk b { font-weight: var(--weight-regular); color: var(--accent-violet); }
+  #reviews .desk b:is(.queued, .auditing) { color: var(--ink-dim); }
+  #reviews .desk b.failed { color: var(--pr-failing); }
+  #reviews .sev.blocker { color: var(--pr-failing); }
+  #reviews .sev.major { color: var(--pr-changes); }
+  #reviews .sev.minor { color: var(--pr-feedback); }
+  #reviews .sev.nit { color: var(--ink-dim); }
+  #reviews .rm { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; top: 0; right: var(--space-2); display: flex; align-items: center; padding: 0 var(--space-2); color: var(--ink-faint); }
+  #reviews .rm:hover { color: var(--ink-hover); }
+  #reviews :is(.tg, .rm):focus-visible { outline: 1px solid var(--focus); outline-offset: -1px; }
+  #reviews .more { padding: var(--space-1) var(--space-1-5) var(--space-2); font-size: var(--text-xs); color: var(--ink); }
+  #reviews .more p { margin: var(--space-1) 0 0; }
+  #reviews .more b { font-weight: var(--weight-regular); color: var(--ink-dim); }
+  #reviews .more .big { color: var(--pr-feedback); }
+  #reviews .more .draft { white-space: pre-wrap; color: var(--ink-soft); }
+  #reviews .finding { margin-top: var(--space-2); }
+  #reviews .finding .where { font-family: var(--font-mono); color: var(--ink-dim); }
+  #reviews .finding :is(.what, .detail) { display: block; }
+  #reviews .finding .what { color: var(--ink-strong); }
+  #reviews .finding .detail { color: var(--ink-dim); }
   /* the CPU and memory readout (src/components/UsageMenu.vue): fixed at the top left, below the drag strip, quiet until hovered; its dropdown opens under it */
   #usageButton { all: unset; cursor: pointer; position: fixed; z-index: var(--z-tip); top: calc(max(var(--space-2), var(--titlebar)) + var(--space-1)); left: var(--space-3); max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--ink-faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
   #usageButton:hover, #usageButton[aria-expanded="true"] { color: var(--ink-dim); }
