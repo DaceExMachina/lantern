@@ -25,6 +25,8 @@ const view = computed(() => {
     return { id, name, how, extra, unearned };
   };
   const todayKey = dayKey(Date.now());
+  const earnedDays = new Map<string, string[]>();
+  for (const [id, day] of j.achievements.slice().reverse()) earnedDays.set(id, [...earnedDays.get(id) ?? [], day]);
   const nums: [string, string | number, string][] = [
     ['answer time', today.medianWait == null ? '–' : ago(today.medianWait), 'median time a moth waited before you answered'],
     ['slowest answers', today.slowWait == null ? '–' : ago(today.slowWait), 'one in ten waits lasted at least this long'],
@@ -42,8 +44,8 @@ const view = computed(() => {
       return { i, name: DAY_NAMES[new Date(d.start).getDay()] ?? '', pct: pct(d.warmMoths), title: mini ? `${clock(mini.from)} to ${clock(mini.to)}: open the recap` : '', ribbon: mini && ribbonBody(mini, 120, 26) };
     }),
     logIsNew: !days.slice(0, -1).some(d => d.mothMs),
-    earned: j.achievements.slice().reverse().map(([id, day]) =>
-      badge(id, day === todayKey ? 'today' : DAY_NAMES[new Date(day + 'T12:00').getDay()] ?? '')),
+    earned: [...earnedDays.entries()].map(([id, days]) => // one per badge, newest first by its latest day; ×N when earned on N days
+      badge(id, (days[0] === todayKey ? 'today' : DAY_NAMES[new Date(days[0] + 'T12:00').getDay()] ?? '') + (days.length > 1 ? ` ×${days.length}` : ''))),
     streak: j.streak, warmGoal: j.warmGoal,
     shelf: Object.keys(ACHIEVEMENTS).map(id => badge(id, (j.tally[id]?.[0] ?? 0) > 1 ? `×${j.tally[id]?.[0]}` : '', !j.tally[id])),
   };
