@@ -174,7 +174,7 @@ export function frameDue(t: number) {
 export function frame(t: number) {
   live.brisk = false; // until something this frame moves fast
   fitView(); // the scene's size, should it have changed (above)
-  const elapsed = (t - last) / 1000, dt = Math.min(0.05, elapsed); last = t;
+  const elapsed = Math.max(0, (t - last) / 1000), dt = Math.min(0.05, elapsed); last = t; // never negative: a first timestamp before `last` would run the physics backwards
   const s = t / 1000;
   const working = sessions.filter(x => x.state === 'working' || x.state === 'paused').length; // agents still busy count too
   const calling = fakeLamp === 'live' ? sessions.some(x => x.state === 'waiting' && !x.snoozed) : fakeLamp === 'violet'; // fakeLamp: lanterns.ts
