@@ -14,7 +14,7 @@ const load = async (o = {}) => {
   live.raw = [{ id: 'api', state: 'working', subagents: [], ...o.api }, { id: 'blog', state: 'working', subagents: [], ...o.blog }];
   live.reviews = o.reviews ?? [];
   state.sync();
-  let t = performance.now(); // the frame's clock starts there; from 0 the first frame's dt would be negative, and a slow worker sends the moth off to millions
+  let t = 0;
   const play = seconds => { for (let i = 0; i < seconds * 60; i++) frame.frame(t += 1000 / 60); };
   play(2);
   return { live, spot, play, fireflies };
