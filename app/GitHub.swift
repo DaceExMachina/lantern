@@ -233,6 +233,8 @@ extension LanternServer {
                 }
                 for p in (data?["mine"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { all[str(p["url"])] = shaped(p) }
             }
+            // a PR I made (through the gh account's sessions) is my own work, whoever it asks to review: never a review request
+            for url in all.keys { wanted[url] = nil }
             let alone = { (cwd: String) in live.filter { $0.1 == cwd }.count == 1 }
             var github: [String: [JSON]] = [:]
             for (id, cwd, created) in live {
@@ -245,12 +247,12 @@ extension LanternServer {
                 for url in created { if let p = all[url] { prs[url] = p } }
                 github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1), "createdAt": $0.1["createdAt"] ?? NSNull()] } // createdAt: how long it's been open, for the card
             }
-            // The stale list: my open PRs that no session owns and nobody has touched for a week (quiet), oldest first.
+            // The wisps: my open PRs that no session owns, oldest first. `quiet` (nobody has touched it for a week) is what makes one stale.
             let owned = Set(github.values.flatMap { $0.map { str($0["url"]) } }), weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
             let iso = ISO8601DateFormatter()
             let quiet = Set(all.items.filter { iso.date(from: str($0.1["updatedAt"])).map { $0 < weekAgo } ?? false }.map(\.0))
             let dead: [JSON] = all.items.compactMap { url, p in
-                guard !owned.contains(url), quiet.contains(url) else { return nil }
+                guard !owned.contains(url) else { return nil }
                 return ["url": url, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))",
                         "need": prNeed(p), "updatedAt": p["updatedAt"]!]
             }.sorted { str($0["updatedAt"]) < str($1["updatedAt"]) }

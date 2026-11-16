@@ -67,7 +67,7 @@ export interface Review extends FlyState { url: string; label: string; title: st
 export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']) && isString(x['need']) && optString(x['author']);
 /** The old session that made a stale PR. */
 export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number; resuming?: Opt<number> }
-/** One of my PRs no session owns and nobody has touched for a week. */
+/** One of my open PRs no session owns (a wisp; stale once nobody has touched it for a week). */
 export interface StalePR extends PR { updatedAt: string; owner?: Opt<Owner> }
 const isOwner = (x: unknown): x is Owner => isRecord(x) && isString(x['id']) && optString(x['title']) && optString(x['cwd']) && isNumber(x['last']) && optNumber(x['resuming']);
 export const isStalePR = (x: unknown): x is StalePR => isRecord(x) && isString(x['updatedAt']) && opt(isOwner)(x['owner']) && isPR(x);

@@ -197,7 +197,7 @@ final class LanternServer {
     var agents: [String: Ordered<JSON>] = [:] // session_id -> agent_id -> { type, description, model, activity, tries, started, last }
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
-    var stale: [JSON] = [] // my open PRs that no session owns and nobody has touched for a week, oldest first
+    var stale: [JSON] = [] // the wisps: my open PRs that no session owns, oldest first (stale proper: also untouched for a week, staleCount)
     var owners: JSON = [:] // dead PR url -> the old session that made it (or NSNull: looked, found none); looked up once
     var resuming: [String: Double] = [:] // old session id -> when a ghost moth's click asked to resume it (pages fly the ghost off for a while)
     /// The stale list as the pages get it, each PR with its owner (and when a click asked to resume that session).
@@ -357,7 +357,7 @@ final class LanternServer {
         Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in // quiet hours start or end with nothing else happening
             if self.autoQuiet() { self.settingsChanged() } else { self.observe() }
         }
-        Timer.scheduledTimer(withTimeInterval: 5 * 60, repeats: true) { _ in self.gauge() }
+        Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_GAUGE_SECONDS"] ?? "") ?? 5 * 60, repeats: true) { _ in self.gauge() }
         Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_USAGE_SECONDS"] ?? "") ?? 5, repeats: true) { _ in self.sendUsage() }
         // Open pages (the toolbelt panel, the Dock app, the screensaver) reload themselves when the page changes on disk.
         pageMtime = pageVersion()
@@ -854,7 +854,7 @@ final class LanternServer {
         // PRs entering the stale list, and leaving it: merged, closed, or revived (someone touched it). One that's still
         // quiet stays stale in the log even while a session owns it, since a session coming back (a restart seeding it
         // again, say) isn't a revival; that session's push or comment would be.
-        let dead = Set(stale.map { str($0["url"]) })
+        let dead = Set(stale.map { str($0["url"]) }.filter(quiet.contains))
         for url in dead.subtracting(buried) { stats.event("stale", nil, ["url": url, "change": "entered"]) }
         for url in buried.subtracting(dead).subtracting(quiet) {
             let how = open.contains(url) ? "revived" : closed[url].map { $0 == "MERGED" ? "merged" : "closed" } ?? "gone"
@@ -863,12 +863,18 @@ final class LanternServer {
         buried = dead.union(buried.intersection(quiet))
     }
 
+    /// The wisps nobody has touched for a week: the stale PRs the stats count.
+    var staleCount: Int {
+        let weekAgo = Date().addingTimeInterval(-7 * 24 * 3600), iso = ISO8601DateFormatter()
+        return stale.filter { iso.date(from: str($0["updatedAt"])).map { $0 < weekAgo } ?? false }.count
+    }
+
     func gauge() {
         let waiting = sessions.items.filter { str($0.1["state"]) == "waiting" }
         let fireflies = Set(sessions.items.flatMap { ($0.1["github"] as? [JSON] ?? []).filter { !["merged", "closed"].contains(str($0["need"])) }.map { str($0["url"]) } })
         stats.gauge([("alive", sessions.count), ("working", sessions.items.filter { ["working", "paused"].contains(str($0.1["state"])) }.count),
                      ("waiting", waiting.count), ("snoozed", waiting.filter { snoozed($0.0) }.count),
-                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("stale", stale.count)])
+                     ("fireflies", fireflies.count), ("agents", agents.values.reduce(0) { $0 + $1.count }), ("strays", strays), ("stale", staleCount)])
         stats.award(warmGoal: warmGoal)
     }
 

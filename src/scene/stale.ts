@@ -1,5 +1,5 @@
-// Stale PRs: my open PRs that no session owns and nobody has touched for a week drift around the lantern as wisps,
-// pale ghost fireflies in a washed-out shade of their PR colour, wandering slowly. The longer stale, the fainter and
+// Wisps: my open PRs that no session owns (the stale ones, untouched for a week, sit lowest) drift around the lantern as wisps,
+// pale ghost fireflies in a washed-out shade of their PR colour, wandering slowly. The older, the fainter and
 // dimmer. Now and then one slowly brightens and fades again. Up to 30; the
 // oldest beyond that gather into a faint cloud with a count. A new one fades in; one that comes back to life (touched
 // again, or picked up by a session) rises and fades. There's no ground: the lantern floats in the dark and its light

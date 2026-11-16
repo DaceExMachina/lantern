@@ -69,6 +69,7 @@ const snapshot = base => new Promise((done, fail) => {
         if (event === 'prose') out.prose = JSON.parse(data);
         if (event === 'name') out.name = JSON.parse(data);
         if (event === 'reviews') out.reviews = JSON.parse(data);
+        if (event === 'stale') out.stale = JSON.parse(data);
         if (!event && data) { out.sessions = JSON.parse(data); req.destroy(); return done(out); }
       }
     });
@@ -1499,6 +1500,27 @@ test('stats: a session owning a stale PR again after a restart isn\'t a revival,
   assert.ok(sql(db, "SELECT 1 FROM events WHERE kind = 'pr' AND json_extract(data, '$.change') = 'appeared'").length, 'the session owned PR 1');
   assert.deepStrictEqual(left(), [{ url: url(3), how: 'revived' }]);
   assert.deepStrictEqual(sql(db, "SELECT count(*) AS n FROM events WHERE kind = 'stale' AND json_extract(data, '$.change') = 'entered'"), [{ n: 3 }], 'nothing entered again');
+});
+
+// A PR the gh account made (so, one of the sessions' own) is never a review request, though its session asks for my review of
+// it. And every one of them no session owns is a wisp at once, whatever its age; only the week-old ones are stale: they alone
+// enter the stale log and count in the stats gauge.
+test('a PR I made is no review request, and is a wisp from the first day, stale only after a week', async t => {
+  const old = iso(Date.now() - 30 * 86400000), fresh = iso(Date.now() - 3600000);
+  const { gh, repo } = ghRepo([prNode(1, fresh), prNode(2, old)]);
+  fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { mine: { nodes: [prNode(1, fresh), prNode(2, old)] }, closed: { nodes: [] },
+    reviews: { nodes: [prNode(1, fresh), { ...prNode(3, fresh), author: { login: 'octo' } }] } } }));
+  let home = '';
+  const base = await serve(t, {}, h => home = h, { LANTERN_GH: gh, LANTERN_GAUGE_SECONDS: '0.2' });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const s = await until(async () => { const s = await snapshot(base); return s.reviews?.length && s.stale?.length && s; }, 'a refresh');
+  assert.deepStrictEqual(s.reviews.map(r => r.label), ['r#3'], 'only the other author\'s request');
+  assert.deepStrictEqual(s.stale.map(p => p.label), ['r#2', 'r#1'], 'both wisps, oldest first');
+  const db = path.join(home, 'data/stats.sqlite');
+  const gauge = await until(() => sql(db, 'SELECT stale FROM gauges ORDER BY rowid DESC LIMIT 1')[0]?.stale === 1 && true, 'a gauge counting just the week-old one');
+  assert.ok(gauge);
+  assert.deepStrictEqual(sql(db, "SELECT json_extract(data, '$.url') AS url FROM events WHERE kind = 'stale' AND json_extract(data, '$.change') = 'entered'"), [{ url: prUrl(2) }]);
 });
 
 // A restart where the session's hooks reach the lantern before seeding does: the session is made from a hook event, so it

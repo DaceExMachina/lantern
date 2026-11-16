@@ -20,7 +20,7 @@ export const useLanternStore = defineStore('lantern', () => {
   setInterval(() => { now.value = Date.now(); }, 1000);
   const settings = shallowRef<Settings>(parseSettings({}));
   const reviews = shallowRef<Review[]>([]); // PRs waiting on my review (GitHub status on)
-  const stale = shallowRef<StalePR[]>([]); // my PRs gone stale, shown as wisps (the settings can hide them), so the reviews list leaves them out
+  const stale = shallowRef<StalePR[]>([]); // my PRs no session owns, shown as wisps (the settings can hide them), so the reviews list leaves them out
   const reviewsOpen = ref(false); // whether the reviews dropdown is open (ReviewsMenu.vue), which the now playing widget gives way to
   const link = ref<'connecting' | 'up' | 'offline'>('connecting'); // the event stream, as the status line tells it
   const github = shallowRef<GitHub>({ accounts: [], signIn: null });
