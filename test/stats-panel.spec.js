@@ -62,6 +62,14 @@ test('badges: this week\'s with the day they came, and every badge on the shelf,
   w.unmount();
 });
 
+test('a badge earned on several days shows once, with its latest day and a count', async () => {
+  const rows = [['revived', '2026-10-15'], ['clear_night', '2026-10-16'], ['revived', '2026-10-16'], ['revived', 'today']];
+  fetch.mockImplementation(async () => new Response(JSON.stringify({ ...log, achievements: rows })));
+  const w = await open();
+  expect(w.findAll('#statsWeek > .badges .badge').map(b => b.text())).toEqual(['Revived today ×3', 'Clear night Fri']);
+  w.unmount();
+});
+
 test('a failed read says so, and closing the popover stops the refresh', async () => {
   vi.useFakeTimers();
   const w = await open();
