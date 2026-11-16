@@ -194,7 +194,7 @@ export function frame(t: number) {
   drawShine(s, flame);
   drawHeat(s, flame);
   if (style.shine && !AMBIENT) drawLeaves(s); // the second screen hides the lantern, as drawShine does
-  if (!AMBIENT) { const n = live.flyLightN; swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); dimLights(n, flyFadeAt(0)); reviewZones(); } // a third while a bookmark's hovered (spot.ts)
+  if (!AMBIENT) { const n = live.flyLightN; swarm(lanternFlies, new Map(offBoard(live.reviewsOn ? live.reviews : [], live.raw, live.staleOn ? live.stalePRs : []).map(r => [r.url, r])), lightAt(), [125, 170], dt, Date.now(), lampVary); dimLights(n, flyFadeAt(0)); reviewZones(); } // a third while a bookmark's hovered (spot.ts)
   stepMessages(t); // where messages' gold pulses are, for the moths and threads below
   for (const [k, m] of live.moths) {
     const aim = mothTarget(k, m, dt, s);

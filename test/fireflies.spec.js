@@ -203,8 +203,16 @@ test('a firefly circling the lantern for a review request is hovered for its PR,
 
 test('the lamp swarm leaves out reviews already flying on a moth, and brings one back when its session goes', () => {
   const pr = n => ({ url: `https://github.com/o/r/pull/${n}`, label: `r#${n}`, title: null, need: 'waiting' }), reviews = [pr(1), pr(2)];
-  assert.deepStrictEqual(offBoard(reviews, [{ id: 's', state: 'working', subagents: [], github: [pr(1)] }]).map(r => r.url), [pr(2).url]);
-  assert.deepStrictEqual(offBoard(reviews, []).map(r => r.url), [pr(1).url, pr(2).url]);
+  assert.deepStrictEqual(offBoard(reviews, [{ id: 's', state: 'working', subagents: [], github: [pr(1)] }], []).map(r => r.url), [pr(2).url]);
+  assert.deepStrictEqual(offBoard(reviews, [], []).map(r => r.url), [pr(1).url, pr(2).url]);
+});
+
+test('the lamp swarm leaves out reviews already drifting as a stale wisp, unless that wisp\'s session is live (or stale PRs are off, as the callers pass [])', () => {
+  const pr = n => ({ url: `https://github.com/o/r/pull/${n}`, label: `r#${n}`, title: null, need: 'waiting' }), reviews = [pr(1), pr(2)];
+  const wisp = (n, owner) => ({ ...pr(n), updatedAt: '2026-01-01T00:00:00Z', owner });
+  assert.deepStrictEqual(offBoard(reviews, [], [wisp(1)]).map(r => r.url), [pr(2).url]);
+  assert.deepStrictEqual(offBoard(reviews, [], [wisp(1, { id: 'old', last: 1 })]).map(r => r.url), [pr(2).url], 'a wisp of a gone session');
+  assert.deepStrictEqual(offBoard(reviews, [{ id: 'old', state: 'working', subagents: [] }], [wisp(1, { id: 'old', last: 1 })]).map(r => r.url), [pr(1).url, pr(2).url], 'its session is live again: no wisp');
 });
 
 test('each lamp firefly flies its own way, stable per URL, while a moth\'s swarm is unchanged by the variation', () => {

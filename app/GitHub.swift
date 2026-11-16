@@ -229,7 +229,7 @@ extension LanternServer {
                     return p
                 }
                 for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
-                    wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))", "need": prNeed(shaped(p))]
+                    wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))", "author": (p["author"] as? JSON)?["login"] ?? NSNull(), "need": prNeed(shaped(p))]
                 }
                 for p in (data?["mine"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { all[str(p["url"])] = shaped(p) }
             }
