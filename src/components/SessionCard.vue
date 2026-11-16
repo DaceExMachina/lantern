@@ -55,7 +55,7 @@ onUpdated(() => {
       <div v-if="!full" class="hint">Click for details, double click to open PR</div>
     </template>
     <template v-else-if="!ghost && 'stale' in shown">
-      <h3><span class="title"><span class="face">{{ shown.stale.label }}</span></span><span class="chip idle"><span class="face">stale</span></span></h3>
+      <h3><span class="title"><span class="face">{{ shown.stale.label }}</span></span><span class="chip idle"><span class="face">adrift</span></span></h3>
       <div :class="{ gist: !full }">{{ shown.stale.title || '' }}</div>
       <div :class="full ? 'dim' : 'foot counts'">{{ `${NEED[shown.stale.need] || shown.stale.need} · ${stillFor(shown.stale) < 1 ? 'touched today' : `untouched for ${stillFor(shown.stale)} days`}` }}</div>
       <div v-if="full && shown.stale.owner" class="dim">{{ `Made by ${shown.stale.owner.title || 'an old session'}` }}</div>
@@ -69,7 +69,7 @@ onUpdated(() => {
         <div v-for="p in ghost.prs" :key="p.url" class="pr"><i :style="{ background: flyColour(p.need) }"></i><a :href="p.url" target="_blank" rel="noopener">{{ p.label }}</a>{{ ` ${NEED[p.need] || p.need} · ` }}<span :title="p.title ?? ''">{{ p.title ?? '' }}</span></div>
       </template>
       <template v-else>
-        <div class="foot counts">{{ `${ghost.prs.length} stale PR${ghost.prs.length > 1 ? 's' : ''}` }}</div>
+        <div class="foot counts">{{ `${ghost.prs.length} PR${ghost.prs.length > 1 ? 's' : ''} adrift` }}</div>
         <div class="hint">Click for details, double click to resume session</div>
       </template>
     </template>

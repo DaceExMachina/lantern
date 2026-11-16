@@ -400,7 +400,7 @@ test('hovering a ghost or a wisp shows a compact card with a hint that names its
   try {
     card = await hoverStale(stale, false);
     assert.deepStrictEqual(hint(card), ['Click for details, double click to resume session'], 'a ghost, or the wisp of one');
-    assert.deepStrictEqual([find(card, 'counts').map(text), text(card).includes('PRs ('), find(card, 'pr').length], [['2 stale PRs'], false, 0], 'its PRs counted, not listed');
+    assert.deepStrictEqual([find(card, 'counts').map(text), text(card).includes('PRs ('), find(card, 'pr').length], [['2 PRs adrift'], false, 0], 'its PRs counted, not listed');
   } finally { ghosts.delete('quiet'); }
   hideCard();
   card = await hoverStale(wisp, false);

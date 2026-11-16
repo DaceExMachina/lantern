@@ -88,7 +88,7 @@ The screensaver and the page are updated together, so after updating Lantern, ru
 
 ## GitHub status
 
-GitHub status is optional. Turn it on and fireflies take on the colour of what each PR needs, and [stale PRs](guide.md#fireflies-and-stale-prs) show up.
+GitHub status is optional. Turn it on and fireflies take on the colour of what each PR needs, and [PRs adrift](guide.md#fireflies-and-prs-adrift) show up.
 
 Open the settings menu (the compass icon at the bottom right) and click **Connect an account** under GitHub. Lantern shows a code. Enter it at github.com/login/device and approve Lantern's GitHub App, [lantern-pr](https://github.com/apps/lantern-pr).
 
