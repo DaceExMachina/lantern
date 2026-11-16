@@ -326,6 +326,9 @@ test('a wisp whose session Lantern knows shows that session\'s card, and an orph
   hideCard();
   card = await hoverStale(wisp);
   assert.ok(text(card).includes('untouched for 9 days'), 'no owner at all');
+  hideCard();
+  card = await hoverStale({ ...wisp, updatedAt: new Date(now - 36e5).toISOString() });
+  assert.ok(text(card).includes('touched today'), 'a fresh wisp is not called a week old');
 });
 
 test('the PR-only card\'s header is laid out like a session\'s: a .title and a pill, not bare text', async () => {

@@ -72,7 +72,7 @@ onBeforeUnmount(() => { for (const [type, f] of events) menu?.removeEventListene
   <ToggleSwitch ref="first" class="notify" label="notify when a session waits" :checked="notify" describedby="tip-notify" @change="onNotify">notify when a session waits</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-notify">Plays a soft chime and sends a system notification the moment a session starts waiting on you. The first time, your Mac may ask to allow notifications.</span>
   <ToggleSwitch label="show stale PRs" :checked="settings.stale !== false" describedby="tip-stale" @change="on => post('/settings', { stale: on })">show stale PRs</ToggleSwitch>
-  <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns and nobody has touched for a week, as pale wisps drifting low in the scene. It needs GitHub status.</span>
+  <span class="tip" role="tooltip" id="tip-stale">Shows your open PRs that no session owns, as pale wisps drifting low in the scene. It needs GitHub status.</span>
   <ToggleSwitch :class="{ unavailable: !style.surface }" label="show session text" :checked="settings.lanternText !== 'off'" :disabled="!style.surface" describedby="tip-text" @change="on => post('/settings', { lanternText: on ? 'sessions' : 'off' })">show session text</ToggleSwitch>
   <span class="tip" role="tooltip" id="tip-text">Prints lines your sessions wrote onto the lantern's paper, fading in and out. Only the barrel and the round chōchin have paper, so it's greyed out on the Moroccan and the candle.</span>
   <ToggleSwitch label="now playing" :checked="settings.nowPlaying !== false" describedby="tip-playing" @change="on => post('/settings', { nowPlaying: on })">now playing</ToggleSwitch>

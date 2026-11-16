@@ -33,7 +33,7 @@ const ghost = computed<Ghost | undefined>(() => {
   return h && 'ghost' in h ? h.ghost : h && 'stale' in h && !session.value ? ghosts.get(h.stale.owner?.id ?? '') : undefined;
 });
 const days = (ms: number) => Math.round(ms / 864e5);
-const stillFor = (p: { updatedAt: string }) => Math.max(7, days(store.now - Date.parse(p.updatedAt)));
+const stillFor = (p: { updatedAt: string }) => days(store.now - Date.parse(p.updatedAt));
 const where = (cwd: string | null | undefined) => String(cwd || '').split('/').filter(Boolean).pop() || '';
 // A re-render that moves an element (a PR that re-ranks) drops its focus in WebKit, so the focused element gets it back.
 // And one that took away the link #prTip was showing for takes the tip too.
@@ -57,7 +57,7 @@ onUpdated(() => {
     <template v-else-if="!ghost && 'stale' in shown">
       <h3><span class="title"><span class="face">{{ shown.stale.label }}</span></span><span class="chip idle"><span class="face">stale</span></span></h3>
       <div :class="{ gist: !full }">{{ shown.stale.title || '' }}</div>
-      <div :class="full ? 'dim' : 'foot counts'">{{ `${NEED[shown.stale.need] || shown.stale.need} · untouched for ${stillFor(shown.stale)} days` }}</div>
+      <div :class="full ? 'dim' : 'foot counts'">{{ `${NEED[shown.stale.need] || shown.stale.need} · ${stillFor(shown.stale) < 1 ? 'touched today' : `untouched for ${stillFor(shown.stale)} days`}` }}</div>
       <div v-if="full && shown.stale.owner" class="dim">{{ `Made by ${shown.stale.owner.title || 'an old session'}` }}</div>
       <div v-if="!full" class="hint">Click for details, double click to open PR</div>
     </template>
