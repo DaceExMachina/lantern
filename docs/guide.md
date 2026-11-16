@@ -4,7 +4,7 @@ What everything on screen means. Installing and settings live in [setup](setup.m
 
 - [Moths and the lantern](#moths-and-the-lantern)
 - [Cards, clicks and snooze](#cards-clicks-and-snooze)
-- [Fireflies and stale PRs](#fireflies-and-stale-prs)
+- [Fireflies and PRs adrift](#fireflies-and-prs-adrift)
 - [Session text on the paper](#session-text-on-the-paper)
 - [Picking a lantern](#picking-a-lantern)
 - [Stats, badges and the recap](#stats-badges-and-the-recap)
@@ -40,7 +40,7 @@ Hover a session's moth for a quick card: its name and status, one line of what i
 
 Click the moth for its full card, which stays open until you click somewhere else, press Escape, or keep the pointer away from it and its moth for two seconds. Click the moth again to put it away. The top says what it needs from you: its questions, and its "You:" line (from a `**You:**` status footer, or else the last paragraph of its final message). Below, under Running, are its agents and the shell commands it left going, then its PRs as chips, or as a list with the arrow. Click an agent to read it in full. Past five agents, click "more" for the rest. The card stays exactly where it opened, however the moth wanders or the lantern sways, until you put it away.
 
-Double-click the moth, or click the card's header, to open the session. Click the card's status to snooze it. Ghost moths and wisps work the same way: hover for a quick card, click for the full one, double-click to act (see Fireflies and stale PRs).
+Double-click the moth, or click the card's header, to open the session. Click the card's status to snooze it. Ghost moths and wisps work the same way: hover for a quick card, click for the full one, double-click to act (see Fireflies and PRs adrift).
 
 To keep a session in view, click the pin on its card. It opens in full in a sidebar on the right, and you can pin as many as you like. Click a pin again to let that session go. When a pinned session ends, it stays there, dimmed. Pins need a window at least 800 pixels wide.
 
@@ -52,7 +52,7 @@ Right-click a moth, or shift-click it, to snooze it. When it waits, it rests on 
 
 Forgot what something means? "What's what?" at the bottom of the settings menu has the short version of this page.
 
-## Fireflies and stale PRs
+## Fireflies and PRs adrift
 
 Fireflies hang around a session's moth, one for each open PR it owns, up to ten. Hover the cluster and you get the session's card, PRs and all. They're always lit, each one slowly brightening and dimming on its own rhythm, and their glow lights the air behind the lantern and moths.
 
@@ -73,11 +73,11 @@ With [GitHub status](setup.md#github-status) on, fireflies show what each PR nee
 
 A new PR's firefly flies in from the window edge nearest its moth. When one turns green it flashes. When a PR merges, its firefly flares and shakes, loops, then zooms off the window on the side away from its moth. A closed PR's firefly dims and drifts off the nearest edge. Reviews requested from you circle the lantern in the colour of their PR's state; hover one for its PR, and double-click to open it. The footer's bottom left shows how many there are, and opens a list of them.
 
-Stale PRs are your open PRs that no session owns, as wisps, whatever their age (the stats count only the ones nobody has touched for a week). They drift low in the scene as wisps, pale ghost fireflies in a washed-out shade of their PR colour. The oldest sit lowest and dimmest, and every so often one slowly brightens and fades again. Up to 30 drift on their own, and the rest gather into a faint cloud with a count. Hover a wisp for a quick look at what it needs, click it for its full card, which says which session made it, and double-click it to open the PR. A wisp whose PR belongs to a session shows that session's card instead, and behaves like that session's moth (or its ghost, below). When someone touches the PR again, its wisp rises away.
+PRs adrift are your open PRs that no session owns, shown as wisps, whatever their age (the stats count only the ones nobody has touched for a week). They drift low in the scene as wisps, pale ghost fireflies in a washed-out shade of their PR colour. The oldest sit lowest and dimmest, and every so often one slowly brightens and fades again. Up to 30 drift on their own, and the rest gather into a faint cloud with a count. Hover a wisp for a quick look at what it needs, click it for its full card, which says which session made it, and double-click it to open the PR. A wisp whose PR belongs to a session shows that session's card instead, and behaves like that session's moth (or its ghost, below). When someone touches the PR again, its wisp rises away.
 
-Ghost moths drift behind the wisps: pale, nearly see-through moths for the old sessions that made some of those PRs, flapping like the living ones. Their wisps circle them. Up to eight show, the most recently active first, and older ones sit lower and fainter. Hover one for a quick look, and click it for its full card: the session, when it was last active, and its stale PRs. Double-click it, or click the card's title, to resume that session in a new iTerm2 tab, running `claude --resume` in its folder (iTerm2 only, for now). The ghost flies off at the double click, its wisps with it, and the session's own moth flies in once it's live, its PRs now its fireflies. If the session never turns up within 45 seconds, the ghost flies back.
+Ghost moths drift behind the wisps: pale, nearly see-through moths for the old sessions that made some of those PRs, flapping like the living ones. Their wisps circle them. Up to eight show, the most recently active first, and older ones sit lower and fainter. Hover one for a quick look, and click it for its full card: the session, when it was last active, and its PRs adrift. Double-click it, or click the card's title, to resume that session in a new iTerm2 tab, running `claude --resume` in its folder (iTerm2 only, for now). The ghost flies off at the double click, its wisps with it, and the session's own moth flies in once it's live, its PRs now its fireflies. If the session never turns up within 45 seconds, the ghost flies back.
 
-Stale PRs need GitHub status, and "show stale PRs" in the settings menu hides them.
+PRs adrift need GitHub status, and "show PRs adrift" in the settings menu hides them.
 
 The fireflies circling the lantern itself, and the reviews button at the footer's left, are PRs waiting on your review. Switch "review requests" off in the settings menu to hide them. Lantern then stops asking GitHub for them too.
 
@@ -95,7 +95,7 @@ The settings menu (the compass icon at the bottom right) has four lanterns: the 
 
 The pillar candle is ivory wax on a bronze altar candlestick, wound with a grapevine and purple grapes, on a marble pedestal the vine climbs. It stands on its own foot, so it has no string or chain and doesn't sway in the wind. Moths that need you land on the wax. Its bare flame throws sparks, like the Moroccan's, and the room below the candle's rim sits in its shade. The flame shines on the candlestick too, with glints on the brass that slide as it leans and brighten as it flickers, a reflection in the molten pool at the crown, a highlight on each grape's near side and a warm patch on the marble round the foot. The air above it shimmers and carries dust up, and every minute or two a thin curl of smoke leaves its tip and fades over about 6 seconds, at the same moment in every window. It has no paper, so it shows no session text.
 
-The same menu holds "notify when a session waits", the stale PR and session text switches (session text is greyed out on the Moroccan and the candle), the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
+The same menu holds "notify when a session waits", the PRs adrift and session text switches (session text is greyed out on the Moroccan and the candle), the barrel's ribbon colour (a handful of swatches, greyed out on the other lanterns), quiet from, quiet until and the day rollover, and GitHub.
 
 ## Stats, badges and the recap
 
@@ -115,7 +115,7 @@ The daily recap opens by itself when quiet hours start. If you miss that, it sho
 
 ## Quiet hours
 
-The moon in the footer snoozes everything on every display until 8am, or the time in "quiet until" in the settings menu. Switch "quiet until" off and quiet lasts until you click the moon again. Either way, click it to end quiet early. Stale PRs' wisps and ghost moths keep drifting through it.
+The moon in the footer snoozes everything on every display until 8am, or the time in "quiet until" in the settings menu. Switch "quiet until" off and quiet lasts until you click the moon again. Either way, click it to end quiet early. Wisps and ghost moths keep drifting through it.
 
 To have quiet come on by itself every night, switch "quiet from" on in the settings menu and pick a time. It works with no window open, since the app does it. It ends at "quiet until", or when you click the moon if that's off. If quiet is already on by then, it stays as it is, and if you end it early, it stays off until the next night.
 

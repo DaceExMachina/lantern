@@ -34,7 +34,7 @@ const flip = (w, text, on) => row(w, text).findAll('button')[on ? 1 : 0].trigger
 
 test('it shows the store\'s settings', async () => {
   const w = open({ style: 'chochin', ribbon: 'moss', lanternText: 'off', stale: false, quietFrom: '22:30', quietEnd: '7:15', dayStart: '4:00' });
-  expect(isOn(w, 'show stale PRs')).toBe(false);
+  expect(isOn(w, 'show PRs adrift')).toBe(false);
   expect(isOn(w, 'show session text')).toBe(false);
   expect(w.find('#style').element.value).toBe('chochin');
   expect(w.find('#ribbons [aria-pressed=true]').attributes('title')).toBe('moss');
@@ -45,7 +45,7 @@ test('it shows the store\'s settings', async () => {
   expect(w.find('#help').text()).toContain('snoozes everything until 7:15am');
   store.settings = parseSettings({ stale: true, lanternText: 'sessions', quietEndOn: false });
   await w.vm.$nextTick();
-  expect(isOn(w, 'show stale PRs')).toBe(true);
+  expect(isOn(w, 'show PRs adrift')).toBe(true);
   expect(pressed(w)).toEqual({ 'quiet from': 'true,false', 'quiet until': 'true,false' });
   expect(time(w, 'quiet from').element.disabled).toBe(true);
   expect(time(w, 'quiet from').element.value).toBe('22:30'); // switched off, it keeps the time it had
@@ -62,7 +62,7 @@ test('before the server says, it shows the barrel, the cerulean ribbon and the u
 
 test('each control POSTs its setting', async () => {
   const w = open({ stale: true, quietFrom: '22:30' });
-  await flip(w, 'show stale PRs', false);
+  await flip(w, 'show PRs adrift', false);
   await flip(w, 'show session text', false);
   await w.find('#style').setValue('candle');
   await w.find('#ribbons [title=plum]').trigger('click');
@@ -112,7 +112,7 @@ test('on the candle the session text and ribbon controls grey out, and come back
 test('a hovered row shows its tip docked above the menu; leaving, or closing the menu, puts it away', async () => {
   const w = open({});
   menu.getBoundingClientRect = () => ({ left: 100, top: 300, width: 260, height: 200 });
-  const stale = row(w, 'show stale PRs'), tip = w.find('#tip-stale');
+  const stale = row(w, 'show PRs adrift'), tip = w.find('#tip-stale');
   await stale.find('button').trigger('pointerover');
   expect(tip.classes()).toContain('show');
   expect(tip.element.style.left).toBe('100px');
@@ -138,7 +138,7 @@ test('every option\'s tip follows its row, and the controls point at them', () =
 // the switch is one component (src/components/ToggleSwitch.vue), the quiet hours' off | on pair; every on/off row in the menu uses it
 test('every on/off row is the one off | on switch, and the menu has no checkbox', async () => {
   const w = open({ nowPlaying: false });
-  const rows = ['notify when', 'show stale PRs', 'show session text', 'now playing', 'review requests', 'system stats', 'quiet from', 'quiet until'].map(t => row(w, t));
+  const rows = ['notify when', 'show PRs adrift', 'show session text', 'now playing', 'review requests', 'system stats', 'quiet from', 'quiet until'].map(t => row(w, t));
   for (const r of rows) {
     expect(r.classes(), r.text()).toContain('switch');
     expect(r.find('.pill').attributes('role'), r.text()).toBe('group');
