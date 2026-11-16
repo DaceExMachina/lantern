@@ -148,7 +148,7 @@ const ORDER = ['failing', 'changes', 'feedback', 'ready', 'waiting', 'draft', 'm
 const SHORT: Record<string, string | undefined> = { ...NEED, ready: 'ready', failing: 'failing' };
 export const AGENT_CAP = 5; // the expanded card's agents, past which a "more" button lists the rest
 const rank = (need: string) => (ORDER.indexOf(need) + 1) || ORDER.length + 1;
-export const worstFirst = (prs: PR[]) => [...prs].sort((a, b) => rank(a.need) - rank(b.need));
+export const worstFirst = <P extends PR>(prs: P[]) => [...prs].sort((a, b) => rank(a.need) - rank(b.need));
 export function prSummary(prs: PR[]) {
   const n = new Map<string, number>();
   for (const p of prs) n.set(p.need, (n.get(p.need) || 0) + 1);

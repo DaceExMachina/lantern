@@ -54,6 +54,28 @@ test('a review already flying as a moth\'s firefly is left out of the list and i
   assert.strictEqual(button().textContent, '2', 'the session leaves: both are back');
 });
 
+test('a review that is also a stale wisp is left out while stale PRs show, and back in the list when they are off', async () => {
+  const pr = n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need: 'waiting' });
+  store.reviews = [pr(1), pr(2)];
+  store.stale = [{ ...pr(1), updatedAt: '2026-01-01T00:00:00Z' }];
+  await nextTick();
+  assert.deepStrictEqual(rows().map(a => a.href), [pr(2).url], 'already a wisp');
+  store.settings = parseSettings({ stale: false }); await nextTick();
+  assert.deepStrictEqual(rows().map(a => a.href).sort(), [pr(1).url, pr(2).url], 'wisps off: both listed');
+});
+
+test('each row shows its author between the label and the status, on one line where only the author clips', async () => {
+  store.reviews = [{ url: 'https://github.com/o/app/pull/1', label: 'app#1', title: 'A', need: 'waiting', author: 'octocat' }, { url: 'https://github.com/o/app/pull/2', label: 'app#2', title: 'B', need: 'waiting' }];
+  await nextTick();
+  const me = rows().map(a => [...a.querySelector('.me').children].map(c => c.tagName + ':' + c.textContent));
+  assert.deepStrictEqual(me, [['I:', 'B:app#1', 'SPAN:octocat'], ['I:', 'B:app#2']]);
+  assert.strictEqual(rows()[0].querySelector('.me').textContent, 'app#1octocatin review');
+  const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8');
+  assert.match(css, /#reviews \.me \.by \{[^}]*min-width: 0; overflow: hidden; text-overflow: ellipsis/);
+  assert.match(css, /#reviews \.me \{ white-space: nowrap; \}/);
+  assert.match(css, /#reviews \.me :is\(i, b\) \{ flex: none; \}/);
+});
+
 test('the now playing widget gives way while the dropdown is open', async () => {
   const pinia = createPinia(), playing = createApp(NowPlaying).use(pinia);
   app.unmount();

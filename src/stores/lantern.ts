@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { post } from '../scene/scene';
 import { parseSettings } from '../types';
-import type { GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, Stats, Usage } from '../types';
+import type { GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, StalePR, Stats, Usage } from '../types';
 
 // No pinning where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
@@ -20,6 +20,7 @@ export const useLanternStore = defineStore('lantern', () => {
   setInterval(() => { now.value = Date.now(); }, 1000);
   const settings = shallowRef<Settings>(parseSettings({}));
   const reviews = shallowRef<Review[]>([]); // PRs waiting on my review (GitHub status on)
+  const stale = shallowRef<StalePR[]>([]); // my PRs gone stale, shown as wisps (the settings can hide them), so the reviews list leaves them out
   const reviewsOpen = ref(false); // whether the reviews dropdown is open (ReviewsMenu.vue), which the now playing widget gives way to
   const link = ref<'connecting' | 'up' | 'offline'>('connecting'); // the event stream, as the status line tells it
   const github = shallowRef<GitHub>({ accounts: [], signIn: null });
@@ -60,5 +61,5 @@ export const useLanternStore = defineStore('lantern', () => {
     post('/settings', { bookmarks: next.map(b => b.id) });
   }
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
-  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, now, settings, reviews, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
+  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
 });

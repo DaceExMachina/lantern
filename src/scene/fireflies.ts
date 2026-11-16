@@ -5,7 +5,7 @@ import { CX, VIEW, nth, roof, stretch } from './scene';
 import type { Box } from './scene';
 import { devButton, devSlider } from '../dev';
 import { GUST, hash, hex, mix, seeded } from './lanterns';
-import type { Firefly, FlyState, Point, Review, Session, Vec3 } from '../types';
+import type { Firefly, FlyState, Point, Review, Session, StalePR, Vec3 } from '../types';
 
 // ---- fireflies -----------------------------------------------------------------
 // One per PR, keyed by its URL. The colour says what it needs (swarm says how they come and go). Failing checks swell
@@ -45,10 +45,12 @@ export function bloomSprite(col: string, size: number) {
   return c;
 }
 export const lanternFlies = new Map<string, Firefly>(); // reviews requested from me hang around the lantern itself
-/** The review requests not already flying as a moth's firefly (a session's first ten PRs, as mothFireflies keeps them): the
- * lamp's swarm and the footer's list both show just these, so they can't disagree. */
-export function offBoard(reviews: Review[], sessions: Session[]) {
-  const on = new Set(sessions.flatMap(s => byUrgency(s.github ?? [], undefined).slice(0, 10).map(p => p.url)));
+/** The review requests not already shown elsewhere: flying as a moth's firefly (a session's first ten PRs, as mothFireflies
+ * keeps them) or drifting as a stale wisp (`stale`, the list while stale PRs are shown, [] when they're off; one whose session
+ * is live is no wisp, as drawStale has it). The lamp's swarm and the footer's list both show just these, so they can't disagree. */
+export function offBoard(reviews: Review[], sessions: Session[], stale: StalePR[]) {
+  const alive = new Set(sessions.map(s => s.id));
+  const on = new Set([...sessions.flatMap(s => byUrgency(s.github ?? [], undefined).slice(0, 10).map(p => p.url)), ...stale.filter(p => !alive.has(p.owner?.id ?? '')).map(p => p.url)]);
   return reviews.filter(r => !on.has(r.url));
 }
 // How much each lamp firefly differs from the next. Each has five draws seeded by its URL (Firefly.u); these set what they

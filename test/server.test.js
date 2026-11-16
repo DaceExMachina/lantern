@@ -1638,12 +1638,12 @@ test('reviews: each PR asking for my review carries its need', async t => {
   const { gh, repo } = ghRepo([]);
   const check = state => ({ commits: { nodes: [{ commit: { statusCheckRollup: { state } } }] } });
   fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { mine: { nodes: [] }, closed: { nodes: [] }, reviews: { nodes: [
-    { ...prNode(1, iso(Date.now())), ...check('FAILURE') }, { ...prNode(2, iso(Date.now())) }, { ...prNode(3, iso(Date.now())), isDraft: false }] } } }));
+    { ...prNode(1, iso(Date.now())), ...check('FAILURE') }, { ...prNode(2, iso(Date.now())), author: { login: 'octo' } }, { ...prNode(3, iso(Date.now())), isDraft: false }] } } }));
   const base = await serve(t, {}, () => {}, { LANTERN_GH: gh });
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
   await post(base, '/settings', { github: true });
   const { reviews } = await until(async () => { const s = await snapshot(base); return s.reviews?.length === 3 && s; }, 'a refresh to list the reviews');
-  assert.deepStrictEqual(reviews.map(r => [r.label, r.need]), [['r#1', 'failing'], ['r#2', 'draft'], ['r#3', 'waiting']]);
+  assert.deepStrictEqual(reviews.map(r => [r.label, r.need, r.author]), [['r#1', 'failing', null], ['r#2', 'draft', 'octo'], ['r#3', 'waiting', null]], 'the author comes along (null when GitHub has none)');
 });
 
 // gh as GitHub answers a search for review requests: the requests of the login the query names (`@me` is the account gh runs as, the
