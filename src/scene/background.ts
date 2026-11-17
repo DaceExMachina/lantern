@@ -482,7 +482,7 @@ void main() {
   vec2 q = vec2(vP.x - uBase.x, uBase.y - vP.y) / uBase.z;
   float h = uShape.x, time = uBase.w, px = max(uPx, uSoft) / uBase.z, t = clamp(q.y / h, 0.0, 1.0), mid = 4.0 * t * (1.0 - t);
   float n1 = noise(vec2(q.x * 0.09, q.y * 0.06 - time * 3.0)), n2 = noise(vec2(q.x * 0.13 + 7.0, q.y * 0.1 - time * 5.0));
-  vec2 root = q; // unbent, for the blue root
+  vec2 root = q; // unbent: the blue root leans with the flame from where it sits (below)
   q.x -= spineX(t) + uShape.y * mid * (2.5 * n1 + 0.8 * n2);
   float swell = 1.0 + uShape.y * 0.12 * mid * n2;
   float tear = 1.0 - uShape.z * smoothstep(0.45, 0.9, t) * smoothstep(0.0, 0.5, noise(vec2(q.x * 0.05, q.y * 0.12 - time * 9.0)));
@@ -494,8 +494,10 @@ void main() {
   c = mix(c, vec4(uOuterC, 1.0), tear * tongue(q, 34.0 * swell, h, px));
   c = mix(c, vec4(uMidC, 1.0), tear * tongue(q, 24.0 * swell, h * 0.73 * (1.0 + 0.06 * noise(vec2(time * 1.3, 3.0))), px));
   c = mix(c, vec4(uCoreC, 1.0), tear * tongue(q, 13.0 * swell, h * 0.42 * (1.0 + 0.06 * noise(vec2(time * 1.3, 9.0))), px));
-  vec2 b = (root - uBlue.xy) / uBlue.zw;
-  c = mix(c, vec4(uBlueC, 1.0), uBlueA * smoothstep(1.0, 0.8, length(b)));
+  float tb = clamp(3.0 * uBlue.y / h, 0.0, 1.0), lean = spineX(tb) - spineX(0.0) + uShape.y * 4.0 * tb * (1.0 - tb) * (2.5 * n1 + 0.8 * n2);
+  vec2 b = (root - uBlue.xy - vec2(lean, 0.0)) / uBlue.zw;
+  float soft = uSoft / uBase.z / min(uBlue.z, uBlue.w); // the paper's softness, in the root's own units
+  c = mix(c, vec4(uBlueC, 1.0), uBlueA * smoothstep(1.0 + soft, 0.8 - soft, length(b)));
   gl_FragColor = c * uAlpha;
 }`, fgl);
 const flameQuad = fgl.createBuffer();
