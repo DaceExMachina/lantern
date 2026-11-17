@@ -1544,65 +1544,90 @@ test('stats: a session the hooks bring back still owns the PRs it created', asyn
   assert.deepStrictEqual(prChanges(path.join(home, 'data/stats.sqlite')), [{ session: id, url: prUrl(1), change: 'appeared' }], 'no stray, no second appeared');
 });
 
-// The race that test can't reach: a refresh that goes out while the joining session is still reading its PRs back, and
-// lands after. Refreshes leave a session out until its read is done; otherwise that refresh gives it no PRs and logs the
-// one it made as a stray. A long transcript full of `gh pr create` mentions (each one parsed) keeps the read going while
-// the refresh goes out, and gh holds each refresh's answer until the test lets it go. A second session in another checkout,
-// owning nothing, shows when the refresh has landed.
 // A session parked on lantern-pr's channel (it wakes the session when the checks finish) ends its turn with nothing open:
-// "Nothing yet. Your review request comes when CI is green." While its PR's checks run, that's waiting on CI, not on me,
-// through the idle nudge too; once a refresh sees them done, it's a finished turn on me. `ciRepo` is a session in a repo
-// on branch feat, whose PR 1 has its checks at `rollup`; `setChecks` changes them and refreshes.
-async function ciRepo(t, rollup, env = {}) {
+// "Nothing yet. Your review request comes when CI is green." While a check run is going on its PR, that's waiting on CI, not
+// on me, through the idle nudge too; once a refresh sees them done, it's a finished turn on me. `ciRepo` is a session in a
+// repo on branch feat, whose PR 1 has its checks at `checks` (a rollup as GitHub's query answers it); `setChecks` changes
+// them for the next refresh, and `refresh` asks for one.
+const run = status => ({ __typename: 'CheckRun', status });
+const RUNNING = { state: 'PENDING', contexts: { nodes: [run('COMPLETED'), run('IN_PROGRESS')] } }, DONE = { state: 'SUCCESS', contexts: { nodes: [run('COMPLETED')] } };
+async function ciRepo(t, checks, env = {}) {
   const { gh, repo } = ghRepo([]), prs = path.join(path.dirname(gh), 'prs.json');
-  const write = state => fs.writeFileSync(prs, JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: [{ ...prNode(1, iso(Date.now()), 'feat'), isDraft: false, commits: { nodes: [{ commit: { committedDate: iso(Date.now() - 60000), statusCheckRollup: { state } } }] } }] } } }));
-  write(rollup);
+  const setChecks = rollup => fs.writeFileSync(prs, JSON.stringify({ data: { reviews: { nodes: [] }, closed: { nodes: [] }, mine: { nodes: [{ ...prNode(1, iso(Date.now()), 'feat'), isDraft: false, commits: { nodes: [{ commit: { committedDate: iso(Date.now() - 60000), statusCheckRollup: rollup } }] } }] } } }));
+  setChecks(checks);
   const base = await serve(t, {}, () => {}, { LANTERN_GH: gh, ...env });
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'push it' });
   await post(base, '/settings', { github: true });
-  await until(async () => (await s1(base))?.github?.[0]?.running === (rollup === 'PENDING'), 'the refresh to see the checks');
-  const setChecks = async state => { write(state); await post(base, '/settings', { github: true }); };
-  return { base, setChecks, stop: msg => post(base, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: repo, last_assistant_message: msg }) };
+  await until(async () => (await s1(base))?.github?.[0]?.running === (checks === RUNNING), 'the refresh to see the checks');
+  return { base, setChecks, refresh: () => post(base, '/settings', { github: true }), stop: msg => post(base, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: repo, last_assistant_message: msg }) };
 }
 const shownState = async base => (({ state, note }) => [state, note])(await s1(base));
+const ciSeen = (base, running) => until(async () => (await s1(base)).github[0].running === running, `a refresh to see the checks ${running ? 'running' : 'done'}`);
 
+// And once it has landed, a re-run (a workflow a comment starts, Update branch) doesn't lift it again: the wait is over.
 test('a turn that ends with nothing to ask while its PR\'s checks run waits on CI, through the idle nudge, and lands once they finish', async t => {
-  const { base, setChecks, stop } = await ciRepo(t, 'PENDING');
+  const { base, setChecks, refresh, stop } = await ciRepo(t, RUNNING);
   await stop('Nothing yet. Your review request comes when CI is green.');
   assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI']);
   await post(base, '/event', { session_id: 's1', hook_event_name: 'Notification', notification_type: 'idle_prompt', message: 'Claude is waiting for your input' });
   assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI']);
-  await setChecks('SUCCESS');
-  await until(async () => (await s1(base)).github[0].running === false, 'the refresh to see the checks done');
+  setChecks(DONE); await refresh(); await ciSeen(base, false);
   assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn']);
+  setChecks(RUNNING); await refresh(); await ciSeen(base, true);
+  assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn'], 'a re-run after it landed');
 });
 
 test('a turn that asks something while its PR\'s checks run still needs me', async t => {
-  const { base, stop } = await ciRepo(t, 'PENDING');
+  const { base, stop } = await ciRepo(t, RUNNING);
   await stop('CI is still running. Should I merge it once it\'s green?');
   assert.deepStrictEqual(await shownState(base), ['waiting', 'Asks: Should I merge it once it\'s green?']);
 });
 
-// Checks can start after the Stop: the push's checks reach GitHub after the session has already ended its turn.
-test('checks a refresh finds running after a plain Stop put the finished turn back on CI', async t => {
-  const { base, setChecks, stop } = await ciRepo(t, 'SUCCESS');
+// A push just before the Stop: the last refresh still says the checks are done, and the push's checks are only in GitHub's
+// next answer. The Stop asks for that refresh itself, and the turn waits on it rather than landing (a chime) and taking off.
+test('checks a push started reach the session through the refresh its Stop asks for, and it never lands in between', async t => {
+  const { base, setChecks, stop } = await ciRepo(t, DONE);
+  setChecks(RUNNING);
   await stop('Pushed. Your review request comes when CI is green.');
-  assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn']);
-  await setChecks('PENDING');
-  await until(async () => (await s1(base)).github[0].running, 'the refresh to see the checks running');
+  assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI'], 'waiting on the refresh');
+  const seen = [];
+  await until(async () => { const s = await s1(base); seen.push(s.state); return s.github[0].running; }, 'the Stop\'s refresh to see the checks running');
+  assert.deepStrictEqual([...new Set(seen)], ['paused']);
   assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI']);
 });
 
-// A check stuck pending (a status nobody ever reports) doesn't hold the session forever: past TASK_FRESH_MS from the Stop,
-// the sweep lands it as a finished turn.
+// extension#7098: every check run done, but the commit status e2e-test-summary pending until someone re-adds the `test` label.
+// That's a gate waiting on a person, not CI running, so the finished turn needs me once the Stop's refresh says so.
+test('a pending commit status with every check run done is no CI running: the finished turn needs me', async t => {
+  const { base, stop } = await ciRepo(t, { state: 'PENDING', contexts: { nodes: [run('COMPLETED'), { __typename: 'StatusContext' }] } });
+  await stop('Nothing yet. Your review request comes when CI is green.');
+  await until(async () => (await s1(base)).state === 'waiting', 'the Stop\'s refresh to land it');
+  assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn']);
+});
+
+// A check run stuck in the queue doesn't hold the session forever: past TASK_FRESH_MS from the Stop, the sweep lands it.
 test('a check stuck pending lets its session go once the turn is past the task freshness', async t => {
-  const { base, stop } = await ciRepo(t, 'PENDING', { LANTERN_TASK_FRESH_SECONDS: '2', LANTERN_SWEEP_SECONDS: '0.2' });
+  const { base, stop } = await ciRepo(t, RUNNING, { LANTERN_TASK_FRESH_SECONDS: '2', LANTERN_SWEEP_SECONDS: '0.2' });
   await stop('Nothing yet. Your review request comes when CI is green.');
   assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI']);
   await until(async () => (await s1(base)).state === 'waiting', 'the sweep to let it go');
   assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn']);
 });
 
+// Turning GitHub status off takes the PRs away, and with them the wait, straight away rather than at the next sweep.
+test('turning GitHub status off lands a session waiting on CI at once', async t => {
+  const { base, stop } = await ciRepo(t, RUNNING);
+  await stop('Nothing yet. Your review request comes when CI is green.');
+  assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI']);
+  await post(base, '/settings', { github: false });
+  assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn']);
+});
+
+// The race that test can't reach: a refresh that goes out while the joining session is still reading its PRs back, and
+// lands after. Refreshes leave a session out until its read is done; otherwise that refresh gives it no PRs and logs the
+// one it made as a stray. A long transcript full of `gh pr create` mentions (each one parsed) keeps the read going while
+// the refresh goes out, and gh holds each refresh's answer until the test lets it go. A second session in another checkout,
+// owning nothing, shows when the refresh has landed.
 test('stats: a refresh that goes out while a joining session reads its PRs back leaves its PRs alone', async t => {
   const id = UUID(8), file = `.claude/projects/-work-8/${id}.jsonl`, { gh, repo, release } = ghRepo([prNode(1, iso(Date.now()))], true);
   const other = fs.mkdtempSync(path.join(tmp, 'other-'));

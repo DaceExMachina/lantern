@@ -376,7 +376,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked", "finished"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked", "finished", "githubAt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if snoozed(id) { out["snoozed"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 }.filter { $0.key != "inTool" } }
             return out
@@ -659,7 +659,7 @@ final class LanternServer {
             if str(s["turn"]) == "compacting" && str(e["notification_type"]) == "idle_prompt" { check(&s); if truthy(s["awaits"]) { break } }
             // the "idle, waiting for input" nudge also fires while a session waits on its background work or its CI; that one
             // doesn't count, so an agent that wakes up again still brings it back to paused
-            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && (truthy(s["awaits"]) || str(s["state"]) == "paused") { break }
+            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && (truthy(s["awaits"]) || waitsOnCI(s)) { break }
             if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["turn"] = "blocked"; s["note"] = or(e["message"], s["note"]) }
         default: // UserPromptSubmit, PreToolUse, PostToolUse: the session is moving, so it no longer needs me
             s["turn"] = "running"
@@ -700,6 +700,17 @@ final class LanternServer {
         return !known.isEmpty && known.allSatisfy { !$0 }
     }
 
+    /// A turn that ended with nothing to ask (`finished`) waits on CI, not on me, while a check run is going on one of its open
+    /// PRs (lantern-pr wakes the session when they finish), and until the GitHub refresh its Stop asked for has answered, so a
+    /// push just before the Stop doesn't land it on the old answer first. Never past TASK_FRESH_MS from the Stop, like a
+    /// background task: a check run stuck in the queue lets go. A refresh that sees its checks finish clears `finished`
+    /// (GitHub.swift refreshGitHub), so a re-run after that doesn't lift a turn that already landed.
+    func waitsOnCI(_ s: JSON) -> Bool {
+        guard str(s["turn"]) == "ended", let at = s["finished"] as? Double, now() - at < TASK_FRESH_MS else { return false }
+        let prs = s["github"] as? [JSON] ?? []
+        return prs.contains { !["merged", "closed"].contains(str($0["need"])) } && ((s["githubAt"] as? Double ?? 0) < at || ciRunning(prs))
+    }
+
     /// The background work a turn handed over to that's still open, in words: its own tasks and its live agents.
     func openWork(_ s: JSON, _ id: String) -> String {
         let n = (s["taskSince"] as? [String: Double] ?? [:]).count, a = awaitedAgents(s, id).count
@@ -722,11 +733,8 @@ final class LanternServer {
             let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS, work = openWork(s, id)
             s["state"] = busy ? "paused" : "waiting"
             s["note"] = busy ? "Waiting on \(work)" : "Finished its turn" + (work.isEmpty ? "" : " (\(work) still running)")
-        // A turn that ended with nothing to ask while its PR's checks run waits on CI, not on me: lantern-pr wakes the session
-        // when they finish. Once a GitHub refresh sees them done it's a finished turn on me; a check stuck pending lets go
-        // after TASK_FRESH_MS from the Stop, like a background task.
         case "ended" where s["finished"] != nil:
-            let ci = now() - (s["finished"] as? Double ?? 0) < TASK_FRESH_MS && (s["github"] as? [JSON] ?? []).contains { truthy($0["running"]) }
+            let ci = waitsOnCI(s)
             s["state"] = ci ? "paused" : "waiting"
             s["note"] = ci ? "Waiting on CI" : "Finished its turn"
         default: s["state"] = "waiting" // a turn that ended without handing over, or one blocked on me (a permission, a question)

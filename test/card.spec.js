@@ -209,9 +209,11 @@ test('the status pill does what a right-click on the moth does (snooze, wake), a
 });
 
 // A turn parked on its PR's checks (the server's "Waiting on CI") is paused like one waiting on agents, but says what it waits on.
+// A resumed session keeps its old note, and it's idle, not waiting on CI.
 test('the pill says what a paused session waits on: its agents, or its CI', async () => {
   const word = async o => find(await show(session(o)), 'chip')[0].getAttribute('aria-label');
-  assert.deepStrictEqual([await word({ state: 'paused', note: 'Waiting on 1 agent' }), await word({ state: 'paused', note: 'Waiting on CI' })], ['waiting on agents: snooze', 'waiting on CI: snooze']);
+  assert.deepStrictEqual([await word({ state: 'paused', note: 'Waiting on 1 agent' }), await word({ state: 'paused', note: 'Waiting on CI' }), await word({ state: 'idle', note: 'Waiting on CI' })],
+    ['waiting on agents: snooze', 'waiting on CI: snooze', 'idle: snooze']);
 });
 
 test('an agent with no tag or model is two lines (job beside the dot), and a shell command has "shell" in the model\'s place', async () => {

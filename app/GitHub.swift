@@ -12,7 +12,7 @@ let CLIENT_ID = "Iv23liGsGuBVmd5HoOSn", KEYCHAIN = "lantern-pr"
 // Where GitHub lives and which `security` to run, so a test can point them at stand-ins (never the real Keychain).
 let GH_WEB = ProcessInfo.processInfo.environment["LANTERN_GITHUB_WEB"] ?? "https://github.com", GH_API = ProcessInfo.processInfo.environment["LANTERN_GITHUB_API"] ?? "https://api.github.com"
 let SECURITY = ProcessInfo.processInfo.environment["LANTERN_SECURITY"] ?? "/usr/bin/security"
-let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }"
+let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision headRefName author { login } repository { name nameWithOwner } reviews(last: 20) { nodes { author { __typename login } state submittedAt } } comments(last: 20) { nodes { author { __typename login } createdAt } } commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state contexts(first: 100) { nodes { __typename ... on CheckRun { status } } } } } } }"
 // GitHub's GraphQL gives up after about 10 seconds and `mine` and `reviews` with all their fields take longer than that past ~50 PRs,
 // so they come a page at a time: the first query also carries closed, reviewed and requestedClosed, the rest only the next pages.
 // `login` is whose review requests count: `@me`, or `githubLogin` in the settings, for a gh whose account is an agent's rather than
@@ -76,13 +76,15 @@ func prNeed(_ p: JSON) -> String {
     if checks.contains(where: { ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].contains(result($0)) }) { return "failing" }
     if str(p["reviewDecision"]) == "CHANGES_REQUESTED" { return "changes" }
     if feedbackWaiting(p) { return "feedback" }
-    if str(p["reviewDecision"]) == "APPROVED" && !checksRunning(p) { return "ready" }
+    let running = checks.contains { (truthy($0["status"]) && str($0["status"]) != "COMPLETED") || result($0) == "PENDING" }
+    if str(p["reviewDecision"]) == "APPROVED" && !running { return "ready" }
     return truthy(p["isDraft"]) ? "draft" : "waiting"
 }
-// whether a PR's checks are still running (prNeed's "ready" waits for them, and so does derive()'s "Waiting on CI")
-func checksRunning(_ p: JSON) -> Bool {
-    (p["statusCheckRollup"] as? [JSON] ?? []).contains { (truthy($0["status"]) && str($0["status"]) != "COMPLETED") || str(or($0["conclusion"], $0["state"])) == "PENDING" }
-}
+// Whether CI is still running on a PR, for derive()'s "Waiting on CI": a check run not yet completed. A commit status left
+// pending doesn't count: one can wait on a person for good (extension's e2e-test-summary until someone adds the `test` label).
+func checksRunning(_ p: JSON) -> Bool { (p["checkRuns"] as? [JSON] ?? []).contains { str($0["status"]) != "COMPLETED" } }
+// a session's PRs with CI running, merged and closed ones aside (stamp keeps those a minute, with their last `running`)
+func ciRunning(_ prs: [JSON]) -> Bool { prs.contains { truthy($0["running"]) && !["merged", "closed"].contains(str($0["need"])) } }
 // When the page animates a PR's firefly from, so every window plays it at the same moment: `seen` when this list first
 // had it (it flies in), `since` when its need last changed, and `was` the need before (its colour crossfades). One that
 // left the list merged or closed stays a minute with that as its need, for its firefly's exit.
@@ -172,7 +174,7 @@ extension LanternServer {
         if accounts.count == 0 && !truthy(settings["github"]) { return }
         if refreshing { refreshAgain = true; return }
         refreshing = true
-        let epoch = githubEpoch
+        let epoch = githubEpoch, asked = now() // a session's `githubAt`: what its github answer is as fresh as
         let list = sessions.items.filter { $0.1["createdPending"] == nil }.map { ($0.0, str($0.1["cwd"]), $0.1["created"] as? [String] ?? []) }
         let tokens = accounts.items, previous = lastResults, wantReviews = isOn("reviews"), me = (settings["githubLogin"] as? String).flatMap { Re("^[A-Za-z0-9-]+$").test($0) ? $0 : nil } ?? "@me"
         DispatchQueue.global().async {
@@ -225,11 +227,12 @@ extension LanternServer {
                 // One in neither list was withdrawn (or I can't see it any more), and just drifts away.
                 for p in (data?["requestedClosed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { reviewEnded[str(p["url"])] = str(p["state"]) }
                 for p in (data?["reviewed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { reviewEnded[str(p["url"])] = str(p["state"]) == "OPEN" ? "MERGED" : str(p["state"]) }
-                // reshape to gh's form so prNeed can read it: checks become one rollup state
+                // reshape to gh's form so prNeed can read it: checks become one rollup state, and the check runs are kept for checksRunning
                 let shaped = { (p: JSON) -> JSON in
                     var p = p
-                    let rollup = ((((p["commits"] as? JSON)?["nodes"] as? [JSON])?.first?["commit"] as? JSON)?["statusCheckRollup"] as? JSON)?["state"]
+                    let checks = (((p["commits"] as? JSON)?["nodes"] as? [JSON])?.first?["commit"] as? JSON)?["statusCheckRollup"] as? JSON, rollup = checks?["state"]
                     p["statusCheckRollup"] = truthy(rollup) ? [["state": rollup!]] : [JSON]()
+                    p["checkRuns"] = ((checks?["contexts"] as? JSON)?["nodes"] as? [JSON] ?? []).filter { str($0["__typename"]) == "CheckRun" }
                     return p
                 }
                 for (name, assigned) in [("reviews", false), ("assigned", true)] {
@@ -277,8 +280,17 @@ extension LanternServer {
                 self.lastResults = Dictionary(keys.enumerated().compactMap { i, k in results[i].map { (k, (at: t, data: $0)) } ?? previous[k].map { (k, $0) } }, uniquingKeysWith: { a, _ in a })
                 self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: reviewEnded, at: t)
                 self.stale = dead
-                // checks starting or finishing can change a session's state (derive's "Waiting on CI")
-                for (id, g) in github { if var s = self.sessions[id] { s["github"] = stamp(g, was: s["github"] as? [JSON] ?? [], closed: closed, at: t); self.derive(&s, id); self.sessions[id] = s } }
+                // checks starting or finishing can change a session's state (derive's "Waiting on CI"). Ones seen to finish end
+                // that wait for good: a re-run after it (a comment's workflow, Update branch) doesn't lift a turn that landed.
+                for (id, g) in github {
+                    guard var s = self.sessions[id] else { continue }
+                    let was = s["github"] as? [JSON] ?? [], fresh = stamp(g, was: was, closed: closed, at: t)
+                    if ciRunning(was) && !ciRunning(fresh) && str(s["turn"]) == "ended" && s["finished"] != nil { s["finished"] = nil; s["note"] = "Finished its turn" }
+                    s["github"] = fresh
+                    s["githubAt"] = asked
+                    self.derive(&s, id)
+                    self.sessions[id] = s
+                }
                 // a query that failed with nothing from before would make its PRs look gone, so then nothing is logged
                 if !answers.isEmpty && answers.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh
@@ -345,7 +357,7 @@ extension LanternServer {
         DispatchQueue.global().async { try? text.write(toFile: self.githubCache, atomically: true, encoding: .utf8) }
     }
 
-    func clearGitHub() { githubEpoch += 1; lastResults = [:]; reviews = []; stale = []; for (id, _) in sessions.items { sessions[id]!["github"] = nil }; broadcast() }
+    func clearGitHub() { githubEpoch += 1; lastResults = [:]; reviews = []; stale = []; for (id, var s) in sessions.items { s["github"] = nil; derive(&s, id); sessions[id] = s }; broadcast() }
 
     // Connect GitHub: the GitHub App's device flow (no server, no secret), tokens kept in the macOS Keychain.
     func loadAccounts() {

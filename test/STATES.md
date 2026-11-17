@@ -72,16 +72,20 @@ A turn that ends with its own task open hands over to it (`awaits`): paused whil
 
 ## CI
 
-A turn that ends with nothing to ask (`finished`) while one of its PRs has checks running (`running` on its `github` entry) waits on CI: lantern-pr wakes the session when they finish. A refresh re-derives the sessions it updates, so checks starting or finishing move the state straight away; past `TASK_FRESH_MS` from the Stop it lets go, as a task does.
+A turn that ends with nothing to ask (`finished`) waits on CI (`waitsOnCI` in `app/Server.swift`) while one of its open PRs has a check run not yet completed (`running` on its `github` entry), and until the GitHub refresh its Stop asked for has answered (`githubAt`). A pending commit status doesn't count, since one can wait on a person. A refresh re-derives the sessions it updates, and one that sees the checks finish ends the wait for good (it clears `finished`). Past `TASK_FRESH_MS` from the Stop it lets go, as a task does.
 
 | Situation | Inputs | Shows | Test |
 |---|---|---|---|
-| The turn ends with its PR's checks running | Stop, checks PENDING | paused, "Waiting on CI" | `a turn that ends with nothing to ask while its PR's checks run waits on CI, through the idle nudge, and lands once they finish` |
+| The turn ends with its PR's checks running | Stop, a check run IN_PROGRESS | paused, "Waiting on CI" | `a turn that ends with nothing to ask while its PR's checks run waits on CI, through the idle nudge, and lands once they finish` |
 | The idle nudge while waiting on CI | … idle_prompt | paused, unchanged | same test |
-| The checks finish | … refresh, checks SUCCESS | waiting, "Finished its turn" | same test |
-| It asks something while they run | ask, checks PENDING | waiting, "Asks: …" | `a turn that asks something while its PR's checks run still needs me` |
-| A refresh finds checks running after the Stop | Stop, refresh, checks PENDING | waiting, then paused "Waiting on CI" | `checks a refresh finds running after a plain Stop put the finished turn back on CI` |
-| A check stuck pending | Stop, checks PENDING, time | paused, then waiting "Finished its turn" | `a check stuck pending lets its session go once the turn is past the task freshness` |
+| The checks finish | … refresh, check runs COMPLETED | waiting, "Finished its turn" | same test |
+| A re-run after it landed (a comment's workflow, Update branch) | … refresh, a check run IN_PROGRESS | waiting, "Finished its turn" | same test |
+| It asks something while they run | ask, a check run IN_PROGRESS | waiting, "Asks: …" | `a turn that asks something while its PR's checks run still needs me` |
+| A push just before the Stop, the last refresh still says done | Stop, the Stop's own refresh | paused throughout, "Waiting on CI" | `checks a push started reach the session through the refresh its Stop asks for, and it never lands in between` |
+| A pending commit status, every check run done (extension#7098's label gate) | Stop, status context PENDING | waiting, "Finished its turn" | `a pending commit status with every check run done is no CI running: the finished turn needs me` |
+| A check run stuck in the queue | Stop, time | paused, then waiting "Finished its turn" | `a check stuck pending lets its session go once the turn is past the task freshness` |
+| GitHub status turned off | Stop, settings github off | waiting, "Finished its turn" at once | `turning GitHub status off lands a session waiting on CI at once` |
+| A Lantern restart while waiting on CI | restart, seeding | waiting (accepted: seeding doesn't bring `finished` back, the safe direction) | none: accepted |
 
 ## Agents
 
