@@ -70,6 +70,24 @@ A turn that ends with its own task open hands over to it (`awaits`): paused whil
 | Only a watch open, its agents done (the demo's last Stop) | Stop listing the watch and finished agents | waiting, "Finished its turn" | `a turn ending with its four agents done and only its lantern-pr watch open is a plain finished turn (the demo's last Stop)` |
 | jwt's restarted watch, seeded and on its Stop | transcript, then Stop listing the watch | waiting | `jwt's restarted lantern-pr watch leaves its finished turn waiting, seeded and on its Stop` |
 
+## CI
+
+A turn that ends with nothing to ask (`finished`) waits on CI (`waitsOnCI` in `app/Server.swift`) while one of its open PRs has a check run not yet completed (`running` on its `github` entry), and until the GitHub refresh its Stop asked for has answered (`githubAt`), for `REFRESH_WAIT_MS` (60 s) at most. A pending commit status doesn't count, since one can wait on a person. A refresh re-derives the sessions it updates, and one that sees the checks finish ends the wait for good (it clears `finished`). Past `TASK_FRESH_MS` from the Stop it lets go, as a task does.
+
+| Situation | Inputs | Shows | Test |
+|---|---|---|---|
+| The turn ends with its PR's checks running | Stop, a check run IN_PROGRESS | paused, "Waiting on CI" | `a turn that ends with nothing to ask while its PR's checks run waits on CI, through the idle nudge, and lands once they finish` |
+| The idle nudge while waiting on CI | … idle_prompt | paused, unchanged | same test |
+| The checks finish | … refresh, check runs COMPLETED | waiting, "Finished its turn" | same test |
+| A re-run after it landed (a comment's workflow, Update branch) | … refresh, a check run IN_PROGRESS | waiting, "Finished its turn" | same test |
+| It asks something while they run | ask, a check run IN_PROGRESS | waiting, "Asks: …" | `a turn that asks something while its PR's checks run still needs me` |
+| A push just before the Stop, the last refresh still says done | Stop, the Stop's own refresh | paused throughout, "Waiting on CI" | `checks a push started reach the session through the refresh its Stop asks for, and it never lands in between` |
+| The Stop's refresh never answers (a hung gh, GitHub down) | Stop, no answer, time | paused, then waiting "Finished its turn" after `REFRESH_WAIT_MS` (60 s) | `a finished turn whose refresh never answers needs me once the refresh wait is over` |
+| A pending commit status, every check run done (extension#7098's label gate) | Stop, status context PENDING | waiting, "Finished its turn" | `a pending commit status with every check run done is no CI running: the finished turn needs me` |
+| A check run stuck in the queue | Stop, time | paused, then waiting "Finished its turn" | `a check stuck pending lets its session go once the turn is past the task freshness` |
+| GitHub status turned off | Stop, settings github off | waiting, "Finished its turn" at once | `turning GitHub status off lands a session waiting on CI at once` |
+| A Lantern restart while waiting on CI | restart, seeding | waiting (accepted: seeding doesn't bring `finished` back, the safe direction) | none: accepted |
+
 ## Agents
 
 | Situation | Inputs | Shows | Test |

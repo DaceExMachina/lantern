@@ -15,6 +15,9 @@ let TITLE_EVERY_MS = 15.0 * 1000
 // A session waiting on background tasks counts as working while one is younger than this, or one of its agents was heard
 // from this recently; past both (a dev server, a stuck agent, a long `lantern-pr watch`), it's a finished turn waiting on me.
 let TASK_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_TASK_FRESH_SECONDS"] ?? "") ?? 30 * 60) * 1000
+// ponytail: how long a finished turn waits on the GitHub refresh its Stop asked for (waitsOnCI). It only has to cover one
+// round trip (refreshSoon's 1.5 s debounce plus the gh call); a refresh that fails or never answers lands it after this.
+let REFRESH_WAIT_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_REFRESH_WAIT_SECONDS"] ?? "") ?? 60) * 1000
 let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_FRESH_SECONDS"] ?? "") ?? 5 * 60) * 1000
 // An agent whose transcript hasn't moved this long is assumed gone (its SubagentStop never came), finished or not.
 let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
@@ -376,7 +379,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked", "finished", "githubAt"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if snoozed(id) { out["snoozed"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 }.filter { $0.key != "inTool" } }
             return out
@@ -623,10 +626,14 @@ final class LanternServer {
             s["error"] = false
             s["turn"] = "ended"
             s["awaits"] = !open.isEmpty && q.isEmpty
+            s["finished"] = q.isEmpty ? now() : nil // when it ended with nothing to ask: derive() may hold it on its PRs' checks
+            // a push just before the Stop may have started checks the last refresh hasn't seen
+            if !(s["github"] as? [JSON] ?? []).isEmpty { refreshSoon() }
             if !truthy(s["awaits"]) { s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (open.isEmpty ? "" : " (\(open) still running)") }
         case "StopFailure":
             s["turn"] = "ended"
             s["awaits"] = false
+            s["finished"] = nil
             s["note"] = "Turn ended with an API error"
             s["error"] = true // the moth lands singed
             stats.event("api_error", id)
@@ -653,9 +660,9 @@ final class LanternServer {
         case "Notification":
             // the idle nudge proves it's back at its prompt, so a /compact that never reported back is over: settle it first
             if str(s["turn"]) == "compacting" && str(e["notification_type"]) == "idle_prompt" { check(&s); if truthy(s["awaits"]) { break } }
-            // the "idle, waiting for input" nudge also fires while a session waits on its background work; that one doesn't
-            // count, so an agent that wakes up again still brings it back to paused
-            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && truthy(s["awaits"]) { break }
+            // the "idle, waiting for input" nudge also fires while a session waits on its background work or its CI; that one
+            // doesn't count, so an agent that wakes up again still brings it back to paused
+            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && (truthy(s["awaits"]) || waitsOnCI(s)) { break }
             if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["turn"] = "blocked"; s["note"] = or(e["message"], s["note"]) }
         default: // UserPromptSubmit, PreToolUse, PostToolUse: the session is moving, so it no longer needs me
             s["turn"] = "running"
@@ -696,6 +703,17 @@ final class LanternServer {
         return !known.isEmpty && known.allSatisfy { !$0 }
     }
 
+    /// A turn that ended with nothing to ask (`finished`) waits on CI, not on me, while a check run is going on one of its open
+    /// PRs (lantern-pr wakes the session when they finish), and until the GitHub refresh its Stop asked for has answered, so a
+    /// push just before the Stop doesn't land it on the old answer first (for REFRESH_WAIT_MS at most). Never past TASK_FRESH_MS from the Stop, like a
+    /// background task: a check run stuck in the queue lets go. A refresh that sees its checks finish clears `finished`
+    /// (GitHub.swift refreshGitHub), so a re-run after that doesn't lift a turn that already landed.
+    func waitsOnCI(_ s: JSON) -> Bool {
+        guard str(s["turn"]) == "ended", let at = s["finished"] as? Double, now() - at < TASK_FRESH_MS else { return false }
+        let prs = s["github"] as? [JSON] ?? []
+        return prs.contains { !["merged", "closed"].contains(str($0["need"])) } && ((s["githubAt"] as? Double ?? 0) < at && now() - at < REFRESH_WAIT_MS || ciRunning(prs))
+    }
+
     /// The background work a turn handed over to that's still open, in words: its own tasks and its live agents.
     func openWork(_ s: JSON, _ id: String) -> String {
         let n = (s["taskSince"] as? [String: Double] ?? [:]).count, a = awaitedAgents(s, id).count
@@ -718,6 +736,10 @@ final class LanternServer {
             let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS, work = openWork(s, id)
             s["state"] = busy ? "paused" : "waiting"
             s["note"] = busy ? "Waiting on \(work)" : "Finished its turn" + (work.isEmpty ? "" : " (\(work) still running)")
+        case "ended" where s["finished"] != nil:
+            let ci = waitsOnCI(s)
+            s["state"] = ci ? "paused" : "waiting"
+            s["note"] = ci ? "Waiting on CI" : "Finished its turn"
         default: s["state"] = "waiting" // a turn that ended without handing over, or one blocked on me (a permission, a question)
         }
         // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been
