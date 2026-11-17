@@ -194,9 +194,18 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
   assert.ok(closes > style.holder[0] - style.light[1], 'the point is below the tip');
   assert.match(srcOf('background.ts'), /uCaps\.z > 0\.0 \? max\(1\.0 - lq\.y \/ uCaps\.z/, 'the shader narrows the fan to that point');
   assert.ok(Math.abs(v.sway) > 0.01, 'the fan is turned by the sway');
+  // the fan's axis, as the shader turns it (q = p - uCapsC, by uSway), runs through the drop's tip and on down the lantern's
+  // own axis, though the light itself has slid aside with the twist (above): its shadow swings with the lantern
+  assert.match(srcOf('background.ts'), /vec2 q = p - uCapsC, lq = vec2\(q\.x \* cos\(uSway\) \+ q\.y \* sin\(uSway\)/);
+  for (const y of [style.holder[0], style.holder[0] + style.taper]) {
+    const [px, py] = rot(style.light[0], y), qx = px - v.capsC[0], qy = py - v.capsC[1];
+    const across = qx * Math.cos(v.sway) + qy * Math.sin(v.sway);
+    assert.ok(Math.abs(across) < 1e-9, `the fan's axis passes ${across} beside the lantern's at ${y}`);
+  }
   applyStyle('barrel'); swingLantern(1 / 60, 50);
   drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
   assert.strictEqual(background().caps[2], 0, 'a paper lantern\'s caps keep their full-width fans');
+  assert.deepStrictEqual(background().capsC, background().lightC, 'a paper lantern\'s fans spread from its light, which doesn\'t slide');
   assert.strictEqual($('inside', SVGGElement).getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
 });
 

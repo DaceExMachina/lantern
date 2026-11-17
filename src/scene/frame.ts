@@ -605,6 +605,8 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, turned = 
     drift: Array.from({ length: 13 }, (_, i) => smokeDrift(s, i * PLUME.life / 12)), // background.ts smokeDrift samples it
     caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1]), 0]
       : holder ? [0, holder[1] / Math.max(4, holder[0] - flameY), style.taper ? holder[0] - style.light[1] + style.taper : 0] : [0, 0, 0],
+    // the caps' fans spread from the light on the lantern's axis, unslid by the twist: the caps and the drop hang there
+    capsC: remote ? remote.c : rot(...style.light),
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
     flame: [...base, ...tip],
     // the flame, drawn by the shader (background.ts drawFlame): its scale, the time, and stepFlame's turbulence,
