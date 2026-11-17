@@ -83,6 +83,7 @@ uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lan
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 // the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
+const float RIM_TAPER = 13.0; // a rim's shadow closes to a point within this many half-widths squared: the flame's light wraps round a narrow one
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 uniform vec4 uHeat; // the hot air rising off the lantern (frame.ts heat): where it leaves, how strong (0 for none), and the time
 // How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
@@ -117,7 +118,9 @@ float rimShade(float px, float py) {
   // and the tip's own rays (on the flame's line they're the same ray, and the whole flame is hidden or none of it)
   float tLo = lo == uB ? 0.0 : lo == uT ? 1.0 : (lo * bh - bx) / (dx + lo * dy);
   float tHi = hi == uT ? 1.0 : hi == uB ? 0.0 : (hi * bh - bx) / (dx + hi * dy);
-  return smoothstep(0.0, 1.0, abs(tHi - tLo));
+  // a narrow rim (the Moroccan's tip) is lit round by the flame's glow, so its shadow closes to a point within RIM_TAPER * half-width squared
+  // (a few hundred units); a wide one's (the candle's) is far past the window by then
+  return smoothstep(0.0, 1.0, abs(tHi - tLo)) * (1.0 - smoothstep(0.3, 1.0, h / (RIM_TAPER * uRim.y * uRim.y)));
 }
 float light(vec2 p) {
   // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this point. Right
