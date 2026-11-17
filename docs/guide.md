@@ -71,7 +71,7 @@ With [GitHub status](setup.md#github-status) on, fireflies show what each PR nee
 | Pale yellow | Draft |
 | Blue | Waiting on review |
 
-A new PR's firefly flies in from the window edge nearest its moth. When one turns green it flashes. When a PR merges, its firefly flares and shakes, loops, then zooms off the window on the side away from its moth. A closed PR's firefly dims and drifts off the nearest edge. Reviews requested from you circle the lantern in the colour of their PR's state; hover one for its PR, and double-click to open it. The footer's bottom left shows how many there are, and opens a list of them.
+A new PR's firefly flies in from the window edge nearest its moth. When one turns green it flashes. When a PR merges, its firefly flares and shakes, loops, then zooms off the window on the side away from its moth. A closed PR's firefly dims and drifts off the nearest edge. Reviews requested from you circle the lantern in the colour of their PR's state; hover one for its PR, and double-click to open it. The footer's bottom left shows how many there are, and opens a list of them. Open PRs that someone else made and assigned to you circle the lantern and join the list too, marked "assigned" (one that also asks for your review shows once, unmarked).
 
 PRs adrift are your open PRs that no session owns, shown as wisps, whatever their age (the stats count only the ones nobody has touched for a week). They drift low in the scene as wisps, pale ghost fireflies in a washed-out shade of their PR colour. The oldest sit lowest and dimmest, and every so often one slowly brightens and fades again. Up to 30 drift on their own, and the rest gather into a faint cloud with a count. Hover a wisp for a quick look at what it needs, click it for its full card, which says which session made it, and double-click it to open the PR. A wisp whose PR belongs to a session shows that session's card instead, and behaves like that session's moth (or its ghost, below). When someone touches the PR again, its wisp rises away.
 
@@ -79,7 +79,7 @@ Ghost moths drift behind the wisps: pale, nearly see-through moths for the old s
 
 PRs adrift need GitHub status, and "show PRs adrift" in the settings menu hides them.
 
-The fireflies circling the lantern itself, and the reviews button at the footer's left, are PRs waiting on your review. Switch "review requests" off in the settings menu to hide them. Lantern then stops asking GitHub for them too.
+The fireflies circling the lantern itself, and the reviews button at the footer's left, are PRs waiting on your review, or assigned to you. Switch "review requests" off in the settings menu to hide them. Lantern then stops asking GitHub for them too.
 
 ## Session text on the paper
 

@@ -76,6 +76,16 @@ test('each row shows its author between the label and the status, on one line wh
   assert.match(css, /#reviews \.me :is\(i, b\) \{ flex: none; \}/);
 });
 
+test('an assigned PR carries an "assigned" marker after its author, still on one line, and a requested one does not', async () => {
+  store.reviews = [{ url: 'https://github.com/o/app/pull/1', label: 'app#1', title: 'A', need: 'waiting', author: 'octocat', assigned: true }, { url: 'https://github.com/o/app/pull/2', label: 'app#2', title: 'B', need: 'waiting', author: 'octocat' }];
+  await nextTick();
+  const me = rows().map(a => [...a.querySelector('.me').children].map(c => c.className || c.tagName));
+  assert.deepStrictEqual(me, [['I', 'B', 'by', 'asg'], ['I', 'B', 'by']]);
+  assert.strictEqual(rows()[0].querySelector('.asg').textContent, 'assigned');
+  const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8');
+  assert.match(css, /#reviews \.me \.asg \{ flex: none;/, 'it never shrinks: only the author clips');
+});
+
 test('the now playing widget gives way while the dropdown is open', async () => {
   const pinia = createPinia(), playing = createApp(NowPlaying).use(pinia);
   app.unmount();
