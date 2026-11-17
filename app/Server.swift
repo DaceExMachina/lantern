@@ -376,7 +376,7 @@ final class LanternServer {
     func snapshot() -> String {
         jsonText(sessions.items.map { id, s -> JSON in
             var out = s
-            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
+            for key in ["titleRead", "unconfirmed", "kitty", "taskSince", "createdPending", "titleSeen", "turn", "awaits", "agentsAwaited", "promptId", "replacedPrompt", "agentAsked", "finished"] { out[key] = nil } // the server's own bookkeeping; the page never reads them
             if snoozed(id) { out["snoozed"] = true }
             out["subagents"] = (agents[id] ?? Ordered()).items.map { aid, a in a.merging(["id": aid]) { $1 }.filter { $0.key != "inTool" } }
             return out
@@ -623,10 +623,14 @@ final class LanternServer {
             s["error"] = false
             s["turn"] = "ended"
             s["awaits"] = !open.isEmpty && q.isEmpty
+            s["finished"] = q.isEmpty ? now() : nil // when it ended with nothing to ask: derive() may hold it on its PRs' checks
+            // a push just before the Stop may have started checks the last refresh hasn't seen
+            if !(s["github"] as? [JSON] ?? []).isEmpty { refreshSoon() }
             if !truthy(s["awaits"]) { s["note"] = (q.isEmpty ? "Finished its turn" : "Asks: \(q)") + (open.isEmpty ? "" : " (\(open) still running)") }
         case "StopFailure":
             s["turn"] = "ended"
             s["awaits"] = false
+            s["finished"] = nil
             s["note"] = "Turn ended with an API error"
             s["error"] = true // the moth lands singed
             stats.event("api_error", id)
@@ -653,9 +657,9 @@ final class LanternServer {
         case "Notification":
             // the idle nudge proves it's back at its prompt, so a /compact that never reported back is over: settle it first
             if str(s["turn"]) == "compacting" && str(e["notification_type"]) == "idle_prompt" { check(&s); if truthy(s["awaits"]) { break } }
-            // the "idle, waiting for input" nudge also fires while a session waits on its background work; that one doesn't
-            // count, so an agent that wakes up again still brings it back to paused
-            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && truthy(s["awaits"]) { break }
+            // the "idle, waiting for input" nudge also fires while a session waits on its background work or its CI; that one
+            // doesn't count, so an agent that wakes up again still brings it back to paused
+            if str(e["notification_type"]) == "idle_prompt" && str(s["turn"]) == "ended" && (truthy(s["awaits"]) || str(s["state"]) == "paused") { break }
             if let t = e["notification_type"] as? String, WAITING_NOTIFICATIONS.contains(t) { s["turn"] = "blocked"; s["note"] = or(e["message"], s["note"]) }
         default: // UserPromptSubmit, PreToolUse, PostToolUse: the session is moving, so it no longer needs me
             s["turn"] = "running"
@@ -718,6 +722,13 @@ final class LanternServer {
             let busy = since.values.contains { t - $0 < TASK_FRESH_MS } || t - heard < AGENT_FRESH_MS, work = openWork(s, id)
             s["state"] = busy ? "paused" : "waiting"
             s["note"] = busy ? "Waiting on \(work)" : "Finished its turn" + (work.isEmpty ? "" : " (\(work) still running)")
+        // A turn that ended with nothing to ask while its PR's checks run waits on CI, not on me: lantern-pr wakes the session
+        // when they finish. Once a GitHub refresh sees them done it's a finished turn on me; a check stuck pending lets go
+        // after TASK_FRESH_MS from the Stop, like a background task.
+        case "ended" where s["finished"] != nil:
+            let ci = now() - (s["finished"] as? Double ?? 0) < TASK_FRESH_MS && (s["github"] as? [JSON] ?? []).contains { truthy($0["running"]) }
+            s["state"] = ci ? "paused" : "waiting"
+            s["note"] = ci ? "Waiting on CI" : "Finished its turn"
         default: s["state"] = "waiting" // a turn that ended without handing over, or one blocked on me (a permission, a question)
         }
         // when it started waiting on me: the footer goes oldest first, and moths grow restless the longer it's been

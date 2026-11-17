@@ -76,9 +76,12 @@ func prNeed(_ p: JSON) -> String {
     if checks.contains(where: { ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"].contains(result($0)) }) { return "failing" }
     if str(p["reviewDecision"]) == "CHANGES_REQUESTED" { return "changes" }
     if feedbackWaiting(p) { return "feedback" }
-    let running = checks.contains { (truthy($0["status"]) && str($0["status"]) != "COMPLETED") || result($0) == "PENDING" }
-    if str(p["reviewDecision"]) == "APPROVED" && !running { return "ready" }
+    if str(p["reviewDecision"]) == "APPROVED" && !checksRunning(p) { return "ready" }
     return truthy(p["isDraft"]) ? "draft" : "waiting"
+}
+// whether a PR's checks are still running (prNeed's "ready" waits for them, and so does derive()'s "Waiting on CI")
+func checksRunning(_ p: JSON) -> Bool {
+    (p["statusCheckRollup"] as? [JSON] ?? []).contains { (truthy($0["status"]) && str($0["status"]) != "COMPLETED") || str(or($0["conclusion"], $0["state"])) == "PENDING" }
 }
 // When the page animates a PR's firefly from, so every window plays it at the same moment: `seen` when this list first
 // had it (it flies in), `since` when its need last changed, and `was` the need before (its colour crossfades). One that
@@ -250,7 +253,7 @@ extension LanternServer {
                     for (url, p) in all.items where str(p["headRefName"]) == branch && str((p["repository"] as? JSON)?["nameWithOwner"]).lowercased() == repo?.lowercased() { prs[url] = p }
                 }
                 for url in created { if let p = all[url] { prs[url] = p } }
-                github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1), "createdAt": $0.1["createdAt"] ?? NSNull()] } // createdAt: how long it's been open, for the card
+                github[id] = prs.items.map { ["url": $0.1["url"]!, "title": $0.1["title"] ?? NSNull(), "label": "#\(str($0.1["number"]))", "need": prNeed($0.1), "running": checksRunning($0.1), "createdAt": $0.1["createdAt"] ?? NSNull()] } // createdAt: how long it's been open, for the card; running: its checks, for derive()
             }
             // The wisps: my open PRs that no session owns, oldest first. `quiet` (nobody has touched it for a week) is what makes one stale.
             let owned = Set(github.values.flatMap { $0.map { str($0["url"]) } }), weekAgo = Date().addingTimeInterval(-7 * 24 * 3600)
@@ -274,7 +277,8 @@ extension LanternServer {
                 self.lastResults = Dictionary(keys.enumerated().compactMap { i, k in results[i].map { (k, (at: t, data: $0)) } ?? previous[k].map { (k, $0) } }, uniquingKeysWith: { a, _ in a })
                 self.reviews = stamp(wanted.items.map(\.1), was: self.reviews, closed: reviewEnded, at: t)
                 self.stale = dead
-                for (id, g) in github { let was = self.sessions[id]?["github"] as? [JSON] ?? []; self.sessions[id]?["github"] = stamp(g, was: was, closed: closed, at: t) }
+                // checks starting or finishing can change a session's state (derive's "Waiting on CI")
+                for (id, g) in github { if var s = self.sessions[id] { s["github"] = stamp(g, was: s["github"] as? [JSON] ?? [], closed: closed, at: t); self.derive(&s, id); self.sessions[id] = s } }
                 // a query that failed with nothing from before would make its PRs look gone, so then nothing is logged
                 if !answers.isEmpty && answers.allSatisfy({ $0 != nil }) { self.logPRs(open: Set(all.keys), quiet: quiet, closed: closed) }
                 // remember the result, so a restart shows the fireflies straight away instead of after the first slow refresh

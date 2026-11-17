@@ -70,6 +70,19 @@ A turn that ends with its own task open hands over to it (`awaits`): paused whil
 | Only a watch open, its agents done (the demo's last Stop) | Stop listing the watch and finished agents | waiting, "Finished its turn" | `a turn ending with its four agents done and only its lantern-pr watch open is a plain finished turn (the demo's last Stop)` |
 | jwt's restarted watch, seeded and on its Stop | transcript, then Stop listing the watch | waiting | `jwt's restarted lantern-pr watch leaves its finished turn waiting, seeded and on its Stop` |
 
+## CI
+
+A turn that ends with nothing to ask (`finished`) while one of its PRs has checks running (`running` on its `github` entry) waits on CI: lantern-pr wakes the session when they finish. A refresh re-derives the sessions it updates, so checks starting or finishing move the state straight away; past `TASK_FRESH_MS` from the Stop it lets go, as a task does.
+
+| Situation | Inputs | Shows | Test |
+|---|---|---|---|
+| The turn ends with its PR's checks running | Stop, checks PENDING | paused, "Waiting on CI" | `a turn that ends with nothing to ask while its PR's checks run waits on CI, through the idle nudge, and lands once they finish` |
+| The idle nudge while waiting on CI | … idle_prompt | paused, unchanged | same test |
+| The checks finish | … refresh, checks SUCCESS | waiting, "Finished its turn" | same test |
+| It asks something while they run | ask, checks PENDING | waiting, "Asks: …" | `a turn that asks something while its PR's checks run still needs me` |
+| A refresh finds checks running after the Stop | Stop, refresh, checks PENDING | waiting, then paused "Waiting on CI" | `checks a refresh finds running after a plain Stop put the finished turn back on CI` |
+| A check stuck pending | Stop, checks PENDING, time | paused, then waiting "Finished its turn" | `a check stuck pending lets its session go once the turn is past the task freshness` |
+
 ## Agents
 
 | Situation | Inputs | Shows | Test |
