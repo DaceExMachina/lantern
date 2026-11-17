@@ -1678,10 +1678,10 @@ const fs = require('fs'), q = process.argv.find(a => a.startsWith('query=')).sli
 fs.appendFileSync('${log}', q + '\\n');
 const data = { mine: { nodes: [] }, closed: { nodes: [] } };
 for (const m of q.matchAll(/(\\w+): search\\(query: "([^"]*)", type: ISSUE, first: (\\d+)(?:, after: "(\\d+)")?/g)) {
-  const [, name, query, first, after] = m, who = /review-requested:(\\S+)/.exec(query)?.[1];
-  if (name !== 'reviews') continue;
-  const all = asked[who === '@me' ? 'agent' : who] || [], from = Number(after || 0), page = all.slice(from, from + Number(first));
-  data.reviews = { pageInfo: { hasNextPage: from + page.length < all.length, endCursor: String(from + page.length) }, nodes: page };
+  const [, name, query, first, after] = m, who = /(?:review-requested|assignee):(\\S+)/.exec(query)?.[1];
+  if (name !== 'reviews' && name !== 'assigned') continue;
+  const all = asked[(name === 'assigned' ? 'assigned:' : '') + (who === '@me' ? 'agent' : who)] || [], from = Number(after || 0), page = all.slice(from, from + Number(first));
+  data[name] = { pageInfo: { hasNextPage: from + page.length < all.length, endCursor: String(from + page.length) }, nodes: page };
 }
 console.log(JSON.stringify({ data }));
 `, { mode: 0o755 });
@@ -1704,6 +1704,25 @@ test('reviews: the list is the configured login\'s requests, every page of them'
   assert.match(queries(), /after: "25"/);
   await post(base, '/settings', { githubLogin: 'a b' }).catch(() => {});
   assert.doesNotMatch(queries(), /user-review-requested:a b/, 'a login is a login, not a way into the query');
+});
+
+// The open PRs assigned to me join the review requests, marked, and one that also asks for my review is listed once, unmarked. The search
+// leaves out the PRs I made (-author:@me: GitHub applies that, so the test checks the query).
+test('reviews: PRs assigned to me join the list, marked, once each', async t => {
+  const { gh, repo, queries } = ghRequests({
+    dace: [prNode(1, iso(Date.now()))],
+    'assigned:dace': [prNode(1, iso(Date.now())), { ...prNode(2, iso(Date.now())), author: { login: 'octo' } }],
+  });
+  const base = await serve(t, {}, () => {}, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true, githubLogin: 'dace' });
+  const { reviews } = await until(async () => { const s = await snapshot(base); return s.reviews?.length === 2 && s; }, 'a refresh to list the reviews and the assigned');
+  assert.deepStrictEqual(reviews.map(r => [r.label, r.assigned ?? false]).sort(), [['r#1', false], ['r#2', true]], 'r#1 is both: once, and a request');
+  assert.match(queries(), /assignee:dace -author:@me/, 'the PRs I made are left out');
+  await post(base, '/settings', { reviews: false });
+  const asks = () => queries().split('query {').slice(1), before = asks().length; // a refresh under way when it went off may still ask
+  await post(base, '/settings', { githubLogin: 'dace2' }); // a refresh, now with the reviews off
+  await until(async () => asks().length > before && !asks().at(-1).includes('assignee:') && !asks().at(-1).includes('review-requested:'), 'a refresh with reviews off asks for neither');
 });
 
 // A review request that ends leaves its firefly the way a PR's does: merged and closed as they say, one I reviewed (still open)

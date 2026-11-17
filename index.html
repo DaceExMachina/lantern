@@ -330,6 +330,7 @@
   #reviews .me { white-space: nowrap; } /* one line: the author clips, the label and the status never shrink */
   #reviews .me :is(i, b) { flex: none; }
   #reviews .me .by { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; opacity: 0.7; }
+  #reviews .me .asg { flex: none; padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); background: var(--line-soft); color: var(--ink-soft); } /* the card's idle chip: assigned to me, not asked to review */
   #reviews .me i { flex: none; width: 6px; height: 6px; border-radius: 50%; }
   :is(#reviews, #bookmarks) .me b { color: var(--accent-violet); font-weight: var(--weight-regular); }
   #bookmarks .me { display: block; } /* one run of text: its folder, running or ended, and when it was last active */

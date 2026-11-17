@@ -16,15 +16,16 @@ let PR_GQL = "url number title state isDraft createdAt updatedAt reviewDecision 
 // GitHub's GraphQL gives up after about 10 seconds and `mine` and `reviews` with all their fields take longer than that past ~50 PRs,
 // so they come a page at a time: the first query also carries closed, reviewed and requestedClosed, the rest only the next pages.
 // `login` is whose review requests count: `@me`, or `githubLogin` in the settings, for a gh whose account is an agent's rather than
-// the person's. `user-review-requested` is requests addressed to them, not to a team they are in.
-let PAGE_SIZE = 25, PAGED = ["reviews", "mine"]
+// the person's. `user-review-requested` is requests addressed to them, not to a team they are in. `assigned` is open PRs assigned
+// to them that someone else made (their own are in `mine`): they join the reviews list, marked, unless also requested.
+let PAGE_SIZE = 25, PAGED = ["reviews", "assigned", "mine"]
 func prQuery(_ fields: String, _ login: String, after: [String: String]? = nil, reviews: Bool = true) -> String {
     var searches = [
-        "reviews": "is:pr is:open archived:false user-review-requested:\(login)", "mine": "is:pr is:open archived:false author:@me",
+        "reviews": "is:pr is:open archived:false user-review-requested:\(login)", "assigned": "is:pr is:open archived:false assignee:\(login) -author:@me", "mine": "is:pr is:open archived:false author:@me",
         "closed": "is:pr is:closed archived:false author:@me sort:updated-desc", "reviewed": "is:pr is:open archived:false reviewed-by:\(login) sort:updated-desc",
         "requestedClosed": "is:pr is:closed archived:false user-review-requested:\(login) sort:updated-desc",
     ]
-    if !reviews { for name in ["reviews", "reviewed", "requestedClosed"] { searches[name] = nil } } // the review requests are switched off: don't ask for them
+    if !reviews { for name in ["reviews", "assigned", "reviewed", "requestedClosed"] { searches[name] = nil } } // the review requests are switched off: don't ask for them
     let search = { (name: String) -> String in
         let paged = PAGED.contains(name), count = paged ? PAGE_SIZE : 30, cursor = after?[name].map { ", after: \"\($0)\"" } ?? ""
         let body = paged ? "pageInfo { hasNextPage endCursor } nodes { ... on PullRequest { \(fields) } }" : "nodes { ... on PullRequest { url state } }"
@@ -39,7 +40,7 @@ func nextPages(_ d: JSON) -> [String: String] {
         return (name, cursor)
     })
 }
-// Asks for every page of `reviews` and `mine` and returns the first answer with all the pages' PRs in it, or nil if the first has no
+// Asks for every page of `reviews`, `assigned` and `mine` and returns the first answer with all the pages' PRs in it, or nil if the first has no
 // `mine` (a token without checks access) or a later one fails (a blip, so the caller keeps what it had). ponytail: 20 pages (500 PRs) at most.
 func allPages(_ fields: String, _ login: String, reviews: Bool = true, _ ask: (String) -> JSON?) -> JSON? {
     guard var d = ask(prQuery(fields, login, reviews: reviews)), d["mine"] is JSON else { return nil }
@@ -204,7 +205,7 @@ extension LanternServer {
             // reviews, mine, closed and the review lists empty, from a query whose last answer had something, is a blip too. A really empty account
             // shows empty once what it had ages out (GH_KEEP_MS).
             for i in results.indices {
-                let empty = { (d: JSON?) in ["reviews", "mine", "closed", "reviewed", "requestedClosed"].allSatisfy { ((d?[$0] as? JSON)?["nodes"] as? [JSON])?.isEmpty != false } }
+                let empty = { (d: JSON?) in ["reviews", "assigned", "mine", "closed", "reviewed", "requestedClosed"].allSatisfy { ((d?[$0] as? JSON)?["nodes"] as? [JSON])?.isEmpty != false } }
                 if results[i] != nil, empty(results[i]), let last = previous[keys[i]], !empty(last.data) { results[i] = nil }
             }
             // a query that failed (a blip) keeps what it found in the last 10 minutes (GH_KEEP_MS), so its PRs neither vanish and fly back in,
@@ -214,7 +215,7 @@ extension LanternServer {
                 guard errors[keys[i]] != "expired", let last = previous[keys[i]], t0 - last.at < GH_KEEP_MS else { return nil }
                 return last.data
             }
-            var all = Ordered<JSON>(), wanted = Ordered<JSON>(), closed: [String: String] = [:], reviewEnded: [String: String] = [:]
+            var all = Ordered<JSON>(), wanted = Ordered<JSON>(), assignedOnly = Ordered<JSON>(), closed: [String: String] = [:], reviewEnded: [String: String] = [:]
             for data in answers {
                 for p in (data?["closed"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { closed[str(p["url"])] = str(p["state"]) }
                 // how a review request ended, for stamp: merged or closed as it says, and one I reviewed (still open) leaves like a merge.
@@ -228,11 +229,15 @@ extension LanternServer {
                     p["statusCheckRollup"] = truthy(rollup) ? [["state": rollup!]] : [JSON]()
                     return p
                 }
-                for p in (data?["reviews"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
-                    wanted[str(p["url"])] = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))", "author": (p["author"] as? JSON)?["login"] ?? NSNull(), "need": prNeed(shaped(p))]
+                for (name, assigned) in [("reviews", false), ("assigned", true)] {
+                    for p in (data?[name] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) {
+                        var review: JSON = ["url": p["url"]!, "title": p["title"] ?? NSNull(), "label": "\(str((p["repository"] as? JSON)?["name"]))#\(str(p["number"]))", "author": (p["author"] as? JSON)?["login"] ?? NSNull(), "need": prNeed(shaped(p))]
+                        if assigned { review["assigned"] = true; assignedOnly[str(p["url"])] = review } else { wanted[str(p["url"])] = review }
+                    }
                 }
                 for p in (data?["mine"] as? JSON)?["nodes"] as? [JSON] ?? [] where truthy(p["url"]) { all[str(p["url"])] = shaped(p) }
             }
+            for (url, review) in assignedOnly.items where wanted[url] == nil { wanted[url] = review } // a request, from any account, beats an assignment
             // a PR I made (through the gh account's sessions) is my own work, whoever it asks to review: never a review request
             for url in all.keys { wanted[url] = nil }
             let alone = { (cwd: String) in live.filter { $0.1 == cwd }.count == 1 }

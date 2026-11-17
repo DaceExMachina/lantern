@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The review requests: a button at the footer's bottom left with their count, shown only while there are any, opening a
-// dropdown (those not already flying as a moth's firefly, offBoard; a native popover, which closes on a click elsewhere or Escape) that lists each PR asking for my review: its
+// dropdown (those not already flying as a moth's firefly, offBoard; a native popover, which closes on a click elsewhere or Escape) that lists each PR asking for my review, or assigned to me by someone else (marked): its
 // repo#number as a link, its title, its author, and what it needs, the way a PR chip's dot and words show it elsewhere. A title cut
 // short shows in #prTip while its row is hovered or focused. The fireflies circling the lantern are these same PRs.
 import { computed, watch } from 'vue';
@@ -23,7 +23,7 @@ const tip = (e: Event, r: Review) => { const el = e.currentTarget; if (el instan
     </button>
     <div id="reviews" class="flyup" popover aria-label="Review requests" @toggle="store.reviewsOpen = $event.newState === 'open'">
       <a v-for="r in rows" :key="r.url" :href="r.url" target="_blank" rel="noopener" @pointerenter="tip($event, r)" @focus="tip($event, r)" @pointerleave="hidePrTip" @blur="hidePrTip">
-        <span class="face"><span class="ti">{{ r.title ?? '' }}</span><span class="me"><i :style="{ background: flyColour(r.need) }"></i><b>{{ r.label }}</b><span v-if="r.author" class="by">{{ r.author }}</span>{{ NEED[r.need] || r.need }}</span></span>
+        <span class="face"><span class="ti">{{ r.title ?? '' }}</span><span class="me"><i :style="{ background: flyColour(r.need) }"></i><b>{{ r.label }}</b><span v-if="r.author" class="by">{{ r.author }}</span><span v-if="r.assigned" class="asg">assigned</span>{{ NEED[r.need] || r.need }}</span></span>
       </a>
     </div>
   </template>

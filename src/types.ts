@@ -63,8 +63,8 @@ export const isSession = (x: unknown): x is Session => isRecord(x)
 
 // ---- the other events
 /** A PR waiting on my review. */
-export interface Review extends FlyState { url: string; label: string; title: string | null; author?: Opt<string> }
-export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']) && isString(x['need']) && optString(x['author']);
+export interface Review extends FlyState { url: string; label: string; title: string | null; author?: Opt<string>; assigned?: Opt<boolean> }
+export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']) && isString(x['need']) && optString(x['author']) && optBoolean(x['assigned']);
 /** The old session that made a stale PR. */
 export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number; resuming?: Opt<number> }
 /** One of my open PRs no session owns (a wisp; stale once nobody has touched it for a week). */
