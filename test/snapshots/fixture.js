@@ -68,8 +68,8 @@
   const needs = ['ready', 'failing', 'changes', 'draft', 'waiting'];
   // bookmarks: a running session and one that has ended, kept as the server saved it
   const bookmarks = [{ id: 'sess-alpha' }, { id: 'old-9', title: 'Tidy the release notes', cwd: '/Users/x/projects/docs', last: Date.now() - 2 * 864e5 }];
-  const stale = drop => Array.from({ length: 34 }, (_, i) => ({ ...pr(100 + i, needs[i % 5]), updatedAt: new RealDate(BASE - (8 + i) * 864e5).toISOString(),
-    owner: i % 4 === 0 ? owners[i % 3] : undefined })).filter((_, i) => !drop || i !== 33);
+  const stale = drop => Array.from({ length: 54 }, (_, i) => ({ ...pr(100 + i, needs[i % 5]), updatedAt: new RealDate(BASE - (8 + i) * 864e5).toISOString(),
+    owner: i % 4 === 0 ? owners[i % 3] : undefined })).filter((_, i) => !drop || i !== 53);
 
   // frames at 60 a second, with the session text's 250ms timer ticking between them; LAST adds up the runs in the steps
   // below, so it ends as T at the last picture

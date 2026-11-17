@@ -797,13 +797,13 @@ final class LanternServer {
         if quietNow != quiet { if quietNow { stats.begin("quiet", at: t) } else { stats.end("quiet", at: t) }; quiet = quietNow }
         if violetNow != violet { if violetNow { stats.begin("violet", at: t) } else { stats.end("violet", at: t) }; violet = violetNow }
         // badges for what's on screen right now (Stats.earn gives each once a day): ten agents in one session, ten open PRs
-        // owned by one session, twenty fireflies in flight, stale PRs past their 30 (the faint cloud shows), and one ghost moth
+        // owned by one session, twenty fireflies in flight, stale PRs past their 50 (the faint cloud shows), and one ghost moth
         // (an old session) behind five stale PRs
         if agents.values.contains(where: { $0.count >= 10 }) { stats.earn("hive_mind") }
         let open = ownedPRs.filter { !["merged", "closed"].contains($0.value.need) }
         if Dictionary(grouping: open.values, by: \.session).values.contains(where: { $0.count >= 10 }) { stats.earn("swarm_season") }
         if open.count >= 20 { stats.earn("light_pollution") }
-        if stale.count > 30 { stats.earn("haunted") }
+        if stale.count > 50 { stats.earn("haunted") }
         let ghosts = stale.compactMap { (owners[str($0["url"])] as? JSON)?["id"] as? String }
         if Dictionary(grouping: ghosts) { $0 }.values.contains(where: { $0.count >= 5 }) { stats.earn("restless_spirits") }
     }
