@@ -495,7 +495,8 @@ void main() {
   c = mix(c, vec4(uMidC, 1.0), tear * tongue(q, 24.0 * swell, h * 0.73 * (1.0 + 0.06 * noise(vec2(time * 1.3, 3.0))), px));
   c = mix(c, vec4(uCoreC, 1.0), tear * tongue(q, 13.0 * swell, h * 0.42 * (1.0 + 0.06 * noise(vec2(time * 1.3, 9.0))), px));
   vec2 b = (root - uBlue.xy) / uBlue.zw;
-  c = mix(c, vec4(uBlueC, 1.0), uBlueA * smoothstep(1.0, 0.8, length(b)));
+  float soft = uSoft / uBase.z / min(uBlue.z, uBlue.w); // the paper's softness, in the root's own units
+  c = mix(c, vec4(uBlueC, 1.0), uBlueA / (1.0 + soft * soft) * smoothstep(1.0 + soft, 0.8 - soft, length(b)));
   gl_FragColor = c * uAlpha;
 }`, fgl);
 const flameQuad = fgl.createBuffer();
