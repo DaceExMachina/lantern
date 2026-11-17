@@ -153,10 +153,11 @@ float light(vec2 p) {
   vec2 q = p - uCapsC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
   // A narrow tip's fan (uCaps.z: how far below the light the tip is; uCaps.w: how much further it takes to close) keeps its
   // width at the tip, then narrows to a point below it, the flame's light wrapping round it.
-  // The finial dangling from the tip (uDangle, about the tip) has swung off the axis by off at this depth: the fan's edge on
-  // that side moves out to cover it, the other side stays.
-  float off = -max(lq.y - uCaps.z, 0.0) * sin(uDangle), ax = max(abs(lq.x) - (lq.x * off > 0.0 ? abs(off) : 0.0), 0.0);
-  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = ax / max(abs(lq.y), 0.001), wrap = uCaps.w > 0.0 ? max(1.0 - max(lq.y - uCaps.z, 0.0) / uCaps.w, 0.02) : 1.0;
+  float wrap = uCaps.w > 0.0 ? max(1.0 - max(lq.y - uCaps.z, 0.0) / uCaps.w, 0.02) : 1.0;
+  // The finial dangling from the tip (uDangle, about the tip) has swung off the axis by off at this depth, closing with the
+  // fan: the fan's edge on that side moves out to cover it, the other side stays.
+  float off = -min(max(lq.y - uCaps.z, 0.0), uCaps.w) * wrap * sin(uDangle), ax = max(abs(lq.x) - (lq.x * off > 0.0 ? abs(off) : 0.0), 0.0);
+  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = ax / max(abs(lq.y), 0.001);
   float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
     : step(0.001, capR) * smoothstep((capR * 0.8 + 0.05) * wrap, (capR * 0.8 - 0.05) * wrap, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,

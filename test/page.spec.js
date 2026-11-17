@@ -204,15 +204,16 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
   }
   // the finial dangling from the tip: the fan's edge on its side moves out to cover it, the other edge stays (the shader's own
   // lines, run as JS, with the dangle on and off, at a depth below the tip)
-  const dangleSrc = srcOf('background.ts').match(/float off = ([^\n]*?), ax = ([^\n]*?);\n/);
+  const dangleSrc = srcOf('background.ts').match(/float wrap = ([^\n]*?);\n[^\n]*\n[^\n]*\n\s*float off = ([^\n]*?), ax = ([^\n]*?);\n/);
   assert.ok(dangleSrc, 'background.ts widens the fan toward the finial');
-  const reach = (x, y, dangle) => new Function('lqx', 'lqy', 'uDangle', 'uCaps', 'abs', 'max', 'sin', `const off = ${dangleSrc[1]}, ax = ${dangleSrc[2]}; return ax;`.replace(/lq\.x/g, 'lqx').replace(/lq\.y/g, 'lqy').replace(/uCaps\.z/g, 'uCaps[2]'))(x, y, dangle, v.caps, Math.abs, Math.max, Math.sin);
+  const reach = (x, y, dangle) => new Function('lqx', 'lqy', 'uDangle', 'uCaps', 'abs', 'max', 'min', 'sin', `const wrap = ${dangleSrc[1]}, off = ${dangleSrc[2]}, ax = ${dangleSrc[3]}; return ax;`.replace(/lq\.x/g, 'lqx').replace(/lq\.y/g, 'lqy').replace(/uCaps\.([zw])/g, (_, c) => `uCaps[${c === 'z' ? 2 : 3}]`))(x, y, dangle, v.caps, Math.abs, Math.max, Math.min, Math.sin);
   const depth = tip + taper / 2, a = 0.05;
   assert.ok(Math.abs(v.dangle) > 0, 'the finial is dangling in this frame');
   assert.strictEqual(reach(20, depth, 0), 20, 'at rest the fan is as the tip gives it');
   const side = Math.sign(-a);
-  assert.ok(reach(side * 20, depth, a) < 20 - 1, 'the edge on the finial\'s side moves out');
+  assert.ok(reach(side * 20, depth, a) < 20 - 0.5, 'the edge on the finial\'s side moves out');
   assert.strictEqual(reach(-side * 20, depth, a), 20, 'the other edge stays');
+  for (const s of [1, -1]) assert.ok(reach(s * 20, tip + taper + 100, a) > 20 - 0.2, 'past where the fan closes the dangle adds no width');
   applyStyle('barrel'); swingLantern(1 / 60, 50);
   drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
   assert.strictEqual(background().caps[3], 0, 'a paper lantern\'s caps keep their full-width fans');
