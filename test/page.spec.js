@@ -186,7 +186,17 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
     assert.ok(Math.min(0, wall) < x && x < Math.max(0, wall), `${what} slides ${x}, between the front (0) and the far wall (${wall})`);
     assert.ok(Math.abs(x - wall / 2) < 0.01, `${what} sits half way: ${x} of ${wall}`);
   }
+  // the lower shadow comes from the drop's tip alone: a thin fan that closes to a point below it, and (in the shader, turned by
+  // uSway like the paper lanterns' caps) swings with the lantern
+  const [top, bottom, closes] = v.caps;
+  assert.ok(top === 0 && bottom > 0 && bottom < 0.05, `a thin fan under the light: ${bottom}`);
+  assert.strictEqual(closes, style.holder[0] - style.light[1] + style.taper, 'it closes to a point a little below the tip');
+  assert.ok(closes > style.holder[0] - style.light[1], 'the point is below the tip');
+  assert.match(srcOf('background.ts'), /uCaps\.z > 0\.0 \? max\(1\.0 - lq\.y \/ uCaps\.z/, 'the shader narrows the fan to that point');
+  assert.ok(Math.abs(v.sway) > 0.01, 'the fan is turned by the sway');
   applyStyle('barrel'); swingLantern(1 / 60, 50);
+  drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
+  assert.strictEqual(background().caps[2], 0, 'a paper lantern\'s caps keep their full-width fans');
   assert.strictEqual($('inside', SVGGElement).getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
 });
 
@@ -196,25 +206,14 @@ const rimShadeFrom = ({ flame: [fx, fy, tx, ty], rim: [x, y, z] }) => {
   assert.ok(src, 'background.ts has rimShade');
   const js = src[0].replace('float rimShade(float px, float py)', 'return (px, py) =>').replace(/\bfloat /g, 'let ').replace(/\b(min|max|abs)\(/g, 'Math.$1(');
   const smoothstep = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
-  const RIM_TAPER = +srcOf('background.ts').match(/RIM_TAPER = ([\d.]+)/)[1];
-  return new Function('uFlame', 'uRim', 'smoothstep', 'RIM_TAPER', js)({ x: fx, y: fy, z: tx, w: ty }, { x, y, z }, smoothstep, RIM_TAPER);
+  return new Function('uFlame', 'uRim', 'smoothstep', js)({ x: fx, y: fy, z: tx, w: ty }, { x, y, z }, smoothstep);
 };
 test('the candle\'s rim shades the room below from its corners: lit outside the flame\'s base line, dark inside its tip line', () => {
   for (const key of styles) {
     applyStyle(key); swingLantern(1 / 60, 0.5);
     drawLight(1 / 60, 0.5, stepFlame(1 / 60, 0.5, { size: 0.8, pulse: 1 }));
-    if (key !== 'candle' && key !== 'moroccan') { assert.deepStrictEqual([...background().rim], [0, 0, 0], `${key}: no rim shadow`); continue; }
+    if (key !== 'candle') { assert.deepStrictEqual([...background().rim], [0, 0, 0], `${key}: no rim shadow`); continue; }
     const v = background(), [bx, by, tx, ty] = v.flame, [cx, half, rimY] = v.rim, shade = rimShadeFrom(v);
-    if (key === 'moroccan') { // the drop's tip casts only a thin shadow straight down, which the flame's light closes to a point
-      assert.strictEqual(rimY, STYLES.moroccan.holder[0], 'the tip is the rim');
-      assert.ok(half <= 4, `a thin tip: ${half}`);
-      const on = d => cx + (cx - bx) * d / (rimY - by); // on the line from the flame's base through the tip, d below it
-      assert.ok(shade(on(60), rimY + 60) > 0.3, 'a shadow just below the tip');
-      assert.strictEqual(shade(on(60) + 40, rimY + 60), 0, 'light either side of it');
-      assert.ok(shade(on(100), rimY + 100) > 0 && shade(on(100), rimY + 100) < shade(on(60), rimY + 60), 'fading as it goes');
-      assert.strictEqual(shade(on(400), rimY + 400), 0, 'closed to a point further down');
-      continue;
-    }
     assert.deepStrictEqual([cx, half, rimY], [...[STYLES.candle.pillar.cx, STYLES.candle.pillar.r, STYLES.candle.pillar.rim]], 'the pillar\'s rim');
     assert.ok(ty < by - 40, 'the live tip stands well above the base');
     // along each corner's two lines, 200 below the rim, nudged one unit either side

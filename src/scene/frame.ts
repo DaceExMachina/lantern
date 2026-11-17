@@ -603,8 +603,8 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, turned = 
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
     ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), s, strength, heat && style.shine ? [heat.x, heat.y] : null),
     drift: Array.from({ length: 13 }, (_, i) => smokeDrift(s, i * PLUME.life / 12)), // background.ts smokeDrift samples it
-    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1])]
-      : holder ? [0, holder[1] / Math.max(4, holder[0] - flameY)] : [0, 0],
+    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1]), 0]
+      : holder ? [0, holder[1] / Math.max(4, holder[0] - flameY), style.taper ? holder[0] - style.light[1] + style.taper : 0] : [0, 0, 0],
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
     flame: [...base, ...tip],
     // the flame, drawn by the shader (background.ts drawFlame): its scale, the time, and stepFlame's turbulence,

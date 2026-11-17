@@ -21,7 +21,7 @@ interface Fire {
 export interface Light {
   ringC: Point; ringR: Vec3; ringA: number; ringCol: string[]; glowC: Point; glowR: number; glowA: number; glowCol: string;
   lightC: Point; lightScale: number; lightR: number; airA: number; dustCol: string; shadows: Vec3[]; sway: number; heat: Heat | null;
-  plumes: number[][]; trail: number[][]; drift: number[]; caps: Point; flame: [bx: number, by: number, tx: number, ty: number];
+  plumes: number[][]; trail: number[][]; drift: number[]; caps: Vec3; flame: [bx: number, by: number, tx: number, ty: number];
   fire: Fire | null; rim: Vec3; bandO: Point; farWall: { slide: number, heat: Heat | null, col: string } | null; bands: Point[];
 }
 
@@ -74,7 +74,7 @@ const RIPPLE = `vec2 ripple(vec2 p, float t) {
 }`;
 const LIGHT = `${RIPPLE}
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
-uniform vec2 uLightC, uCaps; uniform float uLightScale, uLightR, uSway;
+uniform vec2 uLightC; uniform vec3 uCaps; uniform float uLightScale, uLightR, uSway;
 uniform vec4 uFlame; uniform vec3 uRim; // a standing flame's base and tip, and the rim below it that hides it: centre x, half-width, y (none: 0 wide)
 uniform vec2 uGlowC; uniform float uGlowR;
 uniform vec3 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
@@ -83,7 +83,6 @@ uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lan
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 // the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
-const float RIM_TAPER = 13.0; // a rim's shadow closes to a point within this many half-widths squared: the flame's light wraps round a narrow one
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 uniform vec4 uHeat; // the hot air rising off the lantern (frame.ts heat): where it leaves, how strong (0 for none), and the time
 // How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
@@ -118,9 +117,7 @@ float rimShade(float px, float py) {
   // and the tip's own rays (on the flame's line they're the same ray, and the whole flame is hidden or none of it)
   float tLo = lo == uB ? 0.0 : lo == uT ? 1.0 : (lo * bh - bx) / (dx + lo * dy);
   float tHi = hi == uT ? 1.0 : hi == uB ? 0.0 : (hi * bh - bx) / (dx + hi * dy);
-  // a narrow rim (the Moroccan's tip) is lit round by the flame's glow, so its shadow closes to a point within RIM_TAPER * half-width squared
-  // (a few hundred units); a wide one's (the candle's) is far past the window by then
-  return smoothstep(0.0, 1.0, abs(tHi - tLo)) * (1.0 - smoothstep(0.3, 1.0, h / (RIM_TAPER * uRim.y * uRim.y)));
+  return smoothstep(0.0, 1.0, abs(tHi - tLo));
 }
 float light(vec2 p) {
   // Moth shadows: how much of the light (a small disc around the flame) each moth hides, seen from this point. Right
@@ -152,9 +149,10 @@ float light(vec2 p) {
   // fan stays darker, one shadow about as wide as the cap seen from the flame, with a soft edge, turned with the lantern's
   // sway. A standing flame's rim casts its own shadow instead (rimShade).
   vec2 q = p - uLightC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
-  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001);
+  // A narrow tip's fan (uCaps.z: how far below the light it closes) narrows to a point, the flame's light wrapping round it.
+  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001), wrap = uCaps.z > 0.0 ? max(1.0 - lq.y / uCaps.z, 0.02) : 1.0;
   float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
-    : step(0.001, capR) * smoothstep(capR * 0.8 + 0.05, capR * 0.8 - 0.05, slope)); // no cap, no fan
+    : step(0.001, capR) * smoothstep((capR * 0.8 + 0.05) * wrap, (capR * 0.8 - 0.05) * wrap, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
   // strongest and narrowest beside the lantern, spreading wider and fading out further away (like a moth's, by distance)
   vec2 bq = p - uBandO;
@@ -380,7 +378,7 @@ function setLight(u: Uniforms, v: Light) {
   gl.uniform1f(u('uDebug'), DUST_DEBUG); gl.uniform2f(u('uGlowC'), ...v.glowC); gl.uniform1f(u('uGlowR'), v.glowR);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform2f(u('uLightC'), ...v.lightC); gl.uniform1f(u('uLightScale'), v.lightScale); gl.uniform1f(u('uLightR'), v.lightR);
-  gl.uniform2f(u('uCaps'), ...v.caps); gl.uniform4f(u('uFlame'), ...v.flame); gl.uniform3f(u('uRim'), ...v.rim); gl.uniform1f(u('uSway'), v.sway); gl.uniform1i(u('uMoths'), shadows.length);
+  gl.uniform3f(u('uCaps'), ...v.caps); gl.uniform4f(u('uFlame'), ...v.flame); gl.uniform3f(u('uRim'), ...v.rim); gl.uniform1f(u('uSway'), v.sway); gl.uniform1i(u('uMoths'), shadows.length);
   gl.uniform2f(u('uBandO'), ...v.bandO); gl.uniform1i(u('uBands'), Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u('uBand[0]'), v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform3fv(u('uMoth[0]'), shadows.flat());
   const h = v.heat; gl.uniform4f(u('uHeat'), h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);
