@@ -153,7 +153,7 @@ export const ACHIEVEMENTS: Record<string, [name: string, how: string] | undefine
   streak_7: ['Warm streak: a week', 'Seven days in a row at or over the warm moths mark'],
   streak_14: ['Warm streak: two weeks', 'Fourteen days in a row at or over the warm moths mark'],
   streak_30: ['Warm streak: a month', 'Thirty days in a row at or over the warm moths mark'],
-  haunted: ['Haunted', 'More than 30 PRs adrift, so the faint cloud shows'],
+  haunted: ['Haunted', 'More than 50 PRs adrift, so the faint cloud shows'],
   restless_spirits: ['Restless spirits', 'One old session (a ghost moth) behind 5 or more PRs adrift'],
   light_pollution: ['Light Pollution', '20 or more fireflies in flight'],
   swarm_season: ['Swarm Season', 'One session owned 10 open PRs'],

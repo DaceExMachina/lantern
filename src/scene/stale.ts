@@ -1,6 +1,6 @@
 // Wisps: my open PRs that no session owns (the stale ones, untouched for a week, sit lowest) drift around the lantern as wisps,
 // pale ghost fireflies in a washed-out shade of their PR colour, wandering slowly. The older, the fainter and
-// dimmer. Now and then one slowly brightens and fades again. Up to 30; the
+// dimmer. Now and then one slowly brightens and fades again. Up to 50; the
 // oldest beyond that gather into a faint cloud with a count. A new one fades in; one that comes back to life (touched
 // again, or picked up by a session) rises and fades. There's no ground: the lantern floats in the dark and its light
 // carries onto other displays, so they drift instead of lying anywhere. Shown unless turned off in the settings
@@ -16,7 +16,7 @@ import { sessionMoth } from './state';
 import { bloomColour, fadeAt, flyFadeAt, haloAt, stepLit } from './spot';
 import type { Drifter, Ghost, GhostTarget, Owner, Point, StalePR, StaleTarget, Wisp } from '../types';
 
-const STALE_MAX = 30;
+const STALE_MAX = 50;
 export const wisps = new Map<string, Wisp>(); // url -> wisp
 let staleSeeded = false; // the first list is simply there; later arrivals fade in
 export const WISP_TINT = '#C9C0DC'; // what a stale PR's colour washes out toward
@@ -125,7 +125,7 @@ export function drawStale(dt: number, s: number) {
   // a PR whose session is live again isn't stale, however long ago GitHub last said so: the server rebuilds the list only when it asks GitHub
   const alive = new Set(live.raw.map(s => s.id)), list = live.stalePRs.filter(p => !alive.has(p.owner?.id ?? ''));
   const now = Date.now() / 1000; // they move on the wall clock, so every window (app, panel, screensaver) has them in the same places
-  const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 30 drift, the oldest cloud up
+  const drifting = list.slice(-STALE_MAX), clouded = list.length - drifting.length; // newest 50 drift, the oldest cloud up
   const want = new Map(drifting.map((p, i) => [p.url, [p, i] as const]));
   for (const [url, [p]] of want) if (!wisps.has(url)) wisps.set(url, makeWisp(p));
   staleSeeded ||= list.length > 0;
@@ -189,7 +189,7 @@ export function drawStale(dt: number, s: number) {
     if (show) addFlyLight(x, y, 40, lit * fade * flyFadeAt(moth?.lit ?? 0), pale); // drawn as light by the background shader, like the fireflies; a third while a bookmark points elsewhere (spot.ts)
     Object.assign(d.zone, { x, y, off: !show || d.gone !== undefined || !!moth?.out });
   }
-  // the overflow: everything past 30 as a faint cloud low on the right, with a count
+  // the overflow: everything past 50 as a faint cloud low on the right, with a count
   $('staleCloud', SVGGElement).style.display = show && clouded > 0 ? '' : 'none';
   if (clouded > 0) {
     put($('staleCloud', SVGGElement), 'transform', `translate(${(x0 + w - 50).toFixed(1)} ${(floor - 10).toFixed(1)})`);
