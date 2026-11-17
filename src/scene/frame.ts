@@ -218,6 +218,7 @@ const pal = (k: 'halo' | 'outer' | 'mid' | 'core' | 'base' | 'glow' | 'paper' | 
 // The lantern's sway on its string, in degrees. Anything attached to the lantern goes through rot(), which turns a point
 // in the lantern's own units with it, about where it hangs from the top of the window.
 export let swayAngle = 0;
+let tasselAngle = 0; // degrees the drop's finial dangles by about the tip, relative to the lantern (drawLight sends it to the shadow)
 // A fake twist on the chain, in degrees of yaw: the swing alone wouldn't turn the faces to the light, but the brass's lighting
 // (face tones, the curved parts' highlight, the far wall's parallax) follows this, trailing the sway with a slow turn of
 // its own, never past TWIST_MAX. The drawing itself doesn't turn.
@@ -283,7 +284,8 @@ export function swingLantern(elapsed: number, s: number) {
   });
   // the room's horizon (#horizon) stays level with the window, turned back against the lantern's swing
   put(byId('horizon', SVGLinearGradientElement), 'gradientTransform', `rotate(${(-swayAngle).toFixed(2)} 340 ${top.toFixed(1)})`);
-  if (style.tassel) put(byId('tassel', SVGGElement), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8).toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
+  tasselAngle = -Math.sin(sl * 0.7 - 0.9) * 2.6 - Math.sin(sl * 1.9 - 1.2) * 0.8;
+  if (style.tassel) put(byId('tassel', SVGGElement), 'transform', `rotate(${tasselAngle.toFixed(2)} ${style.tassel[0]} ${style.tassel[1]})`);
   if (style.ribbon) drawRibbon(style.ribbon, elapsed, s); // the real time: it caps its own steps, and needs to know what it skipped
   if (style.knot) put(byId('knotTail', SVGGElement), 'transform', `rotate(${(-Math.sin(sl * 0.7 - 0.5) * 5 - Math.sin(sl * 2.1) * 1.5).toFixed(2)} ${style.knot[0]} ${style.knot[1]})`); // the string's loose tail
 }
@@ -603,10 +605,11 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, turned = 
     airA: AMBIENT && !remote ? 0 : (0.05 + 0.22 * strength) * flick * pulse * dim, dustCol: pal('core'), shadows: casters, sway: swayAngle * Math.PI / 180, heat,
     ...AMBIENT ? { plumes: [], trail: [] } : smoke(Date.now(), s, strength, heat && style.shine ? [heat.x, heat.y] : null),
     drift: Array.from({ length: 13 }, (_, i) => smokeDrift(s, i * PLUME.life / 12)), // background.ts smokeDrift samples it
-    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1]), 0]
-      : holder ? [0, holder[1] / Math.max(4, holder[0] - flameY), style.taper ? holder[0] - style.light[1] + style.taper : 0] : [0, 0, 0],
+    caps: style.caps ? [style.caps[2] / (style.light[1] - style.caps[0]), style.caps[2] / (style.caps[1] - style.light[1]), 0, 0]
+      : holder ? [0, holder[1] / Math.max(4, holder[0] - flameY), holder[0] - style.light[1], style.taper ?? 0] : [0, 0, 0, 0],
     // the caps' fans spread from the light on the lantern's axis, unslid by the twist: the caps and the drop hang there
     capsC: remote ? remote.c : rot(...style.light),
+    dangle: style.taper ? tasselAngle * Math.PI / 180 : 0, // the finial hangs from the tip the fan starts closing at, so its shadow swings with it
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
     flame: [...base, ...tip],
     // the flame, drawn by the shader (background.ts drawFlame): its scale, the time, and stepFlame's turbulence,

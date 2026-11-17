@@ -21,7 +21,7 @@ interface Fire {
 export interface Light {
   ringC: Point; ringR: Vec3; ringA: number; ringCol: string[]; glowC: Point; glowR: number; glowA: number; glowCol: string;
   lightC: Point; lightScale: number; lightR: number; airA: number; dustCol: string; shadows: Vec3[]; sway: number; heat: Heat | null;
-  plumes: number[][]; trail: number[][]; drift: number[]; caps: Vec3; capsC: Point; flame: [bx: number, by: number, tx: number, ty: number];
+  plumes: number[][]; trail: number[][]; drift: number[]; caps: [top: number, bottom: number, tip: number, taper: number]; capsC: Point; dangle: number; flame: [bx: number, by: number, tx: number, ty: number];
   fire: Fire | null; rim: Vec3; bandO: Point; farWall: { slide: number, heat: Heat | null, col: string } | null; bands: Point[];
 }
 
@@ -74,7 +74,7 @@ const RIPPLE = `vec2 ripple(vec2 p, float t) {
 }`;
 const LIGHT = `${RIPPLE}
 uniform float uDebug; // ?dustdebug: shade the shadows red, and show which specks they gate
-uniform vec2 uLightC, uCapsC; uniform vec3 uCaps; uniform float uLightScale, uLightR, uSway;
+uniform vec2 uLightC, uCapsC; uniform vec4 uCaps; uniform float uLightScale, uLightR, uSway, uDangle;
 uniform vec4 uFlame; uniform vec3 uRim; // a standing flame's base and tip, and the rim below it that hides it: centre x, half-width, y (none: 0 wide)
 uniform vec2 uGlowC; uniform float uGlowR;
 uniform vec3 uMoth[${SHADOWS_MAX}]; uniform int uMoths;
@@ -151,8 +151,12 @@ float light(vec2 p) {
   // slid to its middle depth by the twist (frame.ts farSlide), so they stay on the lantern as it swings and twists.
   // A standing flame's rim casts its own shadow instead (rimShade).
   vec2 q = p - uCapsC, lq = vec2(q.x * cos(uSway) + q.y * sin(uSway), -q.x * sin(uSway) + q.y * cos(uSway));
-  // A narrow tip's fan (uCaps.z: how far below the light it closes) narrows to a point, the flame's light wrapping round it.
-  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = abs(lq.x) / max(abs(lq.y), 0.001), wrap = uCaps.z > 0.0 ? max(1.0 - lq.y / uCaps.z, 0.02) : 1.0;
+  // A narrow tip's fan (uCaps.z: how far below the light the tip is; uCaps.w: how much further it takes to close) keeps its
+  // width at the tip, then narrows to a point below it, the flame's light wrapping round it.
+  // The finial dangling from the tip (uDangle, about the tip) has swung off the axis by off at this depth: the fan's edge on
+  // that side moves out to cover it, the other side stays.
+  float off = -max(lq.y - uCaps.z, 0.0) * sin(uDangle), ax = max(abs(lq.x) - (lq.x * off > 0.0 ? abs(off) : 0.0), 0.0);
+  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = ax / max(abs(lq.y), 0.001), wrap = uCaps.w > 0.0 ? max(1.0 - max(lq.y - uCaps.z, 0.0) / uCaps.w, 0.02) : 1.0;
   float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
     : step(0.001, capR) * smoothstep((capR * 0.8 + 0.05) * wrap, (capR * 0.8 - 0.05) * wrap, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
@@ -380,7 +384,7 @@ function setLight(u: Uniforms, v: Light) {
   gl.uniform1f(u('uDebug'), DUST_DEBUG); gl.uniform2f(u('uGlowC'), ...v.glowC); gl.uniform1f(u('uGlowR'), v.glowR);
   const shadows = v.shadows.slice(0, SHADOWS_MAX);
   gl.uniform2f(u('uLightC'), ...v.lightC); gl.uniform1f(u('uLightScale'), v.lightScale); gl.uniform1f(u('uLightR'), v.lightR);
-  gl.uniform3f(u('uCaps'), ...v.caps); gl.uniform2f(u('uCapsC'), ...v.capsC); gl.uniform4f(u('uFlame'), ...v.flame); gl.uniform3f(u('uRim'), ...v.rim); gl.uniform1f(u('uSway'), v.sway); gl.uniform1i(u('uMoths'), shadows.length);
+  gl.uniform4f(u('uCaps'), ...v.caps); gl.uniform2f(u('uCapsC'), ...v.capsC); gl.uniform4f(u('uFlame'), ...v.flame); gl.uniform3f(u('uRim'), ...v.rim); gl.uniform1f(u('uSway'), v.sway); gl.uniform1f(u('uDangle'), v.dangle); gl.uniform1i(u('uMoths'), shadows.length);
   gl.uniform2f(u('uBandO'), ...v.bandO); gl.uniform1i(u('uBands'), Math.min(8, v.bands.length)); if (v.bands.length) gl.uniform2fv(u('uBand[0]'), v.bands.slice(0, 8).flat());
   if (shadows.length) gl.uniform3fv(u('uMoth[0]'), shadows.flat());
   const h = v.heat; gl.uniform4f(u('uHeat'), h?.x ?? 0, h?.y ?? 0, h?.k ?? 0, h?.t ?? 0);

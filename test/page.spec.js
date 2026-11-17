@@ -188,11 +188,11 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
   }
   // the lower shadow comes from the drop's tip alone: a thin fan that closes to a point below it, and (in the shader, turned by
   // uSway like the paper lanterns' caps) swings with the lantern
-  const [top, bottom, closes] = v.caps;
+  const [top, bottom, tip, taper] = v.caps;
   assert.ok(top === 0 && bottom > 0 && bottom < 0.05, `a thin fan under the light: ${bottom}`);
-  assert.strictEqual(closes, style.holder[0] - style.light[1] + style.taper, 'it closes to a point a little below the tip');
-  assert.ok(closes > style.holder[0] - style.light[1], 'the point is below the tip');
-  assert.match(srcOf('background.ts'), /uCaps\.z > 0\.0 \? max\(1\.0 - lq\.y \/ uCaps\.z/, 'the shader narrows the fan to that point');
+  assert.strictEqual(tip, style.holder[0] - style.light[1], 'the fan keeps its full width down to the tip');
+  assert.ok(taper > 0 && taper === style.taper, 'and closes to a point that far below it');
+  assert.match(srcOf('background.ts'), /uCaps\.w > 0\.0 \? max\(1\.0 - max\(lq\.y - uCaps\.z, 0\.0\) \/ uCaps\.w, 0\.02\)/, 'the shader narrows the fan from the tip, not from the light');
   assert.ok(Math.abs(v.sway) > 0.01, 'the fan is turned by the sway');
   // the fan's axis, as the shader turns it (q = p - uCapsC, by uSway), runs through the drop's tip and on down the lantern's
   // own axis, though the light itself has slid aside with the twist (above): its shadow swings with the lantern
@@ -202,9 +202,20 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
     const across = qx * Math.cos(v.sway) + qy * Math.sin(v.sway);
     assert.ok(Math.abs(across) < 1e-9, `the fan's axis passes ${across} beside the lantern's at ${y}`);
   }
+  // the finial dangling from the tip: the fan's edge on its side moves out to cover it, the other edge stays (the shader's own
+  // lines, run as JS, with the dangle on and off, at a depth below the tip)
+  const dangleSrc = srcOf('background.ts').match(/float off = ([^\n]*?), ax = ([^\n]*?);\n/);
+  assert.ok(dangleSrc, 'background.ts widens the fan toward the finial');
+  const reach = (x, y, dangle) => new Function('lqx', 'lqy', 'uDangle', 'uCaps', 'abs', 'max', 'sin', `const off = ${dangleSrc[1]}, ax = ${dangleSrc[2]}; return ax;`.replace(/lq\.x/g, 'lqx').replace(/lq\.y/g, 'lqy').replace(/uCaps\.z/g, 'uCaps[2]'))(x, y, dangle, v.caps, Math.abs, Math.max, Math.sin);
+  const depth = tip + taper / 2, a = 0.05;
+  assert.ok(Math.abs(v.dangle) > 0, 'the finial is dangling in this frame');
+  assert.strictEqual(reach(20, depth, 0), 20, 'at rest the fan is as the tip gives it');
+  const side = Math.sign(-a);
+  assert.ok(reach(side * 20, depth, a) < 20 - 1, 'the edge on the finial\'s side moves out');
+  assert.strictEqual(reach(-side * 20, depth, a), 20, 'the other edge stays');
   applyStyle('barrel'); swingLantern(1 / 60, 50);
   drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
-  assert.strictEqual(background().caps[2], 0, 'a paper lantern\'s caps keep their full-width fans');
+  assert.strictEqual(background().caps[3], 0, 'a paper lantern\'s caps keep their full-width fans');
   assert.deepStrictEqual(background().capsC, background().lightC, 'a paper lantern\'s fans spread from its light, which doesn\'t slide');
   assert.strictEqual($('inside', SVGGElement).getAttribute('transform'), 'translate(0.00 0)', 'without a far wall nothing slides');
 });
