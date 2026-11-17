@@ -15,6 +15,9 @@ let TITLE_EVERY_MS = 15.0 * 1000
 // A session waiting on background tasks counts as working while one is younger than this, or one of its agents was heard
 // from this recently; past both (a dev server, a stuck agent, a long `lantern-pr watch`), it's a finished turn waiting on me.
 let TASK_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_TASK_FRESH_SECONDS"] ?? "") ?? 30 * 60) * 1000
+// ponytail: how long a finished turn waits on the GitHub refresh its Stop asked for (waitsOnCI). It only has to cover one
+// round trip (refreshSoon's 1.5 s debounce plus the gh call); a refresh that fails or never answers lands it after this.
+let REFRESH_WAIT_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_REFRESH_WAIT_SECONDS"] ?? "") ?? 60) * 1000
 let AGENT_FRESH_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_FRESH_SECONDS"] ?? "") ?? 5 * 60) * 1000
 // An agent whose transcript hasn't moved this long is assumed gone (its SubagentStop never came), finished or not.
 let AGENT_EXPIRE_MS = (Double(ProcessInfo.processInfo.environment["LANTERN_AGENT_EXPIRE_SECONDS"] ?? "") ?? 15 * 60) * 1000
@@ -702,13 +705,13 @@ final class LanternServer {
 
     /// A turn that ended with nothing to ask (`finished`) waits on CI, not on me, while a check run is going on one of its open
     /// PRs (lantern-pr wakes the session when they finish), and until the GitHub refresh its Stop asked for has answered, so a
-    /// push just before the Stop doesn't land it on the old answer first. Never past TASK_FRESH_MS from the Stop, like a
+    /// push just before the Stop doesn't land it on the old answer first (for REFRESH_WAIT_MS at most). Never past TASK_FRESH_MS from the Stop, like a
     /// background task: a check run stuck in the queue lets go. A refresh that sees its checks finish clears `finished`
     /// (GitHub.swift refreshGitHub), so a re-run after that doesn't lift a turn that already landed.
     func waitsOnCI(_ s: JSON) -> Bool {
         guard str(s["turn"]) == "ended", let at = s["finished"] as? Double, now() - at < TASK_FRESH_MS else { return false }
         let prs = s["github"] as? [JSON] ?? []
-        return prs.contains { !["merged", "closed"].contains(str($0["need"])) } && ((s["githubAt"] as? Double ?? 0) < at || ciRunning(prs))
+        return prs.contains { !["merged", "closed"].contains(str($0["need"])) } && ((s["githubAt"] as? Double ?? 0) < at && now() - at < REFRESH_WAIT_MS || ciRunning(prs))
     }
 
     /// The background work a turn handed over to that's still open, in words: its own tasks and its live agents.

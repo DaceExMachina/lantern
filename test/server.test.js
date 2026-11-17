@@ -1559,7 +1559,8 @@ async function ciRepo(t, checks, env = {}) {
   await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'push it' });
   await post(base, '/settings', { github: true });
   await until(async () => (await s1(base))?.github?.[0]?.running === (checks === RUNNING), 'the refresh to see the checks');
-  return { base, setChecks, refresh: () => post(base, '/settings', { github: true }), stop: msg => post(base, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: repo, last_assistant_message: msg }) };
+  const hang = () => fs.rmSync(path.join(path.dirname(gh), 'go')); // gh waits for it (ghRepo), so every refresh from now on never answers
+  return { base, setChecks, hang, refresh: () => post(base, '/settings', { github: true }), stop: msg => post(base, '/event', { session_id: 's1', hook_event_name: 'Stop', cwd: repo, last_assistant_message: msg }) };
 }
 const shownState = async base => (({ state, note }) => [state, note])(await s1(base));
 const ciSeen = (base, running) => until(async () => (await s1(base)).github[0].running === running, `a refresh to see the checks ${running ? 'running' : 'done'}`);
@@ -1594,6 +1595,16 @@ test('checks a push started reach the session through the refresh its Stop asks 
   await until(async () => { const s = await s1(base); seen.push(s.state); return s.github[0].running; }, 'the Stop\'s refresh to see the checks running');
   assert.deepStrictEqual([...new Set(seen)], ['paused']);
   assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI']);
+});
+
+// The refresh the Stop asked for never answers (a hung gh, GitHub down): the turn waits on it only briefly, then needs me.
+test('a finished turn whose refresh never answers needs me once the refresh wait is over', async t => {
+  const { base, hang, stop } = await ciRepo(t, DONE, { LANTERN_REFRESH_WAIT_SECONDS: '1', LANTERN_SWEEP_SECONDS: '0.2' });
+  hang();
+  await stop('Pushed. Your review request comes when CI is green.');
+  assert.deepStrictEqual(await shownState(base), ['paused', 'Waiting on CI'], 'waiting on the refresh');
+  await until(async () => (await s1(base)).state === 'waiting', 'the refresh wait to run out', 5000);
+  assert.deepStrictEqual(await shownState(base), ['waiting', 'Finished its turn']);
 });
 
 // extension#7098: every check run done, but the commit status e2e-test-summary pending until someone re-adds the `test` label.
