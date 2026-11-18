@@ -246,7 +246,9 @@ test('an audit whose request has gone stays listed only while it has something u
   assert.deepStrictEqual(listed(), ['9'], 'unread: listed; a queued one with no request and nothing new: not');
   assert.strictEqual(row(9).querySelector('.me').textContent, 'app#9', 'no need, no word');
   row(9).click(); await nextTick();
-  assert.ok(!button(), 'seen: it leaves the list');
+  assert.deepStrictEqual(listed(), ['9'], 'seen, but its detail is open: it stays until the panel closes (see the detail panel tests)');
+  store.review = null; await nextTick(); // the panel closed
+  assert.ok(!button(), 'seen and closed: it leaves the list');
   desk([rec(9, { lastActivity: '2026-11-17T12:00:00Z', activity: [{ at: '2026-11-17T12:00:00Z', author: 'sam' }] })]); await nextTick();
   assert.deepStrictEqual(listed(), ['9'], 'a new post brings it back');
 });
@@ -347,6 +349,19 @@ describe('the detail panel', () => {
     assert.strictEqual(go().textContent, 'Post 1 as your review', 'the unsent major is ticked again');
     desk([rec(1, { findings, head: 'h2', sent: { head: 'h', findings: [0, 1] } })]); await nextTick();
     assert.strictEqual(boxes().length, 4, 'new commits: everything is offered again');
+  });
+
+  test('a record with no request stays listed, and its panel open, while its detail is shown, though opening it marked it read; it leaves once the panel closes', async () => {
+    desk([rec(1, { findings: [{ severity: 'major', title: 'Look' }] })]); await nextTick();
+    const row = () => document.querySelector('#reviews .row');
+    assert.ok(store.unread(store.deskShown[0]), 'unread, so it is listed on its own');
+    row().querySelector('.go').click(); await nextTick(); await nextTick(); // the click marks it read; the list is then built again
+    assert.ok(!store.unread(store.deskShown[0]), 'opening it marked it read');
+    assert.ok(row(), 'its row (the panel\'s invoker) is still there');
+    assert.match(panel().textContent, /Look/, 'and so is the panel');
+    panel().dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed', oldState: 'open' })); await nextTick(); await nextTick();
+    assert.ok(!row(), 'the panel closed: now a read record with no request can go');
+    assert.strictEqual(store.review, null);
   });
 
   test('a mention\'s ask and draft, with a copy button', async () => {

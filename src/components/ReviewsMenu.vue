@@ -26,8 +26,9 @@ const rows = computed((): Row[] => {
   const off = new Set(offBoard(asking, store.sessions, store.settings.stale === false ? [] : store.stale));
   const asked: Row[] = worstFirst(asking.filter(r => off.has(r) || recs.has(r.url))).map(r => ({ ...r, rec: recs.get(r.url) }));
   const listed = new Set(asked.map(r => r.url));
-  // an audit whose request has gone (reviewed, merged) stays only while it has something unread: the desk keeps every record it wrote
-  const own = store.deskShown.filter(d => !listed.has(d.url) && (d.kind !== 'review' || store.unread(d))).map((d): Row => ({ url: d.url, label: `${d.repo.split('/').pop()}#${d.pr}`, title: d.title, author: d.author, rec: d }));
+  // an audit whose request has gone (reviewed, merged) stays only while it has something unread (the desk keeps every record it wrote), or while its
+  // detail is open: opening it marks it read, and its row is the panel's invoker, so it can't go until the panel closes
+  const own = store.deskShown.filter(d => !listed.has(d.url) && (d.kind !== 'review' || store.unread(d) || d.url === store.review)).map((d): Row => ({ url: d.url, label: `${d.repo.split('/').pop()}#${d.pr}`, title: d.title, author: d.author, rec: d }));
   return [...asked, ...own].sort((a, b) => store.reviewPriority(a.url) - store.reviewPriority(b.url));
 });
 // where the desk stands, at the end of the row: its findings by severity once ready, or its status

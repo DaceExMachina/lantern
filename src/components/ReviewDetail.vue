@@ -4,7 +4,7 @@
 // steps back to it). It shows the verdict, the findings worst first (each linked to its line in the PR's diff), the ask and a
 // draft reply to copy, the follow-up posts, and three actions: open the PR, talk it over with the desk's session (when it is
 // running), and dismiss the record.
-import { computed, ref, shallowRef, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { NEED, ago } from '../scene/card';
 import { post } from '../scene/scene';
 import { useLanternStore } from '../stores/lantern';
@@ -54,6 +54,10 @@ async function copy(text: string) {
   setTimeout(() => { copied.value = false; }, 1500);
 }
 const close = () => document.getElementById('review')?.hidePopover();
+// the record shown is the one whose panel is open: closing the panel (Escape, a click away, the button) lets its row leave the list
+const closed = (e: Event) => { if ('newState' in e && e.newState === 'closed') store.review = null; };
+onMounted(() => document.getElementById('review')?.addEventListener('toggle', closed));
+onBeforeUnmount(() => document.getElementById('review')?.removeEventListener('toggle', closed));
 const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
 </script>
 
