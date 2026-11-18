@@ -609,7 +609,7 @@ export function drawLight(dt: number, s: number, { size, flick, pulse, turned = 
       : holder ? [0, holder[1] / Math.max(4, holder[0] - flameY), holder[0] - style.light[1], style.taper ?? 0] : [0, 0, 0, 0],
     // the caps' fans spread from the light on the lantern's axis, unslid by the twist: the caps and the drop hang there
     capsC: remote ? remote.c : rot(...style.light),
-    dangle: style.taper ? tasselAngle * Math.PI / 180 : 0, // the finial hangs from the tip the fan starts closing at, so its shadow swings with it
+    dangle: style.taper ? tasselAngle * Math.PI / 180 : 0, // the finial swings about its hook (6 above the oval the fan starts closing at; the oval's own 0.4 px of swing is left out), so its shadow swings with it
     // a standing flame's rim shades the room below from its corners (rimShade), seen from the live flame's base and tip
     flame: [...base, ...tip],
     // the flame, drawn by the shader (background.ts drawFlame): its scale, the time, and stepFlame's turbulence,
