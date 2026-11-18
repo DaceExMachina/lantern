@@ -214,6 +214,14 @@ test('the Moroccan\'s flame, burner cup and light sit between its front and far 
   assert.ok(reach(side * 20, depth, a) < 20 - 0.5, 'the edge on the finial\'s side moves out');
   assert.strictEqual(reach(-side * 20, depth, a), 20, 'the other edge stays');
   for (const s of [1, -1]) assert.ok(reach(s * 20, tip + taper + 100, a) > 20 - 0.2, 'past where the fan closes the dangle adds no width');
+  // the shadow starts at the tip, sharp there (a band as wide as the tip), and softens as it closes (the shader's own lines, as JS)
+  const edgeSrc = srcOf('background.ts').match(/float capR = ([^\n]*?), slope[^\n]*\n\s*float soft = ([^\n]*?);\n/);
+  assert.ok(edgeSrc, 'background.ts starts the fan at the tip');
+  const edge = (y, caps) => new Function('lqy', 'uCaps', 'max', `const wrap = uCaps[3] > 0 ? max(1 - max(lqy - uCaps[2], 0) / uCaps[3], 0.02) : 1, capR = ${edgeSrc[1]}, soft = ${edgeSrc[2]}; return [capR, soft];`
+    .replace(/lq\.y/g, 'lqy').replace(/uCaps\.([xyzw])/g, (_, c) => `uCaps[${'xyzw'.indexOf(c)}]`).replace(/(\d)\.0\b/g, '$1'))(y, caps, Math.max);
+  assert.strictEqual(edge(tip - 1, v.caps)[0], 0, 'nothing above the tip casts');
+  assert.ok(edge(tip, v.caps)[1] < 0.01 && edge(tip + taper * 0.9, v.caps)[1] > 0.04, `sharp at the tip, soft as it closes: ${edge(tip, v.caps)[1]}`);
+  assert.deepStrictEqual(edge(30, [0.3, 0.4, 0, 0]), [0.4, 0.05], 'a paper cap\'s fan runs from its light, its edge soft all the way');
   applyStyle('barrel'); swingLantern(1 / 60, 50);
   drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
   assert.strictEqual(background().caps[3], 0, 'a paper lantern\'s caps keep their full-width fans');

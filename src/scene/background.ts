@@ -157,9 +157,12 @@ float light(vec2 p) {
   // The finial dangling from the tip (uDangle, about the tip) has swung off the axis by off at this depth, closing with the
   // fan: the fan's edge on that side moves out to cover it, the other side stays.
   float off = -min(max(lq.y - uCaps.z, 0.0), uCaps.w) * wrap * sin(uDangle), ax = max(abs(lq.x) - (lq.x * off > 0.0 ? abs(off) : 0.0), 0.0);
-  float capR = lq.y < 0.0 ? uCaps.x : uCaps.y, slope = ax / max(abs(lq.y), 0.001);
+  // A tip's shadow starts at the tip (nothing above it casts one), its edge sharp there and softening as the fan closes,
+  // its penumbra growing below it; a cap's edge is soft all the way.
+  float capR = lq.y < 0.0 ? uCaps.x : lq.y < uCaps.z ? 0.0 : uCaps.y, slope = ax / max(abs(lq.y), 0.001);
+  float soft = uCaps.w > 0.0 ? 0.05 * max(1.0 - wrap, 0.1) : 0.05;
   float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
-    : step(0.001, capR) * smoothstep((capR * 0.8 + 0.05) * wrap, (capR * 0.8 - 0.05) * wrap, slope)); // no cap, no fan
+    : step(0.001, capR) * smoothstep((capR * 0.8 + soft) * wrap, (capR * 0.8 - soft) * wrap, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
   // strongest and narrowest beside the lantern, spreading wider and fading out further away (like a moth's, by distance)
   vec2 bq = p - uBandO;
