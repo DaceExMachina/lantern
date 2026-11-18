@@ -104,17 +104,19 @@ export interface Settings {
   quietEnd?: string | undefined; quietEndOn?: boolean | undefined; quietFrom?: string | undefined; dayStart?: string | undefined;
   supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined; nowPlaying?: boolean | undefined; reviews?: boolean | undefined; systemStats?: boolean | undefined;
   pinned?: Pin[] | undefined; bookmarks?: Bookmark[] | undefined;
+  reviewPriority?: Record<string, number> | undefined; // a PR's url to its priority, 0 (highest) to 3 (low), where it isn't the default 2
 }
 export function parseSettings(x: unknown): Settings {
   const o = isRecord(x) ? x : {};
   const str = (k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
   const bool = (k: string) => { const v = o[k]; return isBoolean(v) ? v : undefined; };
-  const quietUntil = o['quietUntil'], pinned = o['pinned'], bookmarks = o['bookmarks'];
+  const quietUntil = o['quietUntil'], pinned = o['pinned'], bookmarks = o['bookmarks'], priority = o['reviewPriority'];
   return {
     style: str('style'), ribbon: str('ribbon'), lanternText: str('lanternText'), quietUntil: isNumber(quietUntil) ? quietUntil : undefined,
     quietEnd: str('quietEnd'), quietEndOn: bool('quietEndOn'), quietFrom: str('quietFrom'), dayStart: str('dayStart'),
     supervisorPattern: str('supervisorPattern'), recapSeen: str('recapSeen'), github: bool('github'), stale: bool('stale'), nowPlaying: bool('nowPlaying'), reviews: bool('reviews'), systemStats: bool('systemStats'),
     pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined, bookmarks: Array.isArray(bookmarks) ? bookmarks.filter(isBookmark) : undefined,
+    reviewPriority: isRecord(priority) ? Object.fromEntries(Object.entries(priority).filter((e): e is [string, number] => isNumber(e[1]))) : undefined,
   };
 }
 

@@ -276,7 +276,7 @@
   #bookmarks .go { display: block; width: 100%; padding: 0 var(--space-2); }
   #bookmarks .go .face { padding-right: var(--space-6); } /* room for the cross */
   #bookmarks .rm { position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
-  #bookmarks .rm .face { display: flex; align-items: center; padding: 0 var(--space-1-5); border-radius: var(--radius-sm); color: var(--ink-faint); }
+  #bookmarks .rm .face { display: flex; align-items: center; padding: 0 var(--space-1); border-radius: var(--radius-sm); color: var(--ink-faint); }
   #bookmarks .rm:hover .face { color: var(--ink-hover); }
   #bookmarks :is(.go, .rm):focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   #bookmarks .empty { margin: 0; padding: var(--space-1) var(--space-4); color: var(--ink-dim); }
@@ -321,9 +321,22 @@
   #usage .key hr { margin: var(--space-1-5) var(--space-4); }
   #usage .tracks { grid-column: 1 / -1; display: grid; gap: var(--space-0-5); } /* CPU's bar, and RAM's right under it */
   #usage .track { display: block; height: 3px; border-radius: var(--radius-pill); overflow: hidden; background: var(--line-soft); }
+  #reviews .row { position: relative; }
   #reviews a { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
+  #reviews .pri { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
+  #reviews :is(.pri, .pick button) .face { display: flex; align-items: center; padding: 0 var(--space-1); border-radius: var(--radius-sm); color: var(--ink-faint); }
+  #reviews :is(.pri, .pick) svg { display: block; width: var(--space-4); height: var(--space-4); }
+  #reviews .pri:not(.set) .face { opacity: 0; } /* normal shows only while the row is hovered or focused, so it can still be opened */
+  #reviews .row:is(:hover, :focus-within) .pri .face { opacity: 1; }
+  #reviews .pri.set .face { color: var(--accent-violet); } /* a priority off normal is violet */
+  #reviews .pick { position: fixed; z-index: var(--z-tip); display: flex; flex-direction: column; padding: var(--space-0-5) 0; border-radius: var(--radius-md); background: var(--surface-raised); outline: 1px solid var(--line); box-shadow: var(--shadow-lg); } /* a column over the priority icon; fixed so the list's scrolling can't clip it, placed by the component */
+  #reviews .pick button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; padding: var(--space-0-5) 0; }
+  #reviews .pick button[aria-pressed=true] .face { color: var(--accent-violet); background: color-mix(in srgb, var(--accent-violet) 10%, transparent); } /* the current one */
+  #reviews :is(.pri, .pick button):hover .face { color: var(--ink-hover); }
+  #reviews :is(.pri, .pick button):focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
+  #reviews .row a .face { padding-right: var(--space-6); } /* room for the priority */
   :is(#reviews a, #bookmarks .go) .face { display: block; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); }
-  :is(#reviews a:is(:hover, :focus-visible), #bookmarks .row:is(:hover, :focus-within) .go) .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
+  :is(#reviews .row:is(:hover, :focus-within) a, #bookmarks .row:is(:hover, :focus-within) .go) .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }
   #reviews a:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   :is(#reviews, #bookmarks) .ti { display: block; color: var(--ink-strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   :is(#reviews, #bookmarks) .me { display: flex; gap: var(--space-1-5); align-items: center; margin-top: var(--space-1); font-size: var(--text-xs); color: var(--ink-dim); }

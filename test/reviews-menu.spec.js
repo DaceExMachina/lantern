@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createPinia } from 'pinia';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import NowPlaying from '../src/components/NowPlaying.vue';
 import ReviewsMenu from '../src/components/ReviewsMenu.vue';
@@ -13,9 +13,12 @@ import { useLanternStore } from '../src/stores/lantern';
 import { parseSettings } from '../src/types';
 
 let app, store;
+const posts = [];
 const button = () => document.getElementById('reviewsButton');
 const rows = () => [...document.querySelectorAll('#reviews a')];
 beforeEach(() => {
+  posts.length = 0;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(); });
   const pinia = createPinia();
   store = useLanternStore(pinia);
   app = createApp(ReviewsMenu).use(pinia);
@@ -122,4 +125,71 @@ test('with review requests switched off in the settings there is no button, and 
   assert.ok(!document.getElementById('reviews'));
   store.settings = parseSettings({ reviews: true }); await nextTick();
   assert.ok(button());
+});
+
+test('a review\'s priority defaults to normal, is picked directly from four icons, and sorts the list, highest (0) first, then worst first', async () => {
+  const pr = (n, need = 'waiting') => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need });
+  store.reviews = [pr(1), pr(2), pr(3, 'failing')];
+  await nextTick();
+  const pri = () => [...document.querySelectorAll('#reviews .pri')];
+  const order = () => rows().map(a => a.href.slice(-1));
+  assert.deepStrictEqual(pri().map(b => [b.getAttribute('aria-label'), b.classList.contains('set')]), [['Priority Normal, change', false], ['Priority Normal, change', false], ['Priority Normal, change', false]]);
+  assert.deepStrictEqual(order(), ['3', '1', '2'], 'all default: worst first');
+  pri()[2].click(); // open app#2's picker
+  await nextTick();
+  const pick = () => [...document.querySelectorAll('#reviews .pick button')];
+  assert.deepStrictEqual(pick().map(b => [b.getAttribute('aria-label'), b.getAttribute('aria-pressed')]), [['Highest', 'false'], ['High', 'false'], ['Normal', 'true'], ['Low', 'false']], 'the current one is marked');
+  assert.strictEqual(document.querySelectorAll('#reviews .pick').length, 1);
+  assert.deepStrictEqual(order(), ['3', '1', '2'], 'nothing moves while the picker is open');
+  assert.strictEqual(posts.length, 0, 'opening it saves nothing');
+  pick()[0].click(); // Highest, in one click
+  await nextTick();
+  assert.deepStrictEqual(order(), ['2', '3', '1'], 'highest comes first');
+  assert.ok(!document.querySelector('#reviews .pick'), 'the picker closes');
+  assert.ok(document.querySelector('#reviews .row .pri').classList.contains('set'));
+  assert.deepStrictEqual(posts.at(-1), ['/settings', { reviewPriority: { [pr(2).url]: 0 } }]);
+  pri()[0].click(); await nextTick();
+  pick()[3].click(); await nextTick(); // Low: last
+  assert.deepStrictEqual([order(), posts.at(-1)[1]], [['3', '1', '2'], { reviewPriority: { [pr(2).url]: 3 } }], 'low sorts after normal');
+  pri()[2].click(); await nextTick();
+  pick()[2].click(); await nextTick(); // Normal (the default, not kept)
+  assert.deepStrictEqual(posts.at(-1)[1], { reviewPriority: {} }, 'back to normal saves nothing for it');
+});
+
+test('Escape or a click elsewhere in the list closes the picker unchanged', async () => {
+  const pr = n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need: 'waiting' });
+  store.reviews = [pr(1), pr(2)];
+  await nextTick();
+  const pri = () => document.querySelector('#reviews .pri'), picker = () => document.querySelector('#reviews .pick');
+  pri().click(); await nextTick();
+  assert.ok(picker());
+  picker().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await nextTick();
+  assert.ok(!picker(), 'Escape closes it');
+  pri().click(); await nextTick();
+  rows()[1].click(); await nextTick();
+  assert.ok(!picker(), 'a click on another row closes it');
+  pri().click(); await nextTick();
+  document.getElementById('reviews').dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' })); await nextTick();
+  assert.ok(!picker(), 'the dropdown closing takes it along');
+  assert.strictEqual(posts.length, 0, 'none of it saved anything');
+});
+
+test('Up and Down move between the four choices, wrapping', async () => {
+  const pr = n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need: 'waiting' });
+  store.reviews = [pr(1)];
+  await nextTick();
+  document.querySelector('#reviews .pri').click(); await nextTick(); await nextTick();
+  const btns = [...document.querySelectorAll('#reviews .pick button')], key = k => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  assert.strictEqual(document.activeElement, btns[2], 'opens on the current one (normal)');
+  key('ArrowDown'); assert.strictEqual(document.activeElement, btns[3]);
+  key('ArrowDown'); assert.strictEqual(document.activeElement, btns[0], 'wraps to the top');
+  key('ArrowUp'); assert.strictEqual(document.activeElement, btns[3], 'wraps to the bottom');
+  key('ArrowUp'); assert.strictEqual(document.activeElement, btns[2]);
+});
+
+test('a priority from settings.json shows on load', async () => {
+  store.settings = parseSettings({ reviewPriority: { 'https://github.com/o/app/pull/1': 3, 'https://github.com/o/app/pull/2': 0 } });
+  store.reviews = ['1', '2'].map(n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: n, need: 'waiting' }));
+  await nextTick();
+  assert.deepStrictEqual([rows().map(a => a.href.slice(-1)), [...document.querySelectorAll('#reviews .pri')].map(b => b.getAttribute('aria-label'))], [['2', '1'], ['Priority Highest, change', 'Priority Low, change']]);
 });
