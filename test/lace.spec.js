@@ -1,4 +1,4 @@
-// The Moroccan's baked lace (bakeCutouts, src/scene/lanterns.ts) while the window resizes: many resize steps make one re-bake, and the
+// The Moroccan's baked lace (bakeCutouts, src/scene/lanterns.ts), masking its layer, while the window resizes: many resize steps make one re-bake, and the
 // picture on show stays until the new one has decoded. Timers and images are faked so the test steers them by hand.
 import assert from 'node:assert';
 import { afterEach, test, vi } from 'vitest';
@@ -23,40 +23,57 @@ async function setup() {
   const { applyStyle, bakeCutouts } = await import('../src/scene/lanterns');
   live.farWall = /** @type {any} */ ({}); // the far wall counts as baked already
   applyStyle('moroccan'); // draws the lace's mask, #cutouts
-  const mask = /** @type {Element} */ (document.getElementById('cutouts'));
-  assert.ok(mask, 'the Moroccan has its lace mask');
+  assert.ok(document.getElementById('cutouts'), 'the Moroccan has its vector mask, until the picture is baked');
+  const lace = /** @type {SVGGElement} */ (document.getElementById('lanternLace')), layer = /** @type {SVGSVGElement} */ (document.getElementById('laceLayer'));
+  const shown = () => layer.style.maskImage; // the picture masking the lace's layer
+  VIEW.layer = [200, 10, 280, 600]; // the lantern's strip, its corner at x 200, y 10
   const resize = px => { VIEW.px = px; bakeCutouts(); };
   const bakes = () => vi.getTimerCount(); // the debounced bakes waiting
   const runTimers = () => vi.runOnlyPendingTimers();
   const settle = async () => { while (bakes() || decodes.length) { runTimers(); decodes.splice(0).forEach(r => r()); await new Promise(r => setImmediate(r)); } };
-  return { mask, decodes, built, resize, bakes, runTimers, settle, fail };
+  return { lace, layer, shown, decodes, built, resize, bakes, runTimers, settle, fail };
 }
 
 test('several resize steps bake once, and the old picture stays up until the new one has decoded', async () => {
   const t = await setup();
+  assert.strictEqual(t.lace.getAttribute('mask'), 'url(#cutouts)', 'the vector mask until the first bake');
   t.resize(1); await t.settle();
-  const first = t.mask.innerHTML;
+  const first = t.shown();
   assert.match(first, /data:baked/);
+  // WebKit applies an SVG mask on the CPU whenever anything in its layer repaints, every frame; the layer's CSS mask is the GPU's
+  assert.strictEqual(t.lace.getAttribute('mask'), null, 'no SVG mask on the lace once its picture masks the layer');
   for (const px of [1.5, 2, 2.5, 3]) t.resize(px);
   assert.strictEqual(t.bakes(), 1, 'one debounced bake for the whole drag');
-  assert.strictEqual(t.mask.innerHTML, first, 'still the old picture while resizing');
+  assert.strictEqual(t.shown(), first, 'still the old picture while resizing');
   t.runTimers();
   for (let i = 0; i < 2; i++) { // the svg decodes, then the baked picture
     await new Promise(r => setImmediate(r));
     assert.strictEqual(t.decodes.length, 1, 'waiting on decode ' + i);
-    assert.strictEqual(t.mask.innerHTML, first, 'still the old picture before decode ' + i + ' lands');
+    assert.strictEqual(t.shown(), first, 'still the old picture before decode ' + i + ' lands');
     t.decodes.splice(0)[0]();
   }
   await new Promise(r => setImmediate(r));
-  assert.notStrictEqual(t.mask.innerHTML, first, 'swapped once decoded');
+  assert.notStrictEqual(t.shown(), first, 'swapped once decoded');
+});
+
+test('a resize moves and scales the picture over the lace at once, without setting the picture again', async () => {
+  const t = await setup();
+  t.resize(1); await t.settle();
+  assert.match(t.shown(), /data:baked/);
+  t.layer.style.maskImage = 'url("marker")'; // a stand-in: a resize that sets the picture again would replace it
+  t.resize(2); // a step of a drag: no timer has run, no bake has landed
+  // the lace's box (260, 120, 160 by 380) less the strip's corner (200, 10), at 2 CSS pixels a unit
+  assert.strictEqual(t.layer.style.maskPosition, '120px 220px', 'the picture sits over the lace at the new size');
+  assert.strictEqual(t.layer.style.maskSize, '320px 760px', 'the picture is scaled to the new size');
+  assert.strictEqual(t.shown(), 'url("marker")', 'the picture (a large data URL) is not set again on a resize');
 });
 
 test('a small size change does not re-bake', async () => {
   const t = await setup();
   t.resize(1); await t.settle();
-  const first = t.mask.innerHTML;
+  const first = t.shown();
   t.resize(1.05); await t.settle();
-  assert.strictEqual(t.mask.innerHTML, first);
+  assert.strictEqual(t.shown(), first);
 });
 
 test('a bake that finishes after a newer size started is dropped', async () => {
@@ -66,20 +83,20 @@ test('a bake that finishes after a newer size started is dropped', async () => {
   await new Promise(r => setImmediate(r));
   const two = t.decodes.splice(0); // waiting on its svg
   t.resize(3); t.runTimers(); await t.settle(); // the bake at 3 starts and finishes
-  const three = t.mask.innerHTML;
+  const three = t.shown();
   assert.match(three, /data:baked/);
   const images = t.built.length;
   two.forEach(r => r()); await new Promise(r => setImmediate(r)); await t.settle(); // then the one at 2 lands
   assert.strictEqual(t.built.length, images + 1, 'the bake at 2 went on to make its picture');
-  assert.strictEqual(t.mask.innerHTML, three, 'the picture at 3 stays');
+  assert.strictEqual(t.shown(), three, 'the picture at 3 stays');
 });
 
 test('a bake that fails tries again at the same size', async () => {
   const t = await setup();
   t.resize(1); await t.settle();
-  const first = t.mask.innerHTML;
+  const first = t.shown();
   t.fail.on = true; t.resize(2); await t.settle();
-  assert.strictEqual(t.mask.innerHTML, first, 'the old picture stays when the bake fails');
+  assert.strictEqual(t.shown(), first, 'the old picture stays when the bake fails');
   t.fail.on = false; t.resize(2); await t.settle();
-  assert.notStrictEqual(t.mask.innerHTML, first, 'baked at the next resize, at the size that failed');
+  assert.notStrictEqual(t.shown(), first, 'baked at the next resize, at the size that failed');
 });

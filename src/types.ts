@@ -175,7 +175,7 @@ export interface Surface {
 }
 /** A lantern: what's drawn, where its flame and light are, and what it does (see the notes on lanterns.ts STYLES). */
 export interface Style {
-  name: string; flame: [x: number, y: number, size: number]; light: Point; body: Body; back: string; front: string; inside?: string;
+  name: string; flame: [x: number, y: number, size: number]; light: Point; body: Body; back: string; front: string; inside?: string; lace?: string;
   paper?: boolean; flameWind?: number | null; dim?: number; surface?: Surface; caps?: [top: number, bottom: number, half: number];
   ribbon?: Point; knot?: Point; tassel?: Point; chain?: number; farWall?: boolean; holder?: Point; taper?: number; shadeFromHolder?: boolean;
   heat?: { at?: Point; k: number }; scorches?: boolean;

@@ -9,7 +9,8 @@ import type { Vec3 } from '../types';
 
 // ---- lantern styles -----------------------------------------------------------------------------------------
 // Each style is drawn behind and in front of one shared flame, with `inside` (if any) just in front of the flame; the flame
-// and `inside` slide together as #inside (frame.ts farSlide). `flame` places the flame's base and sets its size,
+// and `inside` slide together as #inside (frame.ts farSlide). `lace` is pierced brass, drawn between `inside` and `front` in a
+// layer masked by the baked cutouts (bakeCutouts). `flame` places the flame's base and sets its size,
 // `light` is where the glow and threads come from, `paper` puts `back` behind the flame (the rest of a lantern is all in
 // front of it) and softens the flame as if it's seen through paper (background.ts FLAME), and `body`
 // is the surface moths land on: its top and bottom, and its half-width at a given height. `caps` (paper lanterns) are
@@ -173,18 +174,26 @@ function bakeFarWall() {
   brass.src = FAR_WALL_SVG('#f00', 0.92); outline.src = FAR_WALL_SVG('#0f0', 0);
 }
 // The front's pierced design (#cutouts in MOROCCAN_DEFS) baked into a picture, the brass opaque and the holes clear, and
-// used as an alpha mask in its place. The lantern sways, so it repaints every frame, and WebKit redraws a vector mask and
-// turns it into luminance each time: about a third of the GPU process's CPU on the Moroccan at 2560x1440. It's baked at
-// the screen's pixels per unit. A resize only rescales the picture on show; once the window settles it's baked again at the
-// new size (if that's off by 10% or more), and swapped in only when decoded, so the lace never blinks to the vector mask.
-// Until the first bake is ready the vector mask stands in.
+// used as the lace layer's CSS mask (index.html #laceLayer) in place of the vector mask. The lantern sways and twists, so its
+// brass repaints every frame, and WebKit applies an SVG mask on the CPU each time it repaints anything in that layer, even
+// with the mask baked to a picture (83% of a core in the GPU process at 3360x1890 and 2x, against 39% with this layer). A
+// composited layer's CSS mask is applied by the GPU instead, so the lace is the only thing in that layer. It's baked at the screen's pixels per unit. A resize
+// only rescales the picture on show; once the window settles it's baked again at the new size (if that's off by 10% or
+// more), and swapped in only when decoded, so the lace never blinks. Until the first bake is ready the vector mask stands in.
 const cutouts = { k: 0, want: 0, pic: '' };
-let cutoutsMask: SVGMaskElement | null = null, cutoutsTimer: ReturnType<typeof setTimeout> | undefined;
+let cutoutsTimer: ReturnType<typeof setTimeout> | undefined, shownPic = '';
+// the picture over the lace's box (x 260 to 420, y 120 to 500), in the layer's CSS pixels. A resize calls this every frame,
+// so the picture (a data URL of some hundreds of kB) is only set again when a new bake replaces it
+function showCutouts() {
+  if (!cutouts.pic) return;
+  const [x0, y] = VIEW.layer ?? [0, 0], px = VIEW.px ?? 0, layer = $('laceLayer', SVGSVGElement);
+  if (shownPic !== cutouts.pic) { shownPic = cutouts.pic; layer.style.maskImage = `url("${shownPic}")`; $('lanternLace', SVGGElement).removeAttribute('mask'); }
+  Object.assign(layer.style, { maskPosition: `${(260 - x0) * px}px ${(120 - y) * px}px`, maskSize: `${160 * px}px ${380 * px}px` });
+}
 export function bakeCutouts() {
-  const m = byId('cutouts', SVGMaskElement), px = VIEW.px;
-  if (!m || !px) return; // not the Moroccan, or not laid out yet
-  const show = (m: SVGMaskElement) => { cutoutsMask = m; m.style.maskType = 'alpha'; m.innerHTML = `<image href="${cutouts.pic}" x="260" y="120" width="160" height="380" preserveAspectRatio="none"/>`; };
-  if (cutouts.pic && m !== cutoutsMask) show(m); // a fresh mask (a style switch): the picture we have, at once
+  const px = VIEW.px;
+  if (!style.lace || !px) return; // not the Moroccan, or not laid out yet
+  showCutouts(); // the picture we have, at this size, at once (a style switch or a resize)
   clearTimeout(cutoutsTimer);
   const bake = async () => {
     const k = px * (devicePixelRatio || 1); // device pixels a unit
@@ -197,8 +206,7 @@ export function bakeCutouts() {
     try { await img.decode(); c.getContext('2d')?.drawImage(img, 0, 0); pic.src = c.toDataURL(); await pic.decode(); } catch { return; }
     if (cutouts.want !== k) return; // a newer size is on its way
     cutouts.k = k; cutouts.pic = pic.src; // only once it's baked, so a failed bake tries again at the next resize
-    const now = byId('cutouts', SVGMaskElement); // the style may have changed while it baked
-    if (now) show(now);
+    if (style.lace) showCutouts(); // the style may have changed while it baked
   };
   if (cutouts.pic) cutoutsTimer = setTimeout(bake, 200); else bake(); // the first one at once
 }
@@ -744,16 +752,14 @@ export const STYLES = {
 <!-- its inside is the far wall, drawn by the background (bakeFarWall); the air's glow kept to half, so the lit wall shows through it -->
       <g opacity=".5"><ellipse id="paperGlow" cx="340" cy="335" rx="72" ry="95" fill="url(#pg)"/></g>`,
     inside: `<path d="M334 399h12l-2 5h-8Z" fill="${BRASS.side}"/><ellipse cx="340" cy="399" rx="6" ry="1.4" fill="${BRASS.lit}"/><path d="M338.8 404h2.4v4h-2.4Z" fill="${BRASS.side}"/>`, // the burner cup
+    // the pierced brass, in a layer of its own under the front (applyStyle, bakeCutouts)
+    lace: `${ONION_FILL('bottom', BOTTOM)}${ONION_FILL('dome', DOME)}${PANEL(45, 22.5, 244, 16)}
+      ${SLOPED([['M295 260H317.5L308.5 285H277Z', -60], [SHOULDER_F, 0], ['M362.5 260H385L403 285H371.5Z', 60]], 36)}
+      ${PANEL(63, 31.5, 290, 118)}
+      <path d="M277 290h126v118h-126Z" fill="url(#horizon)"/><path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>
+      ${SLOPED([['M277 413H308.5L320 428H300Z', -60], [SKIRT_F, 0], ['M371.5 413H403L380 428H360Z', 60]], -57)}`,
     front: `<circle cx="340" cy="132" r="4" fill="none" stroke="${BRASS.lit}" stroke-width="1.8"/>
       <path d="M338.6 136h2.8v20h-2.8Z" fill="${BRASS.front}"/><ellipse cx="340" cy="142" rx="3" ry="2.4" fill="${BRASS.lit}"/><ellipse cx="340" cy="149" rx="4.4" ry="3" fill="${BRASS.front}"/><ellipse cx="340" cy="154.5" rx="2.6" ry="1.8" fill="${BRASS.lit}"/>
-      <g mask="url(#cutouts)">
-        ${ONION_FILL('bottom', BOTTOM)}
-        ${ONION_FILL('dome', DOME)}
-        ${PANEL(45, 22.5, 244, 16)}
-        ${SLOPED([['M295 260H317.5L308.5 285H277Z', -60], [SHOULDER_F, 0], ['M362.5 260H385L403 285H371.5Z', 60]], 36)}
-        ${PANEL(63, 31.5, 290, 118)}
-        <path d="M277 290h126v118h-126Z" fill="url(#horizon)"/><path class="paperLit" d="M277 290h126v118h-126Z" fill="url(#bounce)"/>
-      </g>
       <g fill="none" stroke-linejoin="round">
         <path d="${DOME}" stroke="url(#gore-dome-F)" stroke-width="2"/><path d="${DOME}" stroke="url(#gore-dome-F)" stroke-width="2.6" transform="${HALF_X}"/>
         <path d="M317.5 244v16" ${FLAT(-30, 0.15, 'stroke')} stroke-width="1.6"/><path d="M362.5 244v16" ${FLAT(30, 0.15, 'stroke')} stroke-width="1.6"/>
@@ -766,7 +772,6 @@ export const STYLES = {
       <path d="M275.5 290h3v118h-3Z" ${FLAT(-90)}/><path d="M401.5 290h3v118h-3Z" ${FLAT(90)}/>
       <path d="M306.5 290h4v118h-4ZM369.5 290h4v118h-4ZM275.5 290h3v118h-3ZM401.5 290h3v118h-3Z" fill="url(#horizon)"/>
       ${ROPE(285)}${ROPE(408)}
-      <g mask="url(#cutouts)">${SLOPED([['M277 413H308.5L320 428H300Z', -60], [SKIRT_F, 0], ['M371.5 413H403L380 428H360Z', 60]], -57)}</g>
       <g stroke-width="1.4">${SLOPED([['M308.5 413L320 428', -30], ['M371.5 413L360 428', 30]], -57, 'stroke')}</g>
       ${PANEL(40, 20, 428, 6, true)}
       ${PANEL(40, 20, 428, 1.2, false, 0.2)}${PANEL(40, 20, 432.8, 1.2, false, 0.2)}
@@ -810,10 +815,13 @@ export function applyStyle(key: string) {
   const [fx, fy, fk] = style.flame;
   const back = (style.stands ? '' : style.chain ? `<g id="hang" fill="none" stroke="${BRASS.lit}" stroke-width="1.4"></g>`
     : '<path id="hang" stroke="#C9B49C" stroke-width="2"/>') + style.back;
-  const front = `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})"><g id="sparks"></g></g>${style.inside || ''}</g>`
-    + style.front;
+  const inside = `<g id="inside"><g transform="translate(${fx} ${fy}) scale(${fk}) translate(-340 -${FLAME_BASE})"><g id="sparks"></g></g>${style.inside || ''}</g>`;
+  // back to front: a paper lantern's back paper (under the flame), then the rest of its back and its inside, its lace, its front
   $('lanternPaper', SVGGElement).innerHTML = style.paper ? back : '';
-  $('lantern', SVGGElement).innerHTML = style.paper ? front : back + front;
+  $('lanternIn', SVGGElement).innerHTML = style.paper ? inside : back + inside;
+  $('lanternLace', SVGGElement).innerHTML = style.lace ?? '';
+  $('laceLayer', SVGSVGElement).toggleAttribute('hidden', !style.lace);
+  $('lantern', SVGGElement).innerHTML = style.front;
   drawHang();
   bakeFarWall(); bakeCutouts();
   for (const m of live.moths.values()) m.wasLanded = false; // landed moths find new spots on the new lantern
