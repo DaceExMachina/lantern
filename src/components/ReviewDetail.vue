@@ -2,8 +2,8 @@
 // A review desk record in full, inside the native #review popover, which a reviews row with a record opens over the list
 // (ReviewsMenu.vue sets the store's `review`; the row is the popover's invoker, so the list stays open under it and Escape
 // steps back to it). It shows the verdict, the findings worst first (each linked to its line in the PR's diff), the ask and a
-// draft reply to copy, the follow-up posts, and three actions: open the PR, talk it over with the desk's session (when it is
-// running), and dismiss the record.
+// draft reply to copy, the follow-up posts, and the actions: open the PR, talk it over with the desk's session (when it is
+// running), dismiss the record, and at the far right post the ticked findings as a review (no button while none is ticked; its result sits beside it).
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { NEED, ago } from '../scene/card';
 import { post } from '../scene/scene';
@@ -99,11 +99,6 @@ const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
           </label>
         </li>
       </ul>
-      <div class="send">
-        <button class="primary" :disabled="!checked.size || working" @click="send(rec)">{{ working ? 'Posting' : `Post ${checked.size} as your review` }}</button>
-        <span v-if="result && 'url' in result" role="status">Posted. <a :href="result.url" target="_blank" rel="noopener">See the review</a></span>
-        <span v-else-if="result" class="error" role="alert">{{ result.error }}</span>
-      </div>
     </template>
     <p v-else-if="rec.kind === 'review' && rec.status === 'ready'" class="dim">No findings.</p>
 
@@ -121,6 +116,11 @@ const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
       <a class="link" :href="rec.url" target="_blank" rel="noopener">Open on GitHub</a>
       <button v-if="desk" class="link" title="Bring up the review desk's session" @click="post('/focus', { id: desk })">Talk it over</button>
       <button class="link" :aria-label="`Dismiss the desk's notes on ${rec.repo}#${rec.pr}`" title="Hide this until there is something new" @click="dismiss(rec)">Dismiss</button>
+      <span v-if="checked.size || result" class="send">
+        <span v-if="result && 'url' in result" role="status">Posted. <a :href="result.url" target="_blank" rel="noopener">See the review</a></span>
+        <span v-else-if="result" class="error" role="alert">{{ result.error }}</span>
+        <button v-if="checked.size" class="primary" :disabled="working" @click="send(rec)">{{ working ? 'Posting' : `Post ${checked.size} as your review` }}</button>
+      </span>
     </div>
   </template>
 </template>

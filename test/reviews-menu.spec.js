@@ -325,13 +325,14 @@ describe('the detail panel', () => {
     const findings = [{ severity: 'nit', title: 'Typo' }, { severity: 'blocker', file: 'a.ts', line: 3, title: 'Race' }, { severity: 'major', title: 'No file' }, { severity: 'minor', title: 'Naming' }];
     desk([rec(1, { findings })]);
     store.review = rec(1).url; await nextTick();
-    const boxes = () => [...panel().querySelectorAll('.findings input')], go = () => panel().querySelector('.send .primary');
+    const boxes = () => [...panel().querySelectorAll('.findings input')], go = () => panel().querySelector('.actions .primary');
     assert.deepStrictEqual(boxes().map(b => b.checked), [true, true, false, false], 'worst first: blocker and major ticked, minor and nit not');
     assert.deepStrictEqual([go().textContent, go().disabled], ['Post 2 as your review', false]);
+    assert.strictEqual(panel().querySelector('.actions').lastElementChild, go().parentElement, 'in the actions row, at the far right');
     boxes()[2].click(); await nextTick();
     assert.strictEqual(go().textContent, 'Post 3 as your review');
     for (const b of boxes().filter(b => b.checked)) { b.click(); await nextTick(); } // a click at a time, as a person does
-    assert.deepStrictEqual([go().textContent, go().disabled], ['Post 0 as your review', true], 'nothing ticked: nothing to post');
+    assert.ok(!go(), 'nothing ticked: no button at all');
     boxes()[0].click(); await nextTick(); boxes()[3].click(); await nextTick();
     let answer = { status: 502, body: { error: 'GitHub refused the review: nope.' } };
     vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status })); });
