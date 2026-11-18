@@ -174,6 +174,19 @@ test('Escape or a click elsewhere in the list closes the picker unchanged', asyn
   assert.strictEqual(posts.length, 0, 'none of it saved anything');
 });
 
+test('Up and Down move between the four choices, wrapping', async () => {
+  const pr = n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need: 'waiting' });
+  store.reviews = [pr(1)];
+  await nextTick();
+  document.querySelector('#reviews .pri').click(); await nextTick(); await nextTick();
+  const btns = [...document.querySelectorAll('#reviews .pick button')], key = k => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+  assert.strictEqual(document.activeElement, btns[2], 'opens on the current one (normal)');
+  key('ArrowDown'); assert.strictEqual(document.activeElement, btns[3]);
+  key('ArrowDown'); assert.strictEqual(document.activeElement, btns[0], 'wraps to the top');
+  key('ArrowUp'); assert.strictEqual(document.activeElement, btns[3], 'wraps to the bottom');
+  key('ArrowUp'); assert.strictEqual(document.activeElement, btns[2]);
+});
+
 test('a priority from settings.json shows on load', async () => {
   store.settings = parseSettings({ reviewPriority: { 'https://github.com/o/app/pull/1': 3, 'https://github.com/o/app/pull/2': 0 } });
   store.reviews = ['1', '2'].map(n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: n, need: 'waiting' }));
