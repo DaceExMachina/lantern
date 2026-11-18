@@ -26,11 +26,12 @@ async function setup() {
   assert.ok(document.getElementById('cutouts'), 'the Moroccan has its vector mask, until the picture is baked');
   const lace = /** @type {SVGGElement} */ (document.getElementById('lanternLace')), layer = /** @type {SVGSVGElement} */ (document.getElementById('laceLayer'));
   const shown = () => layer.style.maskImage; // the picture masking the lace's layer
+  VIEW.layer = [200, 10, 280, 600]; // the lantern's strip, its corner at x 200, y 10
   const resize = px => { VIEW.px = px; bakeCutouts(); };
   const bakes = () => vi.getTimerCount(); // the debounced bakes waiting
   const runTimers = () => vi.runOnlyPendingTimers();
   const settle = async () => { while (bakes() || decodes.length) { runTimers(); decodes.splice(0).forEach(r => r()); await new Promise(r => setImmediate(r)); } };
-  return { lace, shown, decodes, built, resize, bakes, runTimers, settle, fail };
+  return { lace, layer, shown, decodes, built, resize, bakes, runTimers, settle, fail };
 }
 
 test('several resize steps bake once, and the old picture stays up until the new one has decoded', async () => {
@@ -53,6 +54,18 @@ test('several resize steps bake once, and the old picture stays up until the new
   }
   await new Promise(r => setImmediate(r));
   assert.notStrictEqual(t.shown(), first, 'swapped once decoded');
+});
+
+test('a resize moves and scales the picture over the lace at once, without setting the picture again', async () => {
+  const t = await setup();
+  t.resize(1); await t.settle();
+  assert.match(t.shown(), /data:baked/);
+  t.layer.style.maskImage = 'url("marker")'; // a stand-in: a resize that sets the picture again would replace it
+  t.resize(2); // a step of a drag: no timer has run, no bake has landed
+  // the lace's box (260, 120, 160 by 380) less the strip's corner (200, 10), at 2 CSS pixels a unit
+  assert.strictEqual(t.layer.style.maskPosition, '120px 220px', 'the picture sits over the lace at the new size');
+  assert.strictEqual(t.layer.style.maskSize, '320px 760px', 'the picture is scaled to the new size');
+  assert.strictEqual(t.shown(), 'url("marker")', 'the picture (a large data URL) is not set again on a resize');
 });
 
 test('a small size change does not re-bake', async () => {

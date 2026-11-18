@@ -181,13 +181,14 @@ function bakeFarWall() {
 // only rescales the picture on show; once the window settles it's baked again at the new size (if that's off by 10% or
 // more), and swapped in only when decoded, so the lace never blinks. Until the first bake is ready the vector mask stands in.
 const cutouts = { k: 0, want: 0, pic: '' };
-let cutoutsTimer: ReturnType<typeof setTimeout> | undefined;
-// the picture over the lace's box (x 260 to 420, y 120 to 500), in the layer's CSS pixels
+let cutoutsTimer: ReturnType<typeof setTimeout> | undefined, shownPic = '';
+// the picture over the lace's box (x 260 to 420, y 120 to 500), in the layer's CSS pixels. A resize calls this every frame,
+// so the picture (a data URL of some hundreds of kB) is only set again when a new bake replaces it
 function showCutouts() {
-  const [x0, y] = VIEW.layer ?? [0, 0], px = VIEW.px ?? 0;
   if (!cutouts.pic) return;
-  $('lanternLace', SVGGElement).removeAttribute('mask');
-  Object.assign($('laceLayer', SVGSVGElement).style, { maskImage: `url("${cutouts.pic}")`, maskPosition: `${(260 - x0) * px}px ${(120 - y) * px}px`, maskSize: `${160 * px}px ${380 * px}px` });
+  const [x0, y] = VIEW.layer ?? [0, 0], px = VIEW.px ?? 0, layer = $('laceLayer', SVGSVGElement);
+  if (shownPic !== cutouts.pic) { shownPic = cutouts.pic; layer.style.maskImage = `url("${shownPic}")`; $('lanternLace', SVGGElement).removeAttribute('mask'); }
+  Object.assign(layer.style, { maskPosition: `${(260 - x0) * px}px ${(120 - y) * px}px`, maskSize: `${160 * px}px ${380 * px}px` });
 }
 export function bakeCutouts() {
   const px = VIEW.px;
