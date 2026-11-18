@@ -201,7 +201,7 @@ final class LanternServer {
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
     var stale: [JSON] = [] // the wisps: my open PRs that no session owns, oldest first (stale proper: also untouched for a week, staleCount)
-    var desk: [JSON] = [] // the review desk's records (~/.ghbus/reviews, one file per PR), newest first, each with its id and url
+    var desk: [JSON] = [] // the review desk's records (~/.ghbus/reviews, one file per PR), newest first, each with its url
     var sentDesk = "{}" // the desk event as last sent: { records, inbox }
     /// The PRs the reviews dropdown can list: those asking for my review and those the desk has a record on. A setting kept per PR drops the rest.
     var listedPRs: Set<String> { Set(reviews.map { str($0["url"]) } + desk.map { str($0["url"]) }) }
@@ -436,10 +436,9 @@ final class LanternServer {
         if kept.count != pins.count { settings["pinned"] = kept; settingsChanged() }
     }
     /// The review desk (a Claude session, see the review-desk skill) writes one JSON file per PR into ~/.ghbus/reviews. A file that
-    /// isn't there whole yet, or isn't a record, is skipped. Each record's id is repo#pr@head (a mention or follow-up has no head: its
-    /// newest activity, or its time), which is what dismissing one in the settings remembers, so a new head, or new activity, shows
-    /// again. A record without a url gets its PR's. The pages also get the inbox session (lantern-pr keeps its id in ~/.ghbus/inbox):
-    /// the desk's own session, which the detail panel's "Talk it over" brings up.
+    /// isn't there whole yet, or isn't a record, is skipped. A record's links are kept only when they go to GitHub: its url (else
+    /// its PR's, which is also what the page keys it by), the posted comment's and each post's. The pages also get the inbox session
+    /// (lantern-pr keeps its id in ~/.ghbus/inbox): the desk's own session, which the detail panel's "Talk it over" brings up.
     func refreshDesk() {
         let bus = ProcessInfo.processInfo.environment["LANTERN_PR_DIR"] ?? HOME + "/.ghbus" // lantern-pr's folder, which it lets the same variable move
         let dir = bus + "/reviews"
@@ -447,8 +446,10 @@ final class LanternServer {
         let records: [JSON] = names.compactMap { name in
             guard var r = FileManager.default.contents(atPath: dir + "/" + name).flatMap(parse) as? JSON,
                   let repo = r["repo"] as? String, let pr = r["pr"] as? Int, r["status"] is String, r["kind"] is String else { return nil }
-            r["id"] = "\(repo)#\(pr)@\(str(r["head"] ?? r["lastActivity"] ?? r["at"]))"
-            if !(r["url"] is String) { r["url"] = "https://github.com/\(repo)/pull/\(pr)" }
+            let github = { (v: Any?) in (v as? String).map { $0.hasPrefix("https://github.com/") } ?? false }
+            if !github(r["url"]) { r["url"] = "https://github.com/\(repo)/pull/\(pr)" }
+            if !github(r["posted"]) { r["posted"] = nil }
+            if let posts = r["activity"] as? [Any] { r["activity"] = posts.map { p -> Any in guard var p = p as? JSON else { return p }; if !github(p["url"]) { p["url"] = nil }; return p } }
             return r
         }.sorted { str($0["lastActivity"] ?? $0["at"]) > str($1["lastActivity"] ?? $1["at"]) }
         desk = records
@@ -1213,10 +1214,11 @@ final class LanternServer {
                     let open = listedPRs
                     settings["reviewPriority"] = given.filter { open.contains($0.key) && [0, 1, 3].contains(($0.value as? NSNumber)?.intValue ?? -1) }; ok = true
                 }
-                // the desk records dismissed, by id: Lantern's own memory, the desk's files stay. Only ids the desk still has are kept.
-                if let given = j["dismissedReviews"] as? [Any], given.allSatisfy({ $0 is String }) { let ids = Set(desk.map { str($0["id"]) }); settings["dismissedReviews"] = given.filter { ids.contains(str($0)) }; ok = true }
-                // when I last opened each PR's desk record, as the time of its newest news then (an ISO time), the whole `{ url: time }` map each time; only listed PRs stay
-                if let given = j["reviewSeen"] as? JSON, given.values.allSatisfy({ $0 is String }) { let open = listedPRs; settings["reviewSeen"] = given.filter { open.contains($0.key) }; ok = true }
+                // what the page remembers about each PR's desk record, as its news then (a string the page makes), the whole `{ url: news }`
+                // map each time: when I last opened it, and when I dismissed it (the desk's files stay). Only listed PRs stay.
+                for key in ["reviewSeen", "dismissedReviews"] {
+                    if let given = j[key] as? JSON, given.values.allSatisfy({ $0 is String }) { let open = listedPRs; settings[key] = given.filter { open.contains($0.key) }; ok = true }
+                }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }
             if !ok { return respond(c, 400) }

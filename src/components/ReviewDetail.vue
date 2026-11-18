@@ -8,9 +8,9 @@ import { computed, ref, shallowRef, watch } from 'vue';
 import { NEED, ago } from '../scene/card';
 import { post } from '../scene/scene';
 import { useLanternStore } from '../stores/lantern';
-import type { Finding } from '../types';
+import { SEVERITIES } from '../types';
+import type { DeskRecord, Finding } from '../types';
 
-const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const store = useLanternStore();
 const rec = computed(() => store.deskShown.find(r => r.url === store.review));
 const request = computed(() => store.reviews.find(r => r.url === store.review));
@@ -25,7 +25,7 @@ const desk = computed(() => store.sessions.some(s => s.id === store.desk.inbox) 
 const hashes = shallowRef(new Map<string, string>());
 const sha256 = async (s: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))].map(b => b.toString(16).padStart(2, '0')).join('');
 watch(findings, async fs => { hashes.value = new Map(await Promise.all([...new Set(fs.flatMap(f => f.file ? [f.file] : []))].map(async f => [f, await sha256(f)] as const))); }, { immediate: true });
-const lineUrl = (f: Finding) => { const h = f.file ? hashes.value.get(f.file) : undefined; return h && rec.value ? `${rec.value.url}/files#diff-${h}${f.line ? `R${f.line}` : ''}` : undefined; };
+const lineUrl = (f: Finding) => { const h = f.file ? hashes.value.get(f.file) : undefined; return h && rec.value ? `${rec.value.url}/files#diff-${h}${/^\d+$/.test(String(f.line ?? '')) ? `R${f.line}` : ''}` : undefined; }; // a range or other text line shows, unanchored
 
 const copied = ref(false);
 async function copy(text: string) {
@@ -34,7 +34,7 @@ async function copy(text: string) {
   setTimeout(() => { copied.value = false; }, 1500);
 }
 const close = () => document.getElementById('review')?.hidePopover();
-const dismiss = (id: string) => { store.dismissReview(id); close(); };
+const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
 </script>
 
 <template>
@@ -76,7 +76,7 @@ const dismiss = (id: string) => { store.dismissReview(id); close(); };
       <h4>Recent activity</h4>
       <ul class="activity">
         <li v-for="(a, i) in activity" :key="i">
-          <span class="who"><b>{{ a.author }}</b> <component :is="a.url ? 'a' : 'span'" :href="a.url ?? undefined" target="_blank" rel="noopener">{{ when(a.at) }}</component><template v-if="a.mine === true || a.mine === 'true'">, in your thread</template></span>
+          <span class="who"><b>{{ a.author }}</b> <component :is="a.url ? 'a' : 'span'" :href="a.url ?? undefined" target="_blank" rel="noopener">{{ when(a.at) }}</component><template v-if="a.mine">, in your thread</template></span>
           <span v-if="a.excerpt" class="excerpt">{{ a.excerpt }}</span>
         </li>
       </ul>
@@ -85,7 +85,7 @@ const dismiss = (id: string) => { store.dismissReview(id); close(); };
     <div class="actions">
       <a class="link" :href="rec.url" target="_blank" rel="noopener">Open on GitHub</a>
       <button v-if="desk" class="link" title="Bring up the review desk's session" @click="post('/focus', { id: desk })">Talk it over</button>
-      <button class="link" :aria-label="`Dismiss the desk's notes on ${rec.repo}#${rec.pr}`" title="Hide this until there is something new" @click="dismiss(rec.id)">Dismiss</button>
+      <button class="link" :aria-label="`Dismiss the desk's notes on ${rec.repo}#${rec.pr}`" title="Hide this until there is something new" @click="dismiss(rec)">Dismiss</button>
     </div>
   </template>
 </template>

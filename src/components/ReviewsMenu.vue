@@ -12,11 +12,11 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { NEED, cutShort, hidePrTip, showPrTip, worstFirst } from '../scene/card';
 import { flyColour, offBoard } from '../scene/fireflies';
 import { useLanternStore } from '../stores/lantern';
+import { SEVERITIES } from '../types';
 import type { DeskRecord, Opt } from '../types';
 
 // a row: a request (with its need) or a desk record with no request in the list
 interface Row { url: string; label: string; title: Opt<string>; author?: Opt<string>; assigned?: Opt<boolean>; need?: string; rec?: DeskRecord | undefined }
-const SEVERITIES = ['blocker', 'major', 'minor', 'nit'];
 const store = useLanternStore();
 // priority first (0 is highest, like a P0 bug; the sort is stable), then the requests worst first, then the records of their own
 const rows = computed((): Row[] => {
@@ -26,11 +26,12 @@ const rows = computed((): Row[] => {
   const off = new Set(offBoard(asking, store.sessions, store.settings.stale === false ? [] : store.stale));
   const asked: Row[] = worstFirst(asking.filter(r => off.has(r) || recs.has(r.url))).map(r => ({ ...r, rec: recs.get(r.url) }));
   const listed = new Set(asked.map(r => r.url));
-  const own = store.deskShown.filter(d => !listed.has(d.url)).map((d): Row => ({ url: d.url, label: `${d.repo.split('/').pop()}#${d.pr}`, title: d.title, author: d.author, rec: d }));
+  // an audit whose request has gone (reviewed, merged) stays only while it has something unread: the desk keeps every record it wrote
+  const own = store.deskShown.filter(d => !listed.has(d.url) && (d.kind !== 'review' || store.unread(d))).map((d): Row => ({ url: d.url, label: `${d.repo.split('/').pop()}#${d.pr}`, title: d.title, author: d.author, rec: d }));
   return [...asked, ...own].sort((a, b) => store.reviewPriority(a.url) - store.reviewPriority(b.url));
 });
 // where the desk stands, at the end of the row: its findings by severity once ready, or its status
-const counts = (d: DeskRecord) => SEVERITIES.map(s => [s, d.findings?.filter(f => f.severity === s).length ?? 0] as const).filter(([, n]) => n);
+const counts = (d: DeskRecord) => [...SEVERITIES, 'other'].map(s => [s, d.findings.filter(f => f.severity === s || s === 'other' && !SEVERITIES.includes(f.severity)).length] as const).filter(([, n]) => n);
 const word = (x: Row) => x.need ? NEED[x.need] || x.need : x.rec?.kind === 'mention' ? 'mention' : '';
 // the dropdown's open state is the popover's own (toggle fires on any close: outside click, Escape, a link); it goes with the list
 watch(() => rows.value.length, n => { if (!n) store.reviewsOpen = false; });
@@ -74,16 +75,19 @@ const tip = (e: Event, x: Row) => { const el = e.currentTarget; if (el instanceo
           @click="r.rec && store.openReview(r.rec)" @pointerenter="tip($event, r)" @focus="tip($event, r)" @pointerleave="hidePrTip" @blur="hidePrTip">
           <i v-if="r.rec && store.unread(r.rec)" class="new" role="img" aria-label="New since you last looked"></i>
           <span class="face">
-            <span class="ti">{{ r.title ?? '' }}</span>
-            <span class="me">
-              <i v-if="r.need" :style="{ background: flyColour(r.need) }"></i><b>{{ r.label }}</b>
-              <span v-if="r.rec?.kind === 'followup'" class="bubble" :title="`Follow-up: ${r.rec.activity?.length ?? 0} post${r.rec.activity?.length === 1 ? '' : 's'} on a PR you joined`"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-3 2.5V11h.5A1.5 1.5 0 0 1 3 9.5z"/></svg><span class="sr">Follow-up, </span>{{ r.rec.activity?.length || '' }}</span>
-              <span v-if="r.author" class="by">{{ r.author }}</span><span v-if="r.assigned" class="asg">assigned</span>{{ word(r) }}<span v-if="r.rec && r.rec.kind === 'review'" class="desk">
+            <span class="top">
+              <span class="ti">{{ r.title ?? '' }}</span>
+              <!-- where the audit stands: its status, or once ready its findings counted by severity -->
+              <span v-if="r.rec && r.rec.kind === 'review'" class="desk">
                 <span v-if="r.rec.status !== 'ready'" :class="r.rec.status">{{ r.rec.status }}</span>
-                <template v-else-if="counts(r.rec).length"><span v-for="[s, n] in counts(r.rec)" :key="s" :class="['sev', s]" :title="`${n} ${s}${n > 1 ? 's' : ''}`"><i></i>{{ n }}<span class="sr">{{ ` ${s}` }}</span></span></template>
+                <template v-else-if="r.rec.findings.length"><span v-for="[s, n] in counts(r.rec)" :key="s" :class="['sev', s]" :title="`${n} ${s}${n > 1 ? 's' : ''}`"><i></i>{{ n }}<span class="sr">{{ ` ${s}` }}</span></span></template>
                 <span v-else class="clean">clean</span>
               </span>
             </span>
+            <span class="me">
+              <i v-if="r.need" :style="{ background: flyColour(r.need) }"></i><b>{{ r.label }}</b>
+              <span v-if="r.rec?.kind === 'followup'" class="bubble" :title="`Follow-up: ${r.rec.activity.length ?? 0} post${r.rec.activity.length === 1 ? '' : 's'} on a PR you joined`"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-3 2.5V11h.5A1.5 1.5 0 0 1 3 9.5z"/></svg><span class="sr">Follow-up, </span>{{ r.rec.activity.length || '' }}</span>
+              <span v-if="r.author" class="by">{{ r.author }}</span><span v-if="r.assigned" class="asg">assigned</span>{{ word(r) }}</span>
           </span>
         </component>
         <div v-if="picking === r.url" class="pick" role="group" aria-label="Priority" :style="{ top: `${at.top}px`, right: `${at.right}px` }" @keydown.esc.stop.prevent="close" @keydown.up.prevent="step($event, -1)" @keydown.down.prevent="step($event, 1)">

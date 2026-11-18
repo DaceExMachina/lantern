@@ -256,15 +256,17 @@
   #reviews .go .new { position: absolute; left: var(--space-1); top: calc(var(--space-1) + .75em); translate: 0 -50%; width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: var(--accent-violet); } /* in the gutter, level with the title */
   #reviews .me .bubble { flex: none; display: flex; align-items: center; gap: var(--space-0-5); color: var(--accent-violet); }
   #reviews .me .bubble svg { width: var(--space-4); height: var(--space-4); }
-  #reviews .me .desk { flex: none; display: flex; gap: var(--space-2); margin-left: auto; }
-  #reviews .me .sev { display: flex; align-items: center; gap: var(--space-1); } /* a finding count: a dot in its severity's colour, then the number */
-  #reviews .me .sev i { background: currentColor; }
+  #reviews .top { display: flex; align-items: baseline; gap: var(--space-2); } /* the title, clipped first, then where the audit stands */
+  #reviews .top .ti { flex: 0 1 auto; min-width: 0; }
+  #reviews .top .desk { flex: none; display: flex; align-items: center; gap: var(--space-2); margin-left: auto; font-size: var(--text-xs); }
+  #reviews .top .sev { display: flex; align-items: center; gap: var(--space-1); } /* a finding count: a dot in its severity's colour, then the number */
+  #reviews .top .sev i { width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: currentColor; }
   :is(#reviews, #review) :is(.queued, .auditing, .clean) { color: var(--ink-dim); }
   :is(#reviews, #review) .failed { color: var(--pr-failing); }
   :is(#reviews, #review) .sev.blocker { color: var(--pr-failing); }
   :is(#reviews, #review) .sev.major { color: var(--pr-changes); }
   :is(#reviews, #review) .sev.minor { color: var(--pr-feedback); }
-  :is(#reviews, #review) .sev.nit { color: var(--ink-dim); }
+  :is(#reviews, #review) .sev:is(.nit, .other) { color: var(--ink-dim); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   /* a desk record in full (src/components/ReviewDetail.vue), placed like the stats and the recap */
   #review h3 { display: flex; justify-content: space-between; gap: var(--space-3); margin: 0; font-size: var(--text-md); font-weight: var(--weight-regular); color: var(--ink-strong); }
