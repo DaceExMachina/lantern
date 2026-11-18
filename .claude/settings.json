@@ -1,0 +1,48 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$LANTERN_SPIKE_URL\" ] || exit 0; i=$(cat); if command -v jq >/dev/null 2>&1; then p=$(printf '%s' \"$i\" | jq -c '{hook_event_name,session_id}'); else p=$(printf '%s' \"$i\" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(json.dumps({\"hook_event_name\":d.get(\"hook_event_name\"),\"session_id\":d.get(\"session_id\")}))'); fi; curl -sS -m 3 -X POST -H 'Content-Type: application/json' -d \"$p\" \"$LANTERN_SPIKE_URL/hook\" >/dev/null 2>&1 || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$LANTERN_SPIKE_URL\" ] || exit 0; i=$(cat); if command -v jq >/dev/null 2>&1; then p=$(printf '%s' \"$i\" | jq -c '{hook_event_name,session_id}'); else p=$(printf '%s' \"$i\" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(json.dumps({\"hook_event_name\":d.get(\"hook_event_name\"),\"session_id\":d.get(\"session_id\")}))'); fi; curl -sS -m 3 -X POST -H 'Content-Type: application/json' -d \"$p\" \"$LANTERN_SPIKE_URL/hook\" >/dev/null 2>&1 || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$LANTERN_SPIKE_URL\" ] || exit 0; i=$(cat); if command -v jq >/dev/null 2>&1; then p=$(printf '%s' \"$i\" | jq -c '{hook_event_name,session_id}'); else p=$(printf '%s' \"$i\" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(json.dumps({\"hook_event_name\":d.get(\"hook_event_name\"),\"session_id\":d.get(\"session_id\")}))'); fi; curl -sS -m 3 -X POST -H 'Content-Type: application/json' -d \"$p\" \"$LANTERN_SPIKE_URL/hook\" >/dev/null 2>&1 || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$LANTERN_SPIKE_URL\" ] || exit 0; i=$(cat); if command -v jq >/dev/null 2>&1; then p=$(printf '%s' \"$i\" | jq -c '{hook_event_name,session_id}'); else p=$(printf '%s' \"$i\" | python3 -c 'import sys,json;d=json.load(sys.stdin);print(json.dumps({\"hook_event_name\":d.get(\"hook_event_name\"),\"session_id\":d.get(\"session_id\")}))'); fi; curl -sS -m 3 -X POST -H 'Content-Type: application/json' -d \"$p\" \"$LANTERN_SPIKE_URL/hook\" >/dev/null 2>&1 || true",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
