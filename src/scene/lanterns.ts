@@ -736,7 +736,7 @@ export const STYLES = {
     chain: 123, farWall: true, // its far wall shows through the holes (bakeFarWall); its chain of links runs from here up past the top of the window (see drawHang)
     name: 'Brass Moroccan', flame: [340, 398, 0.9], light: [340, 348], dim: 0.6, flameWind: 2, // enclosed, the wind leans it about a third as hard as the candle's
     tassel: [340, 486], heat: { at: [340, 190], k: 0.5 }, // out through the dome's piercings, gentler than over the candle's bare flame
-    holder: [404, 6], // the burner cup under the flame, the height of its bottom and the half-width of its mouth; it throws a narrow fan of shadow straight down
+    holder: [492, 3.6], taper: 60, // the finial's biggest oval, the widest solid thing under the flame (the lace and burner cup let the light through): its height and half-width, and how far below it the flame's light has wrapped round it, closing its fan of shadow to a point
     // a hexagonal prism seen face-on (front face ±31.5, side faces out to ±63), under a shoulder flaring out from ±45
     body: { top: 262, bottom: 462, half: y => y < 285 ? 45 + Math.max(0, y - 260) / 25 * 18 : y < 413 ? 63 : y < 428 ? 63 - (y - 413) / 15 * 23
       : y < 434 ? 40 : 38 * (1 - ((y - 434) / 54) ** 2) },

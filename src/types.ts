@@ -177,7 +177,7 @@ export interface Surface {
 export interface Style {
   name: string; flame: [x: number, y: number, size: number]; light: Point; body: Body; back: string; front: string; inside?: string;
   paper?: boolean; flameWind?: number | null; dim?: number; surface?: Surface; caps?: [top: number, bottom: number, half: number];
-  ribbon?: Point; knot?: Point; tassel?: Point; chain?: number; farWall?: boolean; holder?: Point; shadeFromHolder?: boolean;
+  ribbon?: Point; knot?: Point; tassel?: Point; chain?: number; farWall?: boolean; holder?: Point; taper?: number; shadeFromHolder?: boolean;
   heat?: { at?: Point; k: number }; scorches?: boolean;
   // a standing lantern: the band its stand fills, its column redrawn to the window's bottom, and the grapes it shines on
   stands?: { half: number; top: number }; column?: (bottom: number) => string; shine?: Point[];
