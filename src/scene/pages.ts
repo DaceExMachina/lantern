@@ -233,7 +233,10 @@ function render(out: HTMLCanvasElement, d: Surface, s: number) {
   const flatCanvas = flat ??= document.createElement('canvas');
   const vTop = flatY(d, d.top), vBottom = flatY(d, d.bottom), fw = Math.ceil(2 * U * s), fh = Math.ceil((vBottom - vTop) * s);
   if (flatCanvas.width !== fw || flatCanvas.height !== fh) { flatCanvas.width = fw; flatCanvas.height = fh; } // also clears it
-  const f = flatCanvas.getContext('2d'), o = out.getContext('2d');
+  // Both drawn on the CPU (willReadFrequently is how a page asks WebKit for that): on the GPU, the round chōchin's couple of
+  // thousand tiles were replayed in WebKit's GPU process, which held the next animation frame about 120 ms on every redraw.
+  // Both or neither: with one on each side, every tile is a copy between them, and the page all but stops.
+  const f = flatCanvas.getContext('2d', { willReadFrequently: true }), o = out.getContext('2d', { willReadFrequently: true });
   if (!f || !o) return;
   f.setTransform(1, 0, 0, 1, 0, 0);
   f.clearRect(0, 0, fw, fh);
