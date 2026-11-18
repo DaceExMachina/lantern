@@ -2,7 +2,7 @@
 // The review requests: a button at the footer's bottom left with their count, shown only while there are any, opening a
 // dropdown (those not already flying as a moth's firefly, offBoard; a native popover, which closes on a click elsewhere or Escape) that lists each PR asking for my review, or assigned to me by someone else (marked): its
 // repo#number as a link, its title, its author, and what it needs, the way a PR chip's dot and words show it elsewhere. A title cut
-// short shows in #prTip while its row is hovered or focused. The fireflies circling the lantern are these same PRs. Each row's priority button (an icon: double caret up for highest, caret up for high, nothing for normal, the default, caret down for low; normal shows only while the row is hovered or focused) opens a small floating picker of the four, a column from highest down to low, with the current choice over the button and the rest above and below, like a pop-up menu (fixed to the window so the list's scrolling can't clip it, and nudged to stay inside the list): one click sets it and closes it (Up and Down move between the four; Escape, a click elsewhere in the list, or scrolling it closes the picker unchanged, and focus returns to the button). The list sorts by priority, highest (0) first, and re-sorts only once one is chosen; the server keeps it in settings.
+// short shows in #prTip while its row is hovered or focused. The fireflies circling the lantern are these same PRs. Each row's priority button (an icon: double caret up for highest, caret up for high, nothing for normal, the default, caret down for low; normal shows only while the row is hovered or focused) opens a small floating picker of the four, a column from highest down to low, with the current choice over the button and the rest above and below, like a pop-up menu (fixed to the window so the list's scrolling can't clip it, and nudged to stay inside it): one click sets it and closes it (Up and Down move between the four; Escape, a click elsewhere in the list, or scrolling it closes the picker unchanged, and focus returns to the button). The list sorts by priority, highest (0) first, and re-sorts only once one is chosen; the server keeps it in settings.
 import { computed, nextTick, ref, watch } from 'vue';
 import { NEED, cutShort, hidePrTip, showPrTip, worstFirst } from '../scene/card';
 import { flyColour, offBoard } from '../scene/fireflies';
@@ -26,10 +26,9 @@ const open = (url: string, e: MouseEvent) => {
   picking.value = url;
   void nextTick(() => {
     const pick = rowOf(url)?.querySelector<HTMLElement>('.pick'), now = pick?.querySelector<HTMLElement>('[aria-pressed=true]');
-    if (r && pick && now) { // like a macOS pop-up menu: the current choice sits over the button, the rest above and below; kept inside the list's edges
+    if (r && pick && now) { // like a macOS pop-up menu: the current choice sits over the button, the rest above and below; kept inside the window
       const mid = (b: DOMRect) => b.top + b.height / 2, top = at.value.top + mid(r) - mid(now.getBoundingClientRect());
-      const box = pick.closest('#reviews')!.getBoundingClientRect(); // a list too short to hold the four lets it hang past the bottom, since it's fixed
-      at.value.top = Math.max(box.top + 4, Math.min(top, box.bottom - 4 - pick.offsetHeight));
+      at.value.top = Math.max(4, Math.min(top, innerHeight - 4 - pick.offsetHeight));
     }
     now?.focus();
   });
