@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { post } from '../scene/scene';
 import { parseSettings } from '../types';
-import type { GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, StalePR, Stats, Usage } from '../types';
+import type { Desk, DeskRecord, GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, StalePR, Stats, Usage } from '../types';
 
 // No pinning where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
@@ -21,6 +21,8 @@ export const useLanternStore = defineStore('lantern', () => {
   const settings = shallowRef<Settings>(parseSettings({}));
   const reviews = shallowRef<Review[]>([]); // PRs waiting on my review (GitHub status on)
   const stale = shallowRef<StalePR[]>([]); // my PRs no session owns, shown as wisps (the settings can hide them), so the reviews list leaves them out
+  const desk = shallowRef<Desk>({ records: [], inbox: null }); // the review desk's records, newest first, and its session (ReviewsMenu.vue, ReviewDetail.vue)
+  const review = ref<string | null>(null); // the PR whose desk record the detail panel shows (ReviewDetail.vue), by url
   const reviewsOpen = ref(false); // whether the reviews dropdown is open (ReviewsMenu.vue), which the now playing widget gives way to
   const link = ref<'connecting' | 'up' | 'offline'>('connecting'); // the event stream, as the status line tells it
   const github = shallowRef<GitHub>({ accounts: [], signIn: null });
@@ -60,6 +62,24 @@ export const useLanternStore = defineStore('lantern', () => {
     settings.value = { ...settings.value, bookmarks: next };
     post('/settings', { bookmarks: next.map(b => b.id) });
   }
+  // ---- the review desk: a record is dismissed by id (repo#pr@head, so a new head shows again), a setting so every window agrees. The desk's file stays.
+  const deskShown = computed(() => desk.value.records.filter(r => !settings.value.dismissedReviews?.includes(r.id)));
+  function dismissReview(id: string) {
+    const next = [...settings.value.dismissedReviews ?? [], id];
+    settings.value = { ...settings.value, dismissedReviews: next };
+    post('/settings', { dismissedReviews: next });
+  }
+  // ---- unread: a record's news is its newest activity, or its audit once ready (a queued or auditing record shows its status instead).
+  // Opening its detail remembers that time per PR, a setting the server prunes to listed PRs; anything newer shows a dot.
+  const news = (r: DeskRecord) => Math.max(Date.parse(r.lastActivity ?? '') || 0, r.status === 'ready' ? Date.parse(r.updated ?? r.at ?? '') || 0 : 0);
+  const unread = (r: DeskRecord) => news(r) > (Date.parse(settings.value.reviewSeen?.[r.url] ?? '') || 0);
+  function openReview(r: DeskRecord) {
+    review.value = r.url;
+    if (!unread(r)) return;
+    const next = { ...settings.value.reviewSeen, [r.url]: new Date(news(r)).toISOString() };
+    settings.value = { ...settings.value, reviewSeen: next };
+    post('/settings', { reviewSeen: next });
+  }
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
   // ---- review priorities: 0 (highest) to 3 (low), like a P0 bug, the default 2 isn't kept; the server drops a PR that left the list
   const reviewPriority = (url: string) => settings.value.reviewPriority?.[url] ?? 2;
@@ -69,5 +89,5 @@ export const useLanternStore = defineStore('lantern', () => {
     settings.value = { ...settings.value, reviewPriority: next };
     post('/settings', { reviewPriority: next });
   };
-  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
+  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, unread, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
 });

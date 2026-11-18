@@ -70,6 +70,7 @@ const snapshot = base => new Promise((done, fail) => {
         if (event === 'name') out.name = JSON.parse(data);
         if (event === 'reviews') out.reviews = JSON.parse(data);
         if (event === 'stale') out.stale = JSON.parse(data);
+        if (event === 'desk') out.desk = JSON.parse(data);
         if (!event && data) { out.sessions = JSON.parse(data); req.destroy(); return done(out); }
       }
     });
@@ -3316,4 +3317,45 @@ test('usage: with systemStats off nothing is sampled or sent', async t => {
   await post(base, '/settings', { systemStats: false });
   const blocks = await streamed(base, () => wait(1000));
   assert.deepStrictEqual(blocks.concat(blocks.opening).filter(b => b.startsWith('event: usage')), []);
+});
+
+// The review desk (the review-desk skill) leaves one record per PR in ~/.ghbus/reviews. The server sends them newest first, each with an id
+// (repo#pr@head; a mention or follow-up has no head, so its newest activity or its time) and its PR's url, skips a file that isn't a whole
+// record, notices a new file, and sends the inbox session (lantern-pr's ~/.ghbus/inbox) along. Dismissed ids, last-seen times and
+// priorities are settings kept only for records (and requests) still listed; the desk's files are never touched.
+test('the review desk\'s records are read, newest first, with half files skipped, the inbox along, and what the page keeps about them pruned to listed PRs', async t => {
+  const rec = (pr, at, more = {}) => JSON.stringify({ repo: 'o/app', pr, title: `PR ${pr}`, kind: 'review', status: 'ready', head: `h${pr}`, at, ...more });
+  let home;
+  const base = await serve(t, {
+    '.ghbus/inbox': 'desk-session\n',
+    '.ghbus/reviews/o__app__1.json': rec(1, '2026-11-01T10:00:00Z', { url: 'https://github.com/o/app/pull/1?x' }),
+    '.ghbus/reviews/o__app__2.json': rec(2, '2026-11-03T10:00:00Z', { kind: 'mention', head: undefined, ask: 'thoughts?' }),
+    '.ghbus/reviews/o__app__6.json': rec(6, '2026-11-02T10:00:00Z', { kind: 'followup', head: undefined, lastActivity: '2026-11-03T12:00:00Z', activity: [{ at: '2026-11-03T12:00:00Z', author: 'sam' }] }),
+    '.ghbus/reviews/o__app__3.json': '{"repo": "o/app", "pr": 3, "sta',
+    '.ghbus/reviews/o__app__4.json': '[1, 2]',
+    '.ghbus/reviews/notes.txt': 'not a record',
+  }, h => home = h);
+  const desk = async () => (await snapshot(base)).desk;
+  const first = await desk();
+  assert.deepStrictEqual(first.records.map(r => [r.id, r.url]), [['o/app#6@2026-11-03T12:00:00Z', 'https://github.com/o/app/pull/6'], ['o/app#2@2026-11-03T10:00:00Z', 'https://github.com/o/app/pull/2'], ['o/app#1@h1', 'https://github.com/o/app/pull/1?x']],
+    'newest first (a follow-up by its newest activity, which is also its id); a url filled in where missing; the half file, the non-record and the .txt are skipped');
+  assert.strictEqual(first.inbox, 'desk-session');
+  fs.writeFileSync(path.join(home, '.ghbus/reviews/o__app__5.json'), rec(5, '2026-11-04T10:00:00Z'));
+  await until(async () => (await desk()).records[0].id === 'o/app#5@h5', 'a new file to show up');
+  const set = async body => (await post(base, '/settings', body)).status;
+  assert.strictEqual(await set({ dismissedReviews: ['o/app#1@h1', 'o/app#9@gone'] }), 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.dismissedReviews, ['o/app#1@h1'], 'an id the desk no longer has is dropped');
+  assert.strictEqual(await set({ dismissedReviews: ['o/app#1@h1', 7] }), 400, 'ids that aren\'t all strings are refused');
+  const url6 = 'https://github.com/o/app/pull/6', gone = 'https://github.com/o/app/pull/99';
+  assert.strictEqual(await set({ reviewSeen: { [url6]: '2026-11-03T12:00:00.000Z', [gone]: '2026-11-03T12:00:00.000Z' } }), 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewSeen, { [url6]: '2026-11-03T12:00:00.000Z' }, 'last seen kept only for listed PRs');
+  assert.strictEqual(await set({ reviewSeen: { [url6]: 5 } }), 400, 'a time that isn\'t a string is refused');
+  assert.strictEqual(await set({ reviewPriority: { [url6]: 0, [gone]: 1 } }), 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [url6]: 0 }, 'a desk record\'s PR takes a priority, though nobody asked for its review');
+  assert.ok(fs.existsSync(path.join(home, '.ghbus/reviews/o__app__1.json')), 'the desk\'s file is still there');
+  assert.ok((await desk()).records.some(r => r.id === 'o/app#1@h1'), 'the record is still sent: the page hides it by id');
+  fs.writeFileSync(path.join(home, '.ghbus/reviews/o__app__1.json'), rec(1, '2026-11-05T10:00:00Z', { head: 'new' }));
+  await until(async () => (await desk()).records[0].id === 'o/app#1@new', 'the new head to show up under a new id, which the dismissal doesn\'t cover');
+  fs.rmSync(path.join(home, '.ghbus/inbox'));
+  await until(async () => (await desk()).inbox === null, 'the inbox released');
 });

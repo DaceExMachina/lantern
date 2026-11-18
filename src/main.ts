@@ -8,6 +8,7 @@ import ReviewsMenu from './components/ReviewsMenu.vue';
 import UsageMenu from './components/UsageMenu.vue';
 import BookmarksMenu from './components/BookmarksMenu.vue';
 import RecapPanel from './components/RecapPanel.vue';
+import ReviewDetail from './components/ReviewDetail.vue';
 import NowPlaying from './components/NowPlaying.vue';
 import PinnedDock from './components/PinnedDock.vue';
 import SessionCard from './components/SessionCard.vue';
@@ -23,6 +24,7 @@ const pinia = createPinia();
 // each into its native popover, which keeps its attributes
 createApp(StatsPanel).use(pinia).mount('#stats');
 createApp(RecapPanel).use(pinia).mount('#recap');
+createApp(ReviewDetail).use(pinia).mount('#review');
 createApp(DevPanel).mount(document.body.appendChild(document.createElement('div'))); // the dev panel is fixed, so its wrapper takes no room
 createApp(SettingsMenu).use(pinia).mount('#menu');
 createApp(SessionCard).use(pinia).mount('#card'); // the scene shows, hides and places #card (src/scene/card.ts)
