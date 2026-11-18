@@ -65,6 +65,41 @@ export const isSession = (x: unknown): x is Session => isRecord(x)
 /** A PR waiting on my review. */
 export interface Review extends FlyState { url: string; label: string; title: string | null; author?: Opt<string>; assigned?: Opt<boolean> }
 export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['url']) && isString(x['label']) && isStringOrNull(x['title']) && isString(x['need']) && optString(x['author']) && optBoolean(x['assigned']);
+/** One of the review desk's records (~/.ghbus/reviews, see the review-desk skill): an audit of a PR asked of me (kind review), a mention
+ *  of me, or a follow-up (someone posted on a PR I reviewed or commented on). `url` is the PR's, from the server. */
+export const SEVERITIES = ['blocker', 'major', 'minor', 'nit']; // worst first; a finding with another severity counts as "other"
+export interface Finding { severity: string; title: string; file?: string | undefined; line?: string | number | undefined; detail?: string | undefined }
+export interface Activity { at: string; author: string; url?: string | undefined; excerpt?: string | undefined; mine: boolean }
+export interface DeskRecord {
+  url: string; repo: string; pr: number; kind: string; status: string; head?: string | undefined; title?: string | undefined; author?: string | undefined;
+  requestedBy?: string | undefined; at?: string | undefined; summary?: string | undefined; findings: Finding[]; ask?: string | undefined; draft?: string | undefined;
+  fullPanel: boolean; activity: Activity[]; lastActivity?: string | undefined; posted?: string | undefined;
+}
+/** The desk event: its records, newest first, and the inbox session (the desk's own, when one has claimed lantern-pr's inbox). */
+export interface Desk { records: DeskRecord[]; inbox: string | null }
+// The desk is a Claude session writing JSON by hand, so a record needs only what places it (repo, pr, kind, status, url); any other field
+// of the wrong type is left out, and a finding or post that can't be shown is dropped, never the whole record.
+const strOf = (o: Record<string, unknown>, k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
+const finding = (x: unknown): Finding[] => {
+  if (!isRecord(x) || !isString(x['severity']) || !isString(x['title'])) return [];
+  const line = x['line'];
+  return [{ severity: x['severity'].toLowerCase(), title: x['title'], file: strOf(x, 'file'), line: isNumber(line) || isString(line) ? line : undefined, detail: strOf(x, 'detail') }];
+};
+const post = (x: unknown): Activity[] => isRecord(x) && isString(x['at'])
+  ? [{ at: x['at'], author: strOf(x, 'author') ?? 'someone', url: strOf(x, 'url'), excerpt: strOf(x, 'excerpt'), mine: x['mine'] === true || x['mine'] === 'true' }] : [];
+export function parseDeskRecord(x: unknown): DeskRecord | null {
+  if (!isRecord(x)) return null;
+  const { repo, pr, kind, status, url, findings, activity } = x;
+  if (!isString(repo) || !isNumber(pr) || !isString(kind) || !isString(status) || !isString(url)) return null;
+  const s = (k: string) => strOf(x, k);
+  return {
+    url, repo, pr, kind, status, head: s('head'), title: s('title'), author: s('author'), requestedBy: s('requestedBy'), at: s('at'), summary: s('summary'),
+    findings: Array.isArray(findings) ? findings.flatMap(finding) : [], ask: s('ask'), draft: s('draft'), fullPanel: x['fullPanel'] === true,
+    activity: Array.isArray(activity) ? activity.flatMap(post) : [], lastActivity: s('lastActivity'), posted: s('posted'),
+  };
+}
+export const parseDesk = (x: unknown): Desk => isRecord(x)
+  ? { records: Array.isArray(x['records']) ? x['records'].flatMap(r => parseDeskRecord(r) ?? []) : [], inbox: isString(x['inbox']) ? x['inbox'] : null } : { records: [], inbox: null };
 /** The old session that made a stale PR. */
 export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number; resuming?: Opt<number> }
 /** One of my open PRs no session owns (a wisp; stale once nobody has touched it for a week). */
@@ -105,18 +140,22 @@ export interface Settings {
   supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined; nowPlaying?: boolean | undefined; reviews?: boolean | undefined; systemStats?: boolean | undefined;
   pinned?: Pin[] | undefined; bookmarks?: Bookmark[] | undefined;
   reviewPriority?: Record<string, number> | undefined; // a PR's url to its priority, 0 (highest) to 3 (low), where it isn't the default 2
+  reviewSeen?: Record<string, string> | undefined; // a PR's url to its desk record's news (newsKey) when I last opened it
+  dismissedReviews?: Record<string, string> | undefined; // a PR's url to its desk record's news when I dismissed it; it shows again once that changes
 }
+const stringMap = (x: unknown) => isRecord(x) ? Object.fromEntries(Object.entries(x).filter((e): e is [string, string] => isString(e[1]))) : undefined;
 export function parseSettings(x: unknown): Settings {
   const o = isRecord(x) ? x : {};
   const str = (k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
   const bool = (k: string) => { const v = o[k]; return isBoolean(v) ? v : undefined; };
-  const quietUntil = o['quietUntil'], pinned = o['pinned'], bookmarks = o['bookmarks'], priority = o['reviewPriority'];
+  const quietUntil = o['quietUntil'], pinned = o['pinned'], bookmarks = o['bookmarks'], priority = o['reviewPriority'], dismissed = o['dismissedReviews'], seen = o['reviewSeen'];
   return {
     style: str('style'), ribbon: str('ribbon'), lanternText: str('lanternText'), quietUntil: isNumber(quietUntil) ? quietUntil : undefined,
     quietEnd: str('quietEnd'), quietEndOn: bool('quietEndOn'), quietFrom: str('quietFrom'), dayStart: str('dayStart'),
     supervisorPattern: str('supervisorPattern'), recapSeen: str('recapSeen'), github: bool('github'), stale: bool('stale'), nowPlaying: bool('nowPlaying'), reviews: bool('reviews'), systemStats: bool('systemStats'),
-    pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined, bookmarks: Array.isArray(bookmarks) ? bookmarks.filter(isBookmark) : undefined,
     reviewPriority: isRecord(priority) ? Object.fromEntries(Object.entries(priority).filter((e): e is [string, number] => isNumber(e[1]))) : undefined,
+    reviewSeen: stringMap(seen),
+    pinned: Array.isArray(pinned) ? pinned.filter(isPin) : undefined, bookmarks: Array.isArray(bookmarks) ? bookmarks.filter(isBookmark) : undefined, dismissedReviews: stringMap(dismissed),
   };
 }
 

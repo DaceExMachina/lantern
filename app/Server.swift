@@ -201,6 +201,10 @@ final class LanternServer {
     var clients: [ObjectIdentifier: NWConnection] = [:]
     var reviews: [JSON] = [] // open PRs waiting on my review, from every account the sessions' folders use
     var stale: [JSON] = [] // the wisps: my open PRs that no session owns, oldest first (stale proper: also untouched for a week, staleCount)
+    var desk: [JSON] = [] // the review desk's records (~/.ghbus/reviews, one file per PR), newest first, each with its url
+    var sentDesk = "{}" // the desk event as last sent: { records, inbox }
+    /// The PRs the reviews dropdown can list: those asking for my review and those the desk has a record on. A setting kept per PR drops the rest.
+    var listedPRs: Set<String> { Set(reviews.map { str($0["url"]) } + desk.map { str($0["url"]) }) }
     var owners: JSON = [:] // dead PR url -> the old session that made it (or NSNull: looked, found none); looked up once
     var resuming: [String: Double] = [:] // old session id -> when a ghost moth's click asked to resume it (pages fly the ghost off for a while)
     /// The stale list as the pages get it, each PR with its owner (and when a click asked to resume that session).
@@ -352,6 +356,8 @@ final class LanternServer {
         loadAccounts()
         startNowPlaying()
         Timer.scheduledTimer(withTimeInterval: 2 * 60, repeats: true) { _ in self.refreshGitHub() }
+        refreshDesk()
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in self.refreshDesk() } // ponytail: a poll of one small folder; a file watch if it ever shows up in a profile
         if let mirror { follow(mirror) } else { // a preview's sessions come from the app; its own poll is enough for its PR lists
             listenLanternPR()
             Timer.scheduledTimer(withTimeInterval: Double(ProcessInfo.processInfo.environment["LANTERN_SWEEP_SECONDS"] ?? "") ?? 30, repeats: true) { _ in self.sweep(); self.linkSpawned() }
@@ -428,6 +434,29 @@ final class LanternServer {
         guard let pins = settings["pinned"] as? [JSON] else { return }
         let kept = pins.filter { sessions[str($0["id"])] != nil }
         if kept.count != pins.count { settings["pinned"] = kept; settingsChanged() }
+    }
+    /// The review desk (a Claude session, see the review-desk skill) writes one JSON file per PR into ~/.ghbus/reviews. A file that
+    /// isn't there whole yet, or isn't a record, is skipped. A record's links are kept only when they go to GitHub: its url (else
+    /// its PR's, which is also what the page keys it by), the posted comment's and each post's. The pages also get the inbox session
+    /// (lantern-pr keeps its id in ~/.ghbus/inbox): the desk's own session, which the detail panel's "Talk it over" brings up.
+    func refreshDesk() {
+        let bus = ProcessInfo.processInfo.environment["LANTERN_PR_DIR"] ?? HOME + "/.ghbus" // lantern-pr's folder, which it lets the same variable move
+        let dir = bus + "/reviews"
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).filter { $0.hasSuffix(".json") }
+        let records: [JSON] = names.compactMap { name in
+            guard var r = FileManager.default.contents(atPath: dir + "/" + name).flatMap(parse) as? JSON,
+                  let repo = r["repo"] as? String, let pr = r["pr"] as? Int, r["status"] is String, r["kind"] is String else { return nil }
+            let github = { (v: Any?) in (v as? String).map { $0.hasPrefix("https://github.com/") } ?? false }
+            if !github(r["url"]) { r["url"] = "https://github.com/\(repo)/pull/\(pr)" }
+            if !github(r["posted"]) { r["posted"] = nil }
+            if let posts = r["activity"] as? [Any] { r["activity"] = posts.map { p -> Any in guard var p = p as? JSON else { return p }; if !github(p["url"]) { p["url"] = nil }; return p } }
+            return r
+        }.sorted { str($0["lastActivity"] ?? $0["at"]) > str($1["lastActivity"] ?? $1["at"]) }
+        desk = records
+        let inbox = (try? String(contentsOfFile: bus + "/inbox", encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let out: JSON = ["records": records, "inbox": inbox.isEmpty ? NSNull() : inbox]
+        let text = (try? JSONSerialization.data(withJSONObject: out, options: [.sortedKeys, .withoutEscapingSlashes])).map { String(decoding: $0, as: UTF8.self) } ?? "{}" // sorted, so the same files compare equal
+        if text != sentDesk { sentDesk = text; send("event: desk\ndata: \(text)\n\n") }
     }
     /// A bookmark keeps what the bookmarks dropdown needs once its session ends: its title, folder and last activity. They
     /// follow the live session as the sessions go out (in memory, saved with the next save), and one that just ended is
@@ -1182,8 +1211,13 @@ final class LanternServer {
                 // each review's priority, 0 (first) to 3 (low), as the whole `{ url: n }` map each time; 2 is the default and isn't kept.
                 // Only PRs still in the reviews list stay, so one that has left drops out at the next change.
                 if let given = j["reviewPriority"] as? JSON {
-                    let open = Set(reviews.map { str($0["url"]) })
+                    let open = listedPRs
                     settings["reviewPriority"] = given.filter { open.contains($0.key) && [0, 1, 3].contains(($0.value as? NSNumber)?.intValue ?? -1) }; ok = true
+                }
+                // what the page remembers about each PR's desk record, as its news then (a string the page makes), the whole `{ url: news }`
+                // map each time: when I last opened it, and when I dismissed it (the desk's files stay). Only listed PRs stay.
+                for key in ["reviewSeen", "dismissedReviews"] {
+                    if let given = j[key] as? JSON, given.values.allSatisfy({ $0 is String }) { let open = listedPRs; settings[key] = given.filter { open.contains($0.key) }; ok = true }
                 }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }
@@ -1209,7 +1243,7 @@ final class LanternServer {
                 if case .cancelled = state { self.clients[ObjectIdentifier(c)] = nil }
             }
             write(c, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: keep-alive\r\n\r\n")
-            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\nevent: nowPlayingArt\ndata: \(jsonText(nowPlayingArt))\n\nevent: nowPlaying\ndata: \(nowPlaying)\n\n" + (systemStatsOn ? lastUsage.map { "event: usage\ndata: \($0)\n\n" } ?? "" : "") + "data: \(snapshot())\n\n")
+            write(c, "retry: 2000\nevent: version\ndata: \(str(pageVersion()))\n\nevent: prose\ndata: \(jsonText(recentProse))\n\nevent: settings\ndata: \(jsonText(settings))\n\nevent: github\ndata: \(jsonText(githubState()))\n\nevent: reviews\ndata: \(jsonText(reviews))\n\nevent: desk\ndata: \(sentDesk)\n\nevent: stale\ndata: \(jsonText(staleOut()))\n\nevent: name\ndata: \(jsonText(FIRST_NAME))\n\nevent: nowPlayingArt\ndata: \(jsonText(nowPlayingArt))\n\nevent: nowPlaying\ndata: \(nowPlaying)\n\n" + (systemStatsOn ? lastUsage.map { "event: usage\ndata: \($0)\n\n" } ?? "" : "") + "data: \(snapshot())\n\n")
             // a closed page shows up as the connection ending, so keep reading until it does
             func drain() { c.receive(minimumIncompleteLength: 1, maximumLength: 1024) { _, _, done, error in if done || error != nil { self.clients[ObjectIdentifier(c)] = nil; c.cancel() } else { drain() } } }
             drain()
