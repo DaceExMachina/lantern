@@ -83,6 +83,7 @@ uniform vec2 uBandO; uniform vec2 uBand[8]; uniform int uBands; // a pierced lan
 const float OUTER = 0.3, CORE = 0.6, SPIKE = 0.22; // SPIKE: a landed moth's, fainter still
 // the bands' shadows: how deep one gets at its middle right beside the lantern, and how wide (× the band and flame's size)
 const float BAND_PEAK = 0.2, BAND_SPREAD = 0.7;
+const float TIP_SOFT = 0.25; // how wide a tip's penumbra is, in slope; a tip is too thin to have a core, so this is also what keeps its shadow faint
 const float CAPS = 0.3; // how much light the caps' fans hold back (the glow still shows through)
 uniform vec4 uHeat; // the hot air rising off the lantern (frame.ts heat): where it leaves, how strong (0 for none), and the time
 // How far the hot air bends what's seen through it at p, up to HEAT_COLUMN.bend across and half that up: a ripple rising up
@@ -157,10 +158,9 @@ float light(vec2 p) {
   // The finial dangling from the tip (uDangle, about the tip) has swung off the axis by off at this depth, closing with the
   // fan: the fan's edge on that side moves out to cover it, the other side stays.
   float off = -min(max(lq.y - uCaps.z, 0.0), uCaps.w) * wrap * sin(uDangle), ax = max(abs(lq.x) - (lq.x * off > 0.0 ? abs(off) : 0.0), 0.0);
-  // A tip's shadow starts at the tip (nothing above it casts one), its edge sharp there and softening as the fan closes,
-  // its penumbra growing below it; a cap's edge is soft all the way.
+  // A tip's shadow starts at the tip (nothing above it casts one) and is all penumbra, wide and faint; a cap's edge is soft all the way.
   float capR = lq.y < 0.0 ? uCaps.x : lq.y < uCaps.z ? 0.0 : uCaps.y, slope = ax / max(abs(lq.y), 0.001);
-  float soft = uCaps.w > 0.0 ? 0.05 * max(1.0 - wrap, 0.1) : 0.05;
+  float soft = uCaps.w > 0.0 ? TIP_SOFT : 0.05;
   float open = 1.0 - CAPS * (uRim.y > 0.0 ? rimShade(p.x, p.y)
     : step(0.001, capR) * smoothstep((capR * 0.8 + soft) * wrap, (capR * 0.8 - soft) * wrap, slope)); // no cap, no fan
   // a band of solid brass, thin beside a big flame, throws mostly penumbra: a soft bell of shadow over the slopes it covers,
