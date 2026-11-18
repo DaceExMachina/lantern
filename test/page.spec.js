@@ -69,7 +69,7 @@ test('the candle is the fourth lantern in the menu', () => {
   assert.strictEqual(STYLES.candle.name, 'Pillar candle');
 });
 
-// The sway turns #lanternLayer and #lanternBack, the lantern's own layers, by a CSS transform, so WebKit turns the picture it has rather
+// The sway turns the lantern's own layers (class lanternLayer) by a CSS transform, so WebKit turns the picture it has rather
 // than drawing the lantern afresh; nothing writes a turn onto the drawing (#lantern) itself.
 test('a standing lantern holds still with nothing to hang from; every hanging one sways on one, turning its layer', () => {
   assert.deepStrictEqual(styles.filter(k => STYLES[k].stands), ['candle'], 'the candle, and only the candle, stands');
@@ -79,11 +79,11 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     applyStyle(key);
     // each frame's sway, and the turn it gives the lantern's layer
     const frames = Array.from({ length: 1800 }, (_, i) => (swingLantern(1 / 60, start + i / 60),
-      [swayAngle, $('lanternLayer', SVGSVGElement).style.transform, $('lanternBack', SVGSVGElement).style.transform]));
+      [swayAngle, $('lanternLayer', SVGSVGElement).style.transform, [...document.querySelectorAll('.lanternLayer')].map(l => l instanceof SVGSVGElement && l.style.transform)]));
     const sway = frames.map(f => f[0]);
     assert.strictEqual($('lantern', SVGGElement).getAttribute('transform'), null, `${key}: the drawing itself is never turned, only its layer`);
     start += 30;
-    const hang = /id="hang"/.test($('lantern', SVGGElement).innerHTML + $('lanternPaper', SVGGElement).innerHTML);
+    const hang = /id="hang"/.test($('lanternIn', SVGGElement).innerHTML + $('lanternPaper', SVGGElement).innerHTML);
     if (STYLES[key].stands) {
       assert.ok(sway.every(a => a === 0), `${key} stands still`);
       assert.strictEqual($('lanternLayer', SVGSVGElement).style.transform, 'rotate(0.000deg)', `${key} is drawn unturned`);
@@ -92,7 +92,7 @@ test('a standing lantern holds still with nothing to hang from; every hanging on
     } else {
       assert.ok(sway.some(a => Math.abs(a) > 0.1), `${key} sways: at most ${Math.max(...sway.map(Math.abs))}`);
       assert.ok(Math.min(...sway) < -0.1 && Math.max(...sway) > 0.1, `${key} swings to and fro, past the middle: ${Math.min(...sway)} to ${Math.max(...sway)}`);
-      const off = frames.find(([a, t, back]) => t !== `rotate(${a.toFixed(3)}deg)` || back !== t);
+      const off = frames.find(([a, t, all]) => t !== `rotate(${a.toFixed(3)}deg)` || all.length !== 4 || all.some(l => l !== t));
       assert.ok(!off, `${key} is drawn turned by its sway: ${off}`);
       assert.ok(hang, `${key} hangs from a string or chain`);
     }
@@ -173,7 +173,7 @@ test('the candle shades the room below its rim, and nothing above its flame', ()
 
 test('the Moroccan\'s flame, burner cup and light sit between its front and far wall as it twists', () => {
   applyStyle('moroccan');
-  assert.match($('lantern', SVGGElement).innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
+  assert.match($('lanternIn', SVGGElement).innerHTML, /<g id="inside">[\s\S]*id="sparks"[\s\S]*M334 399h12[\s\S]*<\/g>/, 'the flame\'s sparks and the burner cup are in #inside');
   for (let i = 0; i < 600; i++) swingLantern(1 / 60, 40 + i / 60);
   drawLight(1 / 60, 50, stepFlame(1 / 60, 50, { size: 0.8, pulse: 1 }));
   const v = background(), wall = v.farWall.slide; // the far wall's texture is sampled at -slide, so it moves +slide

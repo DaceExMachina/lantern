@@ -41,7 +41,7 @@ test('every lantern\'s flame is the shader\'s; a paper lantern\'s burns between 
     const paper = key === 'barrel' || key === 'chochin';
     lanterns.applyStyle(key); frame.swingLantern(1 / 60, 3);
     // a paper lantern's back paper (its glow) goes under the flame's canvas, the rest over it; any other's is all over it
-    const under = document.getElementById('lanternPaper').innerHTML, over = document.getElementById('lantern').innerHTML;
+    const under = document.getElementById('lanternPaper').innerHTML, over = document.getElementById('lanternIn').innerHTML + document.getElementById('lanternLace').innerHTML + document.getElementById('lantern').innerHTML;
     assert.strictEqual(/id="paperGlow"/.test(under), paper, `${key}: the back paper under the flame`);
     if (paper) assert.ok(!/id="paperGlow"/.test(over), `${key}: only the front paper over the flame`);
     assert.strictEqual(under === '', !paper, `${key}: nothing under the flame without paper`);

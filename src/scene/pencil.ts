@@ -9,7 +9,7 @@ import { STYLES } from './lanterns';
 
 let pencilForced = devToggle('Demo', 'pencil', 'Jerrett\'s pencil', false, 'The pencil Jerrett sees on the candle\'s pedestal', v => { pencilForced = v; showPencil(); });
 export const pencilShows = () => pencilForced || live.firstName.toLowerCase() === 'jerrett';
-export function showPencil() { $('lantern', SVGGElement).classList.toggle('pencil', pencilShows()); }
+export function showPencil() { $('scene', HTMLDivElement).classList.toggle('pencil', pencilShows()); }
 
 // Lying along x, centred on its spot: the eraser at the left, the broken point at the right, lit from above.
 const PENCIL = `<ellipse cx="1" cy="4" rx="45" ry="3.4" fill="#2B2238" opacity=".16"/><ellipse cx="0" cy="3.4" rx="41" ry="2" fill="#2B2238" opacity=".22"/><!-- its shadow on the stone -->

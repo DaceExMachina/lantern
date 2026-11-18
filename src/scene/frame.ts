@@ -49,7 +49,7 @@ export function fitView() {
   // turns about where the lantern hangs from (frame.ts swingLantern)
   // turns about where the lantern hangs from (frame.ts swingLantern); the flame's canvas covers the same strip, unturned
   const dpr = devicePixelRatio || 1, left = Math.round((340 - LANTERN_SPAN - x) * VIEW.px * dpr) / dpr, x0 = x + left / VIEW.px;
-  for (const layer of [$('lanternBack', SVGSVGElement), $('lanternLayer', SVGSVGElement), $('flame', HTMLCanvasElement)]) Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
+  for (const layer of document.querySelectorAll<SVGSVGElement | HTMLCanvasElement>('.lanternLayer, #flame')) Object.assign(layer.style, { left: `${left}px`, width: `${2 * LANTERN_SPAN * VIEW.px}px`, transformOrigin: `${(340 - x0) * VIEW.px}px 0` });
   for (const layer of document.querySelectorAll('.lanternLayer')) layer.setAttribute('viewBox', `${x0} ${y} ${2 * LANTERN_SPAN} ${h}`);
   VIEW.layer = [x0, y, 2 * LANTERN_SPAN, h]; // the lantern's strip in scene units, which the flame's canvas covers
   const k = dpr * bgScale; // background.ts
@@ -261,7 +261,7 @@ export function swingLantern(elapsed: number, s: number) {
   const push = -(GUST(s) - swing.wind) * sway.gain * 310 / (330 - top);
   swing.v += (w * w * (push - swing.a) - 2 * sway.damping * w * swing.v) * dt; swing.a += swing.v * dt;
   swayAngle = style.stands ? 0 : swing.a;
-  for (const layer of [$('lanternBack', SVGSVGElement), $('lanternLayer', SVGSVGElement), $('pagesInk', HTMLCanvasElement)]) layer.style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
+  for (const layer of [$('lanternBack', SVGSVGElement), $('lanternInLayer', SVGSVGElement), $('laceLayer', SVGSVGElement), $('lanternLayer', SVGSVGElement), $('pagesInk', HTMLCanvasElement)]) layer.style.transform = `rotate(${swayAngle.toFixed(3)}deg)`; // about where it hangs from (index.html)
   twist += (TWIST_MAX * Math.tanh((swayAngle * 7 + Math.sin(s * 0.23) * 4) * TWIST_GAIN / TWIST_MAX) - twist) * dt * TWIST_RATE;
   farSlide = style.farWall ? -twist * 0.2 : 0;
   put(byId('inside', SVGGElement), 'transform', `translate(${(farSlide / 2).toFixed(2)} 0)`);
