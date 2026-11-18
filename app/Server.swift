@@ -440,8 +440,7 @@ final class LanternServer {
     /// its PR's, which is also what the page keys it by), the posted comment's and each post's. The pages also get the inbox session
     /// (lantern-pr keeps its id in ~/.ghbus/inbox): the desk's own session, which the detail panel's "Talk it over" brings up.
     func refreshDesk() {
-        let bus = ProcessInfo.processInfo.environment["LANTERN_PR_DIR"] ?? HOME + "/.ghbus" // lantern-pr's folder, which it lets the same variable move
-        let dir = bus + "/reviews"
+        let bus = ProcessInfo.processInfo.environment["LANTERN_PR_DIR"] ?? HOME + "/.ghbus", dir = deskDir // lantern-pr's folder, which it lets the same variable move
         let names = ((try? FileManager.default.contentsOfDirectory(atPath: dir)) ?? []).filter { $0.hasSuffix(".json") }
         let records: [JSON] = names.compactMap { name in
             guard var r = FileManager.default.contents(atPath: dir + "/" + name).flatMap(parse) as? JSON,
@@ -449,6 +448,7 @@ final class LanternServer {
             let github = { (v: Any?) in (v as? String).map { $0.hasPrefix("https://github.com/") } ?? false }
             if !github(r["url"]) { r["url"] = "https://github.com/\(repo)/pull/\(pr)" }
             if !github(r["posted"]) { r["posted"] = nil }
+            if let found = r["findings"] as? [Any] { r["findings"] = found.filter(validFinding) } // so the page's indices are the file's
             if let posts = r["activity"] as? [Any] { r["activity"] = posts.map { p -> Any in guard var p = p as? JSON else { return p }; if !github(p["url"]) { p["url"] = nil }; return p } }
             return r
         }.sorted { str($0["lastActivity"] ?? $0["at"]) > str($1["lastActivity"] ?? $1["at"]) }
@@ -1060,6 +1060,7 @@ final class LanternServer {
             }
             return
         }
+        if json && req.url == "/desk/post" { return postDesk(c, body) }
         // Bring a session's window to the front: its iTerm2 tab, else whatever focusElsewhere can do for its terminal.
         if json && req.url == "/focus" {
             guard let id = body?["id"] as? String, let s = sessions[id] else { return respond(c, 404) }

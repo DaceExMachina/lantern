@@ -3358,3 +3358,84 @@ test('the review desk\'s records are read, newest first, with half files skipped
   fs.rmSync(path.join(home, '.ghbus/inbox'));
   await until(async () => (await desk()).inbox === null, 'the inbox released');
 });
+
+// The detail panel's "Post as your review" (POST /desk/post): the checked findings go to GitHub as one COMMENT review through the signed-in
+// account that can see the repo, a finding with a file and line becomes an inline comment, a refused inline comment retries with everything in
+// the body, and the review's link and what went out are written into the desk's file. Against a stand-in GitHub, never the real one.
+async function reviewStub(t) {
+  const seen = [], polls = [];
+  const stub = http.createServer((req, res) => {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      if (req.url === '/graphql') { polls.push(1); res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end('{"data":{}}'); } // the PR poll: the account has loaded
+      const bearer = req.headers.authorization.replace('Bearer ', ''), json = body ? JSON.parse(body) : null;
+      seen.push([req.method, req.url, bearer, json]);
+      const reply = (status, o) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+      if (req.method === 'GET') return reply(bearer === 'good' && req.url === '/repos/o/app' ? 200 : 404, { message: 'Not Found' });
+      if ((json.comments ?? []).some(c => c.path === 'bad.ts')) return reply(422, { message: 'Line could not be resolved' });
+      reply(200, { id: 77 });
+    });
+  });
+  await new Promise(r => stub.listen(0, '127.0.0.1', r));
+  t.after(() => stub.close());
+  return { url: `http://127.0.0.1:${stub.address().port}`, seen, loaded: () => until(() => polls.length, 'the account to load') };
+}
+test('the desk panel posts the checked findings as one review: inline where there is a line, the rest in the body, a refusal retried in the body, the file updated', async t => {
+  const stub = await reviewStub(t), kc = keychain(JSON.stringify({ token: 'good' }));
+  const findings = [
+    { severity: 'blocker', title: 'Race', detail: 'Two writers.', file: 'src/a.ts', line: 12 },
+    { severity: 'major', title: 'No line', file: 'src/b.ts' },
+    { severity: 7, title: 'not a finding' },
+    { severity: 'minor', title: 'Refused', file: 'bad.ts', line: '5' },
+    { severity: 'nit', title: 'Unchecked' },
+  ]; // the file's third entry isn't a finding, so the panel's indices skip it: 0, 1, then 2 is "Refused" and 3 "Unchecked"
+  const record = { repo: 'o/app', pr: 1, title: 'T', kind: 'review', status: 'ready', head: 'abc123', at: '2026-11-01T10:00:00Z', extra: { keep: 'me' }, findings };
+  let home;
+  const base = await serve(t, { 'data/settings.json': '{"githubAccounts":["octo"]}', '.ghbus/reviews/o__app__1.json': JSON.stringify(record) }, h => home = h,
+    { LANTERN_SECURITY: kc.security, LANTERN_GITHUB_API: stub.url });
+  const desk = async () => (await snapshot(base)).desk.records;
+  await until(async () => (await desk()).length === 1, 'the record'); await stub.loaded();
+  assert.deepStrictEqual((await desk())[0].findings.map(f => f.title), ['Race', 'No line', 'Refused', 'Unchecked'], 'the server drops what the panel would');
+  const url = 'https://github.com/o/app/pull/1';
+  const send = async (over = {}) => { const r = await post(base, '/desk/post', { url, head: 'abc123', findings: [0, 1], ...over }); return [r.status, await r.json()]; };
+  for (const bad of [{ findings: [] }, { findings: [0, 0] }, { findings: [4] }, { findings: [-1] }, { findings: 'all' }, { url: 'http://github.com/o/app/pull/1' }]) assert.strictEqual((await send(bad))[0], 400, JSON.stringify(bad));
+  assert.strictEqual((await send({ url: 'https://github.com/o/app/pull/9' }))[0], 404);
+  assert.strictEqual((await send({ head: 'old' }))[0], 409, 'notes the page never saw');
+  assert.deepStrictEqual(stub.seen, [], 'nothing refused reached GitHub');
+
+  assert.deepStrictEqual(await send(), [200, { url: `${url}#pullrequestreview-77` }]);
+  assert.deepStrictEqual(stub.seen.map(s => s.slice(0, 3)), [['GET', '/repos/o/app', 'good'], ['POST', '/repos/o/app/pulls/1/reviews', 'good']]);
+  assert.deepStrictEqual(stub.seen[1][3], { event: 'COMMENT', commit_id: 'abc123', body: '`src/b.ts` **major** No line',
+    comments: [{ path: 'src/a.ts', line: 12, side: 'RIGHT', body: '**blocker** Race\n\nTwo writers.' }] });
+  const saved = JSON.parse(fs.readFileSync(path.join(home, '.ghbus/reviews/o__app__1.json'), 'utf8'));
+  assert.deepStrictEqual([saved.posted, saved.sent, saved.extra, saved.findings.length, saved.head], [`${url}#pullrequestreview-77`, { head: 'abc123', findings: [0, 1] }, { keep: 'me' }, 5, 'abc123'], 'the link and what went out; the rest as it was');
+  assert.ok(!fs.readdirSync(path.join(home, '.ghbus/reviews')).some(n => n.endsWith('.tmp')));
+  await until(async () => (await desk())[0].posted === `${url}#pullrequestreview-77`, 'the panel to hear of it');
+  assert.deepStrictEqual((await desk())[0].sent, { head: 'abc123', findings: [0, 1] });
+
+  stub.seen.length = 0;
+  assert.deepStrictEqual(await send({ findings: [2] }), [200, { url: `${url}#pullrequestreview-77` }]);
+  assert.deepStrictEqual(stub.seen.slice(1).map(s => [s[0], (s[3].comments ?? []).length, s[3].body]), [['POST', 1, ''], ['POST', 0, '`bad.ts:5` **minor** Refused']], 'GitHub refused the line: tried once more, all in the body');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, '.ghbus/reviews/o__app__1.json'), 'utf8')).sent.findings, [0, 1, 2], 'what went out on this head adds up');
+});
+
+const oneRecord = { '.ghbus/reviews/o__app__1.json': JSON.stringify({ repo: 'o/app', pr: 1, kind: 'review', status: 'ready', findings: [{ severity: 'major', title: 'A', file: 'a.ts', line: 1 }] }) };
+const sendOne = async base => { const r = await post(base, '/desk/post', { url: 'https://github.com/o/app/pull/1', head: '', findings: [0] }); return [r.status, await r.json()]; };
+
+test('with no account that can see the repo, the post says so in plain words', async t => {
+  const stub = await reviewStub(t), kc = keychain(JSON.stringify({ token: 'other' }));
+  const base = await serve(t, { ...oneRecord, 'data/settings.json': '{"githubAccounts":["octo"]}' }, () => {}, { LANTERN_SECURITY: kc.security, LANTERN_GITHUB_API: stub.url });
+  await until(async () => (await snapshot(base)).desk.records.length === 1, 'the record'); await stub.loaded();
+  assert.deepStrictEqual(await sendOne(base), [502, { error: 'No GitHub account signed in to Lantern can see o/app.' }]);
+  assert.deepStrictEqual(stub.seen.map(s => s[0]), ['GET'], 'it only looked');
+});
+
+test('a dry run says what it would post and calls nothing', async t => {
+  const stub = await reviewStub(t), kc = keychain(JSON.stringify({ token: 'good' }));
+  const base = await serve(t, { ...oneRecord, 'data/settings.json': '{"githubAccounts":["octo"]}' }, () => {}, { LANTERN_SECURITY: kc.security, LANTERN_GITHUB_API: stub.url, LANTERN_DRY_POST: '1' });
+  await until(async () => (await snapshot(base)).desk.records.length === 1, 'the record'); await stub.loaded();
+  assert.deepStrictEqual(await sendOne(base), [200, { url: 'https://github.com/o/app/pull/1#pullrequestreview-0' }]);
+  assert.deepStrictEqual(stub.seen, [], 'no call to GitHub');
+  await until(() => /^Dry post: o\/app#1 review, body 0 characters, 1 inline$/m.test(t.output()), 'the dry run to say what it would post');
+});

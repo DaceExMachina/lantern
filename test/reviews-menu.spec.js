@@ -319,6 +319,36 @@ describe('the detail panel', () => {
     assert.strictEqual(panel().querySelector('.actions a').href, rec(1).url, 'Open on GitHub');
   });
 
+  test('findings can be ticked and posted as one review: blockers and majors start ticked, the button counts them, and what went out is marked posted', async () => {
+    const findings = [{ severity: 'nit', title: 'Typo' }, { severity: 'blocker', file: 'a.ts', line: 3, title: 'Race' }, { severity: 'major', title: 'No file' }, { severity: 'minor', title: 'Naming' }];
+    desk([rec(1, { findings })]);
+    store.review = rec(1).url; await nextTick();
+    const boxes = () => [...panel().querySelectorAll('.findings input')], go = () => panel().querySelector('.send .primary');
+    assert.deepStrictEqual(boxes().map(b => b.checked), [true, true, false, false], 'worst first: blocker and major ticked, minor and nit not');
+    assert.deepStrictEqual([go().textContent, go().disabled], ['Post 2 as your review', false]);
+    boxes()[2].click(); await nextTick();
+    assert.strictEqual(go().textContent, 'Post 3 as your review');
+    for (const b of boxes().filter(b => b.checked)) { b.click(); await nextTick(); } // a click at a time, as a person does
+    assert.deepStrictEqual([go().textContent, go().disabled], ['Post 0 as your review', true], 'nothing ticked: nothing to post');
+    boxes()[0].click(); await nextTick(); boxes()[3].click(); await nextTick();
+    let answer = { status: 502, body: { error: 'GitHub refused the review: nope.' } };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status })); });
+    go().click(); await nextTick();
+    assert.deepStrictEqual([go().textContent, go().disabled], ['Posting', true], 'working');
+    await new Promise(r => setTimeout(r, 20));
+    assert.deepStrictEqual(posts.at(-1), ['/desk/post', { url: rec(1).url, head: 'h', findings: [0, 1] }], 'the record\'s own indices, not the sorted rows\'');
+    assert.strictEqual(panel().querySelector('.send .error').textContent, 'GitHub refused the review: nope.');
+    answer = { status: 200, body: { url: 'https://github.com/o/app/pull/1#pullrequestreview-5' } };
+    go().click(); await new Promise(r => setTimeout(r, 20));
+    assert.strictEqual(panel().querySelector('.send a').href, 'https://github.com/o/app/pull/1#pullrequestreview-5');
+    desk([rec(1, { findings, posted: 'https://github.com/o/app/pull/1#pullrequestreview-5', sent: { head: 'h', findings: [0, 1] } })]); await nextTick();
+    assert.deepStrictEqual([boxes().length, [...panel().querySelectorAll('.findings input:disabled')].map(c => c.getAttribute('aria-label'))], [4, ['Already posted', 'Already posted']], 'sent ones are marked, not offered');
+    assert.deepStrictEqual(boxes().filter(b => !b.disabled).map(b => b.checked), [true, false], 'only the unsent two can be ticked');
+    assert.strictEqual(go().textContent, 'Post 1 as your review', 'the unsent major is ticked again');
+    desk([rec(1, { findings, head: 'h2', sent: { head: 'h', findings: [0, 1] } })]); await nextTick();
+    assert.strictEqual(boxes().length, 4, 'new commits: everything is offered again');
+  });
+
   test('a mention\'s ask and draft, with a copy button', async () => {
     const copied = [];
     Object.defineProperty(navigator, 'clipboard', { value: { writeText: t => { copied.push(t); return Promise.resolve(); } }, configurable: true });
