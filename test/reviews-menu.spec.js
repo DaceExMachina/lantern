@@ -4,7 +4,7 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createPinia } from 'pinia';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { createApp, nextTick } from 'vue';
 import NowPlaying from '../src/components/NowPlaying.vue';
 import ReviewsMenu from '../src/components/ReviewsMenu.vue';
@@ -13,9 +13,12 @@ import { useLanternStore } from '../src/stores/lantern';
 import { parseSettings } from '../src/types';
 
 let app, store;
+const posts = [];
 const button = () => document.getElementById('reviewsButton');
 const rows = () => [...document.querySelectorAll('#reviews a')];
 beforeEach(() => {
+  posts.length = 0;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(); });
   const pinia = createPinia();
   store = useLanternStore(pinia);
   app = createApp(ReviewsMenu).use(pinia);
@@ -122,4 +125,34 @@ test('with review requests switched off in the settings there is no button, and 
   assert.ok(!document.getElementById('reviews'));
   store.settings = parseSettings({ reviews: true }); await nextTick();
   assert.ok(button());
+});
+
+test('a review\'s priority defaults to 2, shows only when changed, cycles 1 to 4 and sorts the list, 1 first, then worst first', async () => {
+  const pr = (n, need = 'waiting') => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need });
+  store.reviews = [pr(1), pr(2), pr(3, 'failing')];
+  await nextTick();
+  const pri = () => [...document.querySelectorAll('#reviews .pri')];
+  assert.deepStrictEqual(pri().map(b => [b.getAttribute('aria-label'), b.classList.contains('set')]), [['Priority 2, change', false], ['Priority 2, change', false], ['Priority 2, change', false]]);
+  assert.deepStrictEqual(rows().map(a => a.href.slice(-1)), ['3', '1', '2'], 'all default: worst first');
+  pri()[2].click(); // app#2: 2 -> 3
+  await nextTick();
+  assert.deepStrictEqual(rows().map(a => a.href.slice(-1)), ['3', '1', '2']);
+  assert.strictEqual(pri()[2].getAttribute('aria-label'), 'Priority 3, change');
+  assert.ok(pri()[2].classList.contains('set'));
+  pri()[2].click(); pri()[2].click(); // 3 -> 4 -> 1
+  await nextTick();
+  assert.deepStrictEqual(rows().map(a => a.href.slice(-1)), ['2', '3', '1'], 'priority 1 comes first');
+  assert.strictEqual(document.querySelector('#reviews .row .pri').textContent, 'P1');
+  assert.deepStrictEqual(posts.at(-1), ['/settings', { reviewPriority: { [pr(2).url]: 1 } }]);
+  document.querySelector('#reviews .pri').click(); document.querySelector('#reviews .pri').click(); // 1 -> 2 (the default, not kept)
+  await nextTick();
+  assert.deepStrictEqual(posts.at(-1)[1], { reviewPriority: { [pr(2).url]: 3 } }, 'cycles 1, 2, 3: the default is dropped from the map in between');
+  assert.ok(posts.some(([, b]) => Object.keys(b.reviewPriority).length === 0), 'back to 2 saves nothing for it');
+});
+
+test('a priority from settings.json shows on load', async () => {
+  store.settings = parseSettings({ reviewPriority: { 'https://github.com/o/app/pull/1': 4, 'https://github.com/o/app/pull/2': 1 } });
+  store.reviews = ['1', '2'].map(n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: n, need: 'waiting' }));
+  await nextTick();
+  assert.deepStrictEqual([rows().map(a => a.href.slice(-1)), [...document.querySelectorAll('#reviews .pri')].map(b => b.textContent)], [['2', '1'], ['P1', 'P4']]);
 });

@@ -61,5 +61,13 @@ export const useLanternStore = defineStore('lantern', () => {
     post('/settings', { bookmarks: next.map(b => b.id) });
   }
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
-  return { sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
+  // ---- review priorities: 1 (first) to 4, the default 2 isn't kept; the server drops a PR that left the list
+  const reviewPriority = (url: string) => settings.value.reviewPriority?.[url] ?? 2;
+  const cycleReviewPriority = (url: string) => {
+    const next = { ...settings.value.reviewPriority, [url]: reviewPriority(url) % 4 + 1 };
+    if (next[url] === 2) delete next[url];
+    settings.value = { ...settings.value, reviewPriority: next };
+    post('/settings', { reviewPriority: next });
+  };
+  return { reviewPriority, cycleReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
 });

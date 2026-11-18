@@ -1758,6 +1758,23 @@ test('reviews: each PR asking for my review carries its need', async t => {
   assert.deepStrictEqual(reviews.map(r => [r.label, r.need, r.author]), [['r#1', 'failing', null], ['r#2', 'draft', 'octo'], ['r#3', 'waiting', null]], 'the author comes along (null when GitHub has none)');
 });
 
+test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), survives a restart and drops with its PR', async t => {
+  const { gh, repo } = ghRepo([]);
+  const files = { 'data/settings.json': '{"reviewPriority": {"https://github.com/o/r/pull/9": 4}}' };
+  fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { mine: { nodes: [] }, closed: { nodes: [] }, reviews: { nodes: [prNode(1, iso(Date.now())), prNode(3, iso(Date.now()))] } } }));
+  const home = { home: null };
+  const base = await serve(t, files, h => { home.home = h; }, { LANTERN_GH: gh });
+  await post(base, '/event', { session_id: 's1', hook_event_name: 'UserPromptSubmit', cwd: repo, prompt: 'go' });
+  await post(base, '/settings', { github: true });
+  const { reviews } = await until(async () => { const s = await snapshot(base); return s.reviews?.length === 2 && s; }, 'the reviews');
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { 'https://github.com/o/r/pull/9': 4 }, 'what settings.json held shows');
+  const [a, b] = reviews.map(r => r.url);
+  assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 1, [b]: 2, 'https://github.com/o/r/pull/9': 4, [a + 'x']: 3, nope: 'x' } })).status, 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 1 }, 'the default 2, a PR no longer listed and a bad value are not kept');
+  const saved = path.join(home.home, 'data/settings.json');
+  assert.deepStrictEqual(await until(() => { const j = JSON.parse(fs.readFileSync(saved, 'utf8')).reviewPriority; return j[a] === 1 && j; }, 'settings.json written'), { [a]: 1 });
+});
+
 // gh as GitHub answers a search for review requests: the requests of the login the query names (`@me` is the account gh runs as, the
 // agent's), a page at a time as `first` and `after` ask, with every query it gets logged.
 function ghRequests(requests) {

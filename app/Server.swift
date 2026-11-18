@@ -1179,6 +1179,12 @@ final class LanternServer {
                     settings["bookmarks"] = marks.reduce(into: [JSON]()) { kept, b in if !kept.contains(where: { str($0["id"]) == str(b["id"]) }) { kept.append(b) } }; ok = true
                     liveBookmarks = Set(marks.map { str($0["id"]) }.filter { sessions[$0] != nil }) // so one that ends before the next sendState is still caught
                 }
+                // each review's priority, 1 (first) to 4, as the whole `{ url: n }` map each time; 2 is the default and isn't kept.
+                // Only PRs still in the reviews list stay, so one that has left drops out at the next change.
+                if let given = j["reviewPriority"] as? JSON {
+                    let open = Set(reviews.map { str($0["url"]) })
+                    settings["reviewPriority"] = given.filter { open.contains($0.key) && [1, 3, 4].contains(($0.value as? NSNumber)?.intValue ?? 0) }; ok = true
+                }
                 if let ribbon = j["ribbon"] as? String, Re("^[a-z]+$").test(ribbon) { settings["ribbon"] = ribbon; ok = true } // the barrel's bookmark colour
             }
             if !ok { return respond(c, 400) }
