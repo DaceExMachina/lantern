@@ -20,8 +20,8 @@ const level = (n: number) => LEVELS.find(l => l[0] === n) ?? LEVELS[2];
 const picking = ref<string | null>(null); // the row whose picker is open
 const rowOf = (url: string) => [...document.querySelectorAll<HTMLElement>('#reviews .row')].find(el => el.dataset.url === url);
 const at = ref({ top: 0, right: 0 }); // where the open picker sits, in window coordinates
-const open = (url: string, e: MouseEvent) => {
-  const r = (e.currentTarget as HTMLElement).querySelector('.face')?.getBoundingClientRect(); // the button: the picker opens over it
+const open = (url: string) => {
+  const r = rowOf(url)?.querySelector('.pri .face')?.getBoundingClientRect(); // the button: the picker opens over it
   if (r) at.value = { top: r.top, right: innerWidth - r.right };
   picking.value = url;
   void nextTick(() => {
@@ -34,7 +34,7 @@ const open = (url: string, e: MouseEvent) => {
   });
 };
 // Up and Down move between the four (wrapping)
-const step = (e: KeyboardEvent, d: number) => { const bs = [...(e.currentTarget as HTMLElement).querySelectorAll('button')]; bs.at((bs.indexOf(document.activeElement as HTMLButtonElement) + d) % bs.length)?.focus(); };
+const step = (e: KeyboardEvent, d: number) => { if (!(e.currentTarget instanceof HTMLElement)) return; const bs = [...e.currentTarget.querySelectorAll('button')]; bs.at((bs.findIndex(b => b === document.activeElement) + d) % bs.length)?.focus(); };
 const close = () => { const url = picking.value; picking.value = null; void nextTick(() => rowOf(url ?? '')?.querySelector<HTMLElement>('.pri')?.focus()); };
 const pick = (url: string, n: number) => { store.setReviewPriority(url, n); close(); };
 // a click on anything but the open picker closes it (the .pri button toggles it itself)
@@ -57,7 +57,7 @@ const tip = (e: Event, r: Review) => { const el = e.currentTarget; if (el instan
             <span class="face"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path :d="d"/></svg></span>
           </button>
         </div>
-        <button class="pri" :class="{ set: store.reviewPriority(r.url) !== 2 }" :aria-label="`Priority ${level(store.reviewPriority(r.url))[1]}, change`" title="Priority. Click to change" @click="open(r.url, $event)">
+        <button class="pri" :class="{ set: store.reviewPriority(r.url) !== 2 }" :aria-label="`Priority ${level(store.reviewPriority(r.url))[1]}, change`" title="Priority. Click to change" @click="open(r.url)">
           <span class="face"><svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path :d="level(store.reviewPriority(r.url))[2]"/></svg></span>
         </button>
       </div>
