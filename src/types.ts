@@ -104,7 +104,7 @@ export interface Settings {
   quietEnd?: string | undefined; quietEndOn?: boolean | undefined; quietFrom?: string | undefined; dayStart?: string | undefined;
   supervisorPattern?: string | undefined; recapSeen?: string | undefined; github?: boolean | undefined; stale?: boolean | undefined; nowPlaying?: boolean | undefined; reviews?: boolean | undefined; systemStats?: boolean | undefined;
   pinned?: Pin[] | undefined; bookmarks?: Bookmark[] | undefined;
-  reviewPriority?: Record<string, number> | undefined; // a PR's url to its priority, 1 to 4, where it isn't the default 2
+  reviewPriority?: Record<string, number> | undefined; // a PR's url to its priority, 0 (highest) to 3 (low), where it isn't the default 2
 }
 export function parseSettings(x: unknown): Settings {
   const o = isRecord(x) ? x : {};

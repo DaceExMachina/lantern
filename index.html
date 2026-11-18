@@ -276,7 +276,7 @@
   #bookmarks .go { display: block; width: 100%; padding: 0 var(--space-2); }
   #bookmarks .go .face { padding-right: var(--space-6); } /* room for the cross */
   #bookmarks .rm { position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
-  #bookmarks .rm .face { display: flex; align-items: center; padding: 0 var(--space-1-5); border-radius: var(--radius-sm); color: var(--ink-faint); }
+  #bookmarks .rm .face { display: flex; align-items: center; padding: 0 var(--space-1); border-radius: var(--radius-sm); color: var(--ink-faint); }
   #bookmarks .rm:hover .face { color: var(--ink-hover); }
   #bookmarks :is(.go, .rm):focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   #bookmarks .empty { margin: 0; padding: var(--space-1) var(--space-4); color: var(--ink-dim); }
@@ -324,11 +324,16 @@
   #reviews .row { position: relative; }
   #reviews a { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
   #reviews .pri { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
-  #reviews .pri .face { display: flex; align-items: center; padding: 0 var(--space-1-5); border-radius: var(--radius-sm); font-size: var(--text-xs); font-variant-numeric: tabular-nums; color: var(--ink-faint); opacity: 0; }
-  #reviews .pri.set .face { opacity: 1; color: var(--accent-violet); } /* only a priority off the default shows; the default appears while the row is hovered or focused */
+  #reviews :is(.pri, .pick button) .face { display: flex; align-items: center; padding: 0 var(--space-1); border-radius: var(--radius-sm); color: var(--ink-faint); }
+  #reviews :is(.pri, .pick) svg { display: block; width: var(--space-4); height: var(--space-4); }
+  #reviews .pri:not(.set) .face { opacity: 0; } /* normal shows only while the row is hovered or focused, so it can still be opened */
   #reviews .row:is(:hover, :focus-within) .pri .face { opacity: 1; }
-  #reviews .pri:hover .face { color: var(--ink-hover); }
-  #reviews .pri:focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
+  #reviews .pri.set .face { color: var(--accent-violet); } /* a priority off normal is violet */
+  #reviews .pick { position: absolute; top: 0; bottom: 0; right: 0; display: flex; align-items: center; padding: 0 var(--space-2) 0 var(--space-1); background: var(--surface); } /* covers the title it overlaps while open */
+  #reviews .pick button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; align-self: stretch; align-items: center; }
+  #reviews .pick button[aria-pressed=true] .face { color: var(--accent-violet); background: color-mix(in srgb, var(--accent-violet) 10%, transparent); } /* the current one */
+  #reviews :is(.pri, .pick button):hover .face { color: var(--ink-hover); }
+  #reviews :is(.pri, .pick button):focus-visible { outline: 1px solid var(--focus); outline-offset: -3px; }
   #reviews .row a .face { padding-right: var(--space-6); } /* room for the priority */
   :is(#reviews a, #bookmarks .go) .face { display: block; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); }
   :is(#reviews .row:is(:hover, :focus-within) a, #bookmarks .row:is(:hover, :focus-within) .go) .face { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); }

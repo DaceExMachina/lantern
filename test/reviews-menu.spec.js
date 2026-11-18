@@ -127,32 +127,56 @@ test('with review requests switched off in the settings there is no button, and 
   assert.ok(button());
 });
 
-test('a review\'s priority defaults to 2, shows only when changed, cycles 1 to 4 and sorts the list, 1 first, then worst first', async () => {
+test('a review\'s priority defaults to normal, is picked directly from four icons, and sorts the list, highest (0) first, then worst first', async () => {
   const pr = (n, need = 'waiting') => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need });
   store.reviews = [pr(1), pr(2), pr(3, 'failing')];
   await nextTick();
   const pri = () => [...document.querySelectorAll('#reviews .pri')];
-  assert.deepStrictEqual(pri().map(b => [b.getAttribute('aria-label'), b.classList.contains('set')]), [['Priority 2, change', false], ['Priority 2, change', false], ['Priority 2, change', false]]);
-  assert.deepStrictEqual(rows().map(a => a.href.slice(-1)), ['3', '1', '2'], 'all default: worst first');
-  pri()[2].click(); // app#2: 2 -> 3
+  const order = () => rows().map(a => a.href.slice(-1));
+  assert.deepStrictEqual(pri().map(b => [b.getAttribute('aria-label'), b.classList.contains('set')]), [['Priority Normal, change', false], ['Priority Normal, change', false], ['Priority Normal, change', false]]);
+  assert.deepStrictEqual(order(), ['3', '1', '2'], 'all default: worst first');
+  pri()[2].click(); // open app#2's picker
   await nextTick();
-  assert.deepStrictEqual(rows().map(a => a.href.slice(-1)), ['3', '1', '2']);
-  assert.strictEqual(pri()[2].getAttribute('aria-label'), 'Priority 3, change');
-  assert.ok(pri()[2].classList.contains('set'));
-  pri()[2].click(); pri()[2].click(); // 3 -> 4 -> 1
+  const pick = () => [...document.querySelectorAll('#reviews .pick button')];
+  assert.deepStrictEqual(pick().map(b => [b.getAttribute('aria-label'), b.getAttribute('aria-pressed')]), [['Highest', 'false'], ['High', 'false'], ['Normal', 'true'], ['Low', 'false']], 'the current one is marked');
+  assert.strictEqual(document.querySelectorAll('#reviews .pick').length, 1);
+  assert.deepStrictEqual(order(), ['3', '1', '2'], 'nothing moves while the picker is open');
+  assert.strictEqual(posts.length, 0, 'opening it saves nothing');
+  pick()[0].click(); // Highest, in one click
   await nextTick();
-  assert.deepStrictEqual(rows().map(a => a.href.slice(-1)), ['2', '3', '1'], 'priority 1 comes first');
-  assert.strictEqual(document.querySelector('#reviews .row .pri').textContent, 'P1');
-  assert.deepStrictEqual(posts.at(-1), ['/settings', { reviewPriority: { [pr(2).url]: 1 } }]);
-  document.querySelector('#reviews .pri').click(); document.querySelector('#reviews .pri').click(); // 1 -> 2 (the default, not kept)
+  assert.deepStrictEqual(order(), ['2', '3', '1'], 'highest comes first');
+  assert.ok(!document.querySelector('#reviews .pick'), 'the picker closes');
+  assert.ok(document.querySelector('#reviews .row .pri').classList.contains('set'));
+  assert.deepStrictEqual(posts.at(-1), ['/settings', { reviewPriority: { [pr(2).url]: 0 } }]);
+  pri()[0].click(); await nextTick();
+  pick()[3].click(); await nextTick(); // Low: last
+  assert.deepStrictEqual([order(), posts.at(-1)[1]], [['3', '1', '2'], { reviewPriority: { [pr(2).url]: 3 } }], 'low sorts after normal');
+  pri()[2].click(); await nextTick();
+  pick()[2].click(); await nextTick(); // Normal (the default, not kept)
+  assert.deepStrictEqual(posts.at(-1)[1], { reviewPriority: {} }, 'back to normal saves nothing for it');
+});
+
+test('Escape or a click elsewhere in the list closes the picker unchanged', async () => {
+  const pr = n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: `T${n}`, need: 'waiting' });
+  store.reviews = [pr(1), pr(2)];
   await nextTick();
-  assert.deepStrictEqual(posts.at(-1)[1], { reviewPriority: { [pr(2).url]: 3 } }, 'cycles 1, 2, 3: the default is dropped from the map in between');
-  assert.ok(posts.some(([, b]) => Object.keys(b.reviewPriority).length === 0), 'back to 2 saves nothing for it');
+  const pri = () => document.querySelector('#reviews .pri'), picker = () => document.querySelector('#reviews .pick');
+  pri().click(); await nextTick();
+  assert.ok(picker());
+  picker().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await nextTick();
+  assert.ok(!picker(), 'Escape closes it');
+  pri().click(); await nextTick();
+  rows()[1].click(); await nextTick();
+  assert.ok(!picker(), 'a click on another row closes it');
+  pri().click(); await nextTick();
+  document.getElementById('reviews').dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed' })); await nextTick();
+  assert.ok(!picker(), 'the dropdown closing takes it along');
+  assert.strictEqual(posts.length, 0, 'none of it saved anything');
 });
 
 test('a priority from settings.json shows on load', async () => {
-  store.settings = parseSettings({ reviewPriority: { 'https://github.com/o/app/pull/1': 4, 'https://github.com/o/app/pull/2': 1 } });
+  store.settings = parseSettings({ reviewPriority: { 'https://github.com/o/app/pull/1': 3, 'https://github.com/o/app/pull/2': 0 } });
   store.reviews = ['1', '2'].map(n => ({ url: `https://github.com/o/app/pull/${n}`, label: `app#${n}`, title: n, need: 'waiting' }));
   await nextTick();
-  assert.deepStrictEqual([rows().map(a => a.href.slice(-1)), [...document.querySelectorAll('#reviews .pri')].map(b => b.textContent)], [['2', '1'], ['P1', 'P4']]);
+  assert.deepStrictEqual([rows().map(a => a.href.slice(-1)), [...document.querySelectorAll('#reviews .pri')].map(b => b.getAttribute('aria-label'))], [['2', '1'], ['Priority Highest, change', 'Priority Low, change']]);
 });
