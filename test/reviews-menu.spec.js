@@ -210,7 +210,7 @@ test('a request with a desk record says where the audit stands beside its title 
   desk([rec(1, { findings }), rec(2, { status: 'auditing' }), rec(3, { status: 'failed' }), rec(4)]);
   await nextTick();
   const status = n => row(n).querySelector('.top .desk')?.textContent;
-  assert.deepStrictEqual([1, 2, 3, 4].map(status), ['2 blocker1 major1 nit1 other', 'auditing', 'failed', 'clean'], 'worst severity first, counted whatever its case; one the list doesn\'t know still counts');
+  assert.deepStrictEqual([1, 2, 3, 4].map(status), ['2 blocker1 major1 nit1 other', 'Reviewing…', 'failed', 'clean'], 'worst severity first, counted whatever its case; one the list doesn\'t know still counts');
   assert.deepStrictEqual([...row(1).querySelectorAll('.desk .sev')].map(s => s.className), ['sev blocker', 'sev major', 'sev nit', 'sev other']);
   assert.strictEqual(row(5).tagName, 'A', 'no record: a link to GitHub');
   assert.strictEqual(row(5).querySelector('.desk'), null);
@@ -251,6 +251,26 @@ test('an audit whose request has gone stays listed only while it has something u
   assert.ok(!button(), 'seen and closed: it leaves the list');
   desk([rec(9, { lastActivity: '2026-11-17T12:00:00Z', activity: [{ at: '2026-11-17T12:00:00Z', author: 'sam' }] })]); await nextTick();
   assert.deepStrictEqual(listed(), ['9'], 'a new post brings it back');
+});
+
+test('a PR the desk marked merged or closed is left out of the list, whatever its kind, and a malformed closed leaves the record listed', async () => {
+  store.reviews = [request(1), request(2)];
+  desk([rec(1, { closed: { state: 'merged', at: 't' } }), rec(2), rec(7, { kind: 'mention', closed: { state: 'closed' } }), rec(8, { kind: 'mention' }), rec(9, { closed: { state: 'bogus' } })]);
+  await nextTick();
+  assert.deepStrictEqual(listed(), ['2', '8', '9'], 'a closed request, a closed mention: gone; an unclosed one, or a bogus state, stays');
+  assert.strictEqual(button().textContent, '3', 'the count follows');
+});
+
+test('an audit the desk is still on (queued or auditing) shows a labelled in-progress state until it is ready or failed', async () => {
+  store.reviews = [request(1), request(2), request(3)];
+  desk([rec(1, { status: 'queued' }), rec(2, { status: 'auditing' }), rec(3, { status: 'failed' })]);
+  await nextTick();
+  const state = n => [row(n).closest('.row').classList.contains('working'), row(n).querySelector('.desk')?.textContent];
+  assert.deepStrictEqual([1, 2, 3].map(state), [[true, 'Queued'], [true, 'Reviewing…'], [false, 'failed']]);
+  desk([rec(1, { status: 'ready' })]); await nextTick();
+  assert.ok(!row(1).closest('.row').classList.contains('working'), 'ready: back to normal');
+  const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8');
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ #reviews \.top \.working i \{ animation: none;/);
 });
 
 test('a follow-up row takes a priority like a request, and sorts by it', async () => {
@@ -319,6 +339,14 @@ describe('the detail panel', () => {
     assert.deepStrictEqual([...panel().querySelectorAll('.activity li')].map(li => [li.querySelector('b').textContent, li.querySelector('a')?.href ?? null, /in your thread/.test(li.textContent)]),
       [['sam', null, true], ['noah', 'https://github.com/o/app/pull/1#c1', false], ['dana', null, false]], 'newest first; "true" written as a string still means mine');
     assert.strictEqual(panel().querySelector('.actions a').href, rec(1).url, 'Open on GitHub');
+  });
+
+  test('the ask links to its own comment', async () => {
+    desk([rec(1, { kind: 'mention', ask: 'Can you check?', askUrl: 'https://github.com/o/app/pull/1#issuecomment-5' })]);
+    store.review = rec(1).url; await nextTick();
+    assert.strictEqual(panel().querySelector('p a').href, 'https://github.com/o/app/pull/1#issuecomment-5');
+    desk([rec(1, { kind: 'mention', ask: 'Can you check?' })]); await nextTick();
+    assert.ok(!panel().querySelector('p a'), 'no askUrl: no link');
   });
 
   test('findings can be ticked and posted as one review: blockers and majors start ticked, the button counts them, and what went out is marked posted', async () => {

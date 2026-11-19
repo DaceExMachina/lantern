@@ -3328,8 +3328,8 @@ test('the review desk\'s records are read, newest first, with half files skipped
   let home;
   const base = await serve(t, {
     '.ghbus/inbox': 'desk-session\n',
-    '.ghbus/reviews/o__app__1.json': rec(1, '2026-11-01T10:00:00Z', { url: 'https://github.com/O/App/pull/1', posted: 'https://github.com/O/App/pull/1#c9' }),
-    '.ghbus/reviews/o__app__2.json': rec(2, '2026-11-03T10:00:00Z', { kind: 'mention', head: undefined, url: 'javascript:alert(1)', posted: 'http://evil.example/x' }),
+    '.ghbus/reviews/o__app__1.json': rec(1, '2026-11-01T10:00:00Z', { url: 'https://github.com/O/App/pull/1', posted: 'https://github.com/O/App/pull/1#c9', askUrl: 'https://github.com/O/App/pull/1#issuecomment-7' }),
+    '.ghbus/reviews/o__app__2.json': rec(2, '2026-11-03T10:00:00Z', { kind: 'mention', head: undefined, url: 'javascript:alert(1)', posted: 'http://evil.example/x', askUrl: 'javascript:alert(2)', closed: { state: 'merged', at: '2026-11-03T11:00:00Z' } }),
     '.ghbus/reviews/o__app__6.json': rec(6, '2026-11-02T10:00:00Z', { kind: 'followup', head: undefined, lastActivity: '2026-11-03T12:00:00Z',
       activity: [{ at: '2026-11-03T12:00:00Z', author: 'sam', url: 'https://github.com/o/app/pull/6#c1' }, { at: '2026-11-03T11:00:00Z', author: 'eve', url: 'file:///etc/passwd' }] }),
     '.ghbus/reviews/o__app__3.json': '{"repo": "o/app", "pr": 3, "sta',
@@ -3340,6 +3340,8 @@ test('the review desk\'s records are read, newest first, with half files skipped
   const first = await desk();
   assert.deepStrictEqual(first.records.map(r => [r.pr, r.url, r.posted ?? null]), [[6, 'https://github.com/o/app/pull/6', null], [2, 'https://github.com/o/app/pull/2', null], [1, 'https://github.com/O/App/pull/1', 'https://github.com/O/App/pull/1#c9']],
     'newest first (a follow-up by its newest post); a url only to GitHub, else the PR\'s; the half file, the non-record and the .txt skipped');
+  assert.deepStrictEqual(first.records.map(r => r.askUrl ?? null), [null, null, 'https://github.com/O/App/pull/1#issuecomment-7'], 'an ask\'s link only to GitHub');
+  assert.deepStrictEqual(first.records[1].closed, { state: 'merged', at: '2026-11-03T11:00:00Z' }, 'closed goes through as written');
   assert.deepStrictEqual(first.records[0].activity.map(a => a.url ?? null), ['https://github.com/o/app/pull/6#c1', null], 'a post\'s link only to GitHub');
   assert.strictEqual(first.inbox, 'desk-session');
   fs.writeFileSync(path.join(home, '.ghbus/reviews/o__app__5.json'), rec(5, '2026-11-04T10:00:00Z'));

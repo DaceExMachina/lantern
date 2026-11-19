@@ -73,7 +73,7 @@ export const useLanternStore = defineStore('lantern', () => {
   };
   const markOf = (r: DeskRecord, mark: string | undefined) => `${r.status === 'ready' ? head(r) : mark?.split('|')[0] ?? ''}|${r.lastActivity ?? ''}`; // a head is marked only once its audit is ready
   const unread = (r: DeskRecord) => newSince(r, settings.value.reviewSeen?.[r.url]);
-  const deskShown = computed(() => desk.value.records.filter(r => { const d = settings.value.dismissedReviews?.[r.url]; return d === undefined || newSince(r, d); }));
+  const deskShown = computed(() => desk.value.records.filter(r => { if (r.closed) return false; const d = settings.value.dismissedReviews?.[r.url]; return d === undefined || newSince(r, d); }));
   const remember = (key: 'reviewSeen' | 'dismissedReviews', r: DeskRecord) => {
     const next = { ...settings.value[key], [r.url]: markOf(r, settings.value[key]?.[r.url]) };
     settings.value = { ...settings.value, [key]: next };

@@ -437,7 +437,7 @@ final class LanternServer {
     }
     /// The review desk (a Claude session, see the review-desk skill) writes one JSON file per PR into ~/.ghbus/reviews. A file that
     /// isn't there whole yet, or isn't a record, is skipped. A record's links are kept only when they go to GitHub: its url (else
-    /// its PR's, which is also what the page keys it by), the posted comment's and each post's. The pages also get the inbox session
+    /// its PR's, which is also what the page keys it by), the posted comment's, the ask's and each post's. The pages also get the inbox session
     /// (lantern-pr keeps its id in ~/.ghbus/inbox): the desk's own session, which the detail panel's "Talk it over" brings up.
     func refreshDesk() {
         let bus = ProcessInfo.processInfo.environment["LANTERN_PR_DIR"] ?? HOME + "/.ghbus", dir = deskDir // lantern-pr's folder, which it lets the same variable move
@@ -448,6 +448,7 @@ final class LanternServer {
             let github = { (v: Any?) in (v as? String).map { $0.hasPrefix("https://github.com/") } ?? false }
             if !github(r["url"]) { r["url"] = "https://github.com/\(repo)/pull/\(pr)" }
             if !github(r["posted"]) { r["posted"] = nil }
+            if !github(r["askUrl"]) { r["askUrl"] = nil }
             if let found = r["findings"] as? [Any] { r["findings"] = found.filter(validFinding) } // so the page's indices are the file's
             if let posts = r["activity"] as? [Any] { r["activity"] = posts.map { p -> Any in guard var p = p as? JSON else { return p }; if !github(p["url"]) { p["url"] = nil }; return p } }
             return r

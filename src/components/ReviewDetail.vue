@@ -4,6 +4,7 @@
 // steps back to it). It shows the verdict, the findings worst first (each linked to its line in the PR's diff), the ask and a
 // draft reply to copy, the follow-up posts, and the actions: open the PR, talk it over with the desk's session (when it is
 // running), dismiss the record, and at the far right post the ticked findings as a review (no button while none is ticked; its result sits beside it).
+// The ask links to the comment that makes it (askUrl).
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { NEED, ago } from '../scene/card';
 import { post } from '../scene/scene';
@@ -76,7 +77,7 @@ const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
 
     <template v-if="rec.ask || rec.draft">
       <h4>The ask</h4>
-      <p v-if="rec.ask">{{ rec.ask }}</p>
+      <p v-if="rec.ask">{{ rec.ask }} <a v-if="rec.askUrl" :href="rec.askUrl" target="_blank" rel="noopener">See the comment</a></p>
       <div v-if="rec.draft" class="draft">
         <p>{{ rec.draft }}</p>
         <button class="link" :aria-label="copied ? 'Draft reply copied' : 'Copy the draft reply'" @click="copy(rec.draft)">{{ copied ? 'Copied' : 'Copy draft' }}</button>
