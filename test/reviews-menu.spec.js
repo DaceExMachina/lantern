@@ -253,6 +253,18 @@ test('an audit whose request has gone stays listed only while it has something u
   assert.deepStrictEqual(listed(), ['9'], 'a new post brings it back');
 });
 
+test('a merged or closed PR\'s record is greyed out and says so where the status shows, and lists only by the usual rules', async () => {
+  store.reviews = [request(1), request(2)];
+  desk([rec(1, { closed: { state: 'merged', at: 't' }, findings: [{ severity: 'blocker', title: 'a' }] }), rec(2), rec(7, { kind: 'mention', closed: { state: 'closed' } }), rec(9, { closed: { state: 'merged' } }), rec(10, { closed: { state: 'bogus' } })]);
+  await nextTick();
+  assert.deepStrictEqual(listed(), ['1', '2', '7', '9', '10'], 'unread, so a closed audit is still listed; a mention always is');
+  assert.deepStrictEqual([1, 2, 7, 9, 10].map(n => row(n).closest('.row').classList.contains('shut')), [true, false, true, true, false], 'a malformed closed is dropped, not the record');
+  assert.deepStrictEqual([1, 7, 9].map(n => row(n).querySelector('.desk')?.textContent), ['merged', 'closed', 'merged'], 'the word replaces the audit status, mentions too');
+  assert.strictEqual(row(2).querySelector('.ended'), null);
+  row(9).click(); await nextTick(); store.review = null; await nextTick();
+  assert.ok(!listed().includes('9'), 'seen and closed: it leaves, as any audit does');
+});
+
 test('a follow-up row takes a priority like a request, and sorts by it', async () => {
   store.reviews = [request(1)];
   desk([rec(8, { kind: 'followup' })]);
@@ -319,6 +331,23 @@ describe('the detail panel', () => {
     assert.deepStrictEqual([...panel().querySelectorAll('.activity li')].map(li => [li.querySelector('b').textContent, li.querySelector('a')?.href ?? null, /in your thread/.test(li.textContent)]),
       [['sam', null, true], ['noah', 'https://github.com/o/app/pull/1#c1', false], ['dana', null, false]], 'newest first; "true" written as a string still means mine');
     assert.strictEqual(panel().querySelector('.actions a').href, rec(1).url, 'Open on GitHub');
+  });
+
+  test('the ask links to its own comment, and a closed PR says so and offers no posting', async () => {
+    const findings = [{ severity: 'blocker', title: 'Race' }];
+    desk([rec(1, { kind: 'mention', ask: 'Can you check?', askUrl: 'https://github.com/o/app/pull/1#issuecomment-5', findings })]);
+    store.review = rec(1).url; await nextTick();
+    assert.strictEqual(panel().querySelector('p a').href, 'https://github.com/o/app/pull/1#issuecomment-5');
+    desk([rec(1, { kind: 'mention', ask: 'Can you check?', findings })]); await nextTick();
+    assert.ok(!panel().querySelector('p a'), 'no askUrl: no link');
+    desk([rec(1, { findings, closed: { state: 'merged' } })]); await nextTick();
+    assert.match(panel().querySelector('.sub').textContent, /This PR is merged\./);
+    assert.ok(!panel().querySelector('.actions .primary'), 'no "Post as your review" on a merged PR');
+    assert.strictEqual(panel().querySelector('.findings input').disabled, true);
+    desk([rec(1, { findings, closed: { state: 'closed' } })]); await nextTick();
+    assert.match(panel().querySelector('.sub').textContent, /closed without merging/);
+    desk([rec(1, { findings })]); await nextTick();
+    assert.ok(panel().querySelector('.actions .primary'), 'open again: the button is back');
   });
 
   test('findings can be ticked and posted as one review: blockers and majors start ticked, the button counts them, and what went out is marked posted', async () => {

@@ -262,6 +262,9 @@
   #reviews .top .sev { display: flex; align-items: center; gap: var(--space-1); } /* a finding count: a dot in its severity's colour, then the number */
   #reviews .top .sev i { width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: currentColor; }
   :is(#reviews, #review) :is(.queued, .auditing, .clean) { color: var(--ink-dim); }
+  #reviews .row.shut .go { opacity: var(--faded); } /* a merged or closed PR's record is done */
+  :is(#reviews, #review) .ended { color: var(--ink-dim); }
+  #review .sub .ended { margin-left: var(--space-1); }
   :is(#reviews, #review) .failed { color: var(--pr-failing); }
   :is(#reviews, #review) .sev.blocker { color: var(--pr-failing); }
   :is(#reviews, #review) .sev.major { color: var(--pr-changes); }

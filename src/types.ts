@@ -72,7 +72,8 @@ export interface Finding { severity: string; title: string; file?: string | unde
 export interface Activity { at: string; author: string; url?: string | undefined; excerpt?: string | undefined; mine: boolean }
 export interface DeskRecord {
   url: string; repo: string; pr: number; kind: string; status: string; head?: string | undefined; title?: string | undefined; author?: string | undefined;
-  requestedBy?: string | undefined; at?: string | undefined; summary?: string | undefined; findings: Finding[]; ask?: string | undefined; draft?: string | undefined;
+  requestedBy?: string | undefined; at?: string | undefined; summary?: string | undefined; findings: Finding[]; ask?: string | undefined; askUrl?: string | undefined; draft?: string | undefined;
+  closed?: 'merged' | 'closed' | undefined; // how the PR ended, once it has (the desk's `closed.state`)
   fullPanel: boolean; activity: Activity[]; lastActivity?: string | undefined; posted?: string | undefined;
   sent?: Sent | undefined; // which findings I posted as a review, on which head (written by the server's /desk/post)
 }
@@ -90,6 +91,7 @@ const finding = (x: unknown): Finding[] => {
 const post = (x: unknown): Activity[] => isRecord(x) && isString(x['at'])
   ? [{ at: x['at'], author: strOf(x, 'author') ?? 'someone', url: strOf(x, 'url'), excerpt: strOf(x, 'excerpt'), mine: x['mine'] === true || x['mine'] === 'true' }] : [];
 const sent = (x: unknown): Sent | undefined => isRecord(x) && isString(x['head']) && Array.isArray(x['findings']) ? { head: x['head'], findings: x['findings'].filter(isNumber) } : undefined;
+const closedState = (x: unknown) => isRecord(x) && (x['state'] === 'merged' || x['state'] === 'closed') ? x['state'] : undefined;
 export function parseDeskRecord(x: unknown): DeskRecord | null {
   if (!isRecord(x)) return null;
   const { repo, pr, kind, status, url, findings, activity } = x;
@@ -97,7 +99,7 @@ export function parseDeskRecord(x: unknown): DeskRecord | null {
   const s = (k: string) => strOf(x, k);
   return {
     url, repo, pr, kind, status, head: s('head'), title: s('title'), author: s('author'), requestedBy: s('requestedBy'), at: s('at'), summary: s('summary'),
-    findings: Array.isArray(findings) ? findings.flatMap(finding) : [], ask: s('ask'), draft: s('draft'), fullPanel: x['fullPanel'] === true,
+    findings: Array.isArray(findings) ? findings.flatMap(finding) : [], ask: s('ask'), askUrl: s('askUrl'), closed: closedState(x['closed']), draft: s('draft'), fullPanel: x['fullPanel'] === true,
     activity: Array.isArray(activity) ? activity.flatMap(post) : [], lastActivity: s('lastActivity'), posted: s('posted'), sent: sent(x['sent']),
   };
 }
