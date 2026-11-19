@@ -74,7 +74,9 @@ export interface DeskRecord {
   url: string; repo: string; pr: number; kind: string; status: string; head?: string | undefined; title?: string | undefined; author?: string | undefined;
   requestedBy?: string | undefined; at?: string | undefined; summary?: string | undefined; findings: Finding[]; ask?: string | undefined; draft?: string | undefined;
   fullPanel: boolean; activity: Activity[]; lastActivity?: string | undefined; posted?: string | undefined;
+  sent?: Sent | undefined; // which findings I posted as a review, on which head (written by the server's /desk/post)
 }
+export interface Sent { head: string; findings: number[] }
 /** The desk event: its records, newest first, and the inbox session (the desk's own, when one has claimed lantern-pr's inbox). */
 export interface Desk { records: DeskRecord[]; inbox: string | null }
 // The desk is a Claude session writing JSON by hand, so a record needs only what places it (repo, pr, kind, status, url); any other field
@@ -87,6 +89,7 @@ const finding = (x: unknown): Finding[] => {
 };
 const post = (x: unknown): Activity[] => isRecord(x) && isString(x['at'])
   ? [{ at: x['at'], author: strOf(x, 'author') ?? 'someone', url: strOf(x, 'url'), excerpt: strOf(x, 'excerpt'), mine: x['mine'] === true || x['mine'] === 'true' }] : [];
+const sent = (x: unknown): Sent | undefined => isRecord(x) && isString(x['head']) && Array.isArray(x['findings']) ? { head: x['head'], findings: x['findings'].filter(isNumber) } : undefined;
 export function parseDeskRecord(x: unknown): DeskRecord | null {
   if (!isRecord(x)) return null;
   const { repo, pr, kind, status, url, findings, activity } = x;
@@ -95,7 +98,7 @@ export function parseDeskRecord(x: unknown): DeskRecord | null {
   return {
     url, repo, pr, kind, status, head: s('head'), title: s('title'), author: s('author'), requestedBy: s('requestedBy'), at: s('at'), summary: s('summary'),
     findings: Array.isArray(findings) ? findings.flatMap(finding) : [], ask: s('ask'), draft: s('draft'), fullPanel: x['fullPanel'] === true,
-    activity: Array.isArray(activity) ? activity.flatMap(post) : [], lastActivity: s('lastActivity'), posted: s('posted'),
+    activity: Array.isArray(activity) ? activity.flatMap(post) : [], lastActivity: s('lastActivity'), posted: s('posted'), sent: sent(x['sent']),
   };
 }
 export const parseDesk = (x: unknown): Desk => isRecord(x)

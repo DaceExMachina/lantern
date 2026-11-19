@@ -246,7 +246,9 @@ test('an audit whose request has gone stays listed only while it has something u
   assert.deepStrictEqual(listed(), ['9'], 'unread: listed; a queued one with no request and nothing new: not');
   assert.strictEqual(row(9).querySelector('.me').textContent, 'app#9', 'no need, no word');
   row(9).click(); await nextTick();
-  assert.ok(!button(), 'seen: it leaves the list');
+  assert.deepStrictEqual(listed(), ['9'], 'seen, but its detail is open: it stays until the panel closes (see the detail panel tests)');
+  store.review = null; await nextTick(); // the panel closed
+  assert.ok(!button(), 'seen and closed: it leaves the list');
   desk([rec(9, { lastActivity: '2026-11-17T12:00:00Z', activity: [{ at: '2026-11-17T12:00:00Z', author: 'sam' }] })]); await nextTick();
   assert.deepStrictEqual(listed(), ['9'], 'a new post brings it back');
 });
@@ -317,6 +319,50 @@ describe('the detail panel', () => {
     assert.deepStrictEqual([...panel().querySelectorAll('.activity li')].map(li => [li.querySelector('b').textContent, li.querySelector('a')?.href ?? null, /in your thread/.test(li.textContent)]),
       [['sam', null, true], ['noah', 'https://github.com/o/app/pull/1#c1', false], ['dana', null, false]], 'newest first; "true" written as a string still means mine');
     assert.strictEqual(panel().querySelector('.actions a').href, rec(1).url, 'Open on GitHub');
+  });
+
+  test('findings can be ticked and posted as one review: blockers and majors start ticked, the button counts them, and what went out is marked posted', async () => {
+    const findings = [{ severity: 'nit', title: 'Typo' }, { severity: 'blocker', file: 'a.ts', line: 3, title: 'Race' }, { severity: 'major', title: 'No file' }, { severity: 'minor', title: 'Naming' }];
+    desk([rec(1, { findings })]);
+    store.review = rec(1).url; await nextTick();
+    const boxes = () => [...panel().querySelectorAll('.findings input')], go = () => panel().querySelector('.actions .primary');
+    assert.deepStrictEqual(boxes().map(b => b.checked), [true, true, false, false], 'worst first: blocker and major ticked, minor and nit not');
+    assert.deepStrictEqual([go().textContent, go().disabled], ['Post 2 as your review', false]);
+    assert.strictEqual(panel().querySelector('.actions').lastElementChild, go().parentElement, 'in the actions row, at the far right');
+    boxes()[2].click(); await nextTick();
+    assert.strictEqual(go().textContent, 'Post 3 as your review');
+    for (const b of boxes().filter(b => b.checked)) { b.click(); await nextTick(); } // a click at a time, as a person does
+    assert.ok(!go(), 'nothing ticked: no button at all');
+    boxes()[0].click(); await nextTick(); boxes()[3].click(); await nextTick();
+    let answer = { status: 502, body: { error: 'GitHub refused the review: nope.' } };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status })); });
+    go().click(); await nextTick();
+    assert.deepStrictEqual([go().textContent, go().disabled], ['Posting', true], 'working');
+    await new Promise(r => setTimeout(r, 20));
+    assert.deepStrictEqual(posts.at(-1), ['/desk/post', { url: rec(1).url, head: 'h', findings: [0, 1] }], 'the record\'s own indices, not the sorted rows\'');
+    assert.strictEqual(panel().querySelector('.send .error').textContent, 'GitHub refused the review: nope.');
+    answer = { status: 200, body: { url: 'https://github.com/o/app/pull/1#pullrequestreview-5' } };
+    go().click(); await new Promise(r => setTimeout(r, 20));
+    assert.strictEqual(panel().querySelector('.send a').href, 'https://github.com/o/app/pull/1#pullrequestreview-5');
+    desk([rec(1, { findings, posted: 'https://github.com/o/app/pull/1#pullrequestreview-5', sent: { head: 'h', findings: [0, 1] } })]); await nextTick();
+    assert.deepStrictEqual([boxes().length, [...panel().querySelectorAll('.findings input:disabled')].map(c => c.getAttribute('aria-label'))], [4, ['Already posted', 'Already posted']], 'sent ones are marked, not offered');
+    assert.deepStrictEqual(boxes().filter(b => !b.disabled).map(b => b.checked), [true, false], 'only the unsent two can be ticked');
+    assert.strictEqual(go().textContent, 'Post 1 as your review', 'the unsent major is ticked again');
+    desk([rec(1, { findings, head: 'h2', sent: { head: 'h', findings: [0, 1] } })]); await nextTick();
+    assert.strictEqual(boxes().length, 4, 'new commits: everything is offered again');
+  });
+
+  test('a record with no request stays listed, and its panel open, while its detail is shown, though opening it marked it read; it leaves once the panel closes', async () => {
+    desk([rec(1, { findings: [{ severity: 'major', title: 'Look' }] })]); await nextTick();
+    const row = () => document.querySelector('#reviews .row');
+    assert.ok(store.unread(store.deskShown[0]), 'unread, so it is listed on its own');
+    row().querySelector('.go').click(); await nextTick(); await nextTick(); // the click marks it read; the list is then built again
+    assert.ok(!store.unread(store.deskShown[0]), 'opening it marked it read');
+    assert.ok(row(), 'its row (the panel\'s invoker) is still there');
+    assert.match(panel().textContent, /Look/, 'and so is the panel');
+    panel().dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed', oldState: 'open' })); await nextTick(); await nextTick();
+    assert.ok(!row(), 'the panel closed: now a read record with no request can go');
+    assert.strictEqual(store.review, null);
   });
 
   test('a mention\'s ask and draft, with a copy button', async () => {

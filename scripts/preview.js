@@ -15,7 +15,7 @@ const path = require('path');
 const { execFileSync, spawn } = require('child_process');
 
 // What app/Server.swift answers itself; Vite serves everything else.
-const SERVER_ROUTES = '^/(events?|settings|snooze|stats|github|resume|focus|now-playing)$';
+const SERVER_ROUTES = '^/(events?|settings|snooze|stats|github|resume|focus|desk/post|now-playing)$';
 
 const ROOT = path.join(__dirname, '..');
 const LIVE = path.join(os.homedir(), 'Library', 'Application Support', 'Lantern');
