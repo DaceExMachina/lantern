@@ -5,9 +5,9 @@
 // short shows in #prTip while its row is hovered or focused. The fireflies circling the lantern are these same PRs. Each row's priority button (an icon: double caret up for highest, caret up for high, nothing for normal, the default, caret down for low; normal shows only while the row is hovered or focused) opens a small floating picker of the four, a column from highest down to low, with the current choice over the button and the rest above and below, like a pop-up menu (fixed to the window so the list's scrolling can't clip it, and nudged to stay inside it): one click sets it and closes it (Up and Down move between the four; Escape, a click elsewhere in the list, or scrolling it closes the picker unchanged, and focus returns to the button). The list sorts by priority, highest (0) first, and re-sorts only once one is chosen; the server keeps it in settings.
 // The review desk (a Claude session, /review-desk) leaves a record per PR: an audit of a request, a mention of me, or a follow-up (someone posted
 // on a PR I reviewed or commented on). A request with a record says where the audit stands at the end of its row (a pulsing "Queued" or "Reviewing…" pill while the desk is still at it, which also tints the row and dashes its outline so it reads as not ready yet, unlike a merged or closed row's grey; failed; or the
-// findings counted by severity, or merged or closed once its PR is, which greys the row out), stays listed even while its PR flies as a firefly, and its click opens the record's detail panel
+// findings counted by severity), stays listed even while its PR flies as a firefly, and its click opens the record's detail panel
 // (ReviewDetail.vue) in place of GitHub. A record with no request in the list is a row of its own: a mention, a follow-up (a speech bubble
-// with how many posts), or a review since handled. A dot before the title marks news since I last opened the record.
+// with how many posts), or a review since handled. A PR the desk has marked merged or closed leaves the list altogether. A dot before the title marks news since I last opened the record.
 import { computed, nextTick, ref, watch } from 'vue';
 import { NEED, cutShort, hidePrTip, showPrTip, worstFirst } from '../scene/card';
 import { flyColour, offBoard } from '../scene/fireflies';
@@ -22,7 +22,8 @@ const store = useLanternStore();
 const rows = computed((): Row[] => {
   if (store.settings.reviews === false) return [];
   const recs = new Map(store.deskShown.map(d => [d.url, d]));
-  const asking = store.reviews.filter(r => r.need !== 'merged' && r.need !== 'closed'); // one leaving (merged, closed or reviewed) is no longer asking
+  const ended = new Set(store.desk.records.filter(d => d.closed).map(d => d.url)); // the desk says its PR merged or closed: it's gone from the list, notes and all
+  const asking = store.reviews.filter(r => r.need !== 'merged' && r.need !== 'closed' && !ended.has(r.url)); // one leaving (merged, closed or reviewed) is no longer asking
   const off = new Set(offBoard(asking, store.sessions, store.settings.stale === false ? [] : store.stale));
   const asked: Row[] = worstFirst(asking.filter(r => off.has(r) || recs.has(r.url))).map(r => ({ ...r, rec: recs.get(r.url) }));
   const listed = new Set(asked.map(r => r.url));
@@ -34,7 +35,7 @@ const rows = computed((): Row[] => {
 // where the desk stands, at the end of the row: its findings by severity once ready, or its status
 const counts = (d: DeskRecord) => [...SEVERITIES, 'other'].map(s => [s, d.findings.filter(f => f.severity === s || s === 'other' && !SEVERITIES.includes(f.severity)).length] as const).filter(([, n]) => n);
 // the desk hasn't finished an audit (queued or auditing) and its PR is still open: the row says so, loudly, and nothing in it is ready for me yet
-const working = (d?: DeskRecord) => !!d && !d.closed && (d.status === 'queued' || d.status === 'auditing');
+const working = (d?: DeskRecord) => !!d && (d.status === 'queued' || d.status === 'auditing');
 const word = (x: Row) => x.need ? NEED[x.need] || x.need : x.rec?.kind === 'mention' ? 'mention' : '';
 // the dropdown's open state is the popover's own (toggle fires on any close: outside click, Escape, a link); it goes with the list
 watch(() => rows.value.length, n => { if (!n) store.reviewsOpen = false; });
@@ -72,7 +73,7 @@ const tip = (e: Event, x: Row) => { const el = e.currentTarget; if (el instanceo
       <span class="face"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/><path d="M4 5v6M12 11V7.5a2 2 0 0 0-2-2H8.5M10 3.5l-1.5 2 1.5 2"/></svg><span class="n">{{ rows.length }}</span></span>
     </button>
     <div id="reviews" class="flyup" popover aria-label="Review requests" @click="away" @scroll="picking = null" @toggle="picking = null; store.reviewsOpen = $event.newState === 'open'">
-      <div v-for="r in rows" :key="r.url" :class="['row', { shut: r.rec?.closed, working: working(r.rec) }]" :data-url="r.url">
+      <div v-for="r in rows" :key="r.url" :class="['row', { working: working(r.rec) }]" :data-url="r.url">
         <!-- a row with a desk record opens its detail panel over the list; one without goes to GitHub -->
         <component :is="r.rec ? 'button' : 'a'" class="go" v-bind="r.rec ? { popovertarget: 'review', popovertargetaction: 'show' } : { href: r.url, target: '_blank', rel: 'noopener' }"
           @click="r.rec && store.openReview(r.rec)" @pointerenter="tip($event, r)" @focus="tip($event, r)" @pointerleave="hidePrTip" @blur="hidePrTip">
@@ -81,9 +82,8 @@ const tip = (e: Event, x: Row) => { const el = e.currentTarget; if (el instanceo
             <span class="top">
               <span class="ti">{{ r.title ?? '' }}</span>
               <!-- where the audit stands: its status, or once ready its findings counted by severity -->
-              <span v-if="r.rec && (r.rec.closed || r.rec.kind === 'review')" class="desk">
-                <span v-if="r.rec.closed" class="ended">{{ r.rec.closed }}</span>
-                <span v-else-if="working(r.rec)" class="working"><i></i>{{ r.rec.status === 'queued' ? 'Queued' : 'Reviewing…' }}</span>
+              <span v-if="r.rec && r.rec.kind === 'review'" class="desk">
+                <span v-if="working(r.rec)" class="working"><i></i>{{ r.rec.status === 'queued' ? 'Queued' : 'Reviewing…' }}</span>
                 <span v-else-if="r.rec.status !== 'ready'" :class="r.rec.status">{{ r.rec.status }}</span>
                 <template v-else-if="r.rec.findings.length"><span v-for="[s, n] in counts(r.rec)" :key="s" :class="['sev', s]" :title="`${n} ${s}${n > 1 ? 's' : ''}`"><i></i>{{ n }}<span class="sr">{{ ` ${s}` }}</span></span></template>
                 <span v-else class="clean">clean</span>

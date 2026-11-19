@@ -3,8 +3,8 @@
 // (ReviewsMenu.vue sets the store's `review`; the row is the popover's invoker, so the list stays open under it and Escape
 // steps back to it). It shows the verdict, the findings worst first (each linked to its line in the PR's diff), the ask and a
 // draft reply to copy, the follow-up posts, and the actions: open the PR, talk it over with the desk's session (when it is
-// running), dismiss the record, and at the far right post the ticked findings as a review (no button while none is ticked or the PR has ended; its result sits beside it).
-// The ask links to the comment that makes it (askUrl). A merged or closed PR says so in the status line.
+// running), dismiss the record, and at the far right post the ticked findings as a review (no button while none is ticked; its result sits beside it).
+// The ask links to the comment that makes it (askUrl).
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
 import { NEED, ago } from '../scene/card';
 import { post } from '../scene/scene';
@@ -35,7 +35,6 @@ const checked = ref(new Set<number>());
 watch(() => `${rec.value?.url}|${rec.value?.head}|${[...sent.value]}`, () => {
   checked.value = new Set(findings.value.filter(({ f, i }) => !sent.value.has(i) && ['blocker', 'major'].includes(f.severity)).map(({ i }) => i));
 }, { immediate: true });
-const postable = computed(() => checked.value.size > 0 && !rec.value?.closed); // posting a review on a merged or closed PR is pointless
 const working = ref(false);
 const result = ref<{ url: string } | { error: string } | null>(null);
 watch(() => `${rec.value?.url}|${rec.value?.head}`, () => { result.value = null; });
@@ -71,7 +70,6 @@ const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
       <template v-if="rec.kind === 'mention'">{{ rec.requestedBy ?? 'Someone' }} mentioned you.</template>
       <template v-else-if="rec.kind === 'followup'">New posts on a PR you joined.</template>
       <template v-else>{{ rec.requestedBy ? `${rec.requestedBy} asked for your review.` : '' }} <span :class="rec.status">Audit {{ rec.status }}</span>.</template>
-      <span v-if="rec.closed" class="ended">{{ rec.closed === 'merged' ? 'This PR is merged.' : 'This PR was closed without merging.' }}</span>
     </p>
     <p v-if="rec.summary" class="summary">{{ rec.summary }}</p>
     <p v-if="rec.fullPanel" class="note">Big PR: consider the full review panel.</p>
@@ -92,7 +90,7 @@ const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
         <li v-for="{ f, i } in findings" :key="i" :class="{ done: sent.has(i) }">
           <label>
             <input v-if="sent.has(i)" type="checkbox" checked disabled aria-label="Already posted">
-            <input v-else v-model="checked" type="checkbox" :value="i" :disabled="!!rec.closed" :aria-label="`Post: ${f.title}`">
+            <input v-else v-model="checked" type="checkbox" :value="i" :aria-label="`Post: ${f.title}`">
             <span class="body">
               <span :class="['sev', f.severity]">{{ f.severity }}</span>
               <a v-if="f.file && lineUrl(f)" class="where" :href="lineUrl(f)" target="_blank" rel="noopener">{{ f.file }}{{ f.line ? `:${f.line}` : '' }}</a><span v-else-if="f.file" class="where">{{ f.file }}{{ f.line ? `:${f.line}` : '' }}</span>
@@ -119,10 +117,10 @@ const dismiss = (r: DeskRecord) => { store.dismissReview(r); close(); };
       <a class="link" :href="rec.url" target="_blank" rel="noopener">Open on GitHub</a>
       <button v-if="desk" class="link" title="Bring up the review desk's session" @click="post('/focus', { id: desk })">Talk it over</button>
       <button class="link" :aria-label="`Dismiss the desk's notes on ${rec.repo}#${rec.pr}`" title="Hide this until there is something new" @click="dismiss(rec)">Dismiss</button>
-      <span v-if="postable || result" class="send">
+      <span v-if="checked.size || result" class="send">
         <span v-if="result && 'url' in result" role="status">Posted. <a :href="result.url" target="_blank" rel="noopener">See the review</a></span>
         <span v-else-if="result" class="error" role="alert">{{ result.error }}</span>
-        <button v-if="postable" class="primary" :disabled="working" @click="send(rec)">{{ working ? 'Posting' : `Post ${checked.size} as your review` }}</button>
+        <button v-if="checked.size" class="primary" :disabled="working" @click="send(rec)">{{ working ? 'Posting' : `Post ${checked.size} as your review` }}</button>
       </span>
     </div>
   </template>

@@ -253,24 +253,20 @@ test('an audit whose request has gone stays listed only while it has something u
   assert.deepStrictEqual(listed(), ['9'], 'a new post brings it back');
 });
 
-test('a merged or closed PR\'s record is greyed out and says so where the status shows, and lists only by the usual rules', async () => {
+test('a PR the desk marked merged or closed is left out of the list, whatever its kind, and a malformed closed leaves the record listed', async () => {
   store.reviews = [request(1), request(2)];
-  desk([rec(1, { closed: { state: 'merged', at: 't' }, findings: [{ severity: 'blocker', title: 'a' }] }), rec(2), rec(7, { kind: 'mention', closed: { state: 'closed' } }), rec(9, { closed: { state: 'merged' } }), rec(10, { closed: { state: 'bogus' } })]);
+  desk([rec(1, { closed: { state: 'merged', at: 't' } }), rec(2), rec(7, { kind: 'mention', closed: { state: 'closed' } }), rec(8, { kind: 'mention' }), rec(9, { closed: { state: 'bogus' } })]);
   await nextTick();
-  assert.deepStrictEqual(listed(), ['1', '2', '7', '9', '10'], 'unread, so a closed audit is still listed; a mention always is');
-  assert.deepStrictEqual([1, 2, 7, 9, 10].map(n => row(n).closest('.row').classList.contains('shut')), [true, false, true, true, false], 'a malformed closed is dropped, not the record');
-  assert.deepStrictEqual([1, 7, 9].map(n => row(n).querySelector('.desk')?.textContent), ['merged', 'closed', 'merged'], 'the word replaces the audit status, mentions too');
-  assert.strictEqual(row(2).querySelector('.ended'), null);
-  row(9).click(); await nextTick(); store.review = null; await nextTick();
-  assert.ok(!listed().includes('9'), 'seen and closed: it leaves, as any audit does');
+  assert.deepStrictEqual(listed(), ['2', '8', '9'], 'a closed request, a closed mention: gone; an unclosed one, or a bogus state, stays');
+  assert.strictEqual(button().textContent, '3', 'the count follows');
 });
 
-test('an audit the desk is still on (queued or auditing) shows a labelled in-progress state, unlike a done row, until it is ready, failed or closed', async () => {
-  store.reviews = [request(1), request(2), request(3), request(4)];
-  desk([rec(1, { status: 'queued' }), rec(2, { status: 'auditing' }), rec(3, { status: 'failed' }), rec(4, { status: 'auditing', closed: { state: 'merged' } })]);
+test('an audit the desk is still on (queued or auditing) shows a labelled in-progress state until it is ready or failed', async () => {
+  store.reviews = [request(1), request(2), request(3)];
+  desk([rec(1, { status: 'queued' }), rec(2, { status: 'auditing' }), rec(3, { status: 'failed' })]);
   await nextTick();
-  const state = n => { const r = row(n).closest('.row'); return [r.classList.contains('working'), r.classList.contains('shut'), row(n).querySelector('.desk')?.textContent]; };
-  assert.deepStrictEqual([1, 2, 3, 4].map(state), [[true, false, 'Queued'], [true, false, 'Reviewing…'], [false, false, 'failed'], [false, true, 'merged']], 'working is not shut (done), and a closed PR is done whatever the audit says');
+  const state = n => [row(n).closest('.row').classList.contains('working'), row(n).querySelector('.desk')?.textContent];
+  assert.deepStrictEqual([1, 2, 3].map(state), [[true, 'Queued'], [true, 'Reviewing…'], [false, 'failed']]);
   desk([rec(1, { status: 'ready' })]); await nextTick();
   assert.ok(!row(1).closest('.row').classList.contains('working'), 'ready: back to normal');
   const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8');
@@ -345,21 +341,12 @@ describe('the detail panel', () => {
     assert.strictEqual(panel().querySelector('.actions a').href, rec(1).url, 'Open on GitHub');
   });
 
-  test('the ask links to its own comment, and a closed PR says so and offers no posting', async () => {
-    const findings = [{ severity: 'blocker', title: 'Race' }];
-    desk([rec(1, { kind: 'mention', ask: 'Can you check?', askUrl: 'https://github.com/o/app/pull/1#issuecomment-5', findings })]);
+  test('the ask links to its own comment', async () => {
+    desk([rec(1, { kind: 'mention', ask: 'Can you check?', askUrl: 'https://github.com/o/app/pull/1#issuecomment-5' })]);
     store.review = rec(1).url; await nextTick();
     assert.strictEqual(panel().querySelector('p a').href, 'https://github.com/o/app/pull/1#issuecomment-5');
-    desk([rec(1, { kind: 'mention', ask: 'Can you check?', findings })]); await nextTick();
+    desk([rec(1, { kind: 'mention', ask: 'Can you check?' })]); await nextTick();
     assert.ok(!panel().querySelector('p a'), 'no askUrl: no link');
-    desk([rec(1, { findings, closed: { state: 'merged' } })]); await nextTick();
-    assert.match(panel().querySelector('.sub').textContent, /This PR is merged\./);
-    assert.ok(!panel().querySelector('.actions .primary'), 'no "Post as your review" on a merged PR');
-    assert.strictEqual(panel().querySelector('.findings input').disabled, true);
-    desk([rec(1, { findings, closed: { state: 'closed' } })]); await nextTick();
-    assert.match(panel().querySelector('.sub').textContent, /closed without merging/);
-    desk([rec(1, { findings })]); await nextTick();
-    assert.ok(panel().querySelector('.actions .primary'), 'open again: the button is back');
   });
 
   test('findings can be ticked and posted as one review: blockers and majors start ticked, the button counts them, and what went out is marked posted', async () => {
