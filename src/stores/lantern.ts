@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { computed, ref, shallowRef, watch } from 'vue';
 import { post } from '../scene/scene';
 import { parseSettings } from '../types';
-import type { Desk, DeskRecord, GitHub, Hovered, NowPlaying, Pin, Review, Session, Settings, StalePR, Stats, Usage } from '../types';
+import type { Desk, DeskRecord, GitHub, Hovered, NowPlaying, Pin, Review, ReviewLink, Session, Settings, StalePR, Stats, Usage } from '../types';
 
 // No pinning where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
@@ -23,6 +23,7 @@ export const useLanternStore = defineStore('lantern', () => {
   const stale = shallowRef<StalePR[]>([]); // my PRs no session owns, shown as wisps (the settings can hide them), so the reviews list leaves them out
   const desk = shallowRef<Desk>({ records: [], inbox: null }); // the review desk's records, newest first, and its session (ReviewsMenu.vue, ReviewDetail.vue)
   const review = ref<string | null>(null); // the PR whose desk record the detail panel shows (ReviewDetail.vue), by url
+  const reviewLink = shallowRef<ReviewLink | null>(null); // the last link into the reviews the app's window was sent (ReviewDetail.vue opens it)
   const reviewsOpen = ref(false); // whether the reviews dropdown is open (ReviewsMenu.vue), which the now playing widget gives way to
   const link = ref<'connecting' | 'up' | 'offline'>('connecting'); // the event stream, as the status line tells it
   const github = shallowRef<GitHub>({ accounts: [], signIn: null });
@@ -93,5 +94,5 @@ export const useLanternStore = defineStore('lantern', () => {
     settings.value = { ...settings.value, reviewPriority: next };
     post('/settings', { reviewPriority: next });
   };
-  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, unread, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
+  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, reviewLink, unread, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
 });

@@ -3441,3 +3441,74 @@ test('a dry run says what it would post and calls nothing', async t => {
   assert.deepStrictEqual(stub.seen, [], 'no call to GitHub');
   await until(() => /^Dry post: o\/app#1 review, body 0 characters, 1 inline$/m.test(t.output()), 'the dry run to say what it would post');
 });
+
+// Links into the detail panel: GET /review/<owner>/<repo>/<pr> answers a page that posts the path and its #fragment to /desk/show, which
+// tells the pages (the app's window acts on it) what to open. What doesn't fit the patterns is dropped, never passed on.
+test('a link into the reviews answers a page that hands it back, and /desk/show passes on only what fits its patterns', async t => {
+  const base = await serve(t);
+  const page = await fetch(base + '/review/o/app/12');
+  assert.deepStrictEqual([page.status, page.headers.get('content-type'), /fetch\('\/desk\/show'/.test(await page.text())], [200, 'text/html; charset=utf-8', true]);
+  const shown = [];
+  const req = http.get(base + '/events', res => { let text = ''; res.on('data', c => { text += c; for (const m of text.matchAll(/^event: show\ndata: (.*)$/gm)) shown.push(JSON.parse(m[1])); text = text.slice(text.lastIndexOf('\n\n') + 2); }); });
+  t.after(() => req.destroy());
+  await wait(200);
+  const cases = [
+    [{ path: '/review/o/app/12', anchor: 'finding-3' }, { repo: 'o/app', pr: 12, anchor: 'finding-3' }],
+    [{ path: '/review/My-Org/.github/007/', anchor: 'ask' }, { repo: 'My-Org/.github', pr: 7, anchor: 'ask' }],
+    [{ path: '/review/o/app/12', anchor: 'finding-3"><script>' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ path: '/review/o/app/12', anchor: 'finding-' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ path: '/review/o/app/12;rm -rf ~', anchor: 'summary' }, { repo: '', pr: 0, anchor: 'summary' }],
+    [{ path: '/review/o/a$b/12', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: '/review/o%2Fx/app/1', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: '/review/o/app/0', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: '/review/o/app/1234567890', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: 42, anchor: ['summary'] }, { repo: '', pr: 0, anchor: '' }],
+  ];
+  for (const [body, want] of cases) {
+    const before = shown.length;
+    assert.strictEqual((await post(base, '/desk/show', body)).status, 204);
+    await until(() => shown.length > before, 'the show event');
+    assert.deepStrictEqual(shown.at(-1), want, JSON.stringify(body));
+  }
+  const plain = await fetch(base + '/desk/show', { method: 'POST', body: JSON.stringify(cases[0][0]) });
+  assert.strictEqual(plain.status, 404, 'only a JSON post, which other websites can\'t send');
+});
+
+// The code each finding cites (POST /desk/code), from GitHub's contents API at the record's head, against a stand-in GitHub.
+test('the detail panel gets the lines each finding cites at the head, null where there are none, and a file once', async t => {
+  const seen = [], file = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+  const stub = http.createServer((req, res) => {
+    const reply = (status, o) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+    seen.push(req.url);
+    if (req.url === '/graphql') return reply(200, { data: {} });
+    if (req.url === '/repos/o/app/contents/src/b%20c.ts?ref=abc1234') return reply(200, { encoding: 'base64', content: Buffer.from(file).toString('base64').replace(/(.{60})/g, '$1\n') });
+    reply(404, { message: 'Not Found' });
+  });
+  await new Promise(r => stub.listen(0, '127.0.0.1', r));
+  t.after(() => stub.close());
+  const kc = keychain(JSON.stringify({ token: 'good' }));
+  const findings = [
+    { severity: 'major', title: 'One line', file: 'src/b c.ts', line: 2 },
+    { severity: 'minor', title: 'A range', file: 'src/b c.ts', line: 'L18-L20' },
+    { severity: 'nit', title: 'Past the end', file: 'src/b c.ts', line: 99 },
+    { severity: 'nit', title: 'Gone', file: 'gone.ts', line: 1 },
+    { severity: 'nit', title: 'Climbs out', file: '../secret', line: 1 },
+    { severity: 'nit', title: 'No file' },
+  ];
+  const base = await serve(t, { 'data/settings.json': '{"githubAccounts":["octo"]}', '.ghbus/reviews/o__app__1.json': JSON.stringify({ repo: 'o/app', pr: 1, kind: 'review', status: 'ready', head: 'abc1234', findings }),
+    '.ghbus/reviews/o__app__2.json': JSON.stringify({ repo: 'o/app', pr: 2, kind: 'review', status: 'ready', findings }) }, () => {}, { LANTERN_SECURITY: kc.security, LANTERN_GITHUB_API: `http://127.0.0.1:${stub.address().port}` });
+  await until(async () => (await snapshot(base)).desk.records.length === 2, 'the records');
+  const code = async url => { const r = await post(base, '/desk/code', { url }); return [r.status, r.status === 200 ? await r.json() : null]; };
+  await until(async () => (await code('https://github.com/o/app/pull/1'))[1]?.[0], 'the account to load');
+  const [status, out] = await code('https://github.com/o/app/pull/1');
+  assert.strictEqual(status, 200);
+  assert.deepStrictEqual(out[0], { start: 1, lines: Array.from({ length: 17 }, (_, i) => `line ${i + 1}`), mark: [2, 2] }, 'fifteen either side, clamped at the top');
+  assert.deepStrictEqual(out[1], { start: 3, lines: Array.from({ length: 18 }, (_, i) => `line ${i + 3}`), mark: [18, 20] }, 'a range, clamped at the end');
+  assert.deepStrictEqual(out.slice(2), [null, null, null, null], 'past the end, a file GitHub doesn\'t have, a path out of the repo, no file');
+  assert.ok(!seen.some(u => u.includes('secret')), 'a path out of the repo is never asked for');
+  const asked = seen.length;
+  await code('https://github.com/o/app/pull/1');
+  assert.deepStrictEqual(seen.slice(asked).filter(u => u !== '/graphql'), ['/repos/o/app/contents/gone.ts?ref=abc1234'], 'the file it has is kept; the one it didn\'t get is asked for again');
+  assert.deepStrictEqual(await code('https://github.com/o/app/pull/2'), [404, null], 'no head: nothing to show it at');
+  assert.deepStrictEqual(await code('https://github.com/o/app/pull/9'), [404, null], 'no such record');
+});

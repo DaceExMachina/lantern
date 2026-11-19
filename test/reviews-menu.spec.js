@@ -404,6 +404,83 @@ describe('the detail panel', () => {
     assert.deepStrictEqual([copied, copy.textContent], [['Yes, it is.'], 'Copied']);
   });
 
+  // happy-dom has no showPopover: note which popover each link opens
+  const opened = [];
+  beforeEach(() => { opened.length = 0; HTMLElement.prototype.showPopover = function () { opened.push(this.id); }; });
+  afterEach(() => { delete HTMLElement.prototype.showPopover; });
+
+  test('a link to a finding opens that finding on its own, counted in the record\'s own order though the list sorts worst first; one to the summary or the ask scrolls there', async () => {
+    const findings = [{ severity: 'nit', title: 'Typo' }, { severity: 'blocker', title: 'Race' }, { severity: 'major', title: 'Leak' }];
+    desk([rec(1, { findings, summary: 'Fine.', ask: 'Look?' }), rec(2)]);
+    const scrolled = [];
+    vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(function () { scrolled.push(this.id); });
+    const go = async (link) => { store.reviewLink = link; await nextTick(); await nextTick(); await nextTick(); };
+    await go({ repo: 'O/App', pr: 1, anchor: 'finding-0' });
+    assert.deepStrictEqual([store.review, opened], [rec(1).url, ['review']], 'its record, open (the repo\'s case doesn\'t matter)');
+    assert.deepStrictEqual([panel().querySelector('.finding .title')?.textContent, panel().querySelector('.findings')], ['Typo', null], 'finding-0 is the record\'s first (the list would show it last), on its own');
+    await go({ repo: 'o/app', pr: 1, anchor: 'finding-2' });
+    assert.strictEqual(panel().querySelector('.finding .title')?.textContent, 'Leak');
+    for (const [anchor, text] of [['summary', 'Fine.'], ['ask', 'The ask']]) {
+      await go({ repo: 'o/app', pr: 1, anchor });
+      assert.deepStrictEqual([panel().querySelector('.finding'), panel().querySelectorAll('.here').length, panel().querySelector('.here').textContent.includes(text), scrolled.at(-1)], [null, 1, true, anchor], anchor);
+    }
+    await go({ repo: 'o/app', pr: 1, anchor: 'finding-7' });
+    assert.deepStrictEqual([store.review, panel().querySelector('.finding'), panel().querySelector('.here'), panel().querySelectorAll('.findings li').length], [rec(1).url, null, null, 3], 'past the last finding: the record, at its top');
+    await go({ repo: 'o/app', pr: 2, anchor: '' });
+    assert.strictEqual(store.review, rec(2).url, 'no anchor: just the record');
+  });
+
+  test('a finding\'s title steps into it: its detail, more of its code, its link and whatever else the desk wrote; All findings or Escape steps back to it in the list', async () => {
+    const findings = [{ severity: 'nit', title: 'Typo', file: 'a.ts', line: 3, confidence: 80, lens: 'naming', tags: ['x'] }, { severity: 'blocker', title: 'Race', detail: 'Two writers.', file: 'b.ts', line: 20 }];
+    const lines = Array.from({ length: 31 }, (_, n) => `l${n + 5}`); // 5 to 35, around line 20
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(new Response(JSON.stringify([null, { start: 5, lines, mark: [20, 20] }]))); });
+    desk([rec(1, { findings })]);
+    store.review = rec(1).url; await nextTick(); await new Promise(r => setTimeout(r, 20));
+    const race = () => panel().querySelector('#finding-1');
+    assert.deepStrictEqual([...race().querySelectorAll('.code b')].map(b => b.textContent), ['17', '18', '19', '20', '21', '22', '23'], 'the list shows three either side');
+    race().querySelector('button.what').click(); await nextTick(); await nextTick();
+    const view = () => panel().querySelector('.finding');
+    assert.deepStrictEqual([view().querySelector('.sev').textContent, view().querySelector('.title').textContent, view().querySelector('.detail').textContent, view().querySelector('a.where').textContent],
+      ['blocker', 'Race', 'Two writers.', 'b.ts:20']);
+    assert.deepStrictEqual([view().querySelectorAll('.code span').length, view().querySelector('.code .mark b').textContent, panel().querySelector('.findings')], [31, '20', null], 'all the lines the server sent, the cited one marked, in place of the list');
+    panel().querySelector('.back').click(); await nextTick(); await nextTick();
+    assert.deepStrictEqual([view(), document.activeElement === race().querySelector('button.what')], [null, true], 'back to the list, on the finding it left');
+    assert.strictEqual(race().querySelector('input').checked, true, 'a click on the title steps in; it doesn\'t untick the blocker');
+    panel().querySelector('#finding-0 button.what').click(); await nextTick();
+    assert.deepStrictEqual([view().querySelector('.code'), view().querySelector('a.where')?.textContent, [...view().querySelectorAll('.extra dt, .extra dd')].map(e => e.textContent)],
+      [null, 'a.ts:3', ['confidence', '80', 'lens', 'naming']], 'no code: its text and its link; the desk\'s other fields, not lists');
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    panel().querySelector('.back').dispatchEvent(esc); await nextTick(); await nextTick();
+    assert.deepStrictEqual([view(), esc.defaultPrevented, store.review], [null, true, rec(1).url], 'Escape steps out of the finding, not out of the panel');
+  });
+
+  test('a link to a record the desk doesn\'t have, or one that didn\'t fit, opens the reviews list', async () => {
+    store.reviews = [request(1)];
+    desk([rec(1)]); await nextTick();
+    for (const link of [{ repo: 'o/app', pr: 9, anchor: 'summary' }, { repo: '', pr: 0, anchor: '' }]) {
+      opened.length = 0;
+      store.reviewLink = link; await nextTick(); await nextTick();
+      assert.deepStrictEqual([store.review, opened], [null, ['reviews']], JSON.stringify(link));
+    }
+  });
+
+  test('a finding with a file and line shows the lines it cites at the head, the cited ones marked; with no code to show, just its link', async () => {
+    const findings = [{ severity: 'nit', title: 'Typo', file: 'a.ts', line: 3 }, { severity: 'blocker', title: 'Race', file: 'b.ts', line: '11' }];
+    let answer = { status: 200, body: [null, { start: 10, lines: ['let a = 1;', 'race();', '}'], mark: [11, 11] }] };
+    vi.spyOn(globalThis, 'fetch').mockImplementation((url, o) => { posts.push([url, JSON.parse(o.body)]); return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status })); });
+    desk([rec(1, { findings })]);
+    store.review = rec(1).url; await nextTick(); await new Promise(r => setTimeout(r, 20));
+    assert.deepStrictEqual(posts.at(-1), ['/desk/code', { url: rec(1).url }]);
+    const [race, typo] = panel().querySelectorAll('.findings li');
+    assert.deepStrictEqual([...race.querySelectorAll('.code span')].map(l => [l.querySelector('b').textContent, l.textContent.slice(2), l.classList.contains('mark')]),
+      [['10', 'let a = 1;', false], ['11', 'race();', true], ['12', '}', false]], 'numbered from its start, the cited line marked');
+    assert.deepStrictEqual([typo.querySelector('.code'), typo.querySelector('a.where')?.textContent], [null, 'a.ts:3'], 'none for this one: its link stays');
+    assert.strictEqual(race.querySelector('a.where')?.textContent, 'b.ts:11', 'the code joins the link, it doesn\'t replace it');
+    answer = { status: 404, body: {} };
+    desk([rec(1, { findings, head: 'h2' })]); await nextTick(); await new Promise(r => setTimeout(r, 20));
+    assert.deepStrictEqual([posts.at(-1)[0], panel().querySelectorAll('.code').length, panel().querySelectorAll('a.where').length], ['/desk/code', 0, 2], 'the server has none: the links, as before');
+  });
+
   test('Talk it over brings up the desk\'s session only while it runs; Dismiss hides the record until there\'s news and closes the panel', async () => {
     store.reviews = [request(1)];
     desk([rec(1, { lastActivity: 't1' })], 'desk-session');
@@ -415,7 +492,7 @@ describe('the detail panel', () => {
     assert.deepStrictEqual(posts.at(-1), ['/focus', { id: 'desk-session' }]);
     const hide = panel().hidePopover = vi.fn();
     [...panel().querySelectorAll('.actions button')].find(b => b.textContent === 'Dismiss').click(); await nextTick();
-    assert.deepStrictEqual([posts.at(-1), hide.mock.calls.length, panel().textContent], [['/settings', { dismissedReviews: { [rec(1).url]: 'h|t1' } }], 1, '']);
+    assert.deepStrictEqual([posts.at(-1), hide.mock.calls.length], [['/settings', { dismissedReviews: { [rec(1).url]: 'h|t1' } }], 1]); // closing it empties it (a link can still open a dismissed record)
     assert.deepStrictEqual([listed(), row(1).tagName], [['1'], 'A'], 'the request stays, a plain link again');
     desk([rec(1, { lastActivity: 't2' })], 'desk-session'); await nextTick();
     assert.strictEqual(row(1).tagName, 'BUTTON', 'a new post brings the record back');

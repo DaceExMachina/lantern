@@ -68,7 +68,7 @@ export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['
 /** One of the review desk's records (~/.ghbus/reviews, see the review-desk skill): an audit of a PR asked of me (kind review), a mention
  *  of me, or a follow-up (someone posted on a PR I reviewed or commented on). `url` is the PR's, from the server. */
 export const SEVERITIES = ['blocker', 'major', 'minor', 'nit']; // worst first; a finding with another severity counts as "other"
-export interface Finding { severity: string; title: string; file?: string | undefined; line?: string | number | undefined; detail?: string | undefined }
+export interface Finding { severity: string; title: string; file?: string | undefined; line?: string | number | undefined; detail?: string | undefined; extra: [string, string][] } // extra: any other text or number the desk wrote on it
 export interface Activity { at: string; author: string; url?: string | undefined; excerpt?: string | undefined; mine: boolean }
 export interface DeskRecord {
   url: string; repo: string; pr: number; kind: string; status: string; head?: string | undefined; title?: string | undefined; author?: string | undefined;
@@ -83,10 +83,12 @@ export interface Desk { records: DeskRecord[]; inbox: string | null }
 // The desk is a Claude session writing JSON by hand, so a record needs only what places it (repo, pr, kind, status, url); any other field
 // of the wrong type is left out, and a finding or post that can't be shown is dropped, never the whole record.
 const strOf = (o: Record<string, unknown>, k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
+const FINDING_KEYS = ['severity', 'title', 'file', 'line', 'detail'];
 const finding = (x: unknown): Finding[] => {
   if (!isRecord(x) || !isString(x['severity']) || !isString(x['title'])) return [];
   const line = x['line'];
-  return [{ severity: x['severity'].toLowerCase(), title: x['title'], file: strOf(x, 'file'), line: isNumber(line) || isString(line) ? line : undefined, detail: strOf(x, 'detail') }];
+  const extra = Object.entries(x).flatMap(([k, v]): [string, string][] => !FINDING_KEYS.includes(k) && (isString(v) || isNumber(v)) ? [[k, String(v)]] : []);
+  return [{ severity: x['severity'].toLowerCase(), title: x['title'], file: strOf(x, 'file'), line: isNumber(line) || isString(line) ? line : undefined, detail: strOf(x, 'detail'), extra }];
 };
 const post = (x: unknown): Activity[] => isRecord(x) && isString(x['at'])
   ? [{ at: x['at'], author: strOf(x, 'author') ?? 'someone', url: strOf(x, 'url'), excerpt: strOf(x, 'excerpt'), mine: x['mine'] === true || x['mine'] === 'true' }] : [];
@@ -105,6 +107,19 @@ export function parseDeskRecord(x: unknown): DeskRecord | null {
 }
 export const parseDesk = (x: unknown): Desk => isRecord(x)
   ? { records: Array.isArray(x['records']) ? x['records'].flatMap(r => parseDeskRecord(r) ?? []) : [], inbox: isString(x['inbox']) ? x['inbox'] : null } : { records: [], inbox: null };
+/** A link into the reviews (the show event, from http://localhost:7717/review/<owner>/<repo>/<pr>#<anchor>, see app/Review.swift): the record
+ *  to open, and where in it (finding-<i>, its place in the record's findings; summary; ask). repo is "" when the link didn't fit. */
+export interface ReviewLink { repo: string; pr: number; anchor: string }
+export const isReviewLink = (x: unknown): x is ReviewLink => isRecord(x) && isString(x['repo']) && isNumber(x['pr']) && isString(x['anchor']);
+/** The code a finding cites (POST /desk/code): the number of its first line, the lines, and the cited range, first and last line. */
+export interface Code { start: number; lines: string[]; mark: [number, number] }
+const code = (x: unknown): Code | null => {
+  if (!isRecord(x) || !isNumber(x['start']) || !isStrings(x['lines']) || !Array.isArray(x['mark'])) return null;
+  const [a, b] = x['mark'];
+  return isNumber(a) && isNumber(b) ? { start: x['start'], lines: x['lines'], mark: [a, b] } : null;
+};
+/** One per finding, in the record's order: its code, or null where there's none to show. */
+export const parseCode = (x: unknown): (Code | null)[] => Array.isArray(x) ? x.map(code) : [];
 /** The old session that made a stale PR. */
 export interface Owner { id: string; title?: Opt<string>; cwd?: Opt<string>; last: number; resuming?: Opt<number> }
 /** One of my open PRs no session owns (a wisp; stale once nobody has touched it for a week). */

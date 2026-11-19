@@ -1,4 +1,5 @@
-// Posting the review desk's findings I checked as one GitHub review, from the detail panel (POST /desk/post).
+// Posting the review desk's findings I checked as one GitHub review, from the detail panel (POST /desk/post), links that open the panel
+// (GET /review/..., POST /desk/show), and the code each finding cites (POST /desk/code).
 import Foundation
 import Network
 
@@ -99,5 +100,79 @@ extension LanternServer {
             break
         }
         refreshDesk()
+    }
+}
+
+// MARK: links into the detail panel, and the code a finding cites
+
+/// A link to a record's detail: http://localhost:7717/review/<owner>/<repo>/<pr>, with #finding-<i> (its place in the record's findings),
+/// #summary or #ask. The fragment never reaches a server, so GET answers a page (REVIEW_PAGE) that posts it to /desk/show, then closes its tab.
+let REVIEW_PATH = Re("^/review/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/([0-9]{1,9})/?$")
+let REVIEW_ANCHOR = Re("^(finding-[0-9]{1,4}|summary|ask)$")
+let REVIEW_PAGE = """
+    <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="dark light"><title>Lantern</title>
+    <p style="font: 14px system-ui; margin: 2em">Opened in Lantern. You can close this tab.</p>
+    <script>fetch('/desk/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: location.pathname, anchor: location.hash.slice(1) }) }).finally(() => close())</script>
+    """
+
+/// The lines a finding cites (its line: a number, or a range like "4-9" or "L4-L9", at most ten lines) with fifteen either side (the finding's
+/// own view shows them all, the list three), clamped to the file. `mark` is the cited range. Nil when the line isn't one of those or is past the end.
+func codeAround(_ text: [String], line: Any?) -> JSON? {
+    guard let m = Re("^L?([0-9]{1,7})(?:\\s*-\\s*L?([0-9]{1,7}))?$").match(str(line)), let a = Int(m[1] ?? ""), a >= 1, a <= text.count else { return nil }
+    let b = min(max(a, Int(m[2] ?? "") ?? a), a + 9, text.count), start = max(1, a - 15), end = min(text.count, b + 15)
+    return ["start": start, "lines": Array(text[(start - 1)..<end]), "mark": [a, b]]
+}
+
+/// A file's lines at a commit, from GitHub's contents API through the first account that has it. Nil when none does (or it's too big for the API).
+func fileLines(repo: String, head: String, file: String, calls: [GitHubCall]) -> [String]? {
+    let parts = file.split(separator: "/", omittingEmptySubsequences: false)
+    guard !file.hasPrefix("/"), !parts.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else { return nil }
+    let path = parts.map { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? "" }.joined(separator: "/")
+    for call in calls {
+        let r = call("GET", "/repos/\(repo)/contents/\(path)?ref=\(head)", nil)
+        guard r.status == 200, r.json?["encoding"] as? String == "base64", let b64 = r.json?["content"] as? String,
+              let data = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) else { continue }
+        var lines = String(decoding: data, as: UTF8.self).components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
+        if lines.last == "" { lines.removeLast() } // the newline that ends the file isn't a line of its own
+        return lines
+    }
+    return nil
+}
+
+/// Files already fetched, by repo, head and path. Main thread only. A file that couldn't be fetched isn't kept, so the next open tries again.
+var codeCache: [String: [String]] = [:] // ponytail: never evicted, a few KB per file read; prune by head if it ever shows in memory
+
+extension LanternServer {
+    /// POST /desk/show { path, anchor } (from REVIEW_PAGE): brings the app's window forward and tells the page which record to open, and where.
+    /// Whatever doesn't fit the patterns is dropped, so a bad link still opens the reviews list.
+    func showDesk(_ c: NWConnection, _ body: JSON?) {
+        let m = REVIEW_PATH.match(body?["path"] as? String ?? ""), anchor = body?["anchor"] as? String ?? ""
+        let pr = m.flatMap { Int($0[2] ?? "") } ?? 0
+        send("event: show\ndata: \(jsonText(["repo": pr > 0 ? m?[1] ?? "" : "", "pr": pr, "anchor": REVIEW_ANCHOR.test(anchor) ? anchor : ""]))\n\n")
+        if handActivation { print("show") } // the app's window, its parent, comes forward (main.swift); a bare server (tests, previews) has no window
+        respond(c, 204)
+    }
+
+    /// POST /desk/code { url }: for each of the record's findings, in its order, the code it cites at the record's head ({ start, lines, mark },
+    /// see codeAround) or null. 404 when there's no such record or it has no head; the page then keeps its links to the diff.
+    func deskCode(_ c: NWConnection, _ body: JSON?) {
+        guard let url = body?["url"] as? String, let record = desk.first(where: { str($0["url"]) == url }), let repo = record["repo"] as? String,
+              Re("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").test(repo), let head = record["head"] as? String, Re("^[0-9a-f]{7,40}$").test(head)
+        else { return respond(c, 404) }
+        let findings = record["findings"] as? [JSON] ?? [], cached = codeCache
+        let tokens = accounts.items, cwds = sessions.items.map { str($0.1["cwd"]) }.filter { !$0.isEmpty }
+        DispatchQueue.global().async {
+            var files: [String: [String]] = [:]
+            lazy var calls = self.githubCalls(tokens: tokens, cwds: cwds)
+            for file in Set(findings.compactMap { $0["file"] as? String }) {
+                let key = "\(repo)@\(head):\(file)"
+                if let lines = cached[key] ?? fileLines(repo: repo, head: head, file: file, calls: calls) { files[key] = lines }
+            }
+            let out = findings.map { f -> Any in (f["file"] as? String).flatMap { files["\(repo)@\(head):\($0)"] }.flatMap { codeAround($0, line: f["line"]) } ?? NSNull() }
+            DispatchQueue.main.async {
+                codeCache.merge(files) { a, _ in a }
+                self.respond(c, 200, "application/json", Data(jsonText(out).utf8))
+            }
+        }
     }
 }
