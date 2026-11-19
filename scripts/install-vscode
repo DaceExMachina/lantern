@@ -1,0 +1,11 @@
+#!/bin/sh
+# Installs Lantern's VS Code extension (vscode/), so a click on a moth shows the terminal running its session. Run it again
+# after updating Lantern. Another VS Code build: CODE=/path/to/its/code scripts/install-vscode
+set -e
+cd "$(dirname "$0")/.."
+CODE=${CODE:-$(command -v code || echo "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code")}
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+mkdir "$tmp/extension" && cp vscode/package.json vscode/extension.js "$tmp/extension/"
+(cd "$tmp" && zip -qr lantern-focus.vsix extension) # a .vsix is a zip with the extension in extension/
+"$CODE" --install-extension "$tmp/lantern-focus.vsix" --force

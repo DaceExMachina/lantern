@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
+const net = require('net');
 const { execFileSync, spawn } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
@@ -2985,6 +2986,52 @@ test('focusing a VS Code session opens its folder only when the cwd is an existi
     await focus(n, cwd);
     assert.ok(!log().slice(before.length).split('\n').includes(`-b com.example.code ${cwd}`), `${cwd} reached open: ${log()}`); // a relative folder exists from the server's own working directory
   }
+});
+
+// VS Code and Hyper know a terminal by the shell they started: the session's ancestor just below the app. That pid, and nothing
+// else, goes to Lantern's VS Code extension (in a link) or Hyper plugin (on its socket), and only when the companion is there.
+// The test server hands activation to its output, so nothing here pulls focus.
+test('focusing a VS Code or Hyper session hands its shell\'s pid to the companion', async t => {
+  // a short HOME: a unix socket's path has to fit in 104 bytes
+  const short = fs.mkdtempSync('/tmp/lantern-'), sock = path.join(short, '.hyper_plugins/local/lantern/focus.sock');
+  t.after(() => fs.rmSync(short, { recursive: true, force: true }));
+  // claude 900001 runs in shell 900002, which the terminal app started; 900011 is a claude in a VS Code without the extension
+  const ps = '#!/bin/sh\ncase "$*" in\n' +
+    '"-o ppid=,comm= -p 900001") echo "900002 claude";;\n"-o ppid=,comm= -p 900002") echo "900003 -zsh";;\n' +
+    '"-o ppid=,comm= -p 900003") echo "1 /Applications/Term.app/Contents/MacOS/Term";;\nesac\n';
+  const base = await serve(t, { 'no-bin/open': '#!/bin/sh\necho "$@" >> "$HOME/open.log"\n', 'no-bin/ps': ps }, h => {
+    for (const bin of ['open', 'ps']) fs.chmodSync(path.join(h, 'no-bin', bin), 0o755);
+    fs.mkdirSync(path.join(short, 'project'));
+  }, { HOME: short, LANTERN_HAND_ACTIVATION: '1' });
+  const log = () => fs.existsSync(path.join(short, 'open.log')) ? fs.readFileSync(path.join(short, 'open.log'), 'utf8') : '';
+  const focus = async (n, pid, term, app) => {
+    await fetch(base + '/event', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-claude-pid': pid, 'x-term-program': term, 'x-term-app': app },
+      body: JSON.stringify({ session_id: UUID(n), hook_event_name: 'Stop', cwd: path.join(short, 'project'), last_assistant_message: 'Done.' }) });
+    await until(async () => (await snapshot(base)).sessions.find(x => x.id === UUID(n)), `session ${n} to land`);
+    return (await post(base, '/focus', { id: UUID(n) })).status;
+  };
+  const link = 'vscode://lantern.focus/focus?pid=';
+
+  await focus(1, '900001', 'vscode', 'com.microsoft.VSCode');
+  assert.ok(!log().includes(link), `no link without the extension, or VS Code offers to find it online: ${log()}`);
+  fs.mkdirSync(path.join(short, '.vscode/extensions/lantern.focus-0.1.1'), { recursive: true });
+  await focus(2, '900001', 'vscode', 'com.microsoft.VSCode');
+  assert.deepStrictEqual(log().trim().split('\n').slice(-2), [`-g -b com.microsoft.VSCode ${path.join(short, 'project')}`, `-g ${link}900002`], 'the folder\'s window first, then the link with the shell');
+  await focus(3, '900001', 'vscode', 'com.todesktop.cursor'); // a fork: VS Code would get the link
+  await focus(4, '1;open -a Calculator', 'vscode', 'com.microsoft.VSCode'); // not a pid: never recorded
+  assert.strictEqual(log().split(link).length, 2, `one link only: ${log()}`);
+
+  // Hyper: the plugin's socket gets the shell's pid as one line. Finder stands in for Hyper.app, which CI doesn't have.
+  const heard = [];
+  assert.strictEqual(await focus(5, '900001', 'Hyper', 'com.apple.finder'), 204, 'with no plugin, Hyper still comes forward');
+  fs.mkdirSync(path.dirname(sock), { recursive: true });
+  const plugin = net.createServer(c => c.once('data', d => { heard.push(String(d)); c.end(); })).listen(sock);
+  t.after(() => plugin.close());
+  await new Promise(r => plugin.once('listening', r));
+  assert.strictEqual(await focus(6, '900001', 'Hyper', 'com.apple.finder'), 204);
+  await focus(7, 'x', 'Hyper', 'com.apple.finder');
+  assert.deepStrictEqual(heard, ['900002\n'], 'the shell\'s pid, and nothing else, reaches the plugin');
+  assert.match(t.output(), /^activate \/.*\/Finder\.app$/m);
 });
 
 // Tailscale serve proxies the tailnet name to the server and passes the visitor's Host on, with no port or :443. That name is
