@@ -78,17 +78,39 @@ func spawnLinks() -> [String: String] {
 
 // MARK: bringing a session's window to the front, in whichever terminal (or the Claude app) runs it
 
-/// The app executable among a process's ancestors: its terminal, e.g. /Applications/iTerm.app/Contents/MacOS/iTerm2
-func terminalBinary(_ pid: String) -> String? {
-    var p = pid
+/// The app executable among a process's ancestors (its terminal, e.g. /Applications/iTerm.app/Contents/MacOS/iTerm2), and the
+/// ancestor just below it: the shell the terminal started, which is how VS Code and Hyper know their terminals.
+func terminalOf(_ pid: String) -> (binary: String, shell: String)? {
+    var p = pid, below = pid
     for _ in 0..<20 where Re("^[0-9]+$").test(p) && p != "1" {
         let line = run("ps", ["-o", "ppid=,comm=", "-p", p]).out.trim
         guard let gap = line.firstIndex(where: \.isWhitespace) else { return nil }
         let comm = String(line[gap...]).trim
-        if comm.contains(".app/Contents/MacOS/") && !comm.contains("/claude-code/") { return comm } // not Claude Code's own bundled binary
-        p = String(line[..<gap])
+        if comm.contains(".app/Contents/MacOS/") && !comm.contains("/claude-code/") { return (comm, below) } // not Claude Code's own bundled binary
+        below = p; p = String(line[..<gap])
     }
     return nil
+}
+
+/// Asks Lantern's Hyper plugin (hyper/index.js) to show the tab or pane whose shell has this pid, over the socket it listens
+/// on, and waits until it has (it hangs up), so Hyper comes forward with that window. The pid is all that's sent.
+func showHyperSession(_ shell: String) {
+    let path = HOME + "/.hyper_plugins/local/lantern/focus.sock"
+    let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+    guard fd >= 0 else { return }
+    defer { close(fd) }
+    var addr = sockaddr_un()
+    addr.sun_family = sa_family_t(AF_UNIX)
+    guard path.utf8.count < MemoryLayout.size(ofValue: addr.sun_path) else { return }
+    withUnsafeMutableBytes(of: &addr.sun_path) { $0.copyBytes(from: path.utf8) }
+    var wait = timeval(tv_sec: 2, tv_usec: 0), on: Int32 = 1 // a hung Hyper doesn't hold the click up
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &wait, socklen_t(MemoryLayout<timeval>.size))
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size)) // a plugin that hung up mustn't kill the server
+    let line = Array((shell + "\n").utf8)
+    guard withUnsafePointer(to: &addr, { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }) == 0,
+          write(fd, line, line.count) == line.count else { return }
+    var end = [UInt8](repeating: 0, count: 8)
+    while read(fd, &end, end.count) > 0 {}
 }
 
 /// Brings an app (a bundle id, or an app's path) to the front, through Launch Services, so no Accessibility or Automation prompt.
@@ -115,7 +137,7 @@ func focusElsewhere(_ s: JSON) -> Bool {
        let local = appSessions().first(where: { $0.cli == str(s["id"]) })?.local, Re("^local_[A-Za-z0-9-]{1,64}$").test(local) {
         return open(["-g", "claude://code/continue?session=" + local]) && bringForward("com.anthropic.claudefordesktop")
     }
-    let binary = terminalBinary(pid), bundle = binary.map { $0.components(separatedBy: "/Contents/MacOS/")[0] }
+    let terminal = terminalOf(pid), bundle = terminal.map { $0.binary.components(separatedBy: "/Contents/MacOS/")[0] }
     let activate = { bringForward(!app.isEmpty ? app : bundle ?? "") }
     switch term {
     case "Apple_Terminal": // Terminal.app finds the tab by its tty
@@ -144,7 +166,16 @@ func focusElsewhere(_ s: JSON) -> Bool {
         // cwd is event data, so only a folder that exists goes to `open` (not a URL, and not an option)
         var isDir: ObjCBool = false
         let cwd = str(s["cwd"])
-        if !app.isEmpty && cwd.hasPrefix("/") && FileManager.default.fileExists(atPath: cwd, isDirectory: &isDir) && isDir.boolValue { return open(["-g", "-b", app, cwd]) && activate() }
+        guard !app.isEmpty && cwd.hasPrefix("/") && FileManager.default.fileExists(atPath: cwd, isDirectory: &isDir) && isDir.boolValue && open(["-g", "-b", app, cwd]) else { break }
+        // VS Code hands a link to its front window, which is now the folder's, so with Lantern's extension installed (vscode/)
+        // that window then shows the terminal whose shell runs the session. Without it, VS Code would offer to find it online.
+        if app == "com.microsoft.VSCode", let shell = terminal?.shell,
+           (try? FileManager.default.contentsOfDirectory(atPath: HOME + "/.vscode/extensions"))?.contains(where: { $0.hasPrefix("lantern.focus-") }) == true {
+            _ = open(["-g", "vscode://lantern.focus/focus?pid=" + shell])
+        }
+        return activate()
+    case "Hyper": // Lantern's Hyper plugin (hyper/) shows the tab or pane, when it's installed
+        if let shell = terminal?.shell { showHyperSession(shell) }
     default: // kitty only takes remote commands when its kitty.conf allows them (allow_remote_control, listen_on)
         if truthy(s["kitty"]) && truthy(s["pane"]), let bundle,
            run(bundle + "/Contents/MacOS/kitten", ["@", "--to", str(s["kitty"]), "focus-window", "--match", "id:" + str(s["pane"])]).ok { return activate() }

@@ -1,0 +1,7 @@
+{
+  "name": "lantern",
+  "description": "Lets Lantern bring a Claude Code session's tab or pane to the front",
+  "version": "0.1.0",
+  "license": "MIT",
+  "main": "index.js"
+}

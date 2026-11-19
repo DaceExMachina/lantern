@@ -1,0 +1,12 @@
+{
+  "name": "focus",
+  "publisher": "lantern",
+  "displayName": "Lantern focus",
+  "description": "Lets Lantern bring a Claude Code session's terminal to the front",
+  "version": "0.1.1",
+  "license": "MIT",
+  "engines": { "vscode": "^1.74.0" },
+  "capabilities": { "untrustedWorkspaces": { "supported": true } },
+  "main": "extension.js",
+  "activationEvents": ["onUri"]
+}

@@ -1,0 +1,13 @@
+#!/bin/sh
+# Installs Lantern's Hyper plugin (hyper/), so a click on a moth shows the tab or pane running its session. Run it again
+# after updating Lantern. Hyper picks it up as soon as its config changes.
+set -e
+cd "$(dirname "$0")/.."
+CONFIG=~/.hyper.js
+[ -f "$CONFIG" ] || { echo "Open Hyper once first, so it writes $CONFIG" >&2; exit 1; }
+mkdir -p ~/.hyper_plugins/local/lantern
+cp hyper/package.json hyper/index.js ~/.hyper_plugins/local/lantern/
+grep -q "localPlugins: \[[^]]*'lantern'" "$CONFIG" && { echo "Updated the Lantern plugin. Restart Hyper to load the new one."; exit 0; }
+grep -q "localPlugins: \[" "$CONFIG" || { echo "Add 'lantern' to localPlugins in $CONFIG" >&2; exit 1; }
+sed -i '' "s/localPlugins: \[/localPlugins: ['lantern', /" "$CONFIG"
+echo "Installed the Lantern plugin in Hyper"
