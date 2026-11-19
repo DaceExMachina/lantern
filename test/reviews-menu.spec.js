@@ -210,7 +210,7 @@ test('a request with a desk record says where the audit stands beside its title 
   desk([rec(1, { findings }), rec(2, { status: 'auditing' }), rec(3, { status: 'failed' }), rec(4)]);
   await nextTick();
   const status = n => row(n).querySelector('.top .desk')?.textContent;
-  assert.deepStrictEqual([1, 2, 3, 4].map(status), ['2 blocker1 major1 nit1 other', 'auditing', 'failed', 'clean'], 'worst severity first, counted whatever its case; one the list doesn\'t know still counts');
+  assert.deepStrictEqual([1, 2, 3, 4].map(status), ['2 blocker1 major1 nit1 other', 'Reviewing…', 'failed', 'clean'], 'worst severity first, counted whatever its case; one the list doesn\'t know still counts');
   assert.deepStrictEqual([...row(1).querySelectorAll('.desk .sev')].map(s => s.className), ['sev blocker', 'sev major', 'sev nit', 'sev other']);
   assert.strictEqual(row(5).tagName, 'A', 'no record: a link to GitHub');
   assert.strictEqual(row(5).querySelector('.desk'), null);
@@ -263,6 +263,18 @@ test('a merged or closed PR\'s record is greyed out and says so where the status
   assert.strictEqual(row(2).querySelector('.ended'), null);
   row(9).click(); await nextTick(); store.review = null; await nextTick();
   assert.ok(!listed().includes('9'), 'seen and closed: it leaves, as any audit does');
+});
+
+test('an audit the desk is still on (queued or auditing) shows a labelled in-progress state, unlike a done row, until it is ready, failed or closed', async () => {
+  store.reviews = [request(1), request(2), request(3), request(4)];
+  desk([rec(1, { status: 'queued' }), rec(2, { status: 'auditing' }), rec(3, { status: 'failed' }), rec(4, { status: 'auditing', closed: { state: 'merged' } })]);
+  await nextTick();
+  const state = n => { const r = row(n).closest('.row'); return [r.classList.contains('working'), r.classList.contains('shut'), row(n).querySelector('.desk')?.textContent]; };
+  assert.deepStrictEqual([1, 2, 3, 4].map(state), [[true, false, 'Queued'], [true, false, 'Reviewing…'], [false, false, 'failed'], [false, true, 'merged']], 'working is not shut (done), and a closed PR is done whatever the audit says');
+  desk([rec(1, { status: 'ready' })]); await nextTick();
+  assert.ok(!row(1).closest('.row').classList.contains('working'), 'ready: back to normal');
+  const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8');
+  assert.match(css, /prefers-reduced-motion: reduce\) \{ #reviews \.top \.working i \{ animation: none;/);
 });
 
 test('a follow-up row takes a priority like a request, and sorts by it', async () => {
