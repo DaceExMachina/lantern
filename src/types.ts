@@ -68,7 +68,7 @@ export const isReview = (x: unknown): x is Review => isRecord(x) && isString(x['
 /** One of the review desk's records (~/.ghbus/reviews, see the review-desk skill): an audit of a PR asked of me (kind review), a mention
  *  of me, or a follow-up (someone posted on a PR I reviewed or commented on). `url` is the PR's, from the server. */
 export const SEVERITIES = ['blocker', 'major', 'minor', 'nit']; // worst first; a finding with another severity counts as "other"
-export interface Finding { severity: string; title: string; file?: string | undefined; line?: string | number | undefined; detail?: string | undefined; extra: [string, string][] } // extra: any other text or number the desk wrote on it
+export interface Finding { severity: string; title: string; file?: string | undefined; line?: string | number | undefined; detail?: string | undefined; explanation?: string | undefined; extra: [string, string][] } // explanation: Markdown, for the finding's own view; extra: any other text or number the desk wrote on it
 export interface Activity { at: string; author: string; url?: string | undefined; excerpt?: string | undefined; mine: boolean }
 export interface DeskRecord {
   url: string; repo: string; pr: number; kind: string; status: string; head?: string | undefined; title?: string | undefined; author?: string | undefined;
@@ -83,12 +83,13 @@ export interface Desk { records: DeskRecord[]; inbox: string | null }
 // The desk is a Claude session writing JSON by hand, so a record needs only what places it (repo, pr, kind, status, url); any other field
 // of the wrong type is left out, and a finding or post that can't be shown is dropped, never the whole record.
 const strOf = (o: Record<string, unknown>, k: string) => { const v = o[k]; return isString(v) ? v : undefined; };
-const FINDING_KEYS = ['severity', 'title', 'file', 'line', 'detail'];
+const FINDING_KEYS = ['severity', 'title', 'file', 'line', 'detail', 'explanation'];
+const EXPLANATION_MAX = 20_000; // characters: a few paragraphs fit many times over; a runaway file doesn't
 const finding = (x: unknown): Finding[] => {
   if (!isRecord(x) || !isString(x['severity']) || !isString(x['title'])) return [];
   const line = x['line'];
   const extra = Object.entries(x).flatMap(([k, v]): [string, string][] => !FINDING_KEYS.includes(k) && (isString(v) || isNumber(v)) ? [[k, String(v)]] : []);
-  return [{ severity: x['severity'].toLowerCase(), title: x['title'], file: strOf(x, 'file'), line: isNumber(line) || isString(line) ? line : undefined, detail: strOf(x, 'detail'), extra }];
+  return [{ severity: x['severity'].toLowerCase(), title: x['title'], file: strOf(x, 'file'), line: isNumber(line) || isString(line) ? line : undefined, detail: strOf(x, 'detail'), explanation: strOf(x, 'explanation')?.slice(0, EXPLANATION_MAX), extra }];
 };
 const post = (x: unknown): Activity[] => isRecord(x) && isString(x['at'])
   ? [{ at: x['at'], author: strOf(x, 'author') ?? 'someone', url: strOf(x, 'url'), excerpt: strOf(x, 'excerpt'), mine: x['mine'] === true || x['mine'] === 'true' }] : [];
@@ -111,12 +112,16 @@ export const parseDesk = (x: unknown): Desk => isRecord(x)
  *  to open, and where in it (finding-<i>, its place in the record's findings; summary; ask). repo is "" when the link didn't fit. */
 export interface ReviewLink { repo: string; pr: number; anchor: string }
 export const isReviewLink = (x: unknown): x is ReviewLink => isRecord(x) && isString(x['repo']) && isNumber(x['pr']) && isString(x['anchor']);
-/** The code a finding cites (POST /desk/code): the number of its first line, the lines, and the cited range, first and last line. */
-export interface Code { start: number; lines: string[]; mark: [number, number] }
+/** The code a finding cites (POST /desk/code): the PR's change around it (diff), or the file at the audited head where the PR didn't change
+ *  it, and the cited range of new-side line numbers. A line is added "+", removed "-" or context " ", with its old and new numbers (0: none). */
+export interface CodeLine { kind: '+' | '-' | ' '; old: number; new: number; text: string }
+export interface Code { diff: boolean; lines: CodeLine[]; mark: [number, number] }
+const codeLine = (x: unknown): CodeLine[] => isRecord(x) && (x['kind'] === '+' || x['kind'] === '-' || x['kind'] === ' ') && isNumber(x['old']) && isNumber(x['new']) && isString(x['text'])
+  ? [{ kind: x['kind'], old: x['old'], new: x['new'], text: x['text'] }] : [];
 const code = (x: unknown): Code | null => {
-  if (!isRecord(x) || !isNumber(x['start']) || !isStrings(x['lines']) || !Array.isArray(x['mark'])) return null;
+  if (!isRecord(x) || typeof x['diff'] !== 'boolean' || !Array.isArray(x['lines']) || !Array.isArray(x['mark'])) return null;
   const [a, b] = x['mark'];
-  return isNumber(a) && isNumber(b) ? { start: x['start'], lines: x['lines'], mark: [a, b] } : null;
+  return isNumber(a) && isNumber(b) ? { diff: x['diff'], lines: x['lines'].flatMap(codeLine), mark: [a, b] } : null;
 };
 /** One per finding, in the record's order: its code, or null where there's none to show. */
 export const parseCode = (x: unknown): (Code | null)[] => Array.isArray(x) ? x.map(code) : [];

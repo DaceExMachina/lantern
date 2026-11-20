@@ -31,6 +31,7 @@
     /* what a PR needs: the same colours as FLY (fireflies.ts) */
     --pr-ready: #C8F48A; --pr-failing: #FF9E8C; --pr-changes: #FFAA6E; --pr-feedback: #FFD27A; --pr-draft: #FFF2B8; --pr-in-review: #8CCBFF;
     --pr-mention: #E8F48A;
+    --diff-add: rgb(96 204 128 / .16); --diff-add-ink: #8FE0A6; --diff-del: rgb(255 110 100 / .16); --diff-del-ink: #FF9E8C;
     /* spacing: one scale, 1 = 4px */
     --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
     /* radius */
@@ -290,21 +291,46 @@
   #review .findings li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1-5) var(--space-2); align-items: start; }
   #review .findings label { display: contents; } /* its checkbox and text are the row's two columns, so the code lines up under the text */
   #review .findings .body { display: block; cursor: pointer; }
-  /* the lines a finding cites, numbered, the cited ones lit; long lines scroll sideways, each line as wide as the longest */
-  #review .code { grid-column: 2; display: grid; grid-template-columns: minmax(100%, max-content); margin: 0; padding: var(--space-1) 0; overflow-x: auto; border-radius: var(--radius-md); background: var(--surface-tray); font: var(--text-xs) / var(--leading) var(--font-mono); color: var(--ink-dim); }
-  #review .code span { padding: 0 var(--space-2); white-space: pre; }
-  #review .code b { display: inline-block; min-width: 3ch; margin-right: var(--space-2); text-align: right; font-weight: var(--weight-regular); color: var(--ink-faint); user-select: none; }
-  #review .code .mark { background: var(--surface-selected); color: var(--ink-strong); }
-  #review .code .mark b { color: var(--ink-soft); }
-  /* a finding's title steps into its own view, as does its code */
+  /* a finding's title steps into its own view */
   #review button.what { all: unset; display: block; cursor: pointer; color: var(--ink-strong); }
   #review button.what:hover { color: var(--ink-hover); text-decoration: underline; text-decoration-color: var(--accent-violet-line); text-underline-offset: var(--space-0-5); }
   #review button.what:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
-  #review .findings .code { cursor: pointer; }
-  /* one finding on its own: the code shows more and scrolls when it's long */
+  /* one finding on its own */
   #review .finding { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
   #review .finding .title { font-size: var(--text-md); }
-  #review .finding .code { max-height: 60vh; overflow-y: auto; }
+  /* the code a finding cites: the PR's change (added lines green, removed red, with old and new numbers) or the file at head; the cited
+     lines carry a bar at the left. Long lines scroll sideways, each line as wide as the longest. */
+  #review .code { display: grid; grid-template-columns: minmax(100%, max-content); max-height: 60vh; margin: 0; padding: var(--space-1) 0; overflow: auto; border-radius: var(--radius-md); background: var(--surface-tray); font: var(--text-xs) / var(--leading) var(--font-mono); color: var(--ink-soft); }
+  #review .code > span { padding-right: var(--space-2); white-space: pre; border-left: var(--space-0-5) solid transparent; }
+  #review .code b { display: inline-block; min-width: 4ch; padding-right: var(--space-1-5); text-align: right; font-weight: var(--weight-regular); color: var(--ink-faint); user-select: none; }
+  #review .code i { display: inline-block; width: 2ch; font-style: normal; color: var(--ink-faint); user-select: none; }
+  #review .code .add { background: var(--diff-add); }
+  #review .code .del { background: var(--diff-del); }
+  #review .code .add i { color: var(--diff-add-ink); }
+  #review .code .del i { color: var(--diff-del-ink); }
+  #review .code .mark { border-left-color: var(--focus); }
+  #review .code:not(.diff) .mark { background: var(--surface-selected); } /* no green or red to sit on: lit, as well as barred */
+  #review .code .mark b { color: var(--ink-strong); }
+  /* highlight.js's classes (src/code.ts), in the panel's own colours */
+  #review :is(.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag, .hljs-doctag) { color: var(--accent-violet); }
+  #review :is(.hljs-string, .hljs-regexp, .hljs-char) { color: var(--pr-feedback); }
+  #review :is(.hljs-number, .hljs-symbol, .hljs-bullet) { color: var(--pr-changes); }
+  #review :is(.hljs-title, .hljs-section, .hljs-name, .hljs-selector-class, .hljs-selector-id) { color: var(--pr-in-review); }
+  #review :is(.hljs-type, .hljs-template-variable, .hljs-variable.language_) { color: var(--pr-draft); }
+  #review :is(.hljs-comment, .hljs-quote, .hljs-meta) { color: var(--ink-dim); font-style: italic; }
+  #review :is(.hljs-attr, .hljs-attribute, .hljs-property, .hljs-params) { color: var(--ink); }
+  /* the explanation: the desk's Markdown */
+  #review .explain { color: var(--ink); }
+  #review .explain > * { margin: 0 0 var(--space-2); }
+  #review .explain > :last-child { margin-bottom: 0; }
+  #review .explain :is(h1, h2, h3, h4, h5, h6) { font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--ink-strong); text-transform: none; letter-spacing: normal; }
+  #review .explain :is(ul, ol) { display: block; padding-left: var(--space-4); }
+  #review .explain ul { list-style: disc; }
+  #review .explain ol { list-style: decimal; }
+  #review .explain code { padding: 0 var(--space-0-5); border-radius: var(--radius-sm); background: var(--surface-tray); font: var(--text-xs) / var(--leading) var(--font-mono); color: var(--ink-strong); }
+  #review .explain pre { padding: var(--space-2); overflow-x: auto; border-radius: var(--radius-md); background: var(--surface-tray); }
+  #review .explain pre code { padding: 0; background: none; color: var(--ink-soft); }
+  #review .explain blockquote { padding-left: var(--space-2); border-left: var(--space-0-5) solid var(--line); color: var(--ink-soft); }
   #review .extra { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3); margin: 0; font-size: var(--text-xs); }
   #review .extra dt { color: var(--ink-dim); }
   #review .extra dd { margin: 0; color: var(--ink-soft); }

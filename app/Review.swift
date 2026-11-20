@@ -7,7 +7,7 @@ import Network
 let DRY_POST = ProcessInfo.processInfo.environment["LANTERN_DRY_POST"] == "1"
 
 /// One call to GitHub as one account: a method, an API path and a body in, a status and JSON out.
-typealias GitHubCall = (_ method: String, _ path: String, _ body: JSON?) -> (status: Int, json: JSON?)
+typealias GitHubCall = (_ method: String, _ path: String, _ body: JSON?) -> (status: Int, json: Any?) // an object, or a list (pull files)
 
 /// A finding the page can show: it needs a severity and a title, like the page's own parser (so both count the same findings).
 func validFinding(_ f: Any) -> Bool { (f as? JSON).map { $0["severity"] is String && $0["title"] is String } ?? false }
@@ -39,7 +39,7 @@ func postReview(repo: String, pr: Int, head: String, findings: [JSON], calls: ()
     if r.status / 100 != 2 && !first.comments.isEmpty { // GitHub refused a line, or the commit: say it all in the body instead
         r = call("POST", "/repos/\(repo)/pulls/\(pr)/reviews", ["event": "COMMENT", "body": reviewParts(findings, inline: false).body])
     }
-    guard r.status / 100 == 2, let id = r.json?["id"] as? Int else { return (nil, "GitHub refused the review: \(r.json?["message"] as? String ?? "no answer (status \(r.status))").") }
+    guard r.status / 100 == 2, let id = (r.json as? JSON)?["id"] as? Int else { return (nil, "GitHub refused the review: \((r.json as? JSON)?["message"] as? String ?? "no answer (status \(r.status))").") }
     return ("https://github.com/\(repo)/pull/\(pr)#pullrequestreview-\(id)", "")
 }
 
@@ -51,7 +51,7 @@ extension LanternServer {
     func githubCalls(tokens: [(String, JSON)], cwds: [String]) -> [GitHubCall] {
         if !tokens.isEmpty {
             return tokens.map { _, account in { method, path, body in
-                fetch(GH_API + path, method: method, headers: ["Authorization": "Bearer \(str(account["token"]))", "User-Agent": "lantern-pr", "Accept": "application/vnd.github+json"], body: body)
+                fetchAny(GH_API + path, method: method, headers: ["Authorization": "Bearer \(str(account["token"]))", "User-Agent": "lantern-pr", "Accept": "application/vnd.github+json"], body: body)
             } }
         }
         return accountFolders(cwds.filter { git($0, ["rev-parse", "--is-inside-work-tree"]) != nil }).map { f in { method, path, body in
@@ -63,7 +63,7 @@ extension LanternServer {
             }
             defer { if let input { try? FileManager.default.removeItem(atPath: input) } }
             let r = run(GH, args, cwd: f.cwd, timeout: 30)
-            return (r.ok ? 200 : 400, parse(Data(r.out.utf8)) as? JSON)
+            return (r.ok ? 200 : 400, parse(Data(r.out.utf8)))
         } }
     }
 
@@ -115,12 +115,55 @@ let REVIEW_PAGE = """
     <script>fetch('/desk/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: location.pathname, anchor: location.hash.slice(1) }) }).finally(() => close())</script>
     """
 
-/// The lines a finding cites (its line: a number, or a range like "4-9" or "L4-L9", at most ten lines) with fifteen either side (the finding's
-/// own view shows them all, the list three), clamped to the file. `mark` is the cited range. Nil when the line isn't one of those or is past the end.
-func codeAround(_ text: [String], line: Any?) -> JSON? {
-    guard let m = Re("^L?([0-9]{1,7})(?:\\s*-\\s*L?([0-9]{1,7}))?$").match(str(line)), let a = Int(m[1] ?? ""), a >= 1, a <= text.count else { return nil }
-    let b = min(max(a, Int(m[2] ?? "") ?? a), a + 9, text.count), start = max(1, a - 15), end = min(text.count, b + 15)
-    return ["start": start, "lines": Array(text[(start - 1)..<end]), "mark": [a, b]]
+/// The lines a finding cites: its line, a number or a range like "4-9" or "L4-L9", at most ten lines. Nil for anything else.
+func citedLines(_ line: Any?) -> (Int, Int)? {
+    guard let m = Re("^L?([0-9]{1,7})(?:\\s*-\\s*L?([0-9]{1,7}))?$").match(str(line)), let a = Int(m[1] ?? ""), a >= 1 else { return nil }
+    return (a, min(max(a, Int(m[2] ?? "") ?? a), a + 9))
+}
+/// One line to show: added "+", removed "-" or context " ", its number on the old and new side (0 where it has none), and its text.
+func codeLine(_ kind: String, _ old: Int, _ new: Int, _ text: String) -> JSON { ["kind": kind, "old": old, "new": new, "text": text] }
+
+/// The PR's change around the cited lines: the hunk of the file's patch (GitHub's unified diff) that holds the first one, cut to fifteen lines
+/// either side of them. Nil when no hunk does, so the finding is about code the PR didn't touch.
+func diffAround(_ patch: String, _ a: Int, _ b: Int) -> JSON? {
+    var hunks: [[JSON]] = [], old = 0, new = 0
+    for l in patch.components(separatedBy: "\n") {
+        if let h = Re("^@@ -([0-9]+)(?:,[0-9]+)? \\+([0-9]+)").match(l) { old = Int(h[1] ?? "") ?? 0; new = Int(h[2] ?? "") ?? 0; hunks.append([]); continue }
+        guard !hunks.isEmpty, let kind = l.first.map(String.init), ["+", "-", " "].contains(kind) else { continue } // "\ No newline at end of file"
+        let text = String(l.dropFirst())
+        switch kind {
+        case "+": hunks[hunks.count - 1].append(codeLine("+", 0, new, text)); new += 1
+        case "-": hunks[hunks.count - 1].append(codeLine("-", old, 0, text)); old += 1
+        default: hunks[hunks.count - 1].append(codeLine(" ", old, new, text)); old += 1; new += 1
+        }
+    }
+    let cited = { (l: JSON) in l["kind"] as? String != "-" && (a...b).contains(l["new"] as? Int ?? 0) }
+    guard let hunk = hunks.first(where: { $0.contains(where: { $0["kind"] as? String != "-" && $0["new"] as? Int == a }) }),
+          let first = hunk.firstIndex(where: cited), let last = hunk.lastIndex(where: cited) else { return nil }
+    return ["diff": true, "lines": Array(hunk[max(0, first - 15)...min(hunk.count - 1, last + 15)]), "mark": [a, b]]
+}
+
+/// The file at the audited head around the cited lines, fifteen either side, for a finding about code the PR didn't change. Nil past the end.
+func fileAround(_ text: [String], _ a: Int, _ b: Int) -> JSON? {
+    guard a <= text.count else { return nil }
+    let start = max(1, a - 15), end = min(text.count, b + 15)
+    return ["diff": false, "lines": (start...end).map { codeLine(" ", 0, $0, text[$0 - 1]) }, "mark": [a, min(b, text.count)]]
+}
+
+/// Each changed file's patch in a PR, by path, from GitHub's pull files API through the first account that has it. Nil when none does.
+/// ponytail: ten pages (1,000 files); GitHub itself stops at 3,000.
+func prPatches(repo: String, pr: Int, calls: [GitHubCall]) -> [String: String]? {
+    for call in calls {
+        var patches: [String: String] = [:]
+        for page in 1...10 {
+            let r = call("GET", "/repos/\(repo)/pulls/\(pr)/files?per_page=100&page=\(page)", nil)
+            guard r.status == 200, let files = r.json as? [JSON] else { break }
+            for f in files { if let name = f["filename"] as? String, let patch = f["patch"] as? String { patches[name] = patch } }
+            if files.count < 100 { return patches }
+        }
+        if !patches.isEmpty { return patches }
+    }
+    return nil
 }
 
 /// A file's lines at a commit, from GitHub's contents API through the first account that has it. Nil when none does (or it's too big for the API).
@@ -130,7 +173,7 @@ func fileLines(repo: String, head: String, file: String, calls: [GitHubCall]) ->
     let path = parts.map { $0.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? "" }.joined(separator: "/")
     for call in calls {
         let r = call("GET", "/repos/\(repo)/contents/\(path)?ref=\(head)", nil)
-        guard r.status == 200, r.json?["encoding"] as? String == "base64", let b64 = r.json?["content"] as? String,
+        guard r.status == 200, let j = r.json as? JSON, j["encoding"] as? String == "base64", let b64 = j["content"] as? String,
               let data = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) else { continue }
         var lines = String(decoding: data, as: UTF8.self).components(separatedBy: "\n").map { $0.hasSuffix("\r") ? String($0.dropLast()) : $0 }
         if lines.last == "" { lines.removeLast() } // the newline that ends the file isn't a line of its own
@@ -139,8 +182,9 @@ func fileLines(repo: String, head: String, file: String, calls: [GitHubCall]) ->
     return nil
 }
 
-/// Files already fetched, by repo, head and path. Main thread only. A file that couldn't be fetched isn't kept, so the next open tries again.
-var codeCache: [String: [String]] = [:] // ponytail: never evicted, a few KB per file read; prune by head if it ever shows in memory
+/// What's been fetched, kept by head: files by "repo@head:path", a PR's patches by "repo#pr@head". Main thread only. What couldn't be fetched
+/// isn't kept, so the next open tries again. ponytail: never evicted, a few KB a file or PR; prune by head if it ever shows in memory.
+var codeCache: [String: [String]] = [:], patchCache: [String: [String: String]] = [:]
 
 extension LanternServer {
     /// POST /desk/show { path, anchor } (from REVIEW_PAGE): brings the app's window forward and tells the page which record to open, and where.
@@ -153,24 +197,30 @@ extension LanternServer {
         respond(c, 204)
     }
 
-    /// POST /desk/code { url }: for each of the record's findings, in its order, the code it cites at the record's head ({ start, lines, mark },
-    /// see codeAround) or null. 404 when there's no such record or it has no head; the page then keeps its links to the diff.
+    /// POST /desk/code { url }: for each of the record's findings, in its order, the code it cites ({ diff, lines, mark }, see diffAround and
+    /// fileAround) or null. The PR's change when a hunk holds the cited line, else the file at the record's head. 404 when there's no such
+    /// record or it has no head; the page then keeps its links to the diff.
     func deskCode(_ c: NWConnection, _ body: JSON?) {
-        guard let url = body?["url"] as? String, let record = desk.first(where: { str($0["url"]) == url }), let repo = record["repo"] as? String,
+        guard let url = body?["url"] as? String, let record = desk.first(where: { str($0["url"]) == url }), let repo = record["repo"] as? String, let pr = record["pr"] as? Int,
               Re("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").test(repo), let head = record["head"] as? String, Re("^[0-9a-f]{7,40}$").test(head)
         else { return respond(c, 404) }
-        let findings = record["findings"] as? [JSON] ?? [], cached = codeCache
+        let findings = record["findings"] as? [JSON] ?? [], files = codeCache, patchKey = "\(repo)#\(pr)@\(head)", cachedPatches = patchCache[patchKey]
         let tokens = accounts.items, cwds = sessions.items.map { str($0.1["cwd"]) }.filter { !$0.isEmpty }
         DispatchQueue.global().async {
-            var files: [String: [String]] = [:]
             lazy var calls = self.githubCalls(tokens: tokens, cwds: cwds)
-            for file in Set(findings.compactMap { $0["file"] as? String }) {
+            var fetched: [String: [String]] = [:]
+            let cites = findings.compactMap { f in (f["file"] as? String).flatMap { file in citedLines(f["line"]).map { (file, $0) } } }
+            let patches = cites.isEmpty ? nil : cachedPatches ?? prPatches(repo: repo, pr: pr, calls: calls)
+            let out = findings.map { f -> Any in
+                guard let file = f["file"] as? String, let (a, b) = citedLines(f["line"]) else { return NSNull() }
+                if let patch = patches?[file], let diff = diffAround(patch, a, b) { return diff }
                 let key = "\(repo)@\(head):\(file)"
-                if let lines = cached[key] ?? fileLines(repo: repo, head: head, file: file, calls: calls) { files[key] = lines }
+                if fetched[key] == nil, let lines = files[key] ?? fileLines(repo: repo, head: head, file: file, calls: calls) { fetched[key] = lines }
+                return fetched[key].flatMap { fileAround($0, a, b) } ?? NSNull()
             }
-            let out = findings.map { f -> Any in (f["file"] as? String).flatMap { files["\(repo)@\(head):\($0)"] }.flatMap { codeAround($0, line: f["line"]) } ?? NSNull() }
             DispatchQueue.main.async {
-                codeCache.merge(files) { a, _ in a }
+                codeCache.merge(fetched) { a, _ in a }
+                if let patches { patchCache[patchKey] = patches }
                 self.respond(c, 200, "application/json", Data(jsonText(out).utf8))
             }
         }

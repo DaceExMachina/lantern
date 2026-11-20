@@ -155,6 +155,7 @@ In UI CSS, write `var(--space-2)`, never `8px`, and `var(--ink-dim)`, never `#8F
 | Session states | `--state-working`, `--state-waiting`, `--state-snoozed`, `--state-idle`, and the lantern's `--lantern-warm`, `--lantern-violet`, `--lantern-quiet` |
 | Hover card | `--state-waiting-chip` the "needs you" pill · `--error-surface` and `--error-ink` the error pill · `--surface-tray` the tray of work under the card · `--agents-surface`, `--agents-line`, `--agents-ink`, `--agents-ink-dim` the running agents' band, and the "waiting on agents" pill |
 | PR needs | `--pr-ready`, `--pr-failing`, `--pr-changes`, `--pr-feedback` (the last word since the latest push is a reviewer's), `--pr-draft`, `--pr-in-review`, `--pr-mention` |
+| Diffs | `--diff-add` and `--diff-add-ink` an added line and its +, `--diff-del` and `--diff-del-ink` a removed line and its - (a finding's code in the review panel) |
 | Spacing | `--space-0-5` 2px · `--space-1` 4px · `--space-1-5` 6px · `--space-2` 8px · `--space-3` 12px · `--space-4` 16px · `--space-5` 24px · `--space-6` 32px |
 | Controls | `--control-height` the settings menu's controls: the off \| on switch, the time input and the lantern picker |
 | Radius | `--radius-sm` 3px · `--radius-md` 6px controls · `--radius-lg` 10px panels and cards · `--radius-pill` |

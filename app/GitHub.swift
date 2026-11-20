@@ -129,14 +129,19 @@ func accountFolders(_ cwds: [String]) -> [(top: String, cwd: String)] {
 }
 /// A blocking HTTPS request, for background queues only.
 func fetch(_ url: String, method: String = "GET", headers: [String: String], body: Any? = nil) -> (status: Int, json: JSON?) {
+    let r = fetchAny(url, method: method, headers: headers, body: body)
+    return (r.status, r.json as? JSON)
+}
+/// fetch, for an answer that may be a list.
+func fetchAny(_ url: String, method: String = "GET", headers: [String: String], body: Any? = nil) -> (status: Int, json: Any?) {
     var req = URLRequest(url: URL(string: url)!, timeoutInterval: 30)
     req.httpMethod = method
     headers.forEach { req.setValue($1, forHTTPHeaderField: $0) }
     if let body { req.httpBody = try? JSONSerialization.data(withJSONObject: body) }
-    var result: (Int, JSON?) = (0, nil)
+    var result: (Int, Any?) = (0, nil)
     let done = DispatchSemaphore(value: 0)
     URLSession.shared.dataTask(with: req) { data, response, _ in
-        result = ((response as? HTTPURLResponse)?.statusCode ?? 0, data.flatMap(parse) as? JSON)
+        result = ((response as? HTTPURLResponse)?.statusCode ?? 0, data.flatMap(parse))
         done.signal()
     }.resume()
     done.wait()

@@ -3474,13 +3474,16 @@ test('a link into the reviews answers a page that hands it back, and /desk/show 
   assert.strictEqual(plain.status, 404, 'only a JSON post, which other websites can\'t send');
 });
 
-// The code each finding cites (POST /desk/code), from GitHub's contents API at the record's head, against a stand-in GitHub.
-test('the detail panel gets the lines each finding cites at the head, null where there are none, and a file once', async t => {
+// The code each finding cites (POST /desk/code): the PR's change from GitHub's pull files API when a hunk holds the cited line, else the file
+// at the record's head from the contents API, against a stand-in GitHub.
+test('the finding view gets the PR\'s change around each cited line, else the file at head, else null; each fetched once', async t => {
   const seen = [], file = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+  const patch = '@@ -1,4 +1,5 @@\n line 1\n-old 2\n+line 2\n+line 3\n line 4\n\\ No newline at end of file';
   const stub = http.createServer((req, res) => {
     const reply = (status, o) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
     seen.push(req.url);
     if (req.url === '/graphql') return reply(200, { data: {} });
+    if (req.url === '/repos/o/app/pulls/1/files?per_page=100&page=1') return reply(200, [{ filename: 'src/b c.ts', patch }, { filename: 'img.png' }]);
     if (req.url === '/repos/o/app/contents/src/b%20c.ts?ref=abc1234') return reply(200, { encoding: 'base64', content: Buffer.from(file).toString('base64').replace(/(.{60})/g, '$1\n') });
     reply(404, { message: 'Not Found' });
   });
@@ -3488,8 +3491,8 @@ test('the detail panel gets the lines each finding cites at the head, null where
   t.after(() => stub.close());
   const kc = keychain(JSON.stringify({ token: 'good' }));
   const findings = [
-    { severity: 'major', title: 'One line', file: 'src/b c.ts', line: 2 },
-    { severity: 'minor', title: 'A range', file: 'src/b c.ts', line: 'L18-L20' },
+    { severity: 'major', title: 'In the change', file: 'src/b c.ts', line: 2 },
+    { severity: 'minor', title: 'Unchanged code', file: 'src/b c.ts', line: 'L18-L20' },
     { severity: 'nit', title: 'Past the end', file: 'src/b c.ts', line: 99 },
     { severity: 'nit', title: 'Gone', file: 'gone.ts', line: 1 },
     { severity: 'nit', title: 'Climbs out', file: '../secret', line: 1 },
@@ -3502,13 +3505,15 @@ test('the detail panel gets the lines each finding cites at the head, null where
   await until(async () => (await code('https://github.com/o/app/pull/1'))[1]?.[0], 'the account to load');
   const [status, out] = await code('https://github.com/o/app/pull/1');
   assert.strictEqual(status, 200);
-  assert.deepStrictEqual(out[0], { start: 1, lines: Array.from({ length: 17 }, (_, i) => `line ${i + 1}`), mark: [2, 2] }, 'fifteen either side, clamped at the top');
-  assert.deepStrictEqual(out[1], { start: 3, lines: Array.from({ length: 18 }, (_, i) => `line ${i + 3}`), mark: [18, 20] }, 'a range, clamped at the end');
+  const l = (kind, old, nu, text) => ({ kind, old, new: nu, text });
+  assert.deepStrictEqual(out[0], { diff: true, mark: [2, 2], lines: [l(' ', 1, 1, 'line 1'), l('-', 2, 0, 'old 2'), l('+', 0, 2, 'line 2'), l('+', 0, 3, 'line 3'), l(' ', 3, 4, 'line 4')] },
+    'the hunk, numbered on both sides, without the no-newline note');
+  assert.deepStrictEqual(out[1], { diff: false, mark: [18, 20], lines: Array.from({ length: 18 }, (_, i) => l(' ', 0, i + 3, `line ${i + 3}`)) }, 'not in any hunk: the file at head, fifteen either side, clamped');
   assert.deepStrictEqual(out.slice(2), [null, null, null, null], 'past the end, a file GitHub doesn\'t have, a path out of the repo, no file');
   assert.ok(!seen.some(u => u.includes('secret')), 'a path out of the repo is never asked for');
   const asked = seen.length;
   await code('https://github.com/o/app/pull/1');
-  assert.deepStrictEqual(seen.slice(asked).filter(u => u !== '/graphql'), ['/repos/o/app/contents/gone.ts?ref=abc1234'], 'the file it has is kept; the one it didn\'t get is asked for again');
+  assert.deepStrictEqual(seen.slice(asked).filter(u => u !== '/graphql'), ['/repos/o/app/contents/gone.ts?ref=abc1234'], 'the patches and the file it has are kept; the one it didn\'t get is asked for again');
   assert.deepStrictEqual(await code('https://github.com/o/app/pull/2'), [404, null], 'no head: nothing to show it at');
   assert.deepStrictEqual(await code('https://github.com/o/app/pull/9'), [404, null], 'no such record');
 });
