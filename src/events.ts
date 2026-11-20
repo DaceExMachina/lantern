@@ -1,7 +1,7 @@
 import { recordUsage } from './scene/heat';
 import { Q } from './scene/scene';
 import { useLanternStore } from './stores/lantern';
-import { fetchStats, isGitHub, isNowPlaying, isReview, isStalePR, isUsage, parseDesk, parseJson, parseSettings } from './types';
+import { fetchStats, isGitHub, isNowPlaying, isReview, isReviewLink, isStalePR, isUsage, parseDesk, parseJson, parseSettings } from './types';
 
 // The chrome's line to the server. The scene still opens its own EventSource (src/wiring.ts),
 // so for now there are two connections.
@@ -19,6 +19,8 @@ export function connect(store = useLanternStore()) {
   listen('reviews', t => { const v = parseJson(t); store.reviews = Array.isArray(v) ? v.filter(isReview) : []; });
   listen('stale', t => { const v = parseJson(t); store.stale = Array.isArray(v) ? v.filter(isStalePR) : []; });
   listen('desk', t => { store.desk = parseDesk(parseJson(t)); });
+  // a link into the reviews (app/Review.swift) opens in the app's window only, not in a browser tab or the iTerm2 panel
+  listen('show', t => { const v = parseJson(t); if (Q.has('app') && isReviewLink(v)) store.reviewLink = v; });
   // ?style= previews one lantern, whatever the settings say (the scene does the same)
   listen('settings', t => { up(); const settings = parseSettings(parseJson(t)); store.settings = { ...settings, style: Q.get('style') ?? settings.style }; if (settings.systemStats === false) store.usage = null; });
   listen('usage', t => { const v = parseJson(t); if (isUsage(v)) { recordUsage(v); store.usage = v; } });

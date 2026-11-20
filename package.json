@@ -21,10 +21,13 @@
     "snapshots": "node scripts/snapshots.js"
   },
   "devDependencies": {
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.20.5",
     "@vitejs/plugin-vue": "^6.0.10",
     "@vue/test-utils": "^2.5.1",
     "happy-dom": "^21.0.1",
+    "highlight.js": "^11.11.1",
+    "markdown-it": "^14.1.0",
     "pinia": "^4.1.0",
     "typescript": "^5.9.3",
     "vite": "^8.3.4",

@@ -94,6 +94,25 @@ The reviews list also holds your review desk's notes. The desk is a Claude sessi
 
 Click a row with notes to open them in a panel over the list: the verdict, the findings worst first (each file and line links to that spot in the PR's diff), what is being asked of you (with a link to the exact comment that asks it, when the desk has one) with the desk's draft reply and a button to copy it, and the recent posts, newest first. Each finding has a checkbox, with blockers and majors ticked to start, and a "Post 3 as your review" button at the far right of the actions row (the count follows your ticks, and there is no button while nothing is ticked) sends the ticked ones to GitHub as one review in your name, through whichever GitHub account Lantern is signed in to that can see the repo (the connected accounts, else your `gh`). A finding with a file and line becomes a comment on that line, and the rest go in the review's text. When it is done a link to the review shows beside where the button was, and those findings show as posted and aren't offered again until the desk audits new commits. In the actions row, "Open on GitHub" opens the PR, "Talk it over" brings up the desk's own session (shown while it runs), and "Dismiss" hides the notes until there is something new on the PR. The desk's own file is never deleted. A row without notes opens the PR on GitHub, as before.
 
+Click a finding's title to step into it: the finding on its own, with its severity, its file and line linked into the diff, its title, the desk's longer explanation (or its one-line detail when there isn't one), the code it cites, and anything else the desk wrote on it. "All findings" at the top left, or Escape, steps back to it in the list. The code is the PR's change around the cited lines: added lines green, removed lines red, numbered on the old and new side, coloured by the file's language, with a bar beside the cited lines. When the finding is about code the PR didn't change, it's the file as it was at the commit the desk audited, fifteen lines either side, instead. Lantern fetches both through the same GitHub account it posts reviews with, the first time you open a finding on that PR, and keeps them until it restarts. When it can't get either (no account can see the repo, or the file is too big), the finding keeps just its text and its link to the diff.
+
+Each finding in a desk record has a `severity`, a `title` (the claim, in a line), a `detail` (a sentence the list shows), and usually a `file` and a `line` (a number, or a range like `4-9`). It can also have an `explanation`: a few paragraphs of Markdown on what's wrong, why, a concrete case that breaks, and the fix, with inline code and short code blocks. The finding's own view shows it in place of the detail. Lantern shows it with no raw HTML and no images, and only http(s) links, which open in your browser. Any other text or number field on a finding shows at the bottom of its view.
+
+### Links into the panel
+
+A link opens the panel on one PR's notes, in the Lantern window, which comes to the front (the desk puts these in its chat, so you can click straight from your terminal or the Claude app):
+
+```
+http://localhost:7717/review/<owner>/<repo>/<pr>#finding-<i>
+http://localhost:7717/review/<owner>/<repo>/<pr>#summary
+http://localhost:7717/review/<owner>/<repo>/<pr>#ask
+http://localhost:7717/review/<owner>/<repo>/<pr>
+```
+
+`<i>` counts from 0 in the order of the record's `findings`, whatever order the panel lists them in. A finding link opens that finding on its own, as if you had clicked it, and "All findings" steps back to the list. A summary or ask link scrolls the notes to it and outlines it. With no anchor, or one past the last finding, the notes open at the top. A PR the desk has no notes on, or a link that doesn't fit the pattern, opens the reviews list instead. Use `localhost`, not `127.0.0.1`: iTerm2 only makes a link clickable when its host ends in letters. Use your own port if you changed it.
+
+The link goes to your browser first. Lantern answers with a small page that hands the PR and anchor back and closes its own tab, and the Lantern window opens the notes. If your browser won't let the page close itself, the tab says "Opened in Lantern" and you can close it.
+
 ## Session text on the paper
 
 On the book-page barrel and the round chōchin, paragraphs your sessions wrote wrap round the paper like print on a drum or a globe. They squeeze as they turn toward the sides and vanish round the back, on the rows between the wires. On the chōchin they also squash toward the top and bottom, where the paper curves away. A new one fades in every twenty seconds or so and lingers for about a minute, overlapping the others. Some are printed on the inside, mirrored. They read best near the flame.
