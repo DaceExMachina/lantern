@@ -27,7 +27,7 @@ const LANTERN = 'var(--ink-dim)', ELSE = 'var(--ink-faint)';
 
 const store = useLanternStore();
 const roomy = !document.body.matches('.panel, .screensaver, .ambient'); // fixed by the time the chrome mounts
-const u = computed(() => roomy && store.settings.systemStats !== false ? store.usage : null);
+const u = computed(() => roomy && !store.narrow && store.settings.systemStats !== false ? store.usage : null);
 const memPct = computed(() => u.value ? Math.min(100, u.value.mac.used / u.value.mac.total * 100) : 0);
 const cpuPct = computed(() => Math.min(100, u.value?.mac.cpu ?? 0));
 const meters = computed(() => u.value ? [
