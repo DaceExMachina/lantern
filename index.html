@@ -263,7 +263,7 @@
   #reviews .top .sev { display: flex; align-items: center; gap: var(--space-1); } /* a finding count: a dot in its severity's colour, then the number */
   #reviews .top .sev i { width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: currentColor; }
   :is(#reviews, #review) :is(.queued, .auditing, .clean) { color: var(--ink-dim); }
-  #reviews .row.working .go .face { outline: 1px dashed var(--accent-violet); outline-offset: -1px; background: color-mix(in srgb, var(--accent-violet) 9%, transparent); } /* the desk is still on it: not ready for me yet */
+  #reviews .row.working .go .face { background: color-mix(in srgb, var(--accent-violet) 9%, transparent); } /* the desk is still on it: not ready for me yet */
   #reviews .row.working .ti { color: var(--ink-dim); }
   #reviews .top .working { display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--accent-violet); background: color-mix(in srgb, var(--accent-violet) 22%, transparent); color: var(--ink-strong); }
   #reviews .top .working i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-violet); box-shadow: 0 0 var(--space-1-5) var(--accent-violet); animation: live 1.6s ease-in-out infinite; }
@@ -429,6 +429,7 @@
   #usage .tracks { grid-column: 1 / -1; display: grid; gap: var(--space-0-5); } /* CPU's bar, and RAM's right under it */
   #usage .track { display: block; height: 3px; border-radius: var(--radius-pill); overflow: hidden; background: var(--line-soft); }
   #reviews .row { position: relative; }
+  #reviews .row + .row { margin-top: var(--space-1); } /* a gap, so neighbouring tinted faces don't touch */
   #reviews .go { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
   #reviews .pri { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
   #reviews :is(.pri, .pick button) .face { display: flex; align-items: center; padding: 0 var(--space-1); border-radius: var(--radius-sm); color: var(--ink-faint); }
