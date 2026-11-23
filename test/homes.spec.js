@@ -26,7 +26,12 @@ async function open(kx = 1) {
     /** settled at home */
     settled: () => { for (const m of moths.values()) m.home = m.spot; },
     /** the lantern swung out to `deg` (frame.ts swingLantern, which a standing lantern holds at 0) */
-    sway: (deg, s) => { frame.swing.a = deg; frame.swingLantern(0, s); },
+    sway: (deg, s) => {
+      frame.swing.a = deg;
+      // swingLantern also repaints the lantern's facets and gradients, a document-wide query each (the bulk of this file's time in happy-dom); only swayAngle matters here
+      const query = vi.spyOn(document, 'querySelectorAll').mockReturnValue([]);
+      try { frame.swingLantern(0, s); } finally { query.mockRestore(); }
+    },
     /** a frame of every session moth's aim at frame clock `s` */
     fly: s => { for (const [k, m] of moths) if (!m.parentId && !m.satellite) { const aim = frame.mothTarget(k, m, 1 / 60, s); if (aim) frame.mothMove(m, aim, 1 / 60, s); } },
   };
@@ -294,7 +299,7 @@ test('landed moths spread up and down the paper, in their homes\' order, never o
       assert.ok(Math.max(...ys) - Math.min(...ys) > 0.4 * height, `${where}: they span ${(Math.max(...ys) - Math.min(...ys)).toFixed(0)} of ${height.toFixed(0)}`);
     }
   }
-}, 300_000); // ponytail: 216 lantern/size/skip combinations of 300 frames each, about 26s here and over 100s on a CI runner, past vitest's 120s default; trim the grid if it grows
+}, 300_000); // ponytail: 216 lantern/size/skip combinations of 300 frames each, about 10s here (26s before sway stopped repainting the lantern), several times that on a CI runner, past vitest's 120s default; trim the grid if it grows
 // A landed moth rides its spot exactly (mothMove), so its spot has to glide, never jump. Landing depends on nothing but
 // the moth's own home, and a home glides round the ring (glideHome), so its spot glides with it. On main, a home gliding
 // across the top took its spot over to the other side in a single frame, 87 units.
