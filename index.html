@@ -254,7 +254,6 @@
   #reviews { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); /* stops below the drag strip, like #stats and #recap; scrolls inside (.flyup's 52px is its bottom inset) */ left: var(--space-3); right: auto; width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
   /* the review desk in the list: where its audit stands at the end of a row, a follow-up's speech bubble, and a dot for news */
   #reviews button.go { all: unset; box-sizing: border-box; cursor: pointer; display: block; width: 100%; padding: 0 var(--space-2); } /* a row that opens the detail, laid out like a link row */
-  #reviews .go .new { position: absolute; left: var(--space-1); top: calc(var(--space-1) + .75em); translate: 0 -50%; width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: var(--accent-violet); } /* in the gutter, level with the title */
   #reviews .me .bubble { flex: none; display: flex; align-items: center; gap: var(--space-0-5); color: var(--accent-violet); }
   #reviews .me .bubble svg { width: var(--space-4); height: var(--space-4); }
   #reviews .top { display: flex; align-items: baseline; gap: var(--space-2); } /* the title, clipped first, then where the audit stands */

@@ -229,7 +229,7 @@ test('the status sits beside the title, which clips first, so the author line ke
 test('a record with no request in the list is a row of its own, a follow-up with a speech bubble and its post count, and a firefly\'s request stays listed while it has one', async () => {
   store.reviews = [request(1), request(2)];
   store.sessions = [{ id: 's', state: 'working', subagents: [], github: [request(1), request(2)] }];
-  desk([rec(2), rec(7, { kind: 'mention', author: 'dana' }), rec(8, { kind: 'followup', author: 'noah', activity: [{ at: '2026-11-17T10:00:00Z', author: 'noah' }, { at: '2026-11-17T11:00:00Z', author: 'sam' }] })]);
+  desk([rec(2), rec(7, { kind: 'mention', ask: 'Can you check?', author: 'dana' }), rec(8, { kind: 'followup', ask: 'Reply?', author: 'noah', activity: [{ at: '2026-11-17T10:00:00Z', author: 'noah' }, { at: '2026-11-17T11:00:00Z', author: 'sam' }] })]);
   await nextTick();
   assert.deepStrictEqual(listed(), ['2', '7', '8'], 'app#1 flies as a firefly with no record: left out');
   assert.strictEqual(button().textContent, '3');
@@ -240,22 +240,16 @@ test('a record with no request in the list is a row of its own, a follow-up with
   assert.strictEqual(row(7).querySelector('.bubble'), null, 'only follow-ups get one');
 });
 
-test('an audit whose request has gone stays listed only while it has something unread', async () => {
-  desk([rec(9), rec(10, { status: 'queued' })]);
+test('a record whose request has gone stays only if it asks something of me: a review leaves, a mention with an ask stays, a follow-up without one leaves', async () => {
+  desk([rec(9), rec(10, { status: 'queued' }), rec(15, { ask: 'Anything?' }), rec(11, { kind: 'mention', ask: 'Can you check?' }), rec(12, { kind: 'mention' }), rec(13, { kind: 'followup', ask: 'Reply?' }), rec(14, { kind: 'followup' })]);
   await nextTick();
-  assert.deepStrictEqual(listed(), ['9'], 'unread: listed; a queued one with no request and nothing new: not');
-  assert.strictEqual(row(9).querySelector('.me').textContent, 'app#9', 'no need, no word');
-  row(9).click(); await nextTick();
-  assert.deepStrictEqual(listed(), ['9'], 'seen, but its detail is open: it stays until the panel closes (see the detail panel tests)');
-  store.review = null; await nextTick(); // the panel closed
-  assert.ok(!button(), 'seen and closed: it leaves the list');
-  desk([rec(9, { lastActivity: '2026-11-17T12:00:00Z', activity: [{ at: '2026-11-17T12:00:00Z', author: 'sam' }] })]); await nextTick();
-  assert.deepStrictEqual(listed(), ['9'], 'a new post brings it back');
+  assert.deepStrictEqual(listed(), ['11', '13'], 'reviews (new or not) and ask-less notes are gone; the ones with an ask stay');
+  assert.strictEqual(row(11).querySelector('.new'), null, 'no unread dot');
 });
 
 test('a PR the desk marked merged or closed is left out of the list, whatever its kind, and a malformed closed leaves the record listed', async () => {
   store.reviews = [request(1), request(2)];
-  desk([rec(1, { closed: { state: 'merged', at: 't' } }), rec(2), rec(7, { kind: 'mention', closed: { state: 'closed' } }), rec(8, { kind: 'mention' }), rec(9, { closed: { state: 'bogus' } })]);
+  desk([rec(1, { closed: { state: 'merged', at: 't' } }), rec(2), rec(7, { kind: 'mention', ask: 'x', closed: { state: 'closed' } }), rec(8, { kind: 'mention', ask: 'x' }), rec(9, { kind: 'mention', ask: 'x', closed: { state: 'bogus' } })]);
   await nextTick();
   assert.deepStrictEqual(listed(), ['2', '8', '9'], 'a closed request, a closed mention: gone; an unclosed one, or a bogus state, stays');
   assert.strictEqual(button().textContent, '3', 'the count follows');
@@ -275,37 +269,12 @@ test('an audit the desk is still on (queued or auditing) shows a labelled in-pro
 
 test('a follow-up row takes a priority like a request, and sorts by it', async () => {
   store.reviews = [request(1)];
-  desk([rec(8, { kind: 'followup' })]);
+  desk([rec(8, { kind: 'followup', ask: 'x' })]);
   await nextTick();
   assert.deepStrictEqual(listed(), ['1', '8']);
   row(8).closest('.row').querySelector('.pri').click(); await nextTick();
   document.querySelectorAll('#reviews .pick button')[0].click(); await nextTick();
   assert.deepStrictEqual([listed(), posts.at(-1)], [['8', '1'], ['/settings', { reviewPriority: { [rec(8).url]: 0 } }]]);
-});
-
-test('a dot marks news since I last opened a record: a post, or a finished audit of a new head, not a repeat request', async () => {
-  store.reviews = [request(1), request(2)];
-  desk([rec(1, { lastActivity: '2026-11-17T12:00:00Z' }), rec(2, { status: 'auditing' })]);
-  await nextTick();
-  const dot = n => !!row(n).querySelector('.new');
-  assert.deepStrictEqual([dot(1), dot(2)], [true, false], 'never opened: new; an audit still running shows its status, no dot');
-  row(1).click(); await nextTick();
-  assert.deepStrictEqual(posts.at(-1), ['/settings', { reviewSeen: { [rec(1).url]: 'h|2026-11-17T12:00:00Z' } }]);
-  assert.ok(!dot(1), 'seen');
-  row(1).click(); await nextTick();
-  assert.strictEqual(posts.length, 1, 'opening it again with nothing new saves nothing');
-  desk([rec(1, { lastActivity: '2026-11-17T12:00:00Z', at: '2026-11-17T13:00:00Z', requestedBy: 'noah', updated: '2026-11-17T13:00:00Z' })]); await nextTick();
-  assert.ok(!dot(1), 'asked again on the same head: nothing new');
-  desk([rec(1, { lastActivity: '2026-11-17T12:05:00Z' })]); await nextTick();
-  assert.ok(dot(1), 'a newer post');
-  store.settings = parseSettings({ reviewSeen: { [rec(1).url]: 'h|2026-11-17T12:05:00Z' } });
-  desk([rec(1, { lastActivity: '2026-11-17T12:05:00Z', head: 'h2', status: 'auditing' })]); await nextTick();
-  assert.ok(!dot(1), 'a new head still auditing');
-  desk([rec(1, { lastActivity: '2026-11-17T12:10:00Z', head: 'h2', status: 'auditing' })]); await nextTick();
-  row(1).click(); await nextTick();
-  assert.deepStrictEqual([dot(1), posts.at(-1)[1]], [false, { reviewSeen: { [rec(1).url]: 'h|2026-11-17T12:10:00Z' } }], 'a post seen mid-audit marks the post, not the head still being audited');
-  desk([rec(1, { lastActivity: '2026-11-17T12:10:00Z', head: 'h2' })]); await nextTick();
-  assert.ok(dot(1), 'its audit ready');
 });
 
 test('a record that doesn\'t quite fit the shape still shows: a finding or post that can\'t be shown is dropped, not the record', () => {
@@ -380,16 +349,15 @@ describe('the detail panel', () => {
     assert.strictEqual(boxes().length, 4, 'new commits: everything is offered again');
   });
 
-  test('a record with no request stays listed, and its panel open, while its detail is shown, though opening it marked it read; it leaves once the panel closes', async () => {
+  test('a review with no request stays listed, and its panel open, while its detail is shown; it leaves once the panel closes', async () => {
     desk([rec(1, { findings: [{ severity: 'major', title: 'Look' }] })]); await nextTick();
     const row = () => document.querySelector('#reviews .row');
-    assert.ok(store.unread(store.deskShown[0]), 'unread, so it is listed on its own');
-    row().querySelector('.go').click(); await nextTick(); await nextTick(); // the click marks it read; the list is then built again
-    assert.ok(!store.unread(store.deskShown[0]), 'opening it marked it read');
-    assert.ok(row(), 'its row (the panel\'s invoker) is still there');
+    assert.ok(!row(), 'a review with no request isn\'t listed on its own');
+    store.openReview(store.deskShown[0]); await nextTick(); await nextTick(); // opened some other way, e.g. a link
+    assert.ok(row(), 'its row (the panel\'s invoker) is there while the panel is open');
     assert.match(panel().textContent, /Look/, 'and so is the panel');
     panel().dispatchEvent(Object.assign(new Event('toggle'), { newState: 'closed', oldState: 'open' })); await nextTick(); await nextTick();
-    assert.ok(!row(), 'the panel closed: now a read record with no request can go');
+    assert.ok(!row(), 'the panel closed: now it can go');
     assert.strictEqual(store.review, null);
   });
 

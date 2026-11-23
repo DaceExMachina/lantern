@@ -64,27 +64,21 @@ export const useLanternStore = defineStore('lantern', () => {
     post('/settings', { bookmarks: next.map(b => b.id) });
   }
   // ---- the review desk. What's news on a record: its newest post, and for an audit a new head once ready (a repeat request on the
-  // same head isn't news; a mention's or follow-up's time stands in for the head). A mark remembers both as "head|post": opening a
-  // record's detail marks it seen (reviewSeen), and a dot shows news since; dismissing it marks it too (dismissedReviews), hiding
-  // it until there's news. Both are settings kept per PR, which the server prunes to listed PRs.
+  // same head isn't news; a mention's or follow-up's time stands in for the head). Dismissing a record remembers both as "head|post"
+  // (dismissedReviews, a setting kept per PR, which the server prunes to listed PRs) and hides it until there's news.
   const head = (r: DeskRecord) => r.kind === 'review' ? r.head ?? '' : r.at ?? '';
   const newSince = (r: DeskRecord, mark: string | undefined) => {
     const [was = '', wasPost = ''] = mark?.split('|') ?? [];
     return r.status === 'ready' && (mark === undefined || head(r) !== was) || !!r.lastActivity && r.lastActivity !== wasPost;
   };
-  const markOf = (r: DeskRecord, mark: string | undefined) => `${r.status === 'ready' ? head(r) : mark?.split('|')[0] ?? ''}|${r.lastActivity ?? ''}`; // a head is marked only once its audit is ready
-  const unread = (r: DeskRecord) => newSince(r, settings.value.reviewSeen?.[r.url]);
   const deskShown = computed(() => desk.value.records.filter(r => { if (r.closed) return false; const d = settings.value.dismissedReviews?.[r.url]; return d === undefined || newSince(r, d); }));
-  const remember = (key: 'reviewSeen' | 'dismissedReviews', r: DeskRecord) => {
-    const next = { ...settings.value[key], [r.url]: markOf(r, settings.value[key]?.[r.url]) };
-    settings.value = { ...settings.value, [key]: next };
-    post('/settings', { [key]: next });
-  };
-  const dismissReview = (r: DeskRecord) => remember('dismissedReviews', r);
-  function openReview(r: DeskRecord) {
-    review.value = r.url;
-    if (unread(r)) remember('reviewSeen', r);
+  function dismissReview(r: DeskRecord) {
+    const mark = settings.value.dismissedReviews?.[r.url];
+    const next = { ...settings.value.dismissedReviews, [r.url]: `${r.status === 'ready' ? head(r) : mark?.split('|')[0] ?? ''}|${r.lastActivity ?? ''}` }; // a head is marked only once its audit is ready
+    settings.value = { ...settings.value, dismissedReviews: next };
+    post('/settings', { dismissedReviews: next });
   }
+  const openReview = (r: DeskRecord) => { review.value = r.url; };
   const recap = shallowRef<{ stats: Stats; i: number } | null>(null); // the day RecapPanel shows: day `i` of these stats
   // ---- review priorities: 0 (highest) to 3 (low), like a P0 bug, the default 2 isn't kept; the server drops a PR that left the list
   const reviewPriority = (url: string) => settings.value.reviewPriority?.[url] ?? 2;
@@ -94,5 +88,5 @@ export const useLanternStore = defineStore('lantern', () => {
     settings.value = { ...settings.value, reviewPriority: next };
     post('/settings', { reviewPriority: next });
   };
-  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, reviewLink, unread, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
+  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, reviewLink, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
 });

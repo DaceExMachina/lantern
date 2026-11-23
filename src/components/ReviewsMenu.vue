@@ -6,8 +6,8 @@
 // The review desk (a Claude session, /review-desk) leaves a record per PR: an audit of a request, a mention of me, or a follow-up (someone posted
 // on a PR I reviewed or commented on). A request with a record says where the audit stands at the end of its row (a pulsing "Queued" or "Reviewing…" pill while the desk is still at it, which also tints the row so it reads as not ready yet, unlike a merged or closed row's grey; failed; or the
 // findings counted by severity), stays listed even while its PR flies as a firefly, and its click opens the record's detail panel
-// (ReviewDetail.vue) in place of GitHub. A record with no request in the list is a row of its own: a mention, a follow-up (a speech bubble
-// with how many posts), or a review since handled. A PR the desk has marked merged or closed leaves the list altogether. A dot before the title marks news since I last opened the record.
+// (ReviewDetail.vue) in place of GitHub. A record with no request in the list is a row of its own only while it asks something of me (an `ask`): a mention, or a follow-up (a speech bubble
+// with how many posts). A review whose request has gone leaves. A PR the desk has marked merged or closed leaves the list altogether.
 import { computed, nextTick, ref, watch } from 'vue';
 import { NEED, cutShort, hidePrTip, showPrTip, worstFirst } from '../scene/card';
 import { flyColour, offBoard } from '../scene/fireflies';
@@ -27,9 +27,9 @@ const rows = computed((): Row[] => {
   const off = new Set(offBoard(asking, store.sessions, store.settings.stale === false ? [] : store.stale));
   const asked: Row[] = worstFirst(asking.filter(r => off.has(r) || recs.has(r.url))).map(r => ({ ...r, rec: recs.get(r.url) }));
   const listed = new Set(asked.map(r => r.url));
-  // an audit whose request has gone (reviewed, merged) stays only while it has something unread (the desk keeps every record it wrote), or while its
-  // detail is open: opening it marks it read, and its row is the panel's invoker, so it can't go until the panel closes
-  const own = store.deskShown.filter(d => !listed.has(d.url) && (d.kind !== 'review' || store.unread(d) || d.url === store.review)).map((d): Row => ({ url: d.url, label: `${d.repo.split('/').pop()}#${d.pr}`, title: d.title, author: d.author, rec: d }));
+  // a record whose request has gone stays only while it carries an ask (a mention or follow-up; an audit of a handled request is done, though the desk keeps
+  // every record it wrote), or while its detail is open: its row is the panel's invoker, so it can't go until the panel closes
+  const own = store.deskShown.filter(d => !listed.has(d.url) && (d.kind !== 'review' && !!d.ask || d.url === store.review)).map((d): Row => ({ url: d.url, label: `${d.repo.split('/').pop()}#${d.pr}`, title: d.title, author: d.author, rec: d }));
   return [...asked, ...own].sort((a, b) => store.reviewPriority(a.url) - store.reviewPriority(b.url));
 });
 // where the desk stands, at the end of the row: its findings by severity once ready, or its status
@@ -77,7 +77,6 @@ const tip = (e: Event, x: Row) => { const el = e.currentTarget; if (el instanceo
         <!-- a row with a desk record opens its detail panel over the list; one without goes to GitHub -->
         <component :is="r.rec ? 'button' : 'a'" class="go" v-bind="r.rec ? { popovertarget: 'review', popovertargetaction: 'show' } : { href: r.url, target: '_blank', rel: 'noopener' }"
           @click="r.rec && store.openReview(r.rec)" @pointerenter="tip($event, r)" @focus="tip($event, r)" @pointerleave="hidePrTip" @blur="hidePrTip">
-          <i v-if="r.rec && store.unread(r.rec)" class="new" role="img" aria-label="New since you last looked"></i>
           <span class="face">
             <span class="top">
               <span class="ti">{{ r.title ?? '' }}</span>
