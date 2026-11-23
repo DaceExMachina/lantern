@@ -421,3 +421,15 @@ describe('the detail panel', () => {
     assert.strictEqual(row(1).tagName, 'BUTTON', 'a new post brings the record back');
   });
 });
+
+test('in a narrow window the button and the list are gone, and back when the window widens', async () => {
+  const resize = w => { vi.stubGlobal('innerWidth', w); dispatchEvent(new Event('resize')); return nextTick(); };
+  store.reviews = [{ url: 'https://github.com/o/app/pull/2', label: 'app#2', title: 'Fix it', need: 'waiting' }];
+  await resize(1440);
+  assert.ok(button(), 'wide: the button shows');
+  await resize(400);
+  assert.ok(!button() && !document.getElementById('reviews'), 'narrow: no button, no list');
+  await resize(1440);
+  assert.ok(button());
+  vi.unstubAllGlobals();
+});
