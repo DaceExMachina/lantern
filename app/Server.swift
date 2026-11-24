@@ -1265,7 +1265,6 @@ final class LanternServer {
         }
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
         if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
-        if req.method == "GET" && page.hasPrefix("/review/") { return respond(c, 200, "text/html; charset=utf-8", Data(REVIEW_PAGE.utf8)) } // a link into the reviews (Review.swift)
         // any file in dist/ with a known extension, in plain folders (no dot-names, so no ..)
         let types = ["js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
                      "woff2": "font/woff2", "json": "application/json", "map": "application/json"]

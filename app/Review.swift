@@ -1,5 +1,5 @@
 // Posting the review desk's findings I checked as one GitHub review, from the detail panel (POST /desk/post), links that open the panel
-// (GET /review/..., POST /desk/show), and the code each finding cites (POST /desk/code).
+// (lantern:// URLs, POST /desk/show), and the code each finding cites (POST /desk/code).
 import Foundation
 import Network
 
@@ -105,15 +105,10 @@ extension LanternServer {
 
 // MARK: links into the detail panel, and the code a finding cites
 
-/// A link to a record's detail: http://localhost:7717/review/<owner>/<repo>/<pr>, with #finding-<i> (its place in the record's findings),
-/// #summary or #ask. The fragment never reaches a server, so GET answers a page (REVIEW_PAGE) that posts it to /desk/show, then closes its tab.
-let REVIEW_PATH = Re("^/review/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/([0-9]{1,9})/?$")
+/// A link to a record's detail: lantern://review/<owner>/<repo>/<pr>, with #finding-<i> (its place in the record's findings), #summary or
+/// #ask. Any app can open one, so the app (main.swift) forwards the URL as it came to POST /desk/show, which holds it to these patterns.
+let REVIEW_URL = Re("^lantern://review/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/([0-9]{1,9})/?$")
 let REVIEW_ANCHOR = Re("^(finding-[0-9]{1,4}|summary|ask)$")
-let REVIEW_PAGE = """
-    <!doctype html><meta charset="utf-8"><meta name="color-scheme" content="dark light"><title>Lantern</title>
-    <p style="font: 14px system-ui; margin: 2em">Opened in Lantern. You can close this tab.</p>
-    <script>fetch('/desk/show', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: location.pathname, anchor: location.hash.slice(1) }) }).finally(() => close())</script>
-    """
 
 /// The lines a finding cites: its line, a number or a range like "4-9" or "L4-L9", at most ten lines. Nil for anything else.
 func citedLines(_ line: Any?) -> (Int, Int)? {
@@ -187,10 +182,11 @@ func fileLines(repo: String, head: String, file: String, calls: [GitHubCall]) ->
 var codeCache: [String: [String]] = [:], patchCache: [String: [String: String]] = [:]
 
 extension LanternServer {
-    /// POST /desk/show { path, anchor } (from REVIEW_PAGE): brings the app's window forward and tells the page which record to open, and where.
+    /// POST /desk/show { url } (from the app, which was opened with a lantern:// URL): brings the app's window forward and tells the page which record to open, and where.
     /// Whatever doesn't fit the patterns is dropped, so a bad link still opens the reviews list.
     func showDesk(_ c: NWConnection, _ body: JSON?) {
-        let m = REVIEW_PATH.match(body?["path"] as? String ?? ""), anchor = body?["anchor"] as? String ?? ""
+        let parts = (body?["url"] as? String ?? "").split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        let m = REVIEW_URL.match(parts[0]), anchor = parts.count > 1 ? parts[1] : ""
         let pr = m.flatMap { Int($0[2] ?? "") } ?? 0
         send("event: show\ndata: \(jsonText(["repo": pr > 0 ? m?[1] ?? "" : "", "pr": pr, "anchor": REVIEW_ANCHOR.test(anchor) ? anchor : ""]))\n\n")
         if handActivation { print("show") } // the app's window, its parent, comes forward (main.swift); a bare server (tests, previews) has no window

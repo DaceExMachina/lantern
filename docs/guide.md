@@ -103,13 +103,13 @@ Each finding in a desk record has a `severity`, a `title` (the claim, in a line)
 A link opens the panel on one PR's notes, in the Lantern window, which comes to the front (the desk puts these in its chat, so you can click straight from your terminal or the Claude app):
 
 ```
-http://localhost:7717/review/<owner>/<repo>/<pr>#finding-<i>
-http://localhost:7717/review/<owner>/<repo>/<pr>#summary
-http://localhost:7717/review/<owner>/<repo>/<pr>#ask
-http://localhost:7717/review/<owner>/<repo>/<pr>
+lantern://review/<owner>/<repo>/<pr>#finding-<i>
+lantern://review/<owner>/<repo>/<pr>#summary
+lantern://review/<owner>/<repo>/<pr>#ask
+lantern://review/<owner>/<repo>/<pr>
 ```
 
-`<i>` counts from 0 in the order of the record's `findings`, whatever order the panel lists them in. A finding link opens that finding on its own, as if you had clicked it, and "All findings" steps back to the list. A summary or ask link scrolls the notes to it and outlines it. With no anchor, or one past the last finding, the notes open at the top. A PR the desk has no notes on, or a link that doesn't fit the pattern, opens the reviews list instead. Use `localhost`, not `127.0.0.1`: iTerm2 only makes a link clickable when its host ends in letters. Use your own port if you changed it.
+`<i>` counts from 0 in the order of the record's `findings`, whatever order the panel lists them in. A finding link opens that finding on its own, as if you had clicked it, and "All findings" steps back to the list. A summary or ask link scrolls the notes to it and outlines it. With no anchor, or one past the last finding, the notes open at the top. A PR the desk has no notes on, or a link that doesn't fit the pattern, opens the reviews list instead. Clicking one opens Lantern (launching it if it isn't running), whatever app the link is in; any app can send a `lantern://` link, so anything that doesn't fit the pattern is dropped.
 
 The link goes to your browser first. Lantern answers with a small page that hands the PR and anchor back and closes its own tab, and the Lantern window opens the notes. If your browser won't let the page close itself, the tab says "Opened in Lantern" and you can close it.
 

@@ -94,6 +94,23 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
         web.load(URLRequest(url: home))
     }
 
+    // A lantern:// link (see REVIEW_URL in Review.swift) is handed to the server as it came; the server checks it and tells the page. A link that
+    // launched the app waits for the page to load, since the page is what hears the server.
+    var loaded = false, waiting: [URL] = []
+    func application(_ app: NSApplication, open urls: [URL]) { if loaded { urls.forEach(show) } else { waiting += urls } }
+    func show(_ url: URL) {
+        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/desk/show")!)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["url": url.absoluteString])
+        URLSession.shared.dataTask(with: req).resume()
+    }
+    func webView(_ web: WKWebView, didFinish nav: WKNavigation!) {
+        loaded = true
+        // the page opens its event stream a moment after it loads
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.waiting.forEach(self.show); self.waiting = [] }
+    }
+
     // Full screen is a Space of its own, and entering one switches its display to it, which brings Lantern to the front. So it
     // waits until Lantern is brought forward: at once for a Dock or Spotlight launch, and for a background relaunch (`open -g`)
     // not until you click it, so a relaunch leaves your focus where it was.
