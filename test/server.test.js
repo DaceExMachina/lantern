@@ -3492,27 +3492,28 @@ test('a dry run says what it would post and calls nothing', async t => {
   await until(() => /^Dry post: o\/app#1 review, body 0 characters, 1 inline$/m.test(t.output()), 'the dry run to say what it would post');
 });
 
-// Links into the detail panel: GET /review/<owner>/<repo>/<pr> answers a page that posts the path and its #fragment to /desk/show, which
+// Links into the detail panel: the app posts the lantern://review/<owner>/<repo>/<pr>#<anchor> it was opened with to /desk/show, which
 // tells the pages (the app's window acts on it) what to open. What doesn't fit the patterns is dropped, never passed on.
-test('a link into the reviews answers a page that hands it back, and /desk/show passes on only what fits its patterns', async t => {
+test('/desk/show passes on only what fits its patterns', async t => {
   const base = await serve(t);
-  const page = await fetch(base + '/review/o/app/12');
-  assert.deepStrictEqual([page.status, page.headers.get('content-type'), /fetch\('\/desk\/show'/.test(await page.text())], [200, 'text/html; charset=utf-8', true]);
   const shown = [];
   const req = http.get(base + '/events', res => { let text = ''; res.on('data', c => { text += c; for (const m of text.matchAll(/^event: show\ndata: (.*)$/gm)) shown.push(JSON.parse(m[1])); text = text.slice(text.lastIndexOf('\n\n') + 2); }); });
   t.after(() => req.destroy());
   await wait(200);
   const cases = [
-    [{ path: '/review/o/app/12', anchor: 'finding-3' }, { repo: 'o/app', pr: 12, anchor: 'finding-3' }],
-    [{ path: '/review/My-Org/.github/007/', anchor: 'ask' }, { repo: 'My-Org/.github', pr: 7, anchor: 'ask' }],
-    [{ path: '/review/o/app/12', anchor: 'finding-3"><script>' }, { repo: 'o/app', pr: 12, anchor: '' }],
-    [{ path: '/review/o/app/12', anchor: 'finding-' }, { repo: 'o/app', pr: 12, anchor: '' }],
-    [{ path: '/review/o/app/12;rm -rf ~', anchor: 'summary' }, { repo: '', pr: 0, anchor: 'summary' }],
-    [{ path: '/review/o/a$b/12', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
-    [{ path: '/review/o%2Fx/app/1', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
-    [{ path: '/review/o/app/0', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
-    [{ path: '/review/o/app/1234567890', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
-    [{ path: 42, anchor: ['summary'] }, { repo: '', pr: 0, anchor: '' }],
+    [{ url: 'lantern://review/o/app/12#finding-3' }, { repo: 'o/app', pr: 12, anchor: 'finding-3' }],
+    [{ url: 'lantern://review/My-Org/.github/007/#ask' }, { repo: 'My-Org/.github', pr: 7, anchor: 'ask' }],
+    [{ url: 'lantern://review/o/app/12#finding-3"><script>' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ url: 'lantern://review/o/app/12#finding-' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ url: 'lantern://review/o/app/12;rm -rf ~#summary' }, { repo: '', pr: 0, anchor: 'summary' }],
+    [{ url: 'lantern://review/o/a$b/12' }, { repo: '', pr: 0, anchor: '' }],
+    [{ url: 'lantern://review/o%2Fx/app/1' }, { repo: '', pr: 0, anchor: '' }],
+    [{ url: 'lantern://review/o/app/0' }, { repo: '', pr: 0, anchor: '' }],
+    [{ url: 'lantern://review/o/app/1234567890' }, { repo: '', pr: 0, anchor: '' }],
+    [{ url: 'http://localhost:7717/review/o/app/12#summary' }, { repo: '', pr: 0, anchor: 'summary' }],
+    [{ url: 'lantern://other/o/app/12#summary' }, { repo: '', pr: 0, anchor: 'summary' }],
+    [{ url: 'lantern://review/o/app/12#a#summary' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ url: 42 }, { repo: '', pr: 0, anchor: '' }],
   ];
   for (const [body, want] of cases) {
     const before = shown.length;

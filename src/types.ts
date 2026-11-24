@@ -108,7 +108,7 @@ export function parseDeskRecord(x: unknown): DeskRecord | null {
 }
 export const parseDesk = (x: unknown): Desk => isRecord(x)
   ? { records: Array.isArray(x['records']) ? x['records'].flatMap(r => parseDeskRecord(r) ?? []) : [], inbox: isString(x['inbox']) ? x['inbox'] : null } : { records: [], inbox: null };
-/** A link into the reviews (the show event, from http://localhost:7717/review/<owner>/<repo>/<pr>#<anchor>, see app/Review.swift): the record
+/** A link into the reviews (the show event, from lantern://review/<owner>/<repo>/<pr>#<anchor>, see app/Review.swift): the record
  *  to open, and where in it (finding-<i>, its place in the record's findings; summary; ask). repo is "" when the link didn't fit. */
 export interface ReviewLink { repo: string; pr: number; anchor: string }
 export const isReviewLink = (x: unknown): x is ReviewLink => isRecord(x) && isString(x['repo']) && isNumber(x['pr']) && isString(x['anchor']);
