@@ -30,7 +30,7 @@ The [guide](docs/guide.md) has the rest.
 
 ## Works with
 
-Claude Code in iTerm2, Terminal, the Claude desktop app, VS Code and its forks, WezTerm, kitty and Ghostty. [Setup](docs/setup.md#terminals-and-click-to-focus) says what a click does in each.
+Claude Code in iTerm2, Terminal, the Claude desktop app, VS Code and its forks, WezTerm, kitty, Hyper and Ghostty. [Setup](docs/setup.md#terminals-and-click-to-focus) says what a click does in each.
 
 ## Docs
 

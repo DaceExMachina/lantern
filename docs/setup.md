@@ -54,9 +54,11 @@ Clicking the header of a moth's card brings its session to the front. How it doe
 | iTerm2 | Selects its tab. Sessions from before a Lantern restart are matched by tab title. |
 | Terminal | Selects its tab, found by the session's tty. |
 | The Claude desktop app | Opens that session in the app. |
-| VS Code, Cursor and other VS Code forks | Brings forward the window with the session's folder, or opens one. |
+| VS Code | Brings forward the window with the session's folder, and selects its terminal if [Lantern's extension](guide.md#vs-code-and-hyper-companions) is installed. |
+| Cursor and other VS Code forks | Brings forward the window with the session's folder, or opens one. |
 | WezTerm | Activates its pane with `wezterm cli`. |
 | kitty | Focuses its window with `kitten @`, if `allow_remote_control` and `listen_on` are set in kitty.conf. Otherwise it brings kitty forward. |
+| Hyper | Selects its tab and pane, if [Lantern's plugin](guide.md#vs-code-and-hyper-companions) is installed. Otherwise it brings Hyper forward. |
 | Ghostty and anything else | Brings the terminal app forward. |
 
 The first click in iTerm2 or Terminal makes macOS ask whether Lantern may control it. Say yes. Sessions started before you installed or updated Lantern send less detail, so until you restart them, a click may only bring their app forward.

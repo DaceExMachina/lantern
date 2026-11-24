@@ -58,3 +58,14 @@ test('with now playing switched off in the settings the widget is gone, and back
   store.settings = parseSettings({ nowPlaying: true }); await nextTick();
   assert.ok(widget());
 });
+
+test('in a narrow window (the iTerm toolbelt) the widget is gone, and back when the window widens', async () => {
+  const resize = w => { vi.stubGlobal('innerWidth', w); dispatchEvent(new Event('resize')); return nextTick(); };
+  store.nowPlaying = SONG; await resize(1440);
+  assert.strictEqual(widget() !== null, true, 'wide: shown');
+  await resize(400);
+  assert.strictEqual(widget() !== null, false, 'narrow: gone from the layout');
+  await resize(1440);
+  assert.strictEqual(widget() !== null, true);
+  vi.unstubAllGlobals();
+});

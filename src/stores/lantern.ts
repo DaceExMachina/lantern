@@ -6,6 +6,10 @@ import type { Desk, DeskRecord, GitHub, Hovered, NowPlaying, Pin, Review, Review
 
 // No pinning where there's no room: windows under PIN_MIN wide, the iTerm panel and the screensavers.
 const PIN_MIN = 800;
+// Under NARROW wide (the iTerm toolbelt, any small window) the lantern needs the room: now playing, the CPU and memory readout and the
+// reviews button go. Measured: the readout and the now playing strip reach about 210px in from the left, the lantern's left edge
+// is half the width less 57px, so they meet below ~520px.
+const NARROW = 520;
 
 // What the chrome reads. Fed by src/events.ts, the scene's chrome.update (src/main.ts) and the recap's openRecap, which sets
 // `recap`; nothing per-frame writes it. Arrays and
@@ -37,6 +41,7 @@ export const useLanternStore = defineStore('lantern', () => {
   const pinned = computed(() => settings.value.pinned ?? []);
   const width = ref(innerWidth);
   addEventListener('resize', () => { width.value = innerWidth; });
+  const narrow = computed(() => width.value < NARROW);
   const roomy = !document.body.matches('.panel, .screensaver, .ambient'); // fixed by the time the chrome mounts
   const pinnable = computed(() => roomy && width.value >= PIN_MIN);
   // every pinned session as this window last saw it, in pin order: one that ends stays, to be shown as it was, until unpinned
@@ -88,5 +93,5 @@ export const useLanternStore = defineStore('lantern', () => {
     settings.value = { ...settings.value, reviewPriority: next };
     post('/settings', { reviewPriority: next });
   };
-  return { reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, reviewLink, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
+  return { narrow, reviewPriority, setReviewPriority, sessions, hovered, expanded, pinned, pinnable, docked, setPins, togglePin, bookmarks, toggleBookmark, desk, deskShown, dismissReview, review, reviewLink, openReview, now, settings, reviews, stale, reviewsOpen, link, github, stats, statsFailed, usage, recap, nowPlaying, nowPlayingArt };
 });

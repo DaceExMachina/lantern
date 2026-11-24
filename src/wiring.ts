@@ -9,7 +9,7 @@ import { isReview, isSession, isStalePR, isRecord, isString, isTime, parseJson, 
 import { showPencil } from './scene/pencil';
 import './scene/github'; // its dev toggle
 import { QUIET_FOREVER, quiet, quietEndLabel, sync } from './scene/state';
-import { fitView, frame, frameDue } from './scene/frame';
+import { fitView, fps, frame, frameDue } from './scene/frame';
 import { setLanternText, wakePages } from './scene/pages';
 import { clickZone, enterZone, expandCard, hideCard, zoneAt, zones } from './scene/card';
 import { MIN } from './scene/stats';
@@ -77,8 +77,8 @@ $('quiet').onclick = () => {
 paintRibbon('cerulean'); // until the server says which
 applyStyle(PINNED && isStyleKey(PINNED) ? PINNED : 'barrel'); // until the server says which lantern is chosen
 
-// The macOS screensaver's web view never fires requestAnimationFrame, so when it goes quiet a timer takes over,
-// and the screensaver also calls lanternTick() on its own animation clock. In a normal window rAF runs and these idle.
+// requestAnimationFrame drives the page, the screensaver's included (measured on macOS 26). Should rAF go quiet, a timer
+// takes over, and the screensaver also calls lanternTick() on its own animation clock; while rAF runs these idle.
 let rafAt = 0;
 const loop = (t: number) => { rafAt = performance.now(); if (frameDue(t)) frame(t); requestAnimationFrame(loop); }; // frameDue: the frame rate (frame.ts)
 requestAnimationFrame(loop);
@@ -86,6 +86,8 @@ window.lanternTick = () => { const now = performance.now(); if (now - rafAt > 10
 // Not while the page is hidden (a minimised or covered window, a closed panel), since rAF stops then too. Except in the
 // screensaver: WebKit can't tell its window is on screen (screensaver/LanternView.swift), so it may say hidden while showing.
 const SAVER = Q.has('screensaver');
+// The screensaver draws every frame: at the calm 30 fps (frame.ts frameDue) half its refreshes repeated the last picture, which showed as stutter.
+if (SAVER) fps.calm = fps.brisk;
 setInterval(() => document.hidden && !SAVER || lanternTick(), 16);
 
 $('card').addEventListener('pointerenter', () => clearTimeout(live.hideTimer));

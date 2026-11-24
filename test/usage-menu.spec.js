@@ -323,3 +323,15 @@ test('while a row is open the rows keep their order, numbers still live; a new s
   expect(names()).toEqual(['newcomer', 'quiet one', 'busy', 'everything else', 'Lantern']); // closed: sorted again
   w.unmount();
 });
+
+test('in a narrow window the readout is gone, and back when the window widens', async () => {
+  const resize = w => { vi.stubGlobal('innerWidth', w); dispatchEvent(new Event('resize')); return w2.vm.$nextTick(); };
+  const { w: w2 } = await mounted();
+  await resize(1440);
+  expect(w2.find('#usageButton').exists()).toBe(true);
+  await resize(400);
+  expect(w2.find('#usageButton').exists()).toBe(false);
+  await resize(1440);
+  expect(w2.find('#usageButton').exists()).toBe(true);
+  vi.unstubAllGlobals();
+});

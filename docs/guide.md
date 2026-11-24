@@ -46,9 +46,18 @@ To keep a session in view, click the pin on its card. It opens in full in a side
 
 To come back to a session later, click the bookmark beside the pin. A ghost moth's card has one too, for a session that has already ended. Your bookmarks are listed under the bookmark button at the bottom right, beside stats, the most recently active first, each with its folder, whether it's running, and when it was last active. Hovering a bookmark turns the lantern down and lights up its moth or ghost moth, if it has one on screen, and the other moths go grey and faint; hovering a session in the system dropdown does the same. Click a bookmark for that moth's or ghost's card. Double-click it (or press Enter) to bring a running session to the front, or to resume one that has ended in a new iTerm2 tab with `claude --resume` in its folder, the way double-clicking a ghost moth does. The cross removes a bookmark. Bookmarks are shared by every window and survive a restart. The iTerm2 panel and the screensaver have no room for the button.
 
-Click the header of a moth's full card to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. "N need you" in the footer opens whichever session has waited longest, then the next one. "N snoozed" steps through its sessions the same way.
+Click the header of a moth's full card to bring its session to the front: its terminal tab, or the session itself in the Claude desktop app. [Setup](setup.md#terminals-and-click-to-focus) lists what a click does in each terminal. In VS Code and Hyper, a small companion lets the click pick the exact terminal (see below). "N need you" in the footer opens whichever session has waited longest, then the next one. "N snoozed" steps through its sessions the same way.
 
 Right-click a moth, or shift-click it, to snooze it. When it waits, it rests on the lantern in a plain, pale indigo (its own colour is for moths that need you), breathing out the odd z, and doesn't turn the light violet. It stays snoozed until you wake it, however much the session does in between, which is handy for a chat you only drop into now and then. Right-click or shift-click it again to wake it. A snooze survives a restart. The footer counts snoozed sessions, along with every waiting one during quiet hours.
+
+### VS Code and Hyper companions
+
+VS Code and Hyper can't be driven from outside, so Lantern ships a tiny companion for each. With it installed, a click brings forward the exact terminal running the session, even with several in one window. Without it, a click brings forward the window for the session's folder (VS Code) or the app (Hyper). Each companion takes only the process id of the terminal's shell and does nothing else. Install one from a checkout of Lantern:
+
+- **VS Code**: run `scripts/install-vscode`. It installs the Lantern focus extension with VS Code's `code` command (set `CODE` to use another build's). The first click asks "Allow 'Lantern focus' extension to open this URI?". Tick "Do not ask me again" and click Open. VS Code forks such as Cursor keep today's behaviour.
+- **Hyper**: open Hyper once, then run `scripts/install-hyper`. It copies the plugin to `~/.hyper_plugins/local/lantern` and adds `lantern` to `localPlugins` in `~/.hyper.js`. Restart Hyper (or choose View > Reload in each window) to load it.
+
+Run the script again after updating Lantern.
 
 Forgot what something means? "What's what?" at the bottom of the settings menu has the short version of this page.
 

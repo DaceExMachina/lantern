@@ -35,7 +35,7 @@ const counts = (d: DeskRecord) => [...SEVERITIES, 'other'].map(s => [s, d.findin
 const working = (d?: DeskRecord) => !!d && (d.status === 'queued' || d.status === 'auditing');
 const word = (x: Row) => x.need ? NEED[x.need] || x.need : x.rec?.kind === 'mention' ? 'mention' : '';
 // the dropdown's open state is the popover's own (toggle fires on any close: outside click, Escape, a link); it goes with the list
-watch(() => rows.value.length, n => { if (!n) store.reviewsOpen = false; });
+watch(() => rows.value.length && !store.narrow, shown => { if (!shown) store.reviewsOpen = false; });
 // the four priorities, highest first: what each is called and its caret's path (normal is a dash, quiet on the row)
 const LEVELS = [[0, 'Highest', 'M4.5 7.5 8 4l3.5 3.5M4.5 12 8 8.5l3.5 3.5'], [1, 'High', 'M4.5 9.5 8 6l3.5 3.5'], [2, 'Normal', 'M5 8h6'], [3, 'Low', 'M4.5 6.5 8 10l3.5-3.5']] as const;
 const level = (n: number) => LEVELS.find(l => l[0] === n) ?? LEVELS[2];
@@ -65,7 +65,7 @@ const tip = (e: Event, x: Row) => { const el = e.currentTarget; if (el instanceo
 </script>
 
 <template>
-  <template v-if="rows.length">
+  <template v-if="rows.length && !store.narrow">
     <button id="reviewsButton" popovertarget="reviews" :aria-label="`${rows.length} review${rows.length > 1 ? 's' : ''}`" title="Reviews asked of you, and the review desk's notes">
       <span class="face"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="12.5" r="1.5"/><path d="M4 5v6M12 11V7.5a2 2 0 0 0-2-2H8.5M10 3.5l-1.5 2 1.5 2"/></svg><span class="n">{{ rows.length }}</span></span>
     </button>
