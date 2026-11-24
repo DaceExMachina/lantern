@@ -136,6 +136,10 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDele
                     pending = pending[(nl + 1)...]
                     if line.hasPrefix("activate /"), line.hasSuffix(".app") {
                         NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: String(line.dropFirst(9))), configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
+                    } else if line == "show" { // a link into the reviews (Review.swift): this window, to the front, even when it was closed
+                        self.window.makeKeyAndOrderFront(nil)
+                        // only Launch Services may bring a background app forward (NSApp.activate is refused while the browser is in front)
+                        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: NSWorkspace.OpenConfiguration()) { _, _ in }
                     } else { print(line) }
                 }
             }

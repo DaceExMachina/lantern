@@ -205,6 +205,11 @@ final class LanternServer {
     var sentDesk = "{}" // the desk event as last sent: { records, inbox }
     /// The PRs the reviews dropdown can list: those asking for my review and those the desk has a record on. A setting kept per PR drops the rest.
     var listedPRs: Set<String> { Set(reviews.map { str($0["url"]) } + desk.map { str($0["url"]) }) }
+    /// The PRs known to be merged or closed: the reviews list has one leaving, or the desk marked its record closed. No extra GitHub call; a PR whose state isn't known isn't here.
+    var endedPRs: Set<String> {
+        let over: (Any?) -> Bool = { ["merged", "closed"].contains(str($0)) }
+        return Set(reviews.filter { over($0["need"]) }.map { str($0["url"]) } + desk.filter { over(($0["closed"] as? JSON)?["state"]) }.map { str($0["url"]) })
+    }
     var owners: JSON = [:] // dead PR url -> the old session that made it (or NSNull: looked, found none); looked up once
     var resuming: [String: Double] = [:] // old session id -> when a ghost moth's click asked to resume it (pages fly the ghost off for a while)
     /// The stale list as the pages get it, each PR with its owner (and when a click asked to resume that session).
@@ -1062,6 +1067,8 @@ final class LanternServer {
             return
         }
         if json && req.url == "/desk/post" { return postDesk(c, body) }
+        if json && req.url == "/desk/show" { return showDesk(c, body) }
+        if json && req.url == "/desk/code" { return deskCode(c, body) }
         // Bring a session's window to the front: its iTerm2 tab, else whatever focusElsewhere can do for its terminal.
         if json && req.url == "/focus" {
             guard let id = body?["id"] as? String, let s = sessions[id] else { return respond(c, 404) }
@@ -1211,10 +1218,11 @@ final class LanternServer {
                     liveBookmarks = Set(marks.map { str($0["id"]) }.filter { sessions[$0] != nil }) // so one that ends before the next sendState is still caught
                 }
                 // each review's priority, 0 (first) to 3 (low), as the whole `{ url: n }` map each time; 2 is the default and isn't kept.
-                // Only PRs still in the reviews list stay, so one that has left drops out at the next change.
+                // A priority stays while its PR is out of the list (sent back, un-requested, re-requested later), and drops once the PR is
+                // known merged or closed (endedPRs), so the map doesn't grow for ever.
                 if let given = j["reviewPriority"] as? JSON {
-                    let open = listedPRs
-                    settings["reviewPriority"] = given.filter { open.contains($0.key) && [0, 1, 3].contains(($0.value as? NSNumber)?.intValue ?? -1) }; ok = true
+                    let ended = endedPRs
+                    settings["reviewPriority"] = given.filter { !ended.contains($0.key) && [0, 1, 3].contains(($0.value as? NSNumber)?.intValue ?? -1) }; ok = true
                 }
                 // what the page remembers about each PR's desk record, as its news then (a string the page makes), the whole `{ url: news }`
                 // map each time: when I last opened it, and when I dismissed it (the desk's files stay). Only listed PRs stay.
@@ -1257,6 +1265,7 @@ final class LanternServer {
         }
         let page = req.url.components(separatedBy: "?")[0] // ?panel and friends are for the page, not the server
         if page == "/" || page == "/index.html" { return serveFile(c, req, "/index.html", "text/html; charset=utf-8") }
+        if req.method == "GET" && page.hasPrefix("/review/") { return respond(c, 200, "text/html; charset=utf-8", Data(REVIEW_PAGE.utf8)) } // a link into the reviews (Review.swift)
         // any file in dist/ with a known extension, in plain folders (no dot-names, so no ..)
         let types = ["js": "text/javascript; charset=utf-8", "css": "text/css; charset=utf-8", "svg": "image/svg+xml", "png": "image/png",
                      "woff2": "font/woff2", "json": "application/json", "map": "application/json"]

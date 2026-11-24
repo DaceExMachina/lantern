@@ -31,6 +31,7 @@
     /* what a PR needs: the same colours as FLY (fireflies.ts) */
     --pr-ready: #C8F48A; --pr-failing: #FF9E8C; --pr-changes: #FFAA6E; --pr-feedback: #FFD27A; --pr-draft: #FFF2B8; --pr-in-review: #8CCBFF;
     --pr-mention: #E8F48A;
+    --diff-add: rgb(96 204 128 / .16); --diff-add-ink: #8FE0A6; --diff-del: rgb(255 110 100 / .16); --diff-del-ink: #FF9E8C;
     /* spacing: one scale, 1 = 4px */
     --space-0-5: 2px; --space-1: 4px; --space-1-5: 6px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px;
     /* radius */
@@ -253,7 +254,6 @@
   #reviews { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); /* stops below the drag strip, like #stats and #recap; scrolls inside (.flyup's 52px is its bottom inset) */ left: var(--space-3); right: auto; width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
   /* the review desk in the list: where its audit stands at the end of a row, a follow-up's speech bubble, and a dot for news */
   #reviews button.go { all: unset; box-sizing: border-box; cursor: pointer; display: block; width: 100%; padding: 0 var(--space-2); } /* a row that opens the detail, laid out like a link row */
-  #reviews .go .new { position: absolute; left: var(--space-1); top: calc(var(--space-1) + .75em); translate: 0 -50%; width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: var(--accent-violet); } /* in the gutter, level with the title */
   #reviews .me .bubble { flex: none; display: flex; align-items: center; gap: var(--space-0-5); color: var(--accent-violet); }
   #reviews .me .bubble svg { width: var(--space-4); height: var(--space-4); }
   #reviews .top { display: flex; align-items: baseline; gap: var(--space-2); } /* the title, clipped first, then where the audit stands */
@@ -262,7 +262,7 @@
   #reviews .top .sev { display: flex; align-items: center; gap: var(--space-1); } /* a finding count: a dot in its severity's colour, then the number */
   #reviews .top .sev i { width: var(--space-1-5); height: var(--space-1-5); border-radius: 50%; background: currentColor; }
   :is(#reviews, #review) :is(.queued, .auditing, .clean) { color: var(--ink-dim); }
-  #reviews .row.working .go .face { outline: 1px dashed var(--accent-violet); outline-offset: -1px; background: color-mix(in srgb, var(--accent-violet) 9%, transparent); } /* the desk is still on it: not ready for me yet */
+  #reviews .row.working .go .face { background: color-mix(in srgb, var(--accent-violet) 9%, transparent); } /* the desk is still on it: not ready for me yet */
   #reviews .row.working .ti { color: var(--ink-dim); }
   #reviews .top .working { display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); border: 1px solid var(--accent-violet); background: color-mix(in srgb, var(--accent-violet) 22%, transparent); color: var(--ink-strong); }
   #reviews .top .working i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-violet); box-shadow: 0 0 var(--space-1-5) var(--accent-violet); animation: live 1.6s ease-in-out infinite; }
@@ -286,9 +286,55 @@
   #review .draft { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--surface-tray); white-space: pre-wrap; color: var(--ink-soft); }
   #review .draft .link { margin-top: var(--space-1); }
   #review ul { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-  #review .findings .sev { margin-right: var(--space-1-5); }
-  #review .findings label { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2); align-items: start; cursor: pointer; }
-  #review .findings .body { display: block; }
+  #review :is(.findings, .finding) .sev { margin-right: var(--space-1-5); }
+  #review .findings li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1-5) var(--space-2); align-items: start; }
+  #review .findings label { display: contents; } /* its checkbox and text are the row's two columns, so the code lines up under the text */
+  #review .findings .body { display: block; cursor: pointer; }
+  /* a finding's title steps into its own view */
+  #review button.what { all: unset; display: block; cursor: pointer; color: var(--ink-strong); }
+  #review button.what:hover { color: var(--ink-hover); text-decoration: underline; text-decoration-color: var(--accent-violet-line); text-underline-offset: var(--space-0-5); }
+  #review button.what:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
+  /* one finding on its own */
+  #review .finding { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+  #review .finding .title { font-size: var(--text-md); }
+  /* the code a finding cites: the PR's change (added lines green, removed red, with old and new numbers) or the file at head; the cited
+     lines carry a bar at the left. Long lines scroll sideways, each line as wide as the longest. */
+  #review .code { display: grid; grid-template-columns: minmax(100%, max-content); max-height: 60vh; margin: 0; padding: var(--space-1) 0; overflow: auto; border-radius: var(--radius-md); background: var(--surface-tray); font: var(--text-xs) / var(--leading) var(--font-mono); color: var(--ink-soft); }
+  #review .code > span { padding-right: var(--space-2); white-space: pre; border-left: var(--space-0-5) solid transparent; }
+  #review .code b { display: inline-block; min-width: 4ch; padding-right: var(--space-1-5); text-align: right; font-weight: var(--weight-regular); color: var(--ink-faint); user-select: none; }
+  #review .code i { display: inline-block; width: 2ch; font-style: normal; color: var(--ink-faint); user-select: none; }
+  #review .code .add { background: var(--diff-add); }
+  #review .code .del { background: var(--diff-del); }
+  #review .code .add i { color: var(--diff-add-ink); }
+  #review .code .del i { color: var(--diff-del-ink); }
+  #review .code .mark { border-left-color: var(--focus); }
+  #review .code:not(.diff) .mark { background: var(--surface-selected); } /* no green or red to sit on: lit, as well as barred */
+  #review .code .mark b { color: var(--ink-strong); }
+  /* highlight.js's classes (src/code.ts), in the panel's own colours */
+  #review :is(.hljs-keyword, .hljs-built_in, .hljs-literal, .hljs-selector-tag, .hljs-doctag) { color: var(--accent-violet); }
+  #review :is(.hljs-string, .hljs-regexp, .hljs-char) { color: var(--pr-feedback); }
+  #review :is(.hljs-number, .hljs-symbol, .hljs-bullet) { color: var(--pr-changes); }
+  #review :is(.hljs-title, .hljs-section, .hljs-name, .hljs-selector-class, .hljs-selector-id) { color: var(--pr-in-review); }
+  #review :is(.hljs-type, .hljs-template-variable, .hljs-variable.language_) { color: var(--pr-draft); }
+  #review :is(.hljs-comment, .hljs-quote, .hljs-meta) { color: var(--ink-dim); font-style: italic; }
+  #review :is(.hljs-attr, .hljs-attribute, .hljs-property, .hljs-params) { color: var(--ink); }
+  /* the explanation: the desk's Markdown */
+  #review .explain { color: var(--ink); }
+  #review .explain > * { margin: 0 0 var(--space-2); }
+  #review .explain > :last-child { margin-bottom: 0; }
+  #review .explain :is(h1, h2, h3, h4, h5, h6) { font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--ink-strong); text-transform: none; letter-spacing: normal; }
+  #review .explain :is(ul, ol) { display: block; padding-left: var(--space-4); }
+  #review .explain ul { list-style: disc; }
+  #review .explain ol { list-style: decimal; }
+  #review .explain code { padding: 0 var(--space-0-5); border-radius: var(--radius-sm); background: var(--surface-tray); font: var(--text-xs) / var(--leading) var(--font-mono); color: var(--ink-strong); }
+  #review .explain pre { padding: var(--space-2); overflow-x: auto; border-radius: var(--radius-md); background: var(--surface-tray); }
+  #review .explain pre code { padding: 0; background: none; color: var(--ink-soft); }
+  #review .explain blockquote { padding-left: var(--space-2); border-left: var(--space-0-5) solid var(--line); color: var(--ink-soft); }
+  #review .extra { display: grid; grid-template-columns: auto 1fr; gap: var(--space-1) var(--space-3); margin: 0; font-size: var(--text-xs); }
+  #review .extra dt { color: var(--ink-dim); }
+  #review .extra dd { margin: 0; color: var(--ink-soft); }
+  /* what a link into the reviews pointed at */
+  #review .here { outline: 1px solid var(--focus); outline-offset: var(--space-1); border-radius: var(--radius-sm); }
   #review .findings input { margin: 0; margin-top: var(--space-0-5); accent-color: var(--accent-violet); cursor: pointer; }
   #review .findings input:focus-visible { outline: 1px solid var(--focus); outline-offset: 2px; }
   #review .findings .done { opacity: 0.6; }
@@ -382,6 +428,7 @@
   #usage .tracks { grid-column: 1 / -1; display: grid; gap: var(--space-0-5); } /* CPU's bar, and RAM's right under it */
   #usage .track { display: block; height: 3px; border-radius: var(--radius-pill); overflow: hidden; background: var(--line-soft); }
   #reviews .row { position: relative; }
+  #reviews .row + .row { margin-top: var(--space-1); } /* a gap, so neighbouring tinted faces don't touch */
   #reviews .go { display: block; padding: 0 var(--space-2); color: inherit; text-decoration: none; }
   #reviews .pri { all: unset; box-sizing: border-box; cursor: pointer; position: absolute; top: 0; bottom: 0; right: 0; display: flex; padding: 0 var(--space-2) 0 0; }
   #reviews :is(.pri, .pick button) .face { display: flex; align-items: center; padding: 0 var(--space-1); border-radius: var(--radius-sm); color: var(--ink-faint); }

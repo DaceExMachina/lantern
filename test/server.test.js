@@ -1760,9 +1760,10 @@ test('reviews: each PR asking for my review carries its need', async t => {
   assert.deepStrictEqual(reviews.map(r => [r.label, r.need, r.author]), [['r#1', 'failing', null], ['r#2', 'draft', 'octo'], ['r#3', 'waiting', null]], 'the author comes along (null when GitHub has none)');
 });
 
-test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), survives a restart and drops with its PR', async t => {
+test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), survives a restart, outlives leaving the list, and drops once its PR is merged or closed', async t => {
   const { gh, repo } = ghRepo([]);
-  const files = { 'data/settings.json': '{"reviewPriority": {"https://github.com/o/r/pull/9": 0}}' };
+  const files = { 'data/settings.json': '{"reviewPriority": {"https://github.com/o/r/pull/9": 0}}',
+    '.ghbus/reviews/o__r__7.json': JSON.stringify({ repo: 'o/r', pr: 7, title: 'x', kind: 'review', status: 'ready', head: 'h', at: '2026-11-01T10:00:00Z', closed: { state: 'merged', at: '2026-11-02T10:00:00Z' } }) };
   fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { mine: { nodes: [] }, closed: { nodes: [] }, reviews: { nodes: [prNode(1, iso(Date.now())), prNode(3, iso(Date.now()))] } } }));
   const home = { home: null };
   const base = await serve(t, files, h => { home.home = h; }, { LANTERN_GH: gh });
@@ -1772,7 +1773,9 @@ test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), 
   assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { 'https://github.com/o/r/pull/9': 0 }, 'what settings.json held shows');
   const [a, b] = reviews.map(r => r.url);
   assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 0, [b]: 2, 'https://github.com/o/r/pull/9': 1, [a + 'x']: 3, nope: 'x' } })).status, 204);
-  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 0 }, 'the default 2 and a PR no longer listed are not kept, and 0 is a real value');
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 0, 'https://github.com/o/r/pull/9': 1, [a + 'x']: 3 }, 'the default 2 is not kept, 0 is a real value, and a PR out of the list (state unknown) keeps its priority');
+  assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 0, [b]: 1, 'https://github.com/o/r/pull/7': 1 } })).status, 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 0, [b]: 1 }, 'PR 7 is marked merged in the desk: its priority drops');
   assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 3, [b]: 4 } })).status, 204);
   assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 3 }, '4 is out of range'); await post(base, '/settings', { reviewPriority: { [a]: 0 } });
   const saved = path.join(home.home, 'data/settings.json');
@@ -3369,8 +3372,8 @@ test('usage: with systemStats off nothing is sampled or sent', async t => {
 // The review desk (the review-desk skill) leaves one record per PR in ~/.ghbus/reviews. The server sends them newest first (a follow-up
 // by its newest post), each with its PR's url, skips a file that isn't a whole record, keeps a link only when it goes to GitHub,
 // notices a new file, and sends the inbox session (lantern-pr's ~/.ghbus/inbox) along. What the page remembers per PR (when it last
-// opened a record, when it dismissed one, its priority) is kept only for PRs still listed; the desk's files are never touched.
-test('the review desk\'s records are read, newest first, with half files skipped, the inbox along, and what the page keeps about them pruned to listed PRs', async t => {
+// opened a record, when it dismissed one) is kept only for PRs still listed, a priority until its PR ends; the desk's files are never touched.
+test('the review desk\'s records are read, newest first, with half files skipped, the inbox along, and what the page keeps about them pruned', async t => {
   const rec = (pr, at, more = {}) => JSON.stringify({ repo: 'o/app', pr, title: `PR ${pr}`, kind: 'review', status: 'ready', head: `h${pr}`, at, ...more });
   let home;
   const base = await serve(t, {
@@ -3401,7 +3404,7 @@ test('the review desk\'s records are read, newest first, with half files skipped
     assert.strictEqual(await set({ [key]: { [url6]: 5 } }), 400, `${key}: a mark that isn't a string is refused`);
   }
   assert.strictEqual(await set({ reviewPriority: { [url6]: 0, [gone]: 1 } }), 204);
-  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [url6]: 0 }, 'a desk record\'s PR takes a priority, though nobody asked for its review');
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [url6]: 0, [gone]: 1 }, 'a priority outlives its PR leaving the list (only a merged or closed PR drops it)');
   assert.ok(fs.existsSync(path.join(home, '.ghbus/reviews/o__app__6.json')), 'the desk\'s file is still there');
   assert.ok((await desk()).records.some(r => r.pr === 6), 'the record is still sent: the page hides it');
   fs.rmSync(path.join(home, '.ghbus/inbox'));
@@ -3487,4 +3490,80 @@ test('a dry run says what it would post and calls nothing', async t => {
   assert.deepStrictEqual(await sendOne(base), [200, { url: 'https://github.com/o/app/pull/1#pullrequestreview-0' }]);
   assert.deepStrictEqual(stub.seen, [], 'no call to GitHub');
   await until(() => /^Dry post: o\/app#1 review, body 0 characters, 1 inline$/m.test(t.output()), 'the dry run to say what it would post');
+});
+
+// Links into the detail panel: GET /review/<owner>/<repo>/<pr> answers a page that posts the path and its #fragment to /desk/show, which
+// tells the pages (the app's window acts on it) what to open. What doesn't fit the patterns is dropped, never passed on.
+test('a link into the reviews answers a page that hands it back, and /desk/show passes on only what fits its patterns', async t => {
+  const base = await serve(t);
+  const page = await fetch(base + '/review/o/app/12');
+  assert.deepStrictEqual([page.status, page.headers.get('content-type'), /fetch\('\/desk\/show'/.test(await page.text())], [200, 'text/html; charset=utf-8', true]);
+  const shown = [];
+  const req = http.get(base + '/events', res => { let text = ''; res.on('data', c => { text += c; for (const m of text.matchAll(/^event: show\ndata: (.*)$/gm)) shown.push(JSON.parse(m[1])); text = text.slice(text.lastIndexOf('\n\n') + 2); }); });
+  t.after(() => req.destroy());
+  await wait(200);
+  const cases = [
+    [{ path: '/review/o/app/12', anchor: 'finding-3' }, { repo: 'o/app', pr: 12, anchor: 'finding-3' }],
+    [{ path: '/review/My-Org/.github/007/', anchor: 'ask' }, { repo: 'My-Org/.github', pr: 7, anchor: 'ask' }],
+    [{ path: '/review/o/app/12', anchor: 'finding-3"><script>' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ path: '/review/o/app/12', anchor: 'finding-' }, { repo: 'o/app', pr: 12, anchor: '' }],
+    [{ path: '/review/o/app/12;rm -rf ~', anchor: 'summary' }, { repo: '', pr: 0, anchor: 'summary' }],
+    [{ path: '/review/o/a$b/12', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: '/review/o%2Fx/app/1', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: '/review/o/app/0', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: '/review/o/app/1234567890', anchor: '' }, { repo: '', pr: 0, anchor: '' }],
+    [{ path: 42, anchor: ['summary'] }, { repo: '', pr: 0, anchor: '' }],
+  ];
+  for (const [body, want] of cases) {
+    const before = shown.length;
+    assert.strictEqual((await post(base, '/desk/show', body)).status, 204);
+    await until(() => shown.length > before, 'the show event');
+    assert.deepStrictEqual(shown.at(-1), want, JSON.stringify(body));
+  }
+  const plain = await fetch(base + '/desk/show', { method: 'POST', body: JSON.stringify(cases[0][0]) });
+  assert.strictEqual(plain.status, 404, 'only a JSON post, which other websites can\'t send');
+});
+
+// The code each finding cites (POST /desk/code): the PR's change from GitHub's pull files API when a hunk holds the cited line, else the file
+// at the record's head from the contents API, against a stand-in GitHub.
+test('the finding view gets the PR\'s change around each cited line, else the file at head, else null; each fetched once', async t => {
+  const seen = [], file = Array.from({ length: 20 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+  const patch = '@@ -1,4 +1,5 @@\n line 1\n-old 2\n+line 2\n+line 3\n line 4\n\\ No newline at end of file';
+  const stub = http.createServer((req, res) => {
+    const reply = (status, o) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+    seen.push(req.url);
+    if (req.url === '/graphql') return reply(200, { data: {} });
+    if (req.url === '/repos/o/app/pulls/1/files?per_page=100&page=1') return reply(200, [{ filename: 'src/b c.ts', patch }, { filename: 'img.png' }]);
+    if (req.url === '/repos/o/app/contents/src/b%20c.ts?ref=abc1234') return reply(200, { encoding: 'base64', content: Buffer.from(file).toString('base64').replace(/(.{60})/g, '$1\n') });
+    reply(404, { message: 'Not Found' });
+  });
+  await new Promise(r => stub.listen(0, '127.0.0.1', r));
+  t.after(() => stub.close());
+  const kc = keychain(JSON.stringify({ token: 'good' }));
+  const findings = [
+    { severity: 'major', title: 'In the change', file: 'src/b c.ts', line: 2 },
+    { severity: 'minor', title: 'Unchanged code', file: 'src/b c.ts', line: 'L18-L20' },
+    { severity: 'nit', title: 'Past the end', file: 'src/b c.ts', line: 99 },
+    { severity: 'nit', title: 'Gone', file: 'gone.ts', line: 1 },
+    { severity: 'nit', title: 'Climbs out', file: '../secret', line: 1 },
+    { severity: 'nit', title: 'No file' },
+  ];
+  const base = await serve(t, { 'data/settings.json': '{"githubAccounts":["octo"]}', '.ghbus/reviews/o__app__1.json': JSON.stringify({ repo: 'o/app', pr: 1, kind: 'review', status: 'ready', head: 'abc1234', findings }),
+    '.ghbus/reviews/o__app__2.json': JSON.stringify({ repo: 'o/app', pr: 2, kind: 'review', status: 'ready', findings }) }, () => {}, { LANTERN_SECURITY: kc.security, LANTERN_GITHUB_API: `http://127.0.0.1:${stub.address().port}` });
+  await until(async () => (await snapshot(base)).desk.records.length === 2, 'the records');
+  const code = async url => { const r = await post(base, '/desk/code', { url }); return [r.status, r.status === 200 ? await r.json() : null]; };
+  await until(async () => (await code('https://github.com/o/app/pull/1'))[1]?.[0], 'the account to load');
+  const [status, out] = await code('https://github.com/o/app/pull/1');
+  assert.strictEqual(status, 200);
+  const l = (kind, old, nu, text) => ({ kind, old, new: nu, text });
+  assert.deepStrictEqual(out[0], { diff: true, mark: [2, 2], lines: [l(' ', 1, 1, 'line 1'), l('-', 2, 0, 'old 2'), l('+', 0, 2, 'line 2'), l('+', 0, 3, 'line 3'), l(' ', 3, 4, 'line 4')] },
+    'the hunk, numbered on both sides, without the no-newline note');
+  assert.deepStrictEqual(out[1], { diff: false, mark: [18, 20], lines: Array.from({ length: 18 }, (_, i) => l(' ', 0, i + 3, `line ${i + 3}`)) }, 'not in any hunk: the file at head, fifteen either side, clamped');
+  assert.deepStrictEqual(out.slice(2), [null, null, null, null], 'past the end, a file GitHub doesn\'t have, a path out of the repo, no file');
+  assert.ok(!seen.some(u => u.includes('secret')), 'a path out of the repo is never asked for');
+  const asked = seen.length;
+  await code('https://github.com/o/app/pull/1');
+  assert.deepStrictEqual(seen.slice(asked).filter(u => u !== '/graphql'), ['/repos/o/app/contents/gone.ts?ref=abc1234'], 'the patches and the file it has are kept; the one it didn\'t get is asked for again');
+  assert.deepStrictEqual(await code('https://github.com/o/app/pull/2'), [404, null], 'no head: nothing to show it at');
+  assert.deepStrictEqual(await code('https://github.com/o/app/pull/9'), [404, null], 'no such record');
 });
