@@ -1759,9 +1759,10 @@ test('reviews: each PR asking for my review carries its need', async t => {
   assert.deepStrictEqual(reviews.map(r => [r.label, r.need, r.author]), [['r#1', 'failing', null], ['r#2', 'draft', 'octo'], ['r#3', 'waiting', null]], 'the author comes along (null when GitHub has none)');
 });
 
-test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), survives a restart and drops with its PR', async t => {
+test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), survives a restart, outlives leaving the list, and drops once its PR is merged or closed', async t => {
   const { gh, repo } = ghRepo([]);
-  const files = { 'data/settings.json': '{"reviewPriority": {"https://github.com/o/r/pull/9": 0}}' };
+  const files = { 'data/settings.json': '{"reviewPriority": {"https://github.com/o/r/pull/9": 0}}',
+    '.ghbus/reviews/o__r__7.json': JSON.stringify({ repo: 'o/r', pr: 7, title: 'x', kind: 'review', status: 'ready', head: 'h', at: '2026-11-01T10:00:00Z', closed: { state: 'merged', at: '2026-11-02T10:00:00Z' } }) };
   fs.writeFileSync(path.join(path.dirname(gh), 'prs.json'), JSON.stringify({ data: { mine: { nodes: [] }, closed: { nodes: [] }, reviews: { nodes: [prNode(1, iso(Date.now())), prNode(3, iso(Date.now()))] } } }));
   const home = { home: null };
   const base = await serve(t, files, h => { home.home = h; }, { LANTERN_GH: gh });
@@ -1771,7 +1772,9 @@ test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), 
   assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { 'https://github.com/o/r/pull/9': 0 }, 'what settings.json held shows');
   const [a, b] = reviews.map(r => r.url);
   assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 0, [b]: 2, 'https://github.com/o/r/pull/9': 1, [a + 'x']: 3, nope: 'x' } })).status, 204);
-  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 0 }, 'the default 2 and a PR no longer listed are not kept, and 0 is a real value');
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 0, 'https://github.com/o/r/pull/9': 1, [a + 'x']: 3 }, 'the default 2 is not kept, 0 is a real value, and a PR out of the list (state unknown) keeps its priority');
+  assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 0, [b]: 1, 'https://github.com/o/r/pull/7': 1 } })).status, 204);
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 0, [b]: 1 }, 'PR 7 is marked merged in the desk: its priority drops');
   assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 3, [b]: 4 } })).status, 204);
   assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 3 }, '4 is out of range'); await post(base, '/settings', { reviewPriority: { [a]: 0 } });
   const saved = path.join(home.home, 'data/settings.json');
@@ -3322,8 +3325,8 @@ test('usage: with systemStats off nothing is sampled or sent', async t => {
 // The review desk (the review-desk skill) leaves one record per PR in ~/.ghbus/reviews. The server sends them newest first (a follow-up
 // by its newest post), each with its PR's url, skips a file that isn't a whole record, keeps a link only when it goes to GitHub,
 // notices a new file, and sends the inbox session (lantern-pr's ~/.ghbus/inbox) along. What the page remembers per PR (when it last
-// opened a record, when it dismissed one, its priority) is kept only for PRs still listed; the desk's files are never touched.
-test('the review desk\'s records are read, newest first, with half files skipped, the inbox along, and what the page keeps about them pruned to listed PRs', async t => {
+// opened a record, when it dismissed one) is kept only for PRs still listed, a priority until its PR ends; the desk's files are never touched.
+test('the review desk\'s records are read, newest first, with half files skipped, the inbox along, and what the page keeps about them pruned', async t => {
   const rec = (pr, at, more = {}) => JSON.stringify({ repo: 'o/app', pr, title: `PR ${pr}`, kind: 'review', status: 'ready', head: `h${pr}`, at, ...more });
   let home;
   const base = await serve(t, {
@@ -3354,7 +3357,7 @@ test('the review desk\'s records are read, newest first, with half files skipped
     assert.strictEqual(await set({ [key]: { [url6]: 5 } }), 400, `${key}: a mark that isn't a string is refused`);
   }
   assert.strictEqual(await set({ reviewPriority: { [url6]: 0, [gone]: 1 } }), 204);
-  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [url6]: 0 }, 'a desk record\'s PR takes a priority, though nobody asked for its review');
+  assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [url6]: 0, [gone]: 1 }, 'a priority outlives its PR leaving the list (only a merged or closed PR drops it)');
   assert.ok(fs.existsSync(path.join(home, '.ghbus/reviews/o__app__6.json')), 'the desk\'s file is still there');
   assert.ok((await desk()).records.some(r => r.pr === 6), 'the record is still sent: the page hides it');
   fs.rmSync(path.join(home, '.ghbus/inbox'));

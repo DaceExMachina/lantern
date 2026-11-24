@@ -226,33 +226,33 @@ test('the status sits beside the title, which clips first, so the author line ke
   assert.match(css, /#reviews \.top \.desk \{ flex: none;/);
 });
 
-test('a record with no request in the list is a row of its own, a follow-up with a speech bubble and its post count, and a firefly\'s request stays listed while it has one', async () => {
+test('only PRs requesting my review are listed, a firefly\'s request stays while it has a record, and records of other kinds or with no request never get a row', async () => {
   store.reviews = [request(1), request(2)];
   store.sessions = [{ id: 's', state: 'working', subagents: [], github: [request(1), request(2)] }];
-  desk([rec(2), rec(7, { kind: 'mention', ask: 'Can you check?', author: 'dana' }), rec(8, { kind: 'followup', ask: 'Reply?', author: 'noah', activity: [{ at: '2026-11-17T10:00:00Z', author: 'noah' }, { at: '2026-11-17T11:00:00Z', author: 'sam' }] })]);
+  desk([rec(2), rec(7, { kind: 'mention', ask: 'Can you check?', author: 'dana' }), rec(8, { kind: 'followup', ask: 'Reply?', author: 'noah' }), rec(9), rec(10, { status: 'queued' }), rec(11, { ask: 'Anything?' })]);
   await nextTick();
-  assert.deepStrictEqual(listed(), ['2', '7', '8'], 'app#1 flies as a firefly with no record: left out');
-  assert.strictEqual(button().textContent, '3');
+  assert.deepStrictEqual(listed(), ['2'], 'app#1 flies with no record: left out; mentions, follow-ups and records without a request: no rows');
+  assert.strictEqual(button().textContent, '1');
   assert.strictEqual(row(2).querySelector('.me').textContent, 'app#2in review', 'app#2 is listed as the request, with its need, though it flies as a firefly');
-  assert.strictEqual(row(7).querySelector('.me').textContent, 'app#7danamention');
-  assert.ok(row(8).querySelector('.bubble svg'), 'the follow-up\'s speech bubble');
-  assert.strictEqual(row(8).querySelector('.bubble').textContent, 'Follow-up, 2');
-  assert.strictEqual(row(7).querySelector('.bubble'), null, 'only follow-ups get one');
 });
 
-test('a record whose request has gone stays only if it asks something of me: a review leaves, a mention with an ask stays, a follow-up without one leaves', async () => {
-  desk([rec(9), rec(10, { status: 'queued' }), rec(15, { ask: 'Anything?' }), rec(11, { kind: 'mention', ask: 'Can you check?' }), rec(12, { kind: 'mention' }), rec(13, { kind: 'followup', ask: 'Reply?' }), rec(14, { kind: 'followup' })]);
+test('a record with no request keeps its row only while its detail is open (a deep link), and loses it when the panel closes', async () => {
+  store.reviews = [request(1)];
+  desk([rec(7, { kind: 'mention', ask: 'Can you check?' }), rec(8)]);
   await nextTick();
-  assert.deepStrictEqual(listed(), ['11', '13'], 'reviews (new or not) and ask-less notes are gone; the ones with an ask stay');
-  assert.strictEqual(row(11).querySelector('.new'), null, 'no unread dot');
+  assert.deepStrictEqual(listed(), ['1']);
+  store.openReview(store.desk.records.find(d => d.pr === 7)); await nextTick();
+  assert.deepStrictEqual(listed(), ['1', '7'], 'the open record is listed');
+  store.review = null; await nextTick();
+  assert.deepStrictEqual(listed(), ['1'], 'closed: gone again');
 });
 
-test('a PR the desk marked merged or closed is left out of the list, whatever its kind, and a malformed closed leaves the record listed', async () => {
-  store.reviews = [request(1), request(2)];
-  desk([rec(1, { closed: { state: 'merged', at: 't' } }), rec(2), rec(7, { kind: 'mention', ask: 'x', closed: { state: 'closed' } }), rec(8, { kind: 'mention', ask: 'x' }), rec(9, { kind: 'mention', ask: 'x', closed: { state: 'bogus' } })]);
+test('a PR the desk marked merged or closed is left out of the list, and a malformed closed leaves the request listed', async () => {
+  store.reviews = [request(1), request(2), request(3), request(4)];
+  desk([rec(1, { closed: { state: 'merged', at: 't' } }), rec(2), rec(3, { closed: { state: 'closed' } }), rec(4, { closed: { state: 'bogus' } })]);
   await nextTick();
-  assert.deepStrictEqual(listed(), ['2', '8', '9'], 'a closed request, a closed mention: gone; an unclosed one, or a bogus state, stays');
-  assert.strictEqual(button().textContent, '3', 'the count follows');
+  assert.deepStrictEqual(listed().sort(), ['2', '4'], 'a closed request: gone; an unclosed one, or a bogus state, stays');
+  assert.strictEqual(button().textContent, '2', 'the count follows');
 });
 
 test('an audit the desk is still on (queued or auditing) shows a labelled in-progress state until it is ready or failed', async () => {
@@ -265,16 +265,6 @@ test('an audit the desk is still on (queued or auditing) shows a labelled in-pro
   assert.ok(!row(1).closest('.row').classList.contains('working'), 'ready: back to normal');
   const css = readFileSync(join(import.meta.dirname, '..', 'index.html'), 'utf8');
   assert.match(css, /prefers-reduced-motion: reduce\) \{ #reviews \.top \.working i \{ animation: none;/);
-});
-
-test('a follow-up row takes a priority like a request, and sorts by it', async () => {
-  store.reviews = [request(1)];
-  desk([rec(8, { kind: 'followup', ask: 'x' })]);
-  await nextTick();
-  assert.deepStrictEqual(listed(), ['1', '8']);
-  row(8).closest('.row').querySelector('.pri').click(); await nextTick();
-  document.querySelectorAll('#reviews .pick button')[0].click(); await nextTick();
-  assert.deepStrictEqual([listed(), posts.at(-1)], [['8', '1'], ['/settings', { reviewPriority: { [rec(8).url]: 0 } }]]);
 });
 
 test('a record that doesn\'t quite fit the shape still shows: a finding or post that can\'t be shown is dropped, not the record', () => {
