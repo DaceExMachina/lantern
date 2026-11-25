@@ -482,9 +482,12 @@ final class LanternServer {
         observe()
         send("event: settings\ndata: \(jsonText(settings))\n\n")
     }
+    // One serial queue, so writes land in the order they were made: on the concurrent global queue two quick saves could finish
+    // out of order and leave the older settings on disk.
+    let settingsQueue = DispatchQueue(label: "lantern.settings")
     func saveSettings() {
         let text = String(decoding: (try? JSONSerialization.data(withJSONObject: settings, options: [.prettyPrinted, .withoutEscapingSlashes])) ?? Data(), as: UTF8.self)
-        DispatchQueue.global().async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
+        settingsQueue.async { [settingsFile] in try? (text + "\n").write(toFile: settingsFile, atomically: true, encoding: .utf8) }
     }
     // What changes when the page does, so open windows reload: the newest file in dist/. A rebuild empties dist/ for a moment
     // (and touches its folders), so the version holds where it was until index.html is back, and folders don't count: a

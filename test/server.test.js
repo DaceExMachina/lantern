@@ -1782,6 +1782,20 @@ test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), 
   assert.deepStrictEqual(await until(() => { const j = JSON.parse(fs.readFileSync(saved, 'utf8')).reviewPriority; return j[a] === 0 && j; }, 'settings.json written'), { [a]: 0 });
 });
 
+// Saves reach settings.json in the order they were made: a burst of changes leaves on disk what the server holds, never an older save
+// that landed last.
+test('settings: a burst of saves leaves settings.json as the last one made it', async t => {
+  let home = '';
+  const base = await serve(t, {}, h => home = h);
+  const saved = path.join(home, 'data/settings.json');
+  for (let round = 0; round < 20; round++) {
+    await Promise.all(Array.from({ length: 40 }, (_, i) => post(base, '/settings', { reviewPriority: { 'https://github.com/o/r/pull/9': [1, 3, 0][i % 3] } })));
+    const held = (await snapshot(base)).settings.reviewPriority;
+    await wait(100); // the write is off the main queue
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(saved, 'utf8')).reviewPriority, held, `round ${round}`);
+  }
+});
+
 // gh as GitHub answers a search for review requests: the requests of the login the query names (`@me` is the account gh runs as, the
 // agent's), a page at a time as `first` and `after` ask, with every query it gets logged.
 function ghRequests(requests) {
