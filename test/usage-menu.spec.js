@@ -54,6 +54,35 @@ test('the rings fill to the Mac\'s CPU and RAM, and say so when hovered', async 
   w.unmount();
 });
 
+test('the RAM ring shows the compressed part at full strength first, the faded rest after it, and the tooltip and dropdown say how much', async () => {
+  const { w } = await mounted({ ...usage, mac: { ...usage.mac, compressed: 4096 } }); // 12288 of 32768 MB used, 4096 of it compressed
+  const arcs = w.findAll('#usageButton .meter')[1].findAll('.arc');
+  expect(arcs.map(a => [a.classes('faint'), a.attributes('stroke-dasharray')])).toEqual([[true, '37.5 100'], [false, '12.5 100']]); // the whole 37.5% faded, the compressed 12.5% over its start at full strength
+  expect(w.findAll('#usageButton .arc.faint')).toHaveLength(1); // CPU's ring has none
+  expect(w.findAll('#usageButton .meter')[1].attributes('title')).toBe('RAM 12.0 GB of 32.0 GB, 4.0 GB compressed, pressure warning');
+  expect(w.findAll('#usage .big')[1].text()).toBe('12.0of 32 GB, 4.0 GB compressed');
+  w.unmount();
+});
+
+test('a session\'s RAM segment and track show its compressed part first at full strength, then the rest faded; no amount, a plain fill', async () => {
+  const u = { ...usage, mac: { ...usage.mac, compressed: 4096 }, sessions: { ...usage.sessions, b: { ...usage.sessions.b, cmp: 512 } } }; // b: 512 of 2048 MB
+  const { w } = await mounted(u);
+  const seg = w.findAll('#usage section')[1].findAll('.bar button')[0]; // busiest first: b
+  expect(seg.attributes('title')).toBe('busy · 2.0 GB RAM, 0.5 GB compressed');
+    expect(seg.attributes('style')).toContain('--cmp: 25.0%'); // 512 / 2048
+  expect(w.findAll('#usage .krow')[0].find('.track:last-child i').attributes('style')).toContain('--cmp: 25.0%');
+  const plain = await mounted();
+  expect(plain.w.findAll('#usage section')[1].findAll('.bar button')[0].attributes('style')).not.toContain('--cmp');
+  w.unmount(); plain.w.unmount();
+});
+
+test('an older server that sends no compressed amount shows the RAM ring and texts as before', async () => {
+  const { w } = await mounted();
+  expect(w.findAll('#usageButton .arc.faint')).toHaveLength(0);
+  expect(w.findAll('#usage .big')[1].text()).toBe('12.0of 32 GB');
+  w.unmount();
+});
+
 test('each metric has its own sparkline under its bar in the dropdown, which grows with each sample and stops at two minutes', async () => {
   const { w, store } = await mounted();
   const pts = k => w.findAll('#usage section')[k === 'cpu' ? 0 : 1].find('.spark polyline').attributes('points').split(' ').length;

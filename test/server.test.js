@@ -3202,9 +3202,10 @@ test('usage: a session\'s sample counts its process and the children it started,
     usage = await until(() => blocks.filter(b => b.startsWith('event: usage')).map(b => JSON.parse(b.split('data: ')[1])).find(u => u.sessions[id]?.n >= 2), 'a sample with the session and its child');
   });
   assert.ok(usage.sessions[id].mem > 0, 'memory is the footprint of the tree');
+  assert.ok(usage.sessions[id].cmp >= 0 && usage.sessions[id].cmp <= usage.sessions[id].mem, 'the compressed part of it');
   assert.ok(usage.lantern.n >= 1 && usage.lantern.mem > 0, 'Lantern\'s own');
   assert.ok(usage.lantern.procs.length > 0 && usage.lantern.procs.every(p => p.name && p.n > 0), 'Lantern\'s own come by name too');
-  assert.ok(usage.mac.total > 0 && usage.mac.used > 0 && ['normal', 'warning', 'critical'].includes(usage.mac.pressure), 'the Mac\'s');
+  assert.ok(usage.mac.total > 0 && usage.mac.used > 0 && usage.mac.compressed >= 0 && usage.mac.compressed <= usage.mac.used && ['normal', 'warning', 'critical'].includes(usage.mac.pressure), 'the Mac\'s');
   assert.ok(!blocks.some(b => b.startsWith('data:') && b.includes('"cpu"')), 'the session snapshot doesn\'t carry it');
 });
 

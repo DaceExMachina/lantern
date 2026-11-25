@@ -29,10 +29,13 @@ const store = useLanternStore();
 const roomy = !document.body.matches('.panel, .screensaver, .ambient'); // fixed by the time the chrome mounts
 const u = computed(() => roomy && !store.narrow && store.settings.systemStats !== false ? store.usage : null);
 const memPct = computed(() => u.value ? Math.min(100, u.value.mac.used / u.value.mac.total * 100) : 0);
+const squeezed = computed(() => u.value?.mac.compressed ?? 0); // MB of RAM in use that is compressed (an older server sends none)
+const squeezedText = (c: number) => `${memText(c)} compressed`;
 const cpuPct = computed(() => Math.min(100, u.value?.mac.cpu ?? 0));
 const meters = computed(() => u.value ? [
   { kind: 'cpu' as const, pct: cpuPct.value, text: `${Math.round(u.value.mac.cpu)}%`, tip: `CPU ${Math.round(u.value.mac.cpu)}%` },
-  { kind: 'mem' as const, pct: memPct.value, text: memText(u.value.mac.used), tip: `RAM ${memText(u.value.mac.used)} of ${memText(u.value.mac.total)}, pressure ${u.value.mac.pressure}` }] : []);
+  { kind: 'mem' as const, pct: memPct.value, dense: squeezed.value / u.value.mac.total * 100, text: memText(u.value.mac.used),
+    tip: `RAM ${memText(u.value.mac.used)} of ${memText(u.value.mac.total)}${squeezed.value ? `, ${squeezedText(squeezed.value)}` : ''}, pressure ${u.value.mac.pressure}` }] : []);
 
 const history = shallowRef<{ cpu: number; mem: number }[]>([]); // bounded, one sample per usage event
 watch(u, v => { if (v) history.value = [...history.value, { cpu: cpuPct.value, mem: memPct.value }].slice(-HISTORY); }, { immediate: true });
@@ -58,22 +61,24 @@ const popup = computed(() => {
     .sort(([, a], [, b]) => byUse(a, b)).slice(0, TOP)
     .map(([id, g]) => { const s = store.sessions.find(o => o.id === id); return { id, name: s ? s.title || project(s) : id.slice(0, 8), g, c: tintFor(s ?? { id }) }; });
   const order = held.value;
-  const row = (r: { id: string; name: string; g: Group; c: string }) => { const h = heatOf(r.id || 'lantern', r.g), tip = heatTip(h, r.g); return { id: r.id, name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, memPct: r.g.mem / total * 100, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem, app: false, rest: false }; };
+  const row = (r: { id: string; name: string; g: Group; c: string }) => { const h = heatOf(r.id || 'lantern', r.g), tip = heatTip(h, r.g); return { id: r.id, name: r.name, c: r.c, cpu: r.g.cpu / cores(), mem: r.g.mem, cmp: r.g.cmp ?? 0, memPct: r.g.mem / total * 100, cpuHot: h.cpu, memHot: h.mem, cpuTip: tip.cpu, memTip: tip.mem, app: false, rest: false }; };
   const rows = sessions.sort((a, b) => order ? at(order, a.id) - at(order, b.id) : byUse(a.g, b.g)).map(row);
   const app = { ...row({ id: '', name: 'Lantern', g: v.lantern, c: LANTERN }), app: true };
   // everything else is what's left of the Mac, but never less than its own process rows add up to; the "macOS" row is the gap between the two (kernel, GPU and compressed
   // memory, system processes Lantern can't read), so the rows always add up to the header
   const procs = v.else?.procs ?? [], procCpu = procs.reduce((a, p) => a + p.cpu, 0) / cores(), procMem = procs.reduce((a, p) => a + p.mem, 0);
   const cpuElse = Math.max(procCpu, v.mac.cpu - [...rows, app].reduce((a, r) => a + r.cpu, 0)), memElse = Math.max(procMem, used - [...rows, app].reduce((a, r) => a + r.mem, 0));
+  // The compressed memory no process row accounts for (root's processes, the kernel) is in the gap, so everything else's compressed part takes it up, to its size
+  const cmpElse = Math.min(memElse, Math.max(v.else?.cmp ?? 0, (v.mac.compressed ?? 0) - [...rows, app].reduce((a, r) => a + r.cmp, 0)));
   const mac = { name: 'macOS', n: 1, cpu: (cpuElse - procCpu) * cores(), mem: memElse - procMem, help: "The kernel, the GPU and compressed memory, plus system processes Lantern can't read" };
   const elseUse = groupUse('else', v.else, sort.value, Math.round(cpuElse - procCpu) || mac.mem >= 102.4 ? mac : undefined); // an older server sends none: the row is then plain
-  const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '', app: false, rest: !!elseUse }, app];
+  const all = [...rows, { id: '', name: 'everything else', c: ELSE, cpu: cpuElse, mem: memElse, cmp: cmpElse, memPct: memElse / total * 100, cpuHot: 0, memHot: 0, cpuTip: '', memTip: '', app: false, rest: !!elseUse }, app];
   const w = (n: number) => `${Math.max(0, n).toFixed(2)}%`;
   return {
-    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), cpuW: w(r.cpu), memW: w(r.memPct), btn: !!(r.id || r.app || r.rest), use: r.id ? sessionUse(v, r.id, sort.value) : r.app ? groupUse('lantern', v.lantern, sort.value) : r.rest ? elseUse : null })),
+    rows: all.map(r => ({ ...r, key: r.id || r.name, cpuText: `${Math.round(r.cpu)}%`, memText: gb(r.mem), memShade: shade(r.c, r.cmp, r.mem), cpuW: w(r.cpu), memW: w(r.memPct), btn: !!(r.id || r.app || r.rest), use: r.id ? sessionUse(v, r.id, sort.value) : r.app ? groupUse('lantern', v.lantern, sort.value) : r.rest ? elseUse : null })),
     blocks: [
-      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of all cores', segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.cpu), tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
-      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.memPct), tip: `${r.name} · ${gb(r.mem)} RAM` })) }],
+      { kind: 'cpu' as const, num: `${Math.round(v.mac.cpu)}%`, of: 'of all cores', segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.cpu), shade: {}, tip: `${r.name} · ${Math.round(r.cpu)}% CPU` })) },
+      { kind: 'mem' as const, num: (used / 1024).toFixed(1), of: `of ${Math.round(total / 1024)} GB${squeezed.value ? `, ${squeezedText(squeezed.value)}` : ''}`, segs: all.map(r => ({ key: r.id || r.name, id: r.id, btn: !!(r.id || r.app || r.rest), c: r.c, w: w(r.memPct), shade: shade(r.c, r.cmp, r.mem), tip: `${r.name} · ${gb(r.mem)} RAM${r.cmp >= 102.4 ? `, ${squeezedText(r.cmp)}` : ''}` })) }],
   };
 });
 
@@ -83,6 +88,8 @@ const popup = computed(() => {
 // its row (StatsDetail), one row at a time, and another click closes them; a double click opens the moth's card in full and puts the dropdown
 // away, as the processes' Open card and Go to session do. (A double click's two clicks open and close the row on the way.)
 const hot = ref<string | null>(null);
+// A RAM segment's compressed share, for the style in index.html: that part first at full strength, the rest after it faded (the whole being the segment's width)
+const shade = (c: string, cmp: number, mem: number) => cmp > 0 && mem > 0 ? { '--c': c, '--cmp': `${Math.min(100, cmp / mem * 100).toFixed(1)}%` } : {};
 const gb = (mb: number) => `${(mb / 1024).toFixed(1)} GB`; // the column is always GB, as the cards' numbers are
 const menu = useTemplateRef<HTMLElement>('menu');
 // one row's processes open at a time, the rows' order held from now until it closes (or the dropdown does)
@@ -111,13 +118,13 @@ const rowEvents = (key: string, id: string, btn: boolean) => {
     <button id="usageButton" popovertarget="usage" :class="u.mac.pressure" title="CPU and RAM" :style="{ '--hud': `${size}px` }"
       :aria-label="`CPU and RAM: this Mac ${Math.round(u.mac.cpu)}% CPU, ${memText(u.mac.used)} used`">
       <span v-for="m in meters" :key="m.kind" :class="['meter', m.kind]" :title="m.tip">
-        <span class="top"><UsageRing :pct="m.pct" :kind="m.kind" /><span class="v">{{ m.text }}</span></span>
+        <span class="top"><UsageRing :pct="m.pct" :dense="m.dense" :kind="m.kind" /><span class="v">{{ m.text }}</span></span>
       </span>
     </button>
     <div v-if="popup" id="usage" ref="menu" :class="['flyup', { hl: hot }]" popover @toggle="(e: Event) => { if ('newState' in e && e.newState === 'closed') { setOpen(null); hot = null; pointAt(null); } }" :style="{ '--hud': `${size}px` }" aria-label="CPU and RAM">
       <section v-for="b in popup.blocks" :key="b.kind">
         <div class="big"><UsageIcon :kind="b.kind" /><b>{{ b.num }}</b><span>{{ b.of }}</span></div>
-        <div class="bar"><component :is="s.btn ? 'button' : 'i'" v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c }" v-on="rowEvents(s.key, s.id, s.btn)"></component></div>
+        <div class="bar"><component :is="s.btn ? 'button' : 'i'" v-for="s in b.segs" :key="s.key" :class="{ hot: hot === s.key }" :title="s.tip" :style="{ width: s.w, background: s.c, ...s.shade }" v-on="rowEvents(s.key, s.id, s.btn)"></component></div>
         <div class="chart" aria-hidden="true">
           <svg class="spark" :viewBox="`0 0 ${W} ${H}`" preserveAspectRatio="none"><polyline :points="line(b.kind)" /></svg>
         </div>
@@ -130,7 +137,7 @@ const rowEvents = (key: string, id: string, btn: boolean) => {
         <component :is="r.btn ? 'button' : 'div'" :class="['krow', { session: r.id, hot: hot === r.key }]" :title="`${r.name} · ${r.cpuText} CPU · ${r.memText} RAM`"
           :aria-expanded="r.btn ? open === r.key : undefined" v-on="rowEvents(r.key, r.id, r.btn)">
           <i :class="['sw', { app: r.app }]" :style="{ [r.app ? 'borderColor' : 'background']: r.c }"></i><span class="n">{{ r.name }}</span><span :class="`hot${r.cpuHot}`" :title="r.cpuTip || undefined">{{ r.cpuText }}</span><span :class="`hot${r.memHot}`" :title="r.memTip || undefined">{{ r.memText }}</span>
-          <b class="tracks"><b class="track" aria-hidden="true"><i :style="{ width: r.cpuW, background: r.c }"></i></b><b class="track" aria-hidden="true"><i :style="{ width: r.memW, background: r.c }"></i></b></b>
+          <b class="tracks"><b class="track" aria-hidden="true"><i :style="{ width: r.cpuW, background: r.c }"></i></b><b class="track" aria-hidden="true"><i :style="{ width: r.memW, background: r.c, ...r.memShade }"></i></b></b>
         </component>
         <StatsDetail v-if="r.use && open === r.key" :id="r.id" :use="r.use" :card="!r.id" v-on="hover(r.key, r.id)" @done="close" />
         </template>

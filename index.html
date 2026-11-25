@@ -373,6 +373,7 @@
   .uring { width: var(--hud, 14px); height: var(--hud, 14px); flex: none; fill: none; stroke-width: 2; color: var(--m); }
   .uring circle { stroke: var(--lantern-quiet); }
   .uring .arc { stroke: var(--m); stroke-linecap: round; }
+  .uring .arc.faint { opacity: var(--faded); } /* RAM: what isn't compressed, under the compressed part at full strength */
   #usage { inset: calc(max(var(--space-2), var(--titlebar)) + var(--space-1) + var(--hud) * 1.5 + var(--space-3)) auto auto var(--space-3); width: 320px; max-width: calc(100vw - 2 * var(--space-3)); box-sizing: border-box; max-height: calc(100vh - max(var(--space-2), var(--titlebar)) - var(--space-1) - var(--hud) * 1.5 - var(--space-3) - var(--space-6)); padding: var(--space-4); /* below its top, it stops clear of the footer and scrolls inside */ gap: var(--space-4); font-size: var(--text-xs); color: var(--ink); font-variant-numeric: tabular-nums; }
   /* the bookmarks (src/components/BookmarksMenu.vue): a footer corner button beside stats, its list flying up like the reviews' */
   #bookmarks { max-height: calc(100vh - 52px - max(var(--space-5), var(--titlebar))); width: 300px; max-width: calc(100vw - 2 * var(--space-3)); padding: var(--space-2) 0; gap: 0; }
@@ -395,6 +396,8 @@
   #usage.hl .bar > :not(.hot), #usage.hl .krow:not(.hot) .track { opacity: .4; } /* the highlighted session lights up everywhere and the rest dims */
   #usage.hl .krow:not(.hot) { color: var(--ink-dim); }
   #usage .bar > * { position: relative; }
+  /* RAM's compressed share (--cmp, set by UsageMenu.vue on a segment or track): that part at full strength, the rest faded; !important over the inline fill that the session's colour sets */
+  #usage [style*="--cmp"] { background: linear-gradient(90deg, var(--c) var(--cmp), color-mix(in srgb, var(--c) calc(var(--faded) * 100%), transparent) var(--cmp)) !important; }
   :where(#usage .bar button) { all: unset; cursor: pointer; } /* a session's segment is a button like its row; :where keeps the unset from outranking the shared rules below */
   #usage .bar > :not(:last-child) { box-shadow: inset calc(-1 * var(--space-0-5)) 0 0 var(--line-soft); }
   #usage .bar > :first-child { border-radius: var(--radius-pill) 0 0 var(--radius-pill); }
