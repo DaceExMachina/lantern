@@ -1779,7 +1779,7 @@ test('reviews: a priority is kept in settings.json, defaults to 2 (not stored), 
   assert.strictEqual((await post(base, '/settings', { reviewPriority: { [a]: 3, [b]: 4 } })).status, 204);
   assert.deepStrictEqual((await snapshot(base)).settings.reviewPriority, { [a]: 3 }, '4 is out of range'); await post(base, '/settings', { reviewPriority: { [a]: 0 } });
   const saved = path.join(home.home, 'data/settings.json');
-  assert.deepStrictEqual(await until(() => { const j = JSON.parse(fs.readFileSync(saved, 'utf8')).reviewPriority; return j[a] === 0 && j; }, 'settings.json written'), { [a]: 0 });
+  await until(() => JSON.stringify(JSON.parse(fs.readFileSync(saved, 'utf8')).reviewPriority) === JSON.stringify({ [a]: 0 }), 'the last save to land (the first one had a at 0 too)');
 });
 
 // Saves reach settings.json in the order they were made: a burst of changes leaves on disk what the server holds, never an older save
@@ -2598,7 +2598,7 @@ test('a bookmark keeps its session\'s title, folder and last activity after it e
   assert.strictEqual(await mark([B, A]), 204);
   assert.deepStrictEqual((await marks()).map(b => b.id), [B], 'or come back');
   const file = path.join(home, 'data/settings.json');
-  await until(() => JSON.parse(fs.readFileSync(file, 'utf8')).bookmarks?.[0]?.cwd === '/w/8', 'the bookmarks to be saved');
+  await until(() => JSON.parse(fs.readFileSync(file, 'utf8')).bookmarks?.map(b => b.id).join() === B, 'the last save to land (an earlier one also had B first)');
   const again = await serve(t, { 'data/settings.json': fs.readFileSync(file, 'utf8') });
   assert.deepStrictEqual((await snapshot(again)).settings.bookmarks.map(b => [b.id, b.cwd]), [[B, '/w/8']], 'an ended bookmark outlasts a restart (unlike a pin)');
 });
