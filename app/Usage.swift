@@ -20,6 +20,9 @@ final class Usage {
     private var ticks: [UInt32]? // the Mac's CPU ticks at the last sample: user, system, idle, nice
     private let timebase: (Double, Double) = { var t = mach_timebase_info(); mach_timebase_info(&t); return (Double(t.numer), Double(t.denom)) }()
 
+    /// One process's CPU time used since the last sample (ns), memory footprint and compressed memory (bytes; the footprint counts the compressed part)
+    private typealias Use = (pid: pid_t, ns: Double, mem: UInt64, cmp: UInt64)
+
     /// `sessions` is each session's id and process ids. Call it from one queue; it keeps state between calls.
     func sample(_ sessions: [(String, [Int])]) -> JSON {
         let t = Date().timeIntervalSince1970, since = at ?? t
@@ -45,7 +48,7 @@ final class Usage {
         var now: [pid_t: UInt64] = [:]
         let secs = at == nil || t <= since ? 0 : t - since
         // CPU (ns used since the last sample) and memory (bytes) of each process that could be read
-        func use(_ pids: [pid_t]) -> [(pid: pid_t, ns: Double, mem: UInt64)] {
+        func use(_ pids: [pid_t]) -> [Use] {
             pids.compactMap { p in
                 var ru = rusage_info_v4()
                 let ok = withUnsafeMutablePointer(to: &ru) { $0.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) { proc_pid_rusage(p, RUSAGE_INFO_V4, $0) } } == 0
@@ -54,14 +57,14 @@ final class Usage {
                 now[p] = ns
                 // a process that began since the last sample has used all its time in it
                 let used = before[p].map { Double(ns &- $0) } ?? (started[p] ?? 0 > since ? Double(ns) : 0)
-                return (p, used, ru.ri_phys_footprint)
+                return (p, used, ru.ri_phys_footprint, min(ru.ri_phys_footprint, Self.compressed(p)))
             }
         }
         let cpu = { (ns: Double) in secs == 0 ? 0 : (ns / (secs * 1e9) * 1000).rounded() / 10 } // percent of a core, to a tenth
         // n counts the processes that could be read, so a session's count matches its rows (one run as root isn't)
-        func sum(_ u: [(pid: pid_t, ns: Double, mem: UInt64)]) -> JSON {
-            let (ns, mem) = u.reduce((0.0, UInt64(0))) { ($0.0 + $1.ns, $0.1 + $1.mem) }
-            return ["cpu": cpu(ns), "mem": Int(mem >> 20), "n": u.count]
+        func sum(_ u: [Use]) -> JSON {
+            let (ns, mem, cmp) = u.reduce((0.0, UInt64(0), UInt64(0))) { ($0.0 + $1.ns, $0.1 + $1.mem, $0.2 + $1.cmp) }
+            return ["cpu": cpu(ns), "mem": Int(mem >> 20), "cmp": Int(cmp >> 20), "n": u.count]
         }
         // each row's processes: its tree, then what macOS says it is responsible for. A process in no row's tree (Lantern's WebKit
         // services are launchd's children) goes to the row whose tree holds its responsible pid; tree membership always wins, so a
@@ -102,7 +105,7 @@ final class Usage {
         let claimed = Set(trees.joined())
         func group(_ pids: [pid_t], app: Bool = false) -> JSON {
             let u = use(pids)
-            let order: ((name: String, cpu: Double, mem: UInt64, of: [(pid: pid_t, ns: Double, mem: UInt64)]), (name: String, cpu: Double, mem: UInt64, of: [(pid: pid_t, ns: Double, mem: UInt64)])) -> Bool = { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
+            let order: ((name: String, cpu: Double, mem: UInt64, of: [Use]), (name: String, cpu: Double, mem: UInt64, of: [Use])) -> Bool = { ($0.cpu, $0.mem, $1.name) > ($1.cpu, $1.mem, $0.name) }
             let groups = Dictionary(grouping: u) { name($0.pid, app: app) }
                 .map { (name: $0.key, cpu: cpu($0.value.reduce(0) { $0 + $1.ns }), mem: $0.value.reduce(0) { $0 + $1.mem }, of: $0.value) }
                 .sorted(by: order)
@@ -191,6 +194,16 @@ final class Usage {
     // Undocumented: if it goes, daemonized tools fall out of their session as before.
     private static let sessionVariable = "CLAUDE_CODE_MESSAGING_SOCKET"
 
+    // What a process holds compressed (what `top` shows as CMPRS), in bytes: readable for the user's own processes only, so the rest count as 0.
+    private static func compressed(_ pid: pid_t) -> UInt64 {
+        var port = mach_port_name_t()
+        guard task_name_for_pid(mach_task_self_, pid, &port) == KERN_SUCCESS else { return 0 }
+        defer { mach_port_deallocate(mach_task_self_, port) }
+        var info = task_vm_info_data_t(), n = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<integer_t>.size)
+        let ok = withUnsafeMutablePointer(to: &info) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { task_info(port, task_flavor_t(TASK_VM_INFO), $0, &n) } } == KERN_SUCCESS
+        return ok ? UInt64(info.compressed) : 0
+    }
+
     private func mac() -> JSON {
         var cpu = host_cpu_load_info(), n = mach_msg_type_number_t(MemoryLayout<host_cpu_load_info>.size / 4)
         let got = withUnsafeMutablePointer(to: &cpu) { $0.withMemoryRebound(to: integer_t.self, capacity: Int(n)) { host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &n) } } == KERN_SUCCESS
@@ -207,7 +220,8 @@ final class Usage {
         sysctlbyname("hw.memsize", &total, &size, nil, 0)
         sysctlbyname("kern.memorystatus_vm_pressure_level", &level, &lsize, nil, 0)
         // Activity Monitor's "memory used": app memory (not purgeable) + wired + compressed
-        let used = (UInt64(vm.internal_page_count) &- UInt64(vm.purgeable_count) &+ UInt64(vm.wire_count) &+ UInt64(vm.compressor_page_count)) * UInt64(vm_kernel_page_size)
-        return ["cpu": busy, "used": Int(used >> 20), "total": Int(total >> 20), "pressure": level >= 4 ? "critical" : level == 2 ? "warning" : "normal"]
+        let page = UInt64(vm_kernel_page_size), compressed = UInt64(vm.compressor_page_count) * page // the RAM the compressor occupies, part of used
+        let used = (UInt64(vm.internal_page_count) &- UInt64(vm.purgeable_count) &+ UInt64(vm.wire_count)) * page + compressed
+        return ["cpu": busy, "used": Int(used >> 20), "compressed": Int(compressed >> 20), "total": Int(total >> 20), "pressure": level >= 4 ? "critical" : level == 2 ? "warning" : "normal"]
     }
 }
